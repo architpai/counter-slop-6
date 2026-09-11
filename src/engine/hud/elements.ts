@@ -1,4 +1,59 @@
-export function createElements(root) {
+/**
+ * Every `data-hud` name the template below produces, with the element type its
+ * tag gives. The template is the only producer of these nodes, so this table is
+ * complete and correct by construction; `Hud` indexes it directly.
+ */
+export type HudElements = {
+  scope: HTMLDivElement;
+  focusMeter: HTMLDivElement;
+  focusLabel: HTMLDivElement;
+  focusFill: HTMLDivElement;
+  focusMark: HTMLDivElement;
+  crosshair: HTMLDivElement;
+  grappleReticle: HTMLDivElement;
+  breath: HTMLDivElement;
+  breathFill: HTMLDivElement;
+  hitmarker: HTMLDivElement;
+  damageIndicators: HTMLDivElement;
+  /** `<strong>` */
+  score: HTMLElement;
+  combo: HTMLDivElement;
+  topRight: HTMLDivElement;
+  /** `<strong>` */
+  wave: HTMLElement;
+  modifier: HTMLDivElement;
+  /** `<strong>` */
+  enemies: HTMLElement;
+  timer: HTMLDivElement;
+  pvpScore: HTMLDivElement;
+  board: HTMLDivElement;
+  boss: HTMLDivElement;
+  bossName: HTMLDivElement;
+  bossFill: HTMLDivElement;
+  health: HTMLDivElement;
+  healthFill: HTMLDivElement;
+  /** `<strong>` */
+  hp: HTMLElement;
+  /** `<strong>` */
+  magazine: HTMLElement;
+  reserve: HTMLSpanElement;
+  reloading: HTMLSpanElement;
+  grenades: HTMLSpanElement;
+  tally: HTMLDivElement;
+  slots: HTMLDivElement;
+  weaponName: HTMLDivElement;
+  weaponHint: HTMLDivElement;
+  tip: HTMLDivElement;
+  message: HTMLDivElement;
+  messageMain: HTMLDivElement;
+  messageSub: HTMLDivElement;
+  killFeed: HTMLDivElement;
+  screen: HTMLDivElement;
+  /** `<section>` */
+  panel: HTMLElement;
+};
+
+export function createElements(root: HTMLElement): HudElements {
   root.innerHTML = `
     <div class="scope" data-hud="scope" aria-hidden="true">
       <div class="scope-ring"></div><div class="scope-cross horizontal"></div>
@@ -42,15 +97,17 @@ export function createElements(root) {
     <div class="kill-feed" data-hud="killFeed" role="log" aria-live="polite"></div>
     <div class="screen-overlay" data-hud="screen" hidden><section class="screen-panel" data-hud="panel" role="dialog" aria-modal="true" aria-label="Game menu" tabindex="-1"></section></div>
   `;
-  return Object.fromEntries([...root.querySelectorAll('[data-hud]')].map(el => [el.dataset.hud, el]));
+  // Keys and tags come from the literal above, so the table matches `HudElements`.
+  return Object.fromEntries([...root.querySelectorAll<HTMLElement>('[data-hud]')]
+    .map((el): [string, HTMLElement] => [el.dataset.hud ?? '', el])) as HudElements;
 }
 
-export function setText(el, value) {
+export function setText(el: HTMLElement, value: unknown): void {
   const text = String(value ?? '');
   if (el.textContent !== text) el.textContent = text;
 }
 
-export function setHTML(el, value) {
+export function setHTML(el: HTMLElement, value: unknown): void {
   const html = String(value ?? '');
   if (el.dataset.lastHtml !== html) {
     el.innerHTML = html;
@@ -58,13 +115,13 @@ export function setHTML(el, value) {
   }
 }
 
-export function setBoldText(el, value) {
+export function setBoldText(el: HTMLElement, value: unknown): void {
   const doc = el.ownerDocument;
   const template = doc.createElement('template');
   template.innerHTML = String(value ?? '');
-  const copy = (source, target) => {
+  const copy = (source: Node, target: ParentNode): void => {
     for (const node of source.childNodes) {
-      if (node.nodeType === 3) target.append(doc.createTextNode(node.textContent));
+      if (node.nodeType === 3) target.append(doc.createTextNode(node.textContent ?? ''));
       else if (node.nodeType === 1) {
         if (node.nodeName === 'SCRIPT' || node.nodeName === 'STYLE') continue;
         if (node.nodeName === 'B' || node.nodeName === 'STRONG') {

@@ -14,14 +14,22 @@ import type * as THREE from 'three';
 import type { Body, Box, World } from './physics';
 import type { NavGrid } from './nav';
 
+// Ported subsystems: real types.
+export type { Renderer } from './render/index';
+export type { Effects } from './effects';
+export type { Audio } from './audio';
+export type { Input } from './input';
+export type { Hud } from './hud/index';
+
+import type { Renderer } from './render/index';
+import type { Effects } from './effects';
+import type { Audio } from './audio';
+import type { Input } from './input';
+import type { Hud } from './hud/index';
+
 /** A module that has not been converted yet. Replace with a real import type. */
 type UNPORTED = unknown;
 
-export type Renderer = UNPORTED; // render/index.js   — phase 3
-export type Effects = UNPORTED; // effects.js        — phase 3
-export type Audio = UNPORTED; // audio.js          — phase 3
-export type Input = UNPORTED; // input.js          — phase 3
-export type Hud = UNPORTED; // hud/index.js      — phase 3
 export type Player = UNPORTED; // player/index.js   — phase 4
 export type Weapon = UNPORTED; // weapons/index.js  — phase 4
 export type EnemyManager = UNPORTED; // enemies/index.js  — phase 5

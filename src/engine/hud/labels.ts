@@ -1,4 +1,4 @@
-const LABELS = {
+const LABELS: Record<string, readonly [string, string]> = {
   fire: ['LMB', 'R2'], aim: ['RMB', 'L2'], block: ['RMB', 'L2'],
   jump: ['Space', '✕'], sprint: ['Shift', 'L3'], slide: ['C', '○'], dash: ['C', '○'],
   grapple: ['Q', 'L1'], melee: ['F', 'R1'], reload: ['R', '□'], grenade: ['G', 'R3'],
@@ -6,11 +6,12 @@ const LABELS = {
   pause: ['Esc', 'Options'], confirm: ['Space', '✕'], score: ['Tab', 'Create'],
 };
 
-export function key(action, pad = false) {
-  return Object.hasOwn(LABELS, action) ? LABELS[action][pad ? 1 : 0] : String(action);
+export function key(action: string, pad = false): string {
+  const labels = Object.hasOwn(LABELS, action) ? LABELS[action] : undefined;
+  return labels ? labels[pad ? 1 : 0] : String(action);
 }
 
-const KEYBOARD_ROWS = [
+const KEYBOARD_ROWS: readonly string[] = [
   '<b>WASD</b> move   <b>Mouse</b> look   <b>Shift</b> sprint',
   '<b>LMB</b> fire / slash   <b>RMB</b> aim down sights / block',
   '<b>Space</b> jump (again on a wall = wall jump)',
@@ -24,7 +25,7 @@ const KEYBOARD_ROWS = [
   '<b>1-4 / wheel</b> rifle · shotgun · sniper · katana',
 ];
 
-const PAD_ROWS = [
+const PAD_ROWS: readonly string[] = [
   '<b>L stick</b> move   <b>R stick</b> look   <b>L3</b> sprint',
   '<b>R2</b> fire / slash   <b>L2</b> aim / block',
   '<b>✕</b> jump   <b>○</b> slide · air dash',
@@ -36,11 +37,11 @@ const PAD_ROWS = [
   '<b>Create</b> scoreboard (online)   <b>Options</b> pause',
 ];
 
-export function controlsHTML(pad = false) {
-  return `<div class="screen-controls">${[
+export function controlsHTML(pad = false): string {
+  return `<div class="screen-controls">${([
     ['keyboard', 'MOUSE + KEYBOARD', KEYBOARD_ROWS, !pad],
     ['gamepad', 'PS5 CONTROLLER', PAD_ROWS, pad],
-  ].map(([device, title, rows, active]) => `<section class="control-column${active ? ' current-device' : ''}" data-device="${device}">
+  ] as const).map(([device, title, rows, active]) => `<section class="control-column${active ? ' current-device' : ''}" data-device="${device}">
     <h3>${title}</h3><ol>${rows.map(row => `<li class="control-row">${row}</li>`).join('')}</ol>
   </section>`).join('')}</div>`;
 }

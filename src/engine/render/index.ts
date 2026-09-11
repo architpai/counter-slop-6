@@ -1,14 +1,28 @@
 import * as THREE from 'three';
 import { LIGHT, SURF } from './palette';
 import { Composite } from './postfx';
+import type { PostFX } from './postfx';
 
 export { TONE, TONE_HEX, WHITE_HEX, SMOKE_HEX, SURF } from './palette';
 export { surfMat, charMat, toneMat, unlitMat, setFlash, mergeByMaterial } from './materials';
 export { boxGeo, cylGeo, sphereGeo, coneGeo, torusGeo, starGeo, ringGeo } from './prims';
 export { makeFigure, makeWeaponProp, makeNameTag } from './figure';
+export type { PostFX } from './postfx';
 
 export class Renderer {
-  constructor(canvas) {
+  readonly three: THREE.WebGLRenderer;
+  readonly scene: THREE.Scene;
+  readonly camera: THREE.PerspectiveCamera;
+  readonly rig: THREE.Group;
+  readonly sun: THREE.DirectionalLight;
+  readonly post: Composite;
+  /** Reset before every frame; the first rig mesh drawn clears the depth buffer. */
+  _rigDepthCleared = false;
+  readonly _clearRigDepth: () => void;
+  readonly _prepareRigMesh: (object: THREE.Object3D) => void;
+  readonly _onResize: () => void;
+
+  constructor(canvas: HTMLCanvasElement) {
     this.three = new THREE.WebGLRenderer({ canvas, antialias: true, stencil: false, powerPreference: 'high-performance' });
     this.three.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     this.three.outputColorSpace = THREE.SRGBColorSpace;
@@ -40,7 +54,7 @@ export class Renderer {
       }
     };
     this._prepareRigMesh = object => {
-      if (!object.isMesh) return;
+      if (!isMesh(object)) return;
       object.castShadow = object.receiveShadow = false;
       object.renderOrder = 1000;
       object.onBeforeRender = this._clearRigDepth;
@@ -51,7 +65,7 @@ export class Renderer {
     this.resize();
   }
 
-  resize() {
+  resize(): void {
     const width = Math.max(2, window.innerWidth), height = Math.max(2, window.innerHeight);
     this.three.setSize(width, height);
     this.camera.aspect = width / height;
@@ -60,7 +74,7 @@ export class Renderer {
     this.post.resize(Math.floor(width * ratio), Math.floor(height * ratio), this.camera.aspect);
   }
 
-  setLevelShadow(center, radius) {
+  setLevelShadow(center: THREE.Vector3, radius: number): void {
     radius = Math.max(1, radius);
     this.sun.position.set(0.38, 0.82, 0.42).normalize().multiplyScalar(radius * 2).add(center);
     this.sun.target.position.copy(center);
@@ -74,7 +88,7 @@ export class Renderer {
     this.sun.shadow.needsUpdate = true;
   }
 
-  dispose() {
+  dispose(): void {
     window.removeEventListener('resize', this._onResize);
     this.post.dispose();
     this.three.dispose();
@@ -83,7 +97,7 @@ export class Renderer {
     this.three.forceContextLoss?.();
   }
 
-  render(time, fx) {
+  render(time: number, fx: PostFX): void {
     this.rig.traverse(this._prepareRigMesh);
     this._rigDepthCleared = false;
     this.three.setRenderTarget(this.post.target);
@@ -91,4 +105,9 @@ export class Renderer {
     this.three.render(this.scene, this.camera);
     this.post.draw(this.three, time, fx);
   }
+}
+
+/** Duck-typed like the rest of three, so a mesh from any build still matches. */
+function isMesh(node: THREE.Object3D): node is THREE.Mesh {
+  return 'isMesh' in node && node.isMesh === true;
 }

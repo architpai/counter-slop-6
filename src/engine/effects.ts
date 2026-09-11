@@ -1,6 +1,61 @@
 import * as THREE from 'three';
-import { clamp, lerp, rand, randInt, TAU } from './util';
+import { choose, clamp, lerp, rand, TAU } from './util';
 import { TONE, TONE_HEX, WHITE_HEX, SMOKE_HEX, unlitMat } from './render/index';
+import type { World } from './physics';
+import type { BoxFilter, RayHit } from './types';
+
+/** A raw particle request. Every field but `kind` and `pos` has a default. */
+export interface ParticleSpec {
+  kind: 'drop' | 'stroke' | 'emitter';
+  pos: THREE.Vector3;
+  vel?: THREE.Vector3;
+  life?: number; size?: number; tone?: number;
+  gravity?: number; drag?: number;
+  collide?: 'none' | 'decal';
+  stretch?: number; fixedLen?: number; axis?: THREE.Vector3;
+  decalSize?: number; shrink?: boolean; grow?: number;
+  rate?: number; emitDir?: THREE.Vector3;
+}
+
+/** A live particle: a spec with every default resolved. */
+interface Particle {
+  kind: 'drop' | 'stroke' | 'emitter';
+  pos: THREE.Vector3;
+  /** Null for emitters and fixed-length strokes, which never move. */
+  vel: THREE.Vector3 | null;
+  life: number; maxLife: number; size: number; tone: number;
+  gravity: number; drag: number;
+  collide: 'none' | 'decal';
+  stretch: number; fixedLen: number; axis: THREE.Vector3 | null;
+  decalSize: number; shrink: boolean; grow: number;
+  rate: number; acc: number; emitDir: THREE.Vector3; hex: number;
+}
+
+/** One instanced-mesh ring buffer. `generations` stamps every reuse of a slot. */
+interface Pool {
+  mesh: THREE.InstancedMesh;
+  capacity: number;
+  next: number;
+  generations: Uint32Array;
+}
+
+/** A blood pool scaling up in place, dropped when its slot is reused. */
+interface Growing {
+  pool: Pool;
+  index: number;
+  generation: number;
+  time: number; duration: number; size: number;
+  pos: THREE.Vector3; quat: THREE.Quaternion; hex: number;
+}
+
+/** One rigid body owned by this module from `debris()` until it expires. */
+interface Debris {
+  mesh: THREE.Object3D;
+  pos: THREE.Vector3; vel: THREE.Vector3; angVel: THREE.Vector3;
+  scale: THREE.Vector3;
+  life: number; radius: number; blood: boolean;
+  bounces: number; atRest: boolean; trailT: number;
+}
 
 const UP = new THREE.Vector3(0, 1, 0);
 const DOWN = new THREE.Vector3(0, -1, 0);
@@ -21,32 +76,38 @@ const transform = new THREE.Object3D();
 const basis = new THREE.Matrix4();
 const spin = new THREE.Quaternion();
 const color = new THREE.Color();
-const seeThrough = box => !!box.data?.noShoot;
-const finiteVector = v => v?.isVector3 && Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
-const finite = (n, fallback) => Number.isFinite(n) ? n : fallback;
-const toneId = n => Number.isInteger(n) && n >= 0 && n < TONE_HEX.length ? n : TONE.HOSTILE;
+const seeThrough: BoxFilter = box => !!box.data?.noShoot;
+const finiteVector = (v: THREE.Vector3 | null | undefined): v is THREE.Vector3 =>
+  !!v?.isVector3 && Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
+const finite = (n: number | undefined, fallback: number): number =>
+  n !== undefined && Number.isFinite(n) ? n : fallback;
+const toneId = (n: number | undefined): number =>
+  n !== undefined && Number.isInteger(n) && n >= 0 && n < TONE_HEX.length ? n : TONE.HOSTILE;
+// toneId already range-checks, so the fallback below is unreachable; it only
+// satisfies the checked index access on TONE_HEX.
+const toneHex = (n: number | undefined): number => TONE_HEX[toneId(n)] ?? TONE_HEX[TONE.HOSTILE];
 
-function unit(v) {
+function unit(v: THREE.Vector3): THREE.Vector3 {
   return v.lengthSq() > 1e-20 ? v.normalize() : v.copy(UP);
 }
 
-function randomVector(yMin = -1, yMax = 1, xz = 1) {
+function randomVector(yMin = -1, yMax = 1, xz = 1): THREE.Vector3 {
   return new THREE.Vector3(rand(-xz, xz), rand(yMin, yMax), rand(-xz, xz));
 }
 
-function makePool(scene, name, geometry, capacity) {
+function makePool(scene: THREE.Scene, name: string, geometry: THREE.BufferGeometry, capacity: number): Pool {
   const mesh = new THREE.InstancedMesh(geometry, unlitMat(WHITE_HEX), capacity);
   mesh.name = `effects:${name}`;
   mesh.count = 0;
   mesh.frustumCulled = false;
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   mesh.setColorAt(0, color.setHex(TONE_HEX[TONE.HOSTILE]));
-  mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+  mesh.instanceColor?.setUsage(THREE.DynamicDrawUsage);
   scene.add(mesh);
   return { mesh, capacity, next: 0, generations: new Uint32Array(capacity) };
 }
 
-function blobGeometry(seed) {
+function blobGeometry(seed: number): THREE.ShapeGeometry {
   const shape = new THREE.Shape();
   for (let i = 0; i < 20; i++) {
     const angle = i / 20 * TAU;
@@ -66,22 +127,22 @@ function blobGeometry(seed) {
   return new THREE.ShapeGeometry(shapes, 4);
 }
 
-function put(pool, index, matrix, hex) {
+function put(pool: Pool, index: number, matrix: THREE.Matrix4, hex: number): void {
   pool.mesh.setMatrixAt(index, matrix);
   pool.mesh.setColorAt(index, color.setHex(hex));
   pool.mesh.instanceMatrix.needsUpdate = true;
-  pool.mesh.instanceColor.needsUpdate = true;
+  if (pool.mesh.instanceColor) pool.mesh.instanceColor.needsUpdate = true;
 }
 
-function slot(pool) {
+function slot(pool: Pool): number {
   const index = pool.next;
   pool.next = (index + 1) % pool.capacity;
   pool.mesh.count = Math.min(pool.capacity, pool.mesh.count + 1);
-  pool.generations[index]++;
+  pool.generations[index] = (pool.generations[index] ?? 0) + 1;
   return index;
 }
 
-function face(normal, streakDir) {
+function face(normal: THREE.Vector3, streakDir: THREE.Vector3 | null): boolean {
   surfaceNormal.copy(normal);
   unit(surfaceNormal);
   if (finiteVector(streakDir)) {
@@ -100,15 +161,33 @@ function face(normal, streakDir) {
   return false;
 }
 
-function surfaceBasis(normal) {
+function surfaceBasis(normal: THREE.Vector3): void {
   surfaceNormal.copy(normal);
   unit(surfaceNormal);
   tangent.crossVectors(Math.abs(surfaceNormal.y) < 0.9 ? UP : FRONT, surfaceNormal).normalize();
   bitangent.crossVectors(surfaceNormal, tangent);
 }
 
+/**
+ * All particles, decals, blood pools, rigid debris, tracers, explosions, and
+ * the shared screen-shake accumulator. The instanced pools are owned here.
+ */
 export class Effects {
-  constructor(scene, world) {
+  scene: THREE.Scene;
+  world: World;
+  /** Public accumulator: recipes add to it, the player camera step decays it. */
+  shake: number;
+  _particles: Particle[];
+  _growing: Growing[];
+  _debris: Debris[];
+  _bloodyGibs: number;
+  _drops: Pool;
+  _strokes: Pool;
+  _splats: Pool[];
+  _holes: Pool;
+  _pools: Pool[];
+
+  constructor(scene: THREE.Scene, world: World) {
     this.scene = scene;
     this.world = world;
     this.shake = 0;
@@ -123,29 +202,30 @@ export class Effects {
     this._pools = [this._drops, this._strokes, ...this._splats, this._holes];
   }
 
-  particle(p) {
+  particle(p: ParticleSpec): void {
     if (!p || !['drop', 'stroke', 'emitter'].includes(p.kind) || !finiteVector(p.pos)) return;
     const life = finite(p.life, 1), size = Math.max(0, finite(p.size, 0.05));
     if (life <= 0 || size === 0) return;
     this._particles.push({
       kind: p.kind, pos: p.pos.clone(), vel: finiteVector(p.vel) ? p.vel.clone()
-        : p.kind === 'emitter' || p.fixedLen > 0 ? null : new THREE.Vector3(),
+        : p.kind === 'emitter' || finite(p.fixedLen, 0) > 0 ? null : new THREE.Vector3(),
       life, maxLife: life, size, tone: toneId(p.tone), gravity: finite(p.gravity, 20),
       drag: Math.max(0, finite(p.drag, 0)), collide: p.collide === 'decal' ? 'decal' : 'none',
       stretch: Math.max(0, finite(p.stretch, 0.03)), fixedLen: Math.max(0, finite(p.fixedLen, 0)),
       axis: finiteVector(p.axis) ? unit(p.axis.clone()) : null,
       decalSize: Math.max(0, finite(p.decalSize, 3)), shrink: p.shrink !== false,
       grow: Math.max(0, finite(p.grow, 0)), rate: Math.max(0, finite(p.rate, 0)), acc: 0,
-      emitDir: finiteVector(p.emitDir) ? p.emitDir.clone() : UP.clone(), hex: TONE_HEX[toneId(p.tone)],
+      emitDir: finiteVector(p.emitDir) ? p.emitDir.clone() : UP.clone(), hex: toneHex(p.tone),
     });
   }
 
-  update(dt) {
+  update(dt: number): void {
     if (!Number.isFinite(dt) || dt < 0) return;
     this._drops.mesh.count = this._strokes.mesh.count = 0;
     // New particles draw at birth but start their simulation on the following frame.
     for (let i = this._particles.length - 1; i >= 0; i--) {
       const p = this._particles[i];
+      if (!p) continue;
       p.life -= dt;
       if (p.life <= 0) { this._particles.splice(i, 1); continue; }
       if (p.kind === 'emitter') {
@@ -181,6 +261,7 @@ export class Effects {
     }
     for (let i = this._growing.length - 1; i >= 0; i--) {
       const g = this._growing[i];
+      if (!g) continue;
       if (g.pool.generations[g.index] !== g.generation) { this._growing.splice(i, 1); continue; }
       g.time += dt;
       const f = Math.min(1, g.time / g.duration), e = 1 - (1 - f) ** 2;
@@ -195,7 +276,7 @@ export class Effects {
     for (const p of this._particles) if (p.kind !== 'emitter') this._draw(p);
   }
 
-  _draw(p) {
+  _draw(p: Particle): void {
     const pool = p.kind === 'drop' ? this._drops : this._strokes;
     if (pool.mesh.count === pool.capacity) return;
     const frac = clamp(p.life / p.maxLife, 0, 1);
@@ -208,7 +289,7 @@ export class Effects {
       const speed = p.vel ? p.vel.length() : 0;
       let length;
       if (p.fixedLen > 0) { drawAxis.copy(p.axis || UP); length = p.fixedLen; }
-      else if (speed > 1e-10) {
+      else if (p.vel && speed > 1e-10) {
         drawAxis.copy(p.vel).divideScalar(speed);
         length = clamp(speed * p.stretch, p.size * 2, 1.6);
       } else { drawAxis.copy(UP); length = p.size; }
@@ -220,18 +301,19 @@ export class Effects {
     put(pool, pool.mesh.count++, transform.matrix, p.hex);
   }
 
-  decal(point, normal, tone, size, kind = 'splat', streakDir = null, stretch = 1) {
+  decal(point: THREE.Vector3, normal: THREE.Vector3, tone: number, size: number,
+    kind: 'splat' | 'hole' = 'splat', streakDir: THREE.Vector3 | null = null, stretch = 1): void {
     if (!finiteVector(point) || !finiteVector(normal) || !Number.isFinite(size) || size <= 0) return;
-    const pool = kind === 'hole' ? this._holes : this._splats[randInt(0, 4)];
+    const pool = kind === 'hole' ? this._holes : choose(this._splats);
     const index = slot(pool), streak = face(normal, streakDir);
     transform.position.copy(point).addScaledVector(surfaceNormal, rand(0.012, 0.03));
     transform.scale.set(streak ? size * rand(0.6, 0.85) : size,
       streak ? size * Math.max(0, finite(stretch, 1)) * rand(0.9, 1.5) : size * rand(0.7, 1.3), 1);
     transform.updateMatrix();
-    put(pool, index, transform.matrix, TONE_HEX[toneId(tone)]);
+    put(pool, index, transform.matrix, toneHex(tone));
   }
 
-  _surfaceAt(point, normal, delta) {
+  _surfaceAt(point: THREE.Vector3, normal: THREE.Vector3, delta: THREE.Vector3): RayHit | null {
     probe.copy(point).add(delta).addScaledVector(normal, 0.35);
     probeDir.copy(normal).negate();
     let hit = this.world.raycast(probe, probeDir, 2.2, seeThrough);
@@ -244,7 +326,8 @@ export class Effects {
     return hit;
   }
 
-  splat(point, normal, tone, size, streakDir = null, cluster = 3) {
+  splat(point: THREE.Vector3, normal: THREE.Vector3, tone: number, size: number,
+    streakDir: THREE.Vector3 | null = null, cluster = 3): void {
     if (!finiteVector(point) || !finiteVector(normal) || !Number.isFinite(size) || size <= 0) return;
     this.decal(point, normal, tone, size * rand(0.55, 0.8), 'splat', streakDir);
     for (let i = 0; i < Math.max(0, finite(cluster, 3)); i++) {
@@ -264,13 +347,13 @@ export class Effects {
     }
   }
 
-  bloodPool(pos, size = 1.3, tone = TONE.HOSTILE) {
+  bloodPool(pos: THREE.Vector3, size = 1.3, tone: number = TONE.HOSTILE): void {
     if (!finiteVector(pos) || !Number.isFinite(size) || size <= 0) return;
     probe.copy(pos).addScaledVector(UP, 0.5);
     const floor = this.world.raycast(probe, DOWN, 5, seeThrough);
     if (!floor) return;
     for (let i = 0; i < 3; i++) {
-      let hit = floor;
+      let hit: RayHit | null = floor;
       if (i > 0) {
         surfaceBasis(floor.normal);
         const a = rand(0, TAU), r = size * rand(0.15, 0.5);
@@ -278,12 +361,12 @@ export class Effects {
         hit = this._surfaceAt(floor.point, surfaceNormal, offset);
         if (!hit) continue;
       }
-      const pool = this._splats[randInt(0, 4)], index = slot(pool);
+      const pool = choose(this._splats), index = slot(pool);
       face(hit.normal, null);
       transform.position.copy(hit.point).addScaledVector(surfaceNormal, rand(0.02, 0.04));
-      const g = { pool, index, generation: pool.generations[index], time: 0, duration: rand(0.5, 1.1),
+      const g = { pool, index, generation: pool.generations[index] ?? 0, time: 0, duration: rand(0.5, 1.1),
         size: size * (i === 0 ? rand(0.75, 1) : rand(0.3, 0.6)),
-        pos: transform.position.clone(), quat: transform.quaternion.clone(), hex: TONE_HEX[toneId(tone)] };
+        pos: transform.position.clone(), quat: transform.quaternion.clone(), hex: toneHex(tone) };
       this._growing.push(g);
       transform.scale.set(0, 0, 1);
       transform.updateMatrix();
@@ -291,14 +374,20 @@ export class Effects {
     }
   }
 
-  debris(mesh, pos, vel, angVel, o = {}) {
+  /**
+   * Takes ownership of a caller-owned mesh: it is re-parented into the scene
+   * with `scene.attach` semantics and removed here when it expires. The caller
+   * must never remove or dispose it afterwards.
+   */
+  debris(mesh: THREE.Object3D, pos: THREE.Vector3, vel: THREE.Vector3, angVel: THREE.Vector3,
+    o: { life?: number; radius?: number; blood?: boolean } = {}): void {
     if (!mesh?.isObject3D || !finiteVector(pos) || !finiteVector(vel) || !finiteVector(angVel)) return;
     const existing = this._debris.findIndex(d => d.mesh === mesh);
     if (existing !== -1) return;
     if (this._debris.length >= 70) this._removeDebris(0);
     this.scene.attach(mesh);
     mesh.position.copy(this.scene.worldToLocal(localPosition.copy(pos)));
-    mesh.traverse(child => { if (child.isMesh) { child.castShadow = true; child.receiveShadow = false; } });
+    mesh.traverse(child => { if ('isMesh' in child && child.isMesh) { child.castShadow = true; child.receiveShadow = false; } });
     const d = { mesh, pos: pos.clone(), vel: vel.clone(), angVel: angVel.clone(),
       scale: mesh.scale.clone(), life: finite(o.life, 10), radius: Math.max(0, finite(o.radius, 0.18)),
       blood: o.blood === true, bounces: 0, atRest: false, trailT: 0 };
@@ -306,17 +395,22 @@ export class Effects {
     if (d.blood) this._bloodyGibs++;
   }
 
-  _removeDebris(index) {
+  _removeDebris(index: number): void {
     const [d] = this._debris.splice(index, 1);
+    if (!d) return;
     d.mesh.removeFromParent();
-    const geometries = new Set();
-    d.mesh.traverse(child => { if (child.geometry) geometries.add(child.geometry); });
+    const geometries = new Set<THREE.BufferGeometry>();
+    d.mesh.traverse(child => {
+      const geometry = 'geometry' in child ? child.geometry : null;
+      if (geometry instanceof THREE.BufferGeometry) geometries.add(geometry);
+    });
     for (const geometry of geometries) geometry.dispose();
     if (d.blood) this._bloodyGibs--;
   }
 
-  _stepDebris(index, dt) {
+  _stepDebris(index: number, dt: number): void {
     const d = this._debris[index];
+    if (!d) return;
     if (!d.atRest) {
       previous.copy(d.pos);
       d.vel.y -= 20 * dt;
@@ -357,7 +451,7 @@ export class Effects {
     d.mesh.scale.copy(d.scale).multiplyScalar(d.life < 0.6 ? Math.max(0.001, d.life / 0.6) : 1);
   }
 
-  clear() {
+  clear(): void {
     this._particles.length = this._growing.length = 0;
     while (this._debris.length) this._removeDebris(this._debris.length - 1);
     for (const pool of this._pools) {
@@ -366,7 +460,7 @@ export class Effects {
     }
   }
 
-  sparks(point, normal, tone = TONE.PRIMARY, n = 6, speed = 7) {
+  sparks(point: THREE.Vector3, normal: THREE.Vector3, tone: number = TONE.PRIMARY, n = 6, speed = 7): void {
     if (!finiteVector(normal)) return;
     for (let i = 0; i < finite(n, 6); i++) {
       const vel = unit(randomVector());
@@ -377,14 +471,15 @@ export class Effects {
     }
   }
 
-  strokeBurst(pos, tone, n = 16, speed = 6, o = {}) {
+  strokeBurst(pos: THREE.Vector3, tone: number, n = 16, speed = 6,
+    o: { life?: number; size?: number; gravity?: number; drag?: number; stretch?: number } = {}): void {
     for (let i = 0; i < finite(n, 16); i++) this.particle({ kind: 'stroke', pos, tone,
       vel: unit(randomVector()).multiplyScalar(rand(0.3 * speed, speed)),
       size: o.size ?? rand(0.02, 0.04), life: o.life ?? rand(0.25, 0.5),
       gravity: o.gravity ?? 0, stretch: o.stretch ?? 0.05, drag: o.drag ?? 3 });
   }
 
-  tracer(from, to, tone = TONE.PRIMARY, thick = 0.022, life = 0.06) {
+  tracer(from: THREE.Vector3, to: THREE.Vector3, tone: number = TONE.PRIMARY, thick = 0.022, life = 0.06): void {
     if (!finiteVector(from) || !finiteVector(to)) return;
     const axis = to.clone().sub(from), length = axis.length();
     if (length < 0.05) return;
@@ -392,12 +487,12 @@ export class Effects {
       axis: axis.divideScalar(length), fixedLen: length, size: thick, life, tone, gravity: 0, shrink: false });
   }
 
-  bulletImpact(point, normal, tone = TONE.PRIMARY) {
+  bulletImpact(point: THREE.Vector3, normal: THREE.Vector3, tone: number = TONE.PRIMARY): void {
     this.decal(point, normal, tone, rand(0.06, 0.1), 'hole');
     this.sparks(point, normal, tone, 5);
   }
 
-  blood(pos, dir, amount = 1, o = {}) {
+  blood(pos: THREE.Vector3, dir: THREE.Vector3, amount = 1, o: { tone?: number } = {}): void {
     if (!finiteVector(dir) || !Number.isFinite(amount) || amount <= 0) return;
     const tone = o.tone ?? TONE.HOSTILE;
     for (let i = 0; i < Math.round(14 * amount); i++) this.particle({ kind: 'drop', pos, tone,
@@ -411,28 +506,29 @@ export class Effects {
       size: rand(0.012, 0.03), life: rand(0.3, 0.7), gravity: 6, drag: 2 });
   }
 
-  drip(pos, amount = 1) {
+  drip(pos: THREE.Vector3, amount = 1): void {
     this.particle({ kind: 'drop', pos, vel: randomVector(-0.4, 0.2, 0.3),
       size: rand(0.018, 0.03) + 0.02 * finite(amount, 1), life: rand(1, 1.8),
       tone: TONE.HOSTILE, collide: 'decal', gravity: 20, decalSize: 5 });
   }
 
-  fountain(pos, dir, dur = 0.8, tone = TONE.HOSTILE) {
+  fountain(pos: THREE.Vector3, dir: THREE.Vector3, dur = 0.8, tone: number = TONE.HOSTILE): void {
     this.particle({ kind: 'emitter', pos, life: dur, emitDir: dir, rate: 40, tone });
   }
 
-  shell(pos, vel, tone = TONE.ACCENT, size = 0.02) {
+  shell(pos: THREE.Vector3, vel: THREE.Vector3, tone: number = TONE.ACCENT, size = 0.02): void {
     this.particle({ kind: 'stroke', pos, vel, tone, size, life: rand(0.9, 1.4),
       gravity: 22, stretch: 0.012, drag: 0.5, shrink: false });
   }
 
-  _smokeParticle(p) {
+  _smokeParticle(p: ParticleSpec): void {
     const before = this._particles.length;
     this.particle(p);
-    if (this._particles.length > before) this._particles[this._particles.length - 1].hex = SMOKE_HEX;
+    const last = this._particles[this._particles.length - 1];
+    if (last && this._particles.length > before) last.hex = SMOKE_HEX;
   }
 
-  smoke(pos, dir, n = 3) {
+  smoke(pos: THREE.Vector3, dir: THREE.Vector3, n = 3): void {
     if (!finiteVector(dir)) return;
     for (let i = 0; i < finite(n, 3); i++) this._smokeParticle({ kind: 'drop', pos,
       vel: randomVector(0.6, 1.4, 0.5).addScaledVector(dir, rand(0.6, 1.8)),
@@ -440,7 +536,7 @@ export class Effects {
       gravity: -1.2, drag: 3, grow: 3.2, shrink: false });
   }
 
-  explosion(pos, radius = 4, tone = TONE.DARK) {
+  explosion(pos: THREE.Vector3, radius = 4, tone: number = TONE.DARK): void {
     if (!finiteVector(pos)) return;
     for (let i = 0; i < 40; i++) this.particle({ kind: 'drop', pos, tone,
       vel: unit(randomVector(-0.2, 1)).multiplyScalar(rand(4, 14)),
@@ -455,7 +551,7 @@ export class Effects {
     this.shake += 0.5;
   }
 
-  boom(pos, radius = 5) {
+  boom(pos: THREE.Vector3, radius = 5): void {
     if (!finiteVector(pos) || !Number.isFinite(radius) || radius <= 0) return;
     const k = radius / 5;
     for (let i = 0; i < 4; i++) this.particle({ kind: 'drop', pos, tone: TONE.ACCENT,

@@ -2,7 +2,37 @@ import * as THREE from 'three';
 import { SURF, TONE, TONE_HEX } from './palette';
 import { makePostMaterial } from './materials';
 
+/** The four feedback intensities of §3.6, rebuilt by `boot` every frame. */
+export interface PostFX {
+  hurt: number;
+  flash: number;
+  slow: number;
+  lowHp: number;
+}
+
+/**
+ * The shader's uniform table. A type alias, not an interface, so it keeps the
+ * implicit index signature `makePostMaterial` needs.
+ */
+type CompositeUniforms = {
+  image: THREE.IUniform<THREE.Texture>;
+  time: THREE.IUniform<number>;
+  aspect: THREE.IUniform<number>;
+  hurtIn: THREE.IUniform<number>;
+  lowHp: THREE.IUniform<number>;
+  flash: THREE.IUniform<number>;
+  slow: THREE.IUniform<number>;
+  hostile: THREE.IUniform<THREE.Color>;
+  background: THREE.IUniform<THREE.Color>;
+};
+
 export class Composite {
+  readonly target: THREE.WebGLRenderTarget;
+  readonly uniforms: CompositeUniforms;
+  readonly scene: THREE.Scene;
+  readonly camera: THREE.OrthographicCamera;
+  readonly triangle: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;
+
   constructor() {
     this.target = new THREE.WebGLRenderTarget(2, 2, {
       format: THREE.RGBAFormat, type: THREE.UnsignedByteType,
@@ -47,28 +77,24 @@ export class Composite {
     this.scene.add(this.triangle);
   }
 
-  dispose() {
+  // ponytail: this class carried two identical `dispose()` bodies; the second one
+  // silently won. Only one is kept, which is what ran before.
+  dispose(): void {
     this.target.dispose();
     this.triangle.geometry.dispose();
     this.triangle.material.dispose();
   }
 
-  resize(width, height, aspect) {
+  resize(width: number, height: number, aspect: number): void {
     this.target.setSize(width, height);
     this.uniforms.aspect.value = aspect;
   }
 
-  draw(renderer, time, fx) {
+  draw(renderer: THREE.WebGLRenderer, time: number, fx: PostFX): void {
     this.uniforms.time.value = time;
-    for (const key of ['hurt', 'lowHp', 'flash', 'slow']) this.uniforms[key === 'hurt' ? 'hurtIn' : key].value = fx[key] ?? 0;
+    for (const key of ['hurt', 'lowHp', 'flash', 'slow'] as const) this.uniforms[key === 'hurt' ? 'hurtIn' : key].value = fx[key] ?? 0;
     renderer.setRenderTarget(null);
     renderer.clear();
     renderer.render(this.scene, this.camera);
-  }
-
-  dispose() {
-    this.target.dispose();
-    this.triangle.geometry.dispose();
-    this.triangle.material.dispose();
   }
 }

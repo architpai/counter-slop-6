@@ -49,6 +49,30 @@ const play = await page.evaluate(async () => {
   };
 });
 
+// Phase 3 converted input, audio and effects. Drive them: a real keydown must
+// reach the action map and move the player, a gesture must open the audio
+// context, and firing must spawn particles.
+await page.mouse.move(640, 360);
+await page.keyboard.down('w');
+const driven = await page.evaluate(async () => {
+  const g = window.__game;
+  const before = g.player.body.pos.clone();
+  await new Promise(r => setTimeout(r, 700));
+  const moved = g.player.body.pos.distanceTo(before);
+  const wasDown = g.input.down('forward');
+  g.player.weapons[0].mag = 30;
+  g.ctx.effects.smoke(g.player.eye, g.player.forward, 12);
+  await new Promise(r => setTimeout(r, 120));
+  return {
+    moved,
+    wasDown,
+    audioState: g.ctx.audio.ctx ? g.ctx.audio.ctx.state : 'none',
+    magazine: document.querySelector('[data-hud="magazine"]')?.textContent ?? null,
+    hp: document.querySelector('[data-hud="hp"]')?.textContent ?? null,
+  };
+});
+await page.keyboard.up('w');
+
 const shot = await page.screenshot();
 const blank = shot.length < 8000;
 
@@ -84,6 +108,11 @@ check(play.onGround, 'physics resolved the player onto the ground');
 check(play.finite, 'player position stayed finite and bounded');
 check(play.spawned > 0, `enemies spawned (${play.spawned})`);
 check(play.hp > 0, `player alive after 2.5 s (hp ${play.hp})`);
+check(driven.wasDown, "input mapped KeyW to the 'forward' action");
+check(driven.moved > 0.5, `player moved under key input (${driven.moved.toFixed(2)} m)`);
+check(driven.audioState !== 'none', `audio context opened (${driven.audioState})`);
+check(driven.magazine === '30', `HUD magazine reflects engine state (${driven.magazine})`);
+check(driven.hp === '120', `HUD health reflects engine state (${driven.hp})`);
 check(teardown.live === 0, `dispose() drops the instance count (got ${teardown.live})`);
 check(teardown.frozen, 'dispose() stops the frame loop');
 check(teardown.idempotent, 'dispose() is idempotent');
