@@ -93,6 +93,11 @@ export function mergeByMaterial(parts: MergePart[]): THREE.Mesh[] {
   return meshes;
 }
 
+/** Vertex-coloured, unlit, inside-out: the sky dome. One instance, never fogged. */
+export function skyMat(): THREE.MeshBasicMaterial {
+  return new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false });
+}
+
 // Private factories keep every material constructor in this module.
 export function makePostMaterial(uniforms: PostUniforms, vertexShader: string, fragmentShader: string): THREE.ShaderMaterial {
   let material = posts.get(uniforms);

@@ -160,12 +160,11 @@ export class LevelBuilder {
   rail(x1: number, z1: number, x2: number, z2: number, y: number, opts: BuildOpts = {}): Box {
     const length = Math.hypot(x2 - x1, z2 - z1), alongX = Math.abs(x2 - x1) > Math.abs(z2 - z1);
     const x = (x1 + x2) / 2, z = (z1 + z2) / 2;
-    this.box(x, y + 0.9, z, alongX ? length : 0.12, 0.12, alongX ? 0.12 : length,
-      { ...opts, noCollide: true });
+    const look: BuildOpts = { mat: 'metal', ...opts, noCollide: true };
+    this.box(x, y + 0.9, z, alongX ? length : 0.12, 0.12, alongX ? 0.12 : length, look);
     const n = Math.max(1, Math.round(length / 2));
     for (let i = 0; i <= n; i++) {
-      this.box(x1 + (x2 - x1) * i / n, y, z1 + (z2 - z1) * i / n, 0.1, 0.9, 0.1,
-        { ...opts, noCollide: true });
+      this.box(x1 + (x2 - x1) * i / n, y, z1 + (z2 - z1) * i / n, 0.1, 0.9, 0.1, look);
     }
     return this.collider(x, y, z, alongX ? length : 0.12, 1, alongX ? 0.12 : length,
       { ...opts, noNav: true, noShoot: true });

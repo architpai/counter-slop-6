@@ -11,6 +11,8 @@ export interface CameraState {
   landDip: Spring;
   /** Eye offset above the feet, 1.6 standing and 0.88 crouched. */
   eyeHeight: number;
+  /** Stair smoothing: the body pops up a step, the eye eases up after it. */
+  stepOffset: number;
   bobPhase: number;
   bobAmt: number;
   stepDistance: number;
@@ -26,6 +28,7 @@ export function initCamera(p: Player): void {
   p.fovKick = new Spring(220, 14);
   p.landDip = new Spring(170, 15);
   p.eyeHeight = 1.6;
+  p.stepOffset = 0;
   p.bobPhase = p.bobAmt = p.stepDistance = 0;
   p.bobX = p.bobY = 0;
   p.ctx.camera.rotation.order = 'YXZ';
@@ -53,6 +56,7 @@ export function updateCamera(p: Player, dt: number): void {
   p.recoilYaw.update(dt);
   p.fovKick.update(dt);
   p.landDip.update(dt);
+  p.stepOffset = damp(p.stepOffset, 0, 22, dt);
   if (p.alive) {
     p.eyeHeight = damp(p.eyeHeight, p.crouching ? 0.88 : 1.6, 14, dt);
     p.roll = damp(p.roll, -p.move.x * 0.022 + (p.sliding ? -0.08 : 0), 9, dt);

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { TONE, cylGeo, coneGeo, torusGeo } from '../render/index';
+import { SURF, TONE, boxGeo, cylGeo, coneGeo, torusGeo, unlitMat } from '../render/index';
 import type { BuildOpts, LevelBuilder, MarkerKind } from './build';
+import type { SurfKey } from '../render/palette';
 
 type Point = readonly [number, number, number];
 type Segment = readonly [number, number, number, number];
@@ -9,6 +10,11 @@ type Box6 = readonly [number, number, number, number, number, number];
 
 const visual: BuildOpts = { noCollide: true };
 const dark: BuildOpts = { mat: 'dark', noCollide: true };
+const concrete: BuildOpts = { mat: 'blockAlt' };
+const deep: BuildOpts = { mat: 'blockDeep' };
+const metal: BuildOpts = { mat: 'metal' };
+const wood: BuildOpts = { mat: 'wood' };
+const road: BuildOpts = { mat: 'road', noCollide: true };
 
 function markers(b: LevelBuilder, kind: MarkerKind, points: readonly Point[]) {
   for (const point of points) b.marker(kind, ...point);
@@ -23,14 +29,15 @@ export function buildDowntown(b: LevelBuilder) {
   const e = p - 3.8, d = p - 3;
   b.box(0, -1, 0, 2 * p + 6, 1, 2 * p + 6, { mat: 'ground' });
   for (const sign of [-1, 1]) {
-    b.box(0, 0, sign * p, 2 * p + 6, ph, 6);
-    b.box(sign * p, 0, 0, 6, ph, 2 * p + 6);
+    b.box(0, 0, sign * p, 2 * p + 6, ph, 6, concrete);
+    b.box(sign * p, 0, 0, 6, ph, 2 * p + 6, concrete);
   }
+  buildStreets(b, p);
   for (const [x, z, w, depth] of [
     [-30, -e, 8, 1.6], [30, -e, 8, 1.6], [-e, 40, 1.6, 8], [e, -10, 1.6, 8],
     [-e, -30, 1.6, 6], [e, 35, 1.6, 6], [10, e, 8, 1.6], [-40, e, 6, 1.6],
   ] as const) {
-    for (const y of arena ? [9, 5.5, 16] : [9, 5.5]) b.box(x, y, z, w, 0.4, depth);
+    for (const y of arena ? [9, 5.5, 16] : [9, 5.5]) b.box(x, y, z, w, 0.4, depth, metal);
     if (arena) b.ring(x, 20, z);
   }
   for (const [x, z] of [[-d, 0], [d, 0], [-d, 30], [d, -30], [-d, -30], [d, 30]] as const) {
@@ -105,29 +112,43 @@ function buildArena(b: LevelBuilder) {
   b.planes(4, 30, 26, { scale: 1.7, radiusStep: 9, heightStep: 6, speed: 0.11 });
 }
 
+/** Asphalt under the highway and two avenues flanking the tower, with lane dashes. */
+function buildStreets(b: LevelBuilder, p: number) {
+  const edge = p - 3;
+  b.box(0, 0, -30, 2 * edge, 0.04, 10, road);
+  for (const x of [-16, 16]) {
+    b.box(x, 0, -2, 6, 0.04, 2 * edge, road);
+    for (let z = -edge + 2; z < edge; z += 4) b.box(x, 0.04, z, 0.2, 0.02, 2, dark);
+  }
+  for (let x = -edge + 2; x < edge; x += 4) {
+    if (Math.abs(x + 16) < 4 || Math.abs(x - 16) < 4) continue;
+    b.box(x, 0.04, -30, 2, 0.02, 0.2, dark);
+  }
+}
+
 function buildTower(b: LevelBuilder) {
-  for (const top of [4, 8, 12, 16]) b.slab(-7, -7, 7, 7, top, 0.4);
+  for (const top of [4, 8, 12, 16]) b.slab(-7, -7, 7, 7, top, 0.4, concrete);
   for (const [x, z] of [[-6.6, -6.6], [6.6, -6.6], [-6.6, 6.6], [6.6, 6.6],
-    [0, -6.6], [0, 6.6], [-6.6, 0], [6.6, 0]] as const) b.box(x, 0, z, 0.8, 16, 0.8);
+    [0, -6.6], [0, 6.6], [-6.6, 0], [6.6, 0]] as const) b.box(x, 0, z, 0.8, 16, 0.8, deep);
   for (const y of [4, 8, 12]) rails(b, y, [
     [-7, 7, -1.5, 7], [1.5, 7, 7, 7], [-7, -7, 7, -7],
     [-7, -7, -6.5, -7], [3.5, -7, 7, -7], [7, -7, 7, 7],
   ]);
   rails(b, 16, [[-5, -7, 7, -7], [-7, 7, -1.5, 7], [1.5, 7, 7, 7],
     [-7, -7, -7, 7], [7, -7, 7, 3]]);
-  b.box(5.5, 16, 5.5, 1, 10, 1);
-  b.box(5.5, 25.2, 5.5, 1.6, 1.4, 1.6, visual);
-  b.box(11.5, 25, 5.5, 16, 0.8, 0.8);
-  b.box(1, 25, 5.5, 5, 0.8, 0.8);
-  b.box(-0.5, 23.6, 5.5, 2, 1.6, 1.6);
+  b.box(5.5, 16, 5.5, 1, 10, 1, deep);
+  b.box(5.5, 25.2, 5.5, 1.6, 1.4, 1.6, { mat: 'accent', noCollide: true });
+  b.box(11.5, 25, 5.5, 16, 0.8, 0.8, metal);
+  b.box(1, 25, 5.5, 5, 0.8, 0.8, metal);
+  b.box(-0.5, 23.6, 5.5, 2, 1.6, 1.6, deep);
   b.box(19, 20.5, 5.5, 0.08, 4.6, 0.08, dark);
   b.ring(19, 19.8, 5.5, 'x');
   b.ring(19.5, 24.6, 5.5, 'z');
   for (let i = 0; i < 4; i++) {
     const even = i % 2 === 0, y = i * 4;
-    b.stairs(even ? -5 : 1.3, y, even ? -8.3 : -10.3, even ? '+x' : '-x', 14, 1.8);
+    b.stairs(even ? -5 : 1.3, y, even ? -8.3 : -10.3, even ? '+x' : '-x', 14, 1.8, concrete);
     const [x1, x2]: [number, number] = even ? [1.3, 3.5] : [-7.2, -5];
-    b.slab(x1, -11.4, x2, -7, y + 4, 0.4);
+    b.slab(x1, -11.4, x2, -7, y + 4, 0.4, concrete);
     b.rail(x1, -11.4, x2, -11.4, y + 4);
   }
   markers(b, 'spawns', [[0, 8, 0], [0, 4, 3]]);
@@ -136,7 +157,7 @@ function buildTower(b: LevelBuilder) {
 }
 
 function buildA(b: LevelBuilder) {
-  for (const y of [4, 8, 12]) b.slab(-43, 4, -25, 20, y, 0.4);
+  for (const y of [4, 8, 12]) b.slab(-43, 4, -25, 20, y, 0.4, concrete);
   b.wall('z', 4, 20, -25, 0, 12, 0.4, [[10, 13, 0, 3.2], [6, 9, 5, 7],
     [14, 17, 5, 7], [6, 9, 9, 11], [14, 17, 9, 11]]);
   b.wall('z', 4, 20, -43, 0, 12, 0.4, [[8, 11, 0, 3.2], [8, 11, 4.5, 7.5], [8, 11, 8.5, 11.5]]);
@@ -152,9 +173,9 @@ function buildA(b: LevelBuilder) {
     [-34.4, 20, -25, 20], [-43, 4, -43, 20], [-25, 4, -25, 9], [-25, 15, -25, 20]]);
   for (let i = 0; i < 3; i++) {
     const even = i % 2 === 0, y = i * 4;
-    b.stairs(even ? -28.5 : -34.8, y, even ? 21.2 : 23.2, even ? '-x' : '+x', 14, 1.8);
+    b.stairs(even ? -28.5 : -34.8, y, even ? 21.2 : 23.2, even ? '-x' : '+x', 14, 1.8, metal);
     const [x1, x2]: [number, number] = even ? [-37, -34.8] : [-28.5, -26.3];
-    b.slab(x1, 20.2, x2, 24.4, y + 4, 0.4);
+    b.slab(x1, 20.2, x2, 24.4, y + 4, 0.4, metal);
     b.rail(x1, 24.4, x2, 24.4, y + 4);
   }
   const end = b.level.arena ? 24.2 : -7, length = end + 25.2;
@@ -172,32 +193,32 @@ function buildA(b: LevelBuilder) {
 function buildB(b: LevelBuilder) {
   const floors: readonly Rect[] = [[24, 4, 44, 9], [24, 15, 44, 20], [24, 9, 31, 15], [37, 9, 44, 15]];
   for (const rectangle of floors) {
-    b.slab(...rectangle, 12, 0.4);
+    b.slab(...rectangle, 12, 0.4, { mat: 'roof' });
   }
-  b.wall('z', 4, 20, 24, 0, 12, 0.4, [[10, 14, 0, 3.6], [6, 9, 7, 10], [15, 18, 7, 10]]);
-  b.wall('z', 4, 20, 44, 0, 12, 0.4, [[7, 10, 0, 3.2], [14, 17, 0, 3.2], [8, 16, 7, 10]]);
-  b.wall('x', 24, 44, 4, 0, 12, 0.4, [[32, 36, 0, 3.6], [27, 30, 7, 10], [38, 41, 7, 10]]);
+  b.wall('z', 4, 20, 24, 0, 12, 0.4, [[10, 14, 0, 3.6], [6, 9, 7, 10], [15, 18, 7, 10]], concrete);
+  b.wall('z', 4, 20, 44, 0, 12, 0.4, [[7, 10, 0, 3.2], [14, 17, 0, 3.2], [8, 16, 7, 10]], concrete);
+  b.wall('x', 24, 44, 4, 0, 12, 0.4, [[32, 36, 0, 3.6], [27, 30, 7, 10], [38, 41, 7, 10]], concrete);
   b.wall('x', 24, 44, 20, 0, 12, 0.4, [[26, 29, 0, 3.2], [39, 42, 0, 3.2],
-    [33.5, 36.5, 4.05, 7.2], [25.5, 28.5, 8.05, 11.2], [32, 36, 8, 11]]);
+    [33.5, 36.5, 4.05, 7.2], [25.5, 28.5, 8.05, 11.2], [32, 36, 8, 11]], concrete);
   const ledges: readonly Rect[] = [[24.4, 4.4, 26, 19.6], [42, 4.4, 43.6, 19.6],
     [26, 4.4, 42, 6], [26, 18, 42, 19.6]];
-  for (const rectangle of ledges) b.slab(...rectangle, 6, 0.3);
+  for (const rectangle of ledges) b.slab(...rectangle, 6, 0.3, metal);
   rails(b, 6, [[26, 6, 26, 9], [26, 15, 26, 17], [42, 6, 42, 18],
-    [26, 6, 31, 6], [37, 6, 42, 6], [26, 18, 42, 18]]);
-  b.stairs(26.2, 0, 8.6, '+z', 21, 1.6, { rise: 6 / 21 });
-  b.box(34, 0, 12, 2.4, 2.4, 2.4);
-  b.box(36.4, 0, 12, 2.4, 1.2, 2.4);
+    [26, 6, 31, 6], [37, 6, 42, 6], [28.2, 18, 42, 18]]);
+  b.stairs(27.2, 0, 8.6, '+z', 21, 1.6, { rise: 6 / 21, mat: 'metal' });
+  b.box(34, 0, 12, 2.4, 2.4, 2.4, wood);
+  b.box(36.4, 0, 12, 2.4, 1.2, 2.4, wood);
   b.box(30, 0, 16, 1.6, 1.6, 1.6, { tone: TONE.HEAL });
   for (let i = 0; i < 3; i++) {
     const even = i % 2 === 0, y = i * 4;
-    b.stairs(even ? 27.5 : 33.8, y, even ? 21.2 : 23.2, even ? '+x' : '-x', 14, 1.8);
+    b.stairs(even ? 27.5 : 33.8, y, even ? 21.2 : 23.2, even ? '+x' : '-x', 14, 1.8, metal);
     const [x1, x2]: [number, number] = even ? [33.8, 36] : [25.3, 27.5];
-    b.slab(x1, 20.2, x2, 24.4, y + 4, 0.4);
+    b.slab(x1, 20.2, x2, 24.4, y + 4, 0.4, metal);
     b.rail(x1, 24.4, x2, 24.4, y + 4);
   }
   rails(b, 12, [[24, 4, 31, 4], [37, 4, 44, 4], [24, 20, 33.4, 20],
     [36.4, 20, 44, 20], [44, 4, 44, 20], [24, 4, 24, 9], [24, 15, 24, 20]]);
-  b.box(15.5, 11.6, 6, 17.4, 0.4, 2.2);
+  b.box(15.5, 11.6, 6, 17.4, 0.4, 2.2, metal);
   b.rail(7, 4.9, 24, 4.9, 12);
   markers(b, 'spawns', [[34, 12, 18], [40, 0, 8]]);
   markers(b, 'snipers', [[26, 12, 18]]);
@@ -206,11 +227,11 @@ function buildB(b: LevelBuilder) {
 
 function buildHighway(b: LevelBuilder) {
   b.slab(-52, -34.5, 52, -25.5, 7, 0.6, { mat: 'road' });
-  b.wall('x', -52, 52, -34.3, 7, 0.9, 0.4, [[-33, -29], [27, 31], [-2, 2]]);
-  b.wall('x', -52, 52, -25.7, 7, 0.9, 0.4, [[-36.5, -33], [33, 36.5]]);
-  for (let x = -48; x <= 48; x += 12) b.box(x, 0, -30, 1.4, 6.4, 1.4);
-  b.stairs(-46.5, 0, -24.5, '+x', 25, 2, { rise: 0.28 });
-  b.stairs(46.5, 0, -24.5, '-x', 25, 2, { rise: 0.28 });
+  b.wall('x', -52, 52, -34.3, 7, 0.9, 0.4, [[-33, -29], [27, 31], [-2, 2]], concrete);
+  b.wall('x', -52, 52, -25.7, 7, 0.9, 0.4, [[-36.5, -33], [33, 36.5]], concrete);
+  for (let x = -48; x <= 48; x += 12) b.box(x, 0, -30, 1.4, 6.4, 1.4, concrete);
+  b.stairs(-46.5, 0, -24.5, '+x', 25, 2, { rise: 0.28, mat: 'road' });
+  b.stairs(46.5, 0, -24.5, '-x', 25, 2, { rise: 0.28, mat: 'road' });
   for (let x = -49; x <= 47; x += 4) b.box(x, 7, -30, 2, 0.02, 0.2, dark);
   markers(b, 'spawns', [[-48, 7, -30], [48, 7, -30]]);
   markers(b, 'snipers', [[0, 7, -30]]);
@@ -218,16 +239,18 @@ function buildHighway(b: LevelBuilder) {
 }
 
 function buildHouses(b: LevelBuilder) {
-  for (const [x, h] of [[-30, 7], [-8, 11], [16, 7]] as const) b.box(x, 0, -45, 14, h, 10);
-  for (const x of [-31, 29, 0]) b.box(x, 6.7, -37.25, 2.6, 0.3, 5.5);
+  for (const [x, h, mat] of [[-30, 7, 'wood'], [-8, 11, 'blockAlt'], [16, 7, 'roof']] as const) {
+    b.box(x, 0, -45, 14, h, 10, { mat });
+  }
+  for (const x of [-31, 29, 0]) b.box(x, 6.7, -37.25, 2.6, 0.3, 5.5, metal);
   for (const x of [-32.3, -29.7, 27.7, 30.3]) b.rail(x, -40, x, -34.5, 7);
-  b.stairs(-23, 7, -45, '+x', 14, 2.2);
-  b.slab(-16.9, -46.1, -15, -43.9, 11, 0.4);
-  b.stairs(9, 7, -45, '-x', 14, 2.2);
-  b.slab(-1, -46.1, 2.9, -43.9, 11, 0.4);
-  b.box(-33, 7, -48, 1.2, 1.6, 1.2);
-  b.box(19, 7, -42, 1.2, 1.4, 1.2);
-  b.cylinder(-10, 11, -47.5, 1.4, 2.6, { segments: 14 });
+  b.stairs(-23, 7, -45, '+x', 14, 2.2, metal);
+  b.slab(-16.9, -46.1, -15, -43.9, 11, 0.4, metal);
+  b.stairs(9, 7, -45, '-x', 14, 2.2, metal);
+  b.slab(-1, -46.1, 2.9, -43.9, 11, 0.4, metal);
+  b.box(-33, 7, -48, 1.2, 1.6, 1.2, wood);
+  b.box(19, 7, -42, 1.2, 1.4, 1.2, wood);
+  b.cylinder(-10, 11, -47.5, 1.4, 2.6, { segments: 14, mat: 'metal' });
   b.box(-5, 11, -42, 0.1, 4, 0.1, dark);
   markers(b, 'spawns', [[-8, 11, -45], [-30, 7, -48], [16, 7, -45]]);
   markers(b, 'snipers', [[-8, 11, -48], [16, 7, -43]]);
@@ -235,16 +258,19 @@ function buildHouses(b: LevelBuilder) {
 }
 
 function buildPlaza(b: LevelBuilder) {
-  const props: readonly (readonly [Box6, number?])[] = [
+  const props: readonly (readonly [Box6, SurfKey | number])[] = [
     [[-14, 0, 34, 2.5, 2.6, 6.2], TONE.HEAL], [[-14, 2.6, 34, 2.5, 2.6, 6.2], TONE.ACCENT],
     [[14, 0, 36, 6.2, 2.6, 2.5], TONE.PRIMARY], [[17, 2.6, 36, 3, 2.6, 2.5], TONE.HEAL],
-    [[-6, 0, 28, 1.4, 1.4, 1.4]], [[-4.5, 0, 28.5, 1.2, 1.2, 1.2]],
-    [[-5.3, 1.4, 28.2, 1, 1, 1]], [[8, 0, 26, 1.6, 1.6, 1.6]], [[9.6, 0, 26.4, 1.2, 1.2, 1.2]],
-    [[24, 0.6, 40, 11, 3.2, 2.8]], [[38, 0, 40, 6, 2.2, 3.2], TONE.BOSS],
-    [[38, 2.2, 40, 6, 0.8, 3.2]],
+    [[-6, 0, 28, 1.4, 1.4, 1.4], 'wood'], [[-4.5, 0, 28.5, 1.2, 1.2, 1.2], 'wood'],
+    [[-5.3, 1.4, 28.2, 1, 1, 1], 'wood'], [[8, 0, 26, 1.6, 1.6, 1.6], 'wood'],
+    [[9.6, 0, 26.4, 1.2, 1.2, 1.2], 'wood'],
+    [[24, 0.6, 40, 11, 3.2, 2.8], 'blockAlt'], [[38, 0, 40, 6, 2.2, 3.2], TONE.BOSS],
+    [[38, 2.2, 40, 6, 0.8, 3.2], 'dark'],
   ];
-  for (const [values, tone] of props) b.box(...values, { tone });
-  b.box(24, 0, 40, 10, 0.6, 2.6, visual);
+  for (const [values, look] of props) {
+    b.box(...values, typeof look === 'string' ? { mat: look } : { tone: look });
+  }
+  b.box(24, 0, 40, 10, 0.6, 2.6, { ...visual, mat: 'dark' });
   for (const x of [20, 28]) for (const z of [41.5, 38.5]) {
     b.cylinder(x, 0, z, 0.55, 0.4, { ...dark, segments: 10 });
   }
@@ -256,36 +282,42 @@ function buildPlaza(b: LevelBuilder) {
   b.collider(-20.8, 0, 44, 2.4, 1.6, 1.6);
   b.mesh(cylGeo(0.82, 1.6, 8, 'x'), [-38.8, 0.82, 44], { tone: TONE.BOSS });
   b.collider(-38.8, 0, 44, 1.6, 1.64, 1.64);
-  b.cylinder(-40, 0, 32, 2.6, 3.4, { segments: 16 });
-  b.mesh(torusGeo(1.4, 0.35), [-36.6, 1.8, 32]);
+  b.cylinder(-40, 0, 32, 2.6, 3.4, { segments: 16, mat: 'blockAlt' });
+  b.mesh(torusGeo(1.4, 0.35), [-36.6, 1.8, 32], metal);
   for (const [x, z] of [[-10, 46], [10, 46], [-22, 24], [22, 24]] as const) {
-    b.box(x, 0, z, 0.25, 6, 0.25);
-    b.box(x, 6, z, 1.4, 0.3, 0.5, visual);
+    b.box(x, 0, z, 0.25, 6, 0.25, deep);
+    b.box(x, 6, z, 1.4, 0.3, 0.5, { ...visual, mat: 'accent' });
   }
   for (const x of [-4, 4]) {
-    b.box(x, 0.4, 46, 3, 0.15, 0.6);
-    b.box(x, 0, 46, 2.6, 0.4, 0.2, visual);
+    b.box(x, 0.4, 46, 3, 0.15, 0.6, wood);
+    b.box(x, 0, 46, 2.6, 0.4, 0.2, { ...visual, mat: 'dark' });
   }
   markers(b, 'pickups', [[-6, 0, 36], [6, 0, 36], [-30, 1.6, 44], [38, 3, 40], [0, 0, 10]]);
   const benches: readonly Box6[] = [[-16, 0, -8, 2.2, 1.2, 2.2], [18, 0, -10, 2.2, 1.6, 2.2],
     [-20, 0, 8, 1.6, 1, 3], [20, 0, -2, 3, 1, 1.6], [-8, 0, -18, 4, 1.1, 1.2],
     [8, 0, -18, 4, 1.1, 1.2], [0, 0, 22, 5, 0.5, 1.4]];
-  for (const values of benches) b.box(...values);
+  for (const values of benches) b.box(...values, wood);
   b.box(-24, 0, -18, 2.4, 2.6, 2.4, { tone: TONE.ACCENT });
   b.box(26, 0, -18, 2.4, 2.6, 2.4, { tone: TONE.HEAL });
 }
 
 function buildSky(b: LevelBuilder) {
-  b.sphere(-90, 110, -160, 12, { segments: 12 });
+  // Sun and clouds sit against the sky dome, so they are unlit like it.
+  const sun: BuildOpts = { noCollide: true, separate: true };
+  const glow = (mesh: THREE.Mesh, color: number) => {
+    mesh.material = unlitMat(color);
+    mesh.castShadow = false;
+  };
+  glow(b.sphere(-90, 110, -160, 12, { ...sun, segments: 12 }), SURF.accent);
   for (let i = 0; i < 12; i++) {
     const angle = i * Math.PI / 6;
-    b.box(-90 + 19 * Math.cos(angle), 110 + 19 * Math.sin(angle) - 0.35, -160,
-      6, 0.7, 0.7, { noCollide: true, rotation: new THREE.Euler(0, 0, angle) });
+    glow(b.mesh(boxGeo(6, 0.7, 0.7), [-90 + 19 * Math.cos(angle), 110 + 19 * Math.sin(angle) - 0.35, -160],
+      { ...sun, rotation: new THREE.Euler(0, 0, angle) }), SURF.accent);
   }
   for (const [x, y, z, s] of [[60, 70, -170, 1], [-20, 75, -190, 1.3], [140, 60, -80, 0.9],
     [-150, 65, 40, 1.1], [30, 80, 180, 1.2], [-90, 60, 170, 0.8]] as const) {
     for (let i = 0; i < 6; i++) {
-      b.sphere(x + (i - 2.5) * 5 * s, y + 2.5 * s * Math.sin(1.7 * i), z, (4 + i % 3) * s);
+      glow(b.sphere(x + (i - 2.5) * 5 * s, y + 2.5 * s * Math.sin(1.7 * i), z, (4 + i % 3) * s, sun), SURF.cloud);
     }
   }
 }

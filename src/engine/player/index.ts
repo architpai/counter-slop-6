@@ -126,7 +126,7 @@ export class Player implements Target {
   get speed(): number { return this.body.vel.length(); }
   /** A live vector, rewritten every read: copy it before storing. */
   get eye(): Vector3 {
-    if (!this._idle) this._eye.set(this.body.pos.x, this.body.pos.y + this.eyeHeight + this.landDip.value * 0.07 + this.bobY, this.body.pos.z);
+    if (!this._idle) this._eye.set(this.body.pos.x, this.body.pos.y + this.eyeHeight + this.stepOffset + this.landDip.value * 0.07 + this.bobY, this.body.pos.z);
     return this._eye;
   }
   /** A live vector, rewritten every read: copy it before storing. */
@@ -175,6 +175,7 @@ export class Player implements Target {
     this.airJumps = 1;
     this.gravityScale = 1;
     this.eyeHeight = 1.6;
+    this.stepOffset = 0;
     this.grenades = 3;
     for (const weapon of this.weapons) weapon.resetAmmo();
     this.switchTo(0, true);

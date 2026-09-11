@@ -148,13 +148,16 @@ export class World {
     const nx = body.pos.x, nz = body.pos.z;
     if (canStep && body.stepHeight > 0) {
       body.pos.set(ox, oy + body.stepHeight, oz);
-      if (!this.overlapsBody(body)) {
+      // A low ceiling (a ledge over a stair) shortens the lift instead of cancelling the step.
+      if (this.overlapsBody(body)) this.#push(body, 'y', body.stepHeight);
+      const lift = body.pos.y - oy;
+      if (lift > 0.02 && !this.overlapsBody(body)) {
         body.pos.x += dx;
         const rx2 = this.#push(body, 'x', dx);
         body.pos.z += dz;
         const rz2 = this.#push(body, 'z', dz);
-        body.pos.y -= body.stepHeight;
-        this.#push(body, 'y', -body.stepHeight);
+        body.pos.y -= lift;
+        this.#push(body, 'y', -lift);
         const d1 = (nx - ox) ** 2 + (nz - oz) ** 2;
         const d2 = (body.pos.x - ox) ** 2 + (body.pos.z - oz) ** 2;
         if (d2 > d1 + 1e-6 && body.pos.y >= oy - 0.001 && !this.overlapsBody(body)) {
