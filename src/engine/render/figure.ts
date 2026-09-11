@@ -213,10 +213,10 @@ function weaponProp(kind: WeaponPropKind, color: number): THREE.Group {
     addBox(0.11, 0.11, 0.03, 0, 0.04, -0.06, ACCENT);
     addBox(0.035, 0.045, 0.24, 0, 0.04, -0.19, DARK);
   } else if (kind === 'hammer') {
-    barrel(0.065, 0.54, 0, 0.05, 0.07);
-    const nib = mesh(root, coneGeo(0.065, 0.16, 4), ACCENT, 0, 0.05, 0.34);
-    nib.rotation.x = Math.PI / 2;
-    addBox(0.025, 0.09, 0.23, 0.055, 0.08, -0.07, ACCENT);
+    // Ban hammer: a long handle and a fat two-tone head.
+    barrel(0.045, 0.7, 0, 0.05, 0.2);
+    addBox(0.42, 0.2, 0.2, 0, 0.05, 0.58, ACCENT);
+    addBox(0.06, 0.22, 0.22, 0, 0.05, 0.58, DARK);
   } else if (kind === 'shotgun') {
     addBox(0.1, 0.13, 0.66, 0, 0.02, 0.2);
     barrel(0.035, 0.5, 0, 0.08, 0.5);
@@ -378,7 +378,7 @@ export function makeFigure(o: FigureOpts): Figure {
       weapon.rotation.x = Math.PI / 2;
       mount.add(weapon);
       parts.weapon = weapon;
-      parts.tip = group(weapon, 'tip', 0, 0.05, kind === 'blade' ? 0.92 : kind === 'hammer' ? 0.4 : 0.78);
+      parts.tip = group(weapon, 'tip', 0, 0.05, kind === 'blade' ? 0.92 : kind === 'hammer' ? 0.6 : 0.78);
     },
     dropShield() {
       const shield = parts.shield;

@@ -1175,7 +1175,7 @@ ragdoll, respawn replacement or disposal. Keep the placement and billboard rule 
 7. RE §6.3 **kept verbatim**: the four intensities and the exact overlay formulas and order.
 8. E §4.2 humanoid template: every vertical offset, the limb lengths, the shoulder/leg offsets,
    the weapon mount at `(0, -0.29, 0.07)` on the right forearm, the muzzle tip z (0.78 gun /
-   0.92 blade / 0.4 hammer), the shield plate placement, the 0.95–1.06 head jitter.
+   0.92 blade / 0.6 hammer), the shield plate placement, the 0.95–1.06 head jitter.
 9. E §4.3 the hit-anchor set and radii table (the owner reads world positions from `anchors`).
 10. E §4.4 bomber / blob template (body sphere, arms, legs, cap, fuse, spark; hitbox block;
     lagspike's 9 spikes).
