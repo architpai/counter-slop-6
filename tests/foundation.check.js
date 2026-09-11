@@ -1,7 +1,7 @@
 import { Object3D, Vector3 } from 'three';
-import { Spring, Spring3, Cooldown, clamp, damp, wrapAngle, angleLerp, alignSegment, round2 } from '../src/util.js';
-import { Body, EPS, World, seeThrough } from '../src/physics.js';
-import { NavGrid } from '../src/nav.js';
+import { Spring, Spring3, Cooldown, clamp, damp, wrapAngle, angleLerp, alignSegment, round2 } from '../src/engine/util.js';
+import { Body, EPS, World, seeThrough } from '../src/engine/physics.js';
+import { NavGrid } from '../src/engine/nav.js';
 
 export async function run(assert) {
   const v = (x = 0, y = 0, z = 0) => new Vector3(x, y, z);

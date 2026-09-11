@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { Effects } from '../src/effects.js';
-import { unlitMat, TONE_HEX } from '../src/render/index.js';
+import { Effects } from '../src/engine/effects.js';
+import { unlitMat, TONE_HEX } from '../src/engine/render/index.js';
 
 export function run(assert) {
   const scene = new THREE.Scene();

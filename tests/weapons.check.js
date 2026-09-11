@@ -1,5 +1,5 @@
 import { Group, Vector3 } from 'three';
-import { Gun, Katana, GUN_STATS, makeLoadout } from '../src/weapons/index.js';
+import { Gun, Katana, GUN_STATS, makeLoadout } from '../src/engine/weapons/index.js';
 
 export async function run(assert) {
   const near = (a, b) => Math.abs(a - b) < 1e-7;

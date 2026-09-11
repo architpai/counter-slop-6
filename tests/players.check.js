@@ -1,5 +1,5 @@
 import { Scene, PerspectiveCamera, Vector3 } from 'three';
-import { encodeState, RemotePlayer } from '../src/players.js';
+import { encodeState, RemotePlayer } from '../src/engine/players.js';
 
 export function run(assert) {
   const near = (actual, expected, message) => assert(Math.abs(actual - expected) < 1e-8, message);

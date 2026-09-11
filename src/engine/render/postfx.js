@@ -47,6 +47,12 @@ export class Composite {
     this.scene.add(this.triangle);
   }
 
+  dispose() {
+    this.target.dispose();
+    this.triangle.geometry.dispose();
+    this.triangle.material.dispose();
+  }
+
   resize(width, height, aspect) {
     this.target.setSize(width, height);
     this.uniforms.aspect.value = aspect;

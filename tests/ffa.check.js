@@ -1,6 +1,6 @@
 import { Scene, Vector3 } from 'three';
-import { createFFA } from '../src/game/ffa.js';
-import { makeGameState } from '../src/game/state.js';
+import { createFFA } from '../src/engine/game/ffa.js';
+import { makeGameState } from '../src/engine/game/state.js';
 
 const noop = () => {};
 

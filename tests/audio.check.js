@@ -1,4 +1,4 @@
-import { Audio } from '../src/audio.js';
+import { Audio } from '../src/engine/audio.js';
 
 // A silent Web Audio double checks scheduling without a speaker or user gesture.
 export async function run(assert) {

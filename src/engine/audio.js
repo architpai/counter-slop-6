@@ -44,6 +44,17 @@ export class Audio {
     }
   }
 
+  dispose() {
+    this.reelLoop(false);
+    this.music(false);
+    this.#stopMusic();
+    const context = this.#ctx;
+    this.#ctx = null;
+    this.#master = null;
+    this.#noiseBuffer = null;
+    context?.close().catch(() => {});
+  }
+
   resume() {
     const context = this.#ctx;
     if (!context || context.state === 'closed') return;

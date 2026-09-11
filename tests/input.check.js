@@ -1,4 +1,4 @@
-import { Input } from '../src/input.js';
+import { Input } from '../src/engine/input.js';
 
 export function run(assert) {
   const canvas = document.createElement('canvas');

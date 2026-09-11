@@ -1,3 +1,5 @@
+import Peer from 'peerjs';
+
 export const NET = Object.freeze({
   PREFIX_LIVE: 'shooter-rebuild-v1-', PREFIX_DEV: 'shooter-rebuild-dev-v1-',
   PUBLIC_SLOTS: 8, CODE_LEN: 5, CODE_ALPHABET: 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789',
@@ -260,7 +262,7 @@ export class Net {
 
   #openPeer(id, epoch) {
     return new Promise((resolve, reject) => {
-      if (typeof globalThis.Peer !== 'function') { reject(new Error('networking library did not load')); return; }
+      if (typeof Peer !== 'function') { reject(new Error('networking library did not load')); return; }
       let peer;
       try {
         const options = { debug: 0, config: { iceServers: [
@@ -268,7 +270,7 @@ export class Net {
           { urls: 'stun:stun1.l.google.com:19302' },
           { urls: 'stun:stun.cloudflare.com:3478' },
         ] } };
-        peer = id === null ? new globalThis.Peer(options) : new globalThis.Peer(id, options);
+        peer = id === null ? new Peer(options) : new Peer(id, options);
       } catch (error) { reject(errorOf(error, 'could not connect')); return; }
       this.#peer = peer;
       let settled = false;

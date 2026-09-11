@@ -17,10 +17,33 @@ import { createUI } from './game/ui.js';
 import { createPickups } from './game/pickups.js';
 import { createBreakables } from './game/breakables.js';
 
+// Live instance count. A StrictMode remount or an HMR reload must leave this at
+// 1: anything higher means a leaked WebGL context, audio graph and rAF chain.
+let live = 0;
+export const liveInstances = () => live;
+
+/**
+ * Boot one game instance against a canvas and a HUD root.
+ *
+ * Every browser resource this creates is released by `handle.dispose()`, so a
+ * React StrictMode double-mount produces one live instance, not two.
+ *
+ * @param {HTMLCanvasElement} canvas
+ * @param {HTMLElement} hudRoot
+ * @returns {GameHandle}
+ */
+export function boot(canvas, hudRoot) {
+live++;
 let lastStep = performance.now();
+let disposed = false;
+let rafId = 0;
+let keepAlive = 0;
+const teardown = [];
+// Declared up here because loadLevel() refreshes it, and loadLevel runs during
+// boot step 3 — well before the handle object is built at step 11.
+let handle = null;
 
 // ---- boot 1-8
-const canvas = document.getElementById('game');
 const renderer = new Renderer(canvas);
 const { scene, camera } = renderer;
 const world = new World();
@@ -52,12 +75,12 @@ function loadLevel(arena, key, force = false) {
   renderer.setLevelShadow(ctx.level.shadow.center, ctx.level.shadow.radius);
   ctx.nav = new NavGrid(world, ctx.level.bounds, 1); ctx.nav.build();
   audio.setTune(key);
-  if (window.__game) { window.__game.level = ctx.level; window.__game.nav = ctx.nav; }
+  if (handle) { handle.level = ctx.level; handle.nav = ctx.nav; }
 }
 loadLevel(false, settings.mapKey);
 
 const input = ctx.input = new Input(canvas);
-const hud = ctx.hud = new Hud(document.getElementById('hud'));
+const hud = ctx.hud = new Hud(hudRoot);
 const effects = ctx.effects = new Effects(scene, world);
 function applyLook() {
   input.mouseSens = 0.0022 * settings.sens / 100;
@@ -171,20 +194,26 @@ app.jumpToWave = n => {
   hud.hideScreen(); hud.setGameplayVisible(true); gs.state = 'play'; gs.menu = false; audio.reelLoop(false);
 };
 
-// ---- debug handle 11
-window.__game = {
+// ---- handle 11 (also the debug surface)
+handle = {
   ctx, gs, player, enemies, net, remotes: ctx.remotes, lobby, scores, pickups: app.pickups.items,
   level: ctx.level, nav: ctx.nav, hud, effects, input, world,
   beginSolo: app.beginSolo, beginAtWave: app.beginAtWave, jumpToWave: app.jumpToWave, step: t => step(t),
+  dispose,
+  get live() { return live; },
 };
 
 // ---- listeners 12-13
+const listen = (target, type, fn, options) => {
+  target.addEventListener(type, fn, options);
+  teardown.push(() => target.removeEventListener(type, fn, options));
+};
 enemies.onKill = app.solo.onKill;
 enemies.onBoss = app.solo.onBoss;
 player.onThrow = d => { if (net.active) net.broadcast('nade', d); };
 hud.onScreenClick = app.ui.screenClick;
 hud.onUiAction = app.ui.onUiAction;
-canvas.addEventListener('click', () => {
+listen(canvas, 'click', () => {
   if (gs.state === 'play' && !gs.menu && !input.locked && !input.usingGamepad) input.requestLock();
 });
 input.onLockChange = locked => {
@@ -194,10 +223,11 @@ input.onDeviceChange = pad => {
   hud.setDevice(pad); hud.setWeapon(player.weapon.name, player.weapon.hint);
   if (app.screen && gs.state !== 'play') app.ui.redraw();
 };
-window.addEventListener('pagehide', () => { if (net.active) net.leave(); });
-const wake = () => { audio.init(); audio.resume(); window.removeEventListener('pointerdown', wake); window.removeEventListener('keydown', wake); };
-window.addEventListener('pointerdown', wake);
-window.addEventListener('keydown', wake);
+listen(window, 'pagehide', () => { if (net.active) net.leave(); });
+let woken = false;
+const wake = () => { if (woken) return; woken = true; audio.init(); audio.resume(); };
+listen(window, 'pointerdown', wake);
+listen(window, 'keydown', wake);
 
 // ---- 14
 hud.setDevice(input.usingGamepad);
@@ -303,6 +333,34 @@ function step(nowMs) {
   renderer.render(gs.time, fx);
 }
 
-function frame(nowMs) { requestAnimationFrame(frame); step(nowMs); }
-requestAnimationFrame(frame);
-setInterval(() => { if (net.active && performance.now() - lastStep > 300) step(performance.now()); }, 250);
+function frame(nowMs) {
+  if (disposed) return;
+  rafId = requestAnimationFrame(frame);
+  step(nowMs);
+}
+rafId = requestAnimationFrame(frame);
+keepAlive = setInterval(() => { if (net.active && performance.now() - lastStep > 300) step(performance.now()); }, 250);
+
+// ---- teardown
+function dispose() {
+  if (disposed) return;
+  disposed = true;
+  live--;
+  cancelAnimationFrame(rafId);
+  clearInterval(keepAlive);
+  for (const remove of teardown) remove();
+  teardown.length = 0;
+  if (net.active) net.leave();
+  input.dispose();
+  audio.dispose();
+  enemies.clear();
+  effects.clear();
+  app.pickups.clear();
+  disposeLevel(scene, ctx.level);
+  world.clear();
+  hud.dispose();
+  renderer.dispose();
+}
+
+return handle;
+}

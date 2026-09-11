@@ -74,6 +74,15 @@ export class Renderer {
     this.sun.shadow.needsUpdate = true;
   }
 
+  dispose() {
+    window.removeEventListener('resize', this._onResize);
+    this.post.dispose();
+    this.three.dispose();
+    // Drop the WebGL context outright: browsers cap live contexts (~16), and a
+    // StrictMode remount plus HMR burns through that cap fast.
+    this.three.forceContextLoss?.();
+  }
+
   render(time, fx) {
     this.rig.traverse(this._prepareRigMesh);
     this._rigDepthCleared = false;

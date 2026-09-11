@@ -1,4 +1,4 @@
-import { TUNES, scheduleStep } from '../src/audio.tunes.js';
+import { TUNES, scheduleStep } from '../src/engine/audio.tunes.js';
 
 export function run(assert) {
   const midi = (note) => 440 * 2 ** ((note - 69) / 12);

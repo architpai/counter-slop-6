@@ -73,6 +73,15 @@ export class Hud {
     });
   }
 
+  dispose() {
+    // Every listener sits on a child of #root, so dropping the subtree drops them.
+    this.#messageAnimation?.cancel();
+    this.#hitAnimation?.cancel();
+    this.onScreenClick = this.onUiAction = null;
+    this.#root.replaceChildren();
+    this.#root.classList.remove('game-hud');
+  }
+
   update(dt) {
     dt = Math.max(0, number(dt));
     if (this.#messageT > 0 && (this.#messageT -= dt) <= 0) {

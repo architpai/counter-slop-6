@@ -16,7 +16,7 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 #game { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
 .game-hud {
   position: fixed; inset: 0; overflow: hidden; pointer-events: none; user-select: none;
-  font-family: 'Space Grotesk', 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family: var(--font-display), var(--font-body), system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-weight: 500; color: var(--fg); line-height: 1.2; font-variant-numeric: tabular-nums;
 }
 .game-hud *, .game-hud *::before, .game-hud *::after { box-sizing: border-box; }
@@ -74,7 +74,7 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .modifier { color: var(--hot); font-size: 22px; min-height: 26px; }
 .timer { color: var(--hot); font-size: 24px; }
 .top-right.pvp .wave-line, .top-right.pvp .enemies-line { display: none; }
-.pvp-score { font-size: 20px; text-align: right; font-family: 'Inter', system-ui, sans-serif; }
+.pvp-score { font-size: 20px; text-align: right; font-family: var(--font-body), system-ui, sans-serif; }
 .pvp-score .score-rows { min-width: 0; font-size: 20px; margin: 0; }
 .pvp-score .score-rows > div { display: grid; grid-template-columns: auto 1fr 28px; gap: 8px; padding: 3px 0; }
 .pvp-score .score-rows .self { background: none; color: var(--hot); }
@@ -113,7 +113,7 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .slot-badge { min-width: 23px; padding: 1px 4px; text-align: center; border: 1.5px solid var(--cool); border-radius: 4px; font-size: 15px; }
 .slot-ammo { min-width: 54px; font-size: 16px; }
 .weapon-name { font-size: 36px; font-weight: 700; margin-top: 6px; }
-.weapon-hint { font-family: 'Inter', system-ui, sans-serif; font-size: 20px; opacity: .8; margin-top: 3px; }
+.weapon-hint { font-family: var(--font-body), system-ui, sans-serif; font-size: 20px; opacity: .8; margin-top: 3px; }
 .tip-line { position: absolute; left: 50%; bottom: 17%; transform: translateX(-50%); width: max-content; max-width: 85%; text-align: center; font-size: 26px; color: var(--fg); text-shadow: 0 1px 3px var(--panel); opacity: 0; transition: opacity .4s; }
 .tip-line.is-visible { opacity: .9; }
 .tip-line b { color: var(--hot); }
@@ -153,11 +153,11 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .screen-title { margin: 0 0 12px; font-size: 92px; font-weight: 700; letter-spacing: 3px; line-height: 1; overflow-wrap: anywhere; }
 .screen-subtitle { margin: 0 0 18px; font-size: 36px; font-weight: 500; line-height: 1.2; overflow-wrap: anywhere; }
 .screen-actions { display: flex; flex-direction: column; align-items: center; gap: 12px; margin: 18px 0; }
-.screen-button { max-width: 100%; border: 1px solid var(--line); border-radius: var(--r); padding: 12px 22px; font: 700 24px/1.15 'Space Grotesk', system-ui, sans-serif; color: var(--fg); background: var(--panel-2); cursor: pointer; transition: background .12s, border-color .12s; }
+.screen-button { max-width: 100%; border: 1px solid var(--line); border-radius: var(--r); padding: 12px 22px; font: 700 24px/1.15 var(--font-display), system-ui, sans-serif; color: var(--fg); background: var(--panel-2); cursor: pointer; transition: background .12s, border-color .12s; }
 .screen-button:hover { border-color: var(--cool); background: #233149; }
 .screen-button.primary { background: var(--cool); border-color: var(--cool); }
 .screen-button.primary:hover { background: #628EFF; }
-.screen-button small { display: block; margin-top: 7px; font: 400 17px/1.4 'Inter', system-ui, sans-serif; letter-spacing: 0; opacity: .8; }
+.screen-button small { display: block; margin-top: 7px; font: 400 17px/1.4 var(--font-body), system-ui, sans-serif; letter-spacing: 0; opacity: .8; }
 .screen-button:disabled { opacity: .4; cursor: default; }
 .screen-button:disabled:hover { background: var(--panel-2); border-color: var(--line); }
 .screen-button.primary:disabled:hover { background: var(--cool); border-color: var(--cool); }
@@ -165,14 +165,14 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .screen-button[data-act="online"] { font-size: 30px; color: var(--hot); }
 .screen-button[data-act="startMatch"], .screen-button[data-act="quickPlay"] { font-size: 34px; }
 .screen-panel :is(button,input,select,textarea):focus-visible { outline: 2px solid var(--warn); outline-offset: 3px; }
-.screen-controls { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 46px; margin: 24px 0; text-align: left; font: 400 22px/1.35 'Inter', system-ui, sans-serif; }
+.screen-controls { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 46px; margin: 24px 0; text-align: left; font: 400 22px/1.35 var(--font-body), system-ui, sans-serif; }
 .control-column { min-width: 0; }
-.control-column h3 { margin: 0 0 12px; padding-bottom: 8px; border-bottom: 2px solid var(--line); font: 500 26px/1.2 'Space Grotesk', system-ui, sans-serif; }
+.control-column h3 { margin: 0 0 12px; padding-bottom: 8px; border-bottom: 2px solid var(--line); font: 500 26px/1.2 var(--font-display), system-ui, sans-serif; }
 .control-column.current-device h3 { border-color: var(--cool); }
 .control-column ol { list-style: none; padding: 0; margin: 0; }
 .control-row { margin-bottom: 6px; }
 .control-row b { color: var(--hot); }
-.settings { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); font: 400 21px/1.5 'Inter', system-ui, sans-serif; }
+.settings { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); font: 400 21px/1.5 var(--font-body), system-ui, sans-serif; }
 .settings-row { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 10px; margin: 8px 0; }
 .settings-row label { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 10px; }
 .settings input[type="range"] { width: 200px; max-width: 100%; min-width: 100px; accent-color: var(--cool); cursor: pointer; }
@@ -184,20 +184,20 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .screen-prompt { margin: 24px 0 0; font-size: 34px; animation: blink 1.2s ease-in-out infinite; }
 .screen-stats { margin: 24px 0; font-size: 30px; }
 .screen-stats b { color: var(--hot); }
-.screen-footer { margin: 12px 0; font: 400 21px/1.4 'Inter', system-ui, sans-serif; opacity: .8; }
-.screen-status { min-height: 26px; margin: 12px 0; color: var(--hot); font: 400 20px/1.3 'Inter', system-ui, sans-serif; overflow-wrap: anywhere; }
+.screen-footer { margin: 12px 0; font: 400 21px/1.4 var(--font-body), system-ui, sans-serif; opacity: .8; }
+.screen-status { min-height: 26px; margin: 12px 0; color: var(--hot); font: 400 20px/1.3 var(--font-body), system-ui, sans-serif; overflow-wrap: anywhere; }
 .dim { color: var(--fg-dim); }
 .checkpoints, .map-picker { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
 .checkpoints h3, .map-picker h3 { margin: 0 0 12px; font-size: 21px; font-weight: 500; color: var(--fg-dim); }
 .checkpoints .screen-button { margin: 4px; font-size: 20px; }
 .map-choice { display: inline-flex; flex-direction: column; margin: 4px; max-width: 100%; font-size: 22px; }
 .map-choice.selected { color: var(--panel); background: var(--fg); border-color: var(--fg); }
-.online-box { min-width: min(500px, 100%); font: 400 21px/1.5 'Inter', system-ui, sans-serif; }
+.online-box { min-width: min(500px, 100%); font: 400 21px/1.5 var(--font-body), system-ui, sans-serif; }
 .online-or { margin: 28px 0; color: var(--fg-dim); }
 .visibility-options { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 20px; margin: 18px 0; }
 .visibility-options label { display: flex; gap: 7px; align-items: center; }
 .lobby-code { display: inline-block; padding: 8px 18px; margin: 6px 10px; border: 2px dashed var(--hot); border-radius: var(--r); font-size: 52px; letter-spacing: 5px; color: var(--hot); }
-.lobby-players, .score-rows { min-width: min(360px, 100%); margin: 20px 0; font: 400 24px/1.4 'Inter', system-ui, sans-serif; text-align: left; }
+.lobby-players, .score-rows { min-width: min(360px, 100%); margin: 20px 0; font: 400 24px/1.4 var(--font-body), system-ui, sans-serif; text-align: left; }
 .lobby-players > div, .score-rows > div { display: flex; justify-content: space-between; gap: 20px; padding: 7px 10px; border-radius: 5px; }
 .score-rows > div > span:first-child, .lobby-players > div > span:first-child { min-width: 0; overflow-wrap: anywhere; }
 .score-rows > div > span:last-child { white-space: nowrap; }
@@ -216,3 +216,8 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
   .screen-subtitle { overflow-wrap: anywhere; }
   .screen-controls { max-width: 100%; }
 }
+
+/* Boot failure panel (WebGL off, engine chunk failed to load). */
+.boot-error { position: fixed; inset: 0; display: grid; place-content: center; gap: 1rem; padding: 2rem; background: var(--bg, #131a26); color: var(--fg, #f2f5fa); font: 400 16px/1.6 var(--font-body), system-ui, sans-serif; pointer-events: auto; text-align: center; }
+.boot-error pre { white-space: pre-wrap; overflow-wrap: anywhere; opacity: .8; }
+.boot-error button { justify-self: center; padding: 10px 20px; border: 1px solid var(--line, #35405a); border-radius: 8px; background: var(--panel-2, #1c2434); color: inherit; font: inherit; cursor: pointer; }
