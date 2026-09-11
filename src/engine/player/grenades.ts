@@ -1,13 +1,91 @@
 import { Group, Mesh, Vector3 } from 'three';
+import type { BufferGeometry } from 'three';
 import { rand, round2 } from '../util';
 import { surfMat, unlitMat, TONE, TONE_HEX, sphereGeo, torusGeo, cylGeo, ringGeo } from '../render/index';
+import type { Ctx, Target } from '../types';
+import type { Player } from './index';
+
+/** One grenade in flight or at rest. */
+export interface Nade {
+  mesh: Group;
+  /** `mesh.position`, not a copy. */
+  pos: Vector3;
+  vel: Vector3;
+  spin: Vector3;
+  fuse: number;
+  /** Thrown locally: it damages and is replicated. A remote copy is visual only. */
+  mine: boolean;
+  rest: boolean;
+  /** Time to the next fuse spark. */
+  tickT: number;
+}
+
+/** What a network peer sends for a thrown grenade, and what `onThrow` emits. */
+export interface NadeThrow {
+  pos: number[];
+  vel: number[];
+}
+
+/** Just enough of a grenade for `advance` to integrate it. */
+interface Flying {
+  pos: Vector3;
+  vel: Vector3;
+  spin: Vector3;
+  rest: boolean;
+}
+
+/** Geometry and scratch shared by every grenade the player throws. */
+interface GrenadeResources {
+  bodyGeo: BufferGeometry;
+  capGeo: BufferGeometry;
+  ringGeo: BufferGeometry;
+  previous: Vector3;
+  motion: Vector3;
+  point: Vector3;
+  dir: Vector3;
+  /** The single ghost grenade the arc preview integrates. */
+  preview: Flying;
+}
+
+/** The grenade fields `initGrenades` installs on the player. */
+export interface GrenadeState {
+  /** 0..1, charged while the key is held. */
+  grenadeCharge: number;
+  grenadeHeld: boolean;
+  grenadeCd: number;
+  nades: Nade[];
+  /** The arc preview, shown only while charging. */
+  arc: Group;
+  arcDots: Mesh[];
+  arcRing: Mesh;
+  _grenade: GrenadeResources;
+}
+
+/** The slice of the enemy manager a grenade blast uses. */
+interface EnemiesLike {
+  blastEnemies(center: Vector3, radius: number, base: number): void;
+}
+
+const isEnemies = (v: unknown): v is EnemiesLike =>
+  typeof v === 'object' && v !== null && 'blastEnemies' in v;
+
+// TODO(phase5): `ctx.enemies` is `unknown` until `enemies/` is ported, so narrow it here.
+const enemyManager = (ctx: Ctx): EnemiesLike | null => (isEnemies(ctx.enemies) ? ctx.enemies : null);
+
+/**
+ * `ctx.remotes` holds `RemotePlayer`, which is `unknown` until `players.js` is
+ * ported. Every remote is a `Target`, which is all a blast needs.
+ */
+// TODO(phase5): drop this once `RemotePlayer` is a real type.
+const isTarget = (v: unknown): v is Target =>
+  typeof v === 'object' && v !== null && 'alive' in v && 'center' in v;
 
 const RADIUS = 0.16;
 const BLAST = 6.4;
 const HURT_RADIUS = BLAST * 0.95;
 const SPARKS = { life: 0.12, size: 0.02 };
 
-export function initGrenades(p) {
+export function initGrenades(p: Player): void {
   p.grenadeCharge = 0;
   p.grenadeHeld = false;
   p.grenadeCd = 0;
@@ -35,7 +113,7 @@ export function initGrenades(p) {
   };
 }
 
-function launch(p, pos, vel) {
+function launch(p: Player, pos: Vector3, vel: Vector3): void {
   const c = p.grenadeCharge;
   pos.copy(p.eye).addScaledVector(p.right, 0.25).addScaledVector(p.forward, 0.6);
   pos.y -= 0.15;
@@ -43,11 +121,11 @@ function launch(p, pos, vel) {
   vel.y += 3.5 + 2.5 * c;
 }
 
-function validTriple(v) {
+function validTriple(v: unknown): v is number[] {
   return Array.isArray(v) && v.length === 3 && v.every(n => Number.isFinite(n) && Math.abs(n) <= 10000);
 }
 
-export function throwGrenade(p, remote) {
+export function throwGrenade(p: Player, remote?: NadeThrow): void {
   const mine = remote === undefined;
   if (mine ? !p.alive || p.dashLock || p.grenades <= 0 || p.grenadeCd > 0
     : !remote || typeof remote !== 'object' || !validTriple(remote.pos) || !validTriple(remote.vel)) return;
@@ -80,7 +158,7 @@ export function throwGrenade(p, remote) {
   p.nades.push({ mesh, pos: mesh.position, vel, spin: new Vector3(rand(-6, 6), rand(-6, 6), rand(-6, 6)), fuse: 2.3, mine, rest: false, tickT: 0 });
 }
 
-function advance(p, n, dt, audible) {
+function advance(p: Player, n: Flying, dt: number, audible: boolean): void {
   const { previous, motion } = p._grenade;
   previous.copy(n.pos);
   n.vel.y -= 22 * dt;
@@ -103,7 +181,7 @@ function advance(p, n, dt, audible) {
   }
 }
 
-function preview(p) {
+function preview(p: Player): void {
   const n = p._grenade.preview;
   launch(p, n.pos, n.vel);
   n.rest = false;
@@ -112,20 +190,25 @@ function preview(p) {
     advance(p, n, 1 / 30, false);
     if (step >= 6 && step % 2 === 0 && dotCount < p.arcDots.length) {
       const dot = p.arcDots[dotCount++];
-      dot.visible = true;
-      dot.position.copy(n.pos);
-      dot.scale.setScalar(0.8 + 0.6 * p.grenadeCharge);
+      if (dot) {
+        dot.visible = true;
+        dot.position.copy(n.pos);
+        dot.scale.setScalar(0.8 + 0.6 * p.grenadeCharge);
+      }
     }
     if (n.rest) break;
   }
-  for (let i = dotCount; i < p.arcDots.length; i++) p.arcDots[i].visible = false;
+  for (let i = dotCount; i < p.arcDots.length; i++) {
+    const dot = p.arcDots[i];
+    if (dot) dot.visible = false;
+  }
   p.arcRing.position.copy(n.pos);
   p.arcRing.position.y += 0.02;
   p.arcRing.scale.setScalar(0.8 + 0.5 * p.grenadeCharge);
   p.arc.visible = true;
 }
 
-function explode(p, n) {
+function explode(p: Player, n: Nade): void {
   const { ctx } = p;
   // Effects and damage callbacks can read these points after this call.
   const center = n.pos.clone();
@@ -134,7 +217,7 @@ function explode(p, n) {
   ctx.audio.explosion(center);
   ctx.input.rumble(0.9, 0.9, 220);
   if (n.mine) {
-    ctx.enemies?.blastEnemies(center, BLAST, 120);
+    enemyManager(ctx)?.blastEnemies(center, BLAST, 120);
     ctx.game.blastBreakables(center, BLAST * 0.9);
   }
   const distance = p.center.distanceTo(center);
@@ -144,7 +227,7 @@ function explode(p, n) {
   }
   if (n.mine) {
     for (const target of ctx.remotes.values()) {
-      if (!target.alive || !ctx.game.canHurt(target)) continue;
+      if (!isTarget(target) || !target.alive || !ctx.game.canHurt(target)) continue;
       const d = target.center.distanceTo(center);
       if (d < HURT_RADIUS) {
         ctx.game.hitPlayer(target, 12 + 50 * (1 - d / HURT_RADIUS), { point: center, source: 'grenade' });
@@ -153,7 +236,7 @@ function explode(p, n) {
   }
 }
 
-export function updateGrenades(p, dt, allowInput = true) {
+export function updateGrenades(p: Player, dt: number, allowInput = true): void {
   if (!allowInput) {
     p.grenadeHeld = false;
     p.grenadeCharge = 0;
@@ -173,6 +256,7 @@ export function updateGrenades(p, dt, allowInput = true) {
   p.grenadeCd -= dt;
   for (let i = p.nades.length - 1; i >= 0; i--) {
     const n = p.nades[i];
+    if (!n) continue;
     if (!n.rest) {
       advance(p, n, dt, true);
       n.mesh.rotation.x += n.spin.x * dt;
@@ -195,7 +279,7 @@ export function updateGrenades(p, dt, allowInput = true) {
   }
 }
 
-export function clearNades(p) {
+export function clearNades(p: Player): void {
   for (const n of p.nades) p.ctx.scene.remove(n.mesh);
   p.nades.length = 0;
   p.grenadeHeld = false;

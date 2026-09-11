@@ -15,15 +15,32 @@ page.on('pageerror', e => errors.push(String(e)));
 
 await page.goto(url, { waitUntil: 'networkidle' });
 await page.waitForFunction(() => window.__game !== undefined, null, { timeout: 30_000 });
-await page.waitForTimeout(1500); // let StrictMode's remount settle and frames run
+
+// Wait for the loop to actually turn over rather than sleeping a fixed span. A
+// cold dev server spends its first seconds compiling, which used to make these
+// checks flaky -- and a flaky check is one you stop believing.
+await page.waitForFunction(() => {
+  const t = window.__game?.gs.time ?? 0;
+  const seen = window.__smokeT ?? -1;
+  window.__smokeT = t;
+  return t > 0 && t > seen;
+}, null, { timeout: 30_000, polling: 250 });
 
 const report = await page.evaluate(async () => {
   const g = window.__game;
-  const t0 = g.gs.time;
-  await new Promise(r => setTimeout(r, 300));
+  // Poll rather than sample one fixed window: a compiling dev server can stall
+  // the main thread past any window short enough to keep the suite quick.
+  const advanced = async () => {
+    const t0 = g.gs.time;
+    for (let i = 0; i < 50; i++) {
+      await new Promise(r => setTimeout(r, 100));
+      if (g.gs.time > t0) return true;
+    }
+    return false;
+  };
   return {
     live: g.live,
-    advancing: g.gs.time > t0,
+    advancing: await advanced(),
     canvases: document.querySelectorAll('canvas').length,
     hasHud: !!document.querySelector('#hud .crosshair'),
     screen: document.querySelector('.screen-title')?.textContent ?? null,
@@ -32,12 +49,20 @@ const report = await page.evaluate(async () => {
 
 // Physics, nav and the springs only run during play, so the menu alone proves
 // very little about them. Start a solo wave and let it simulate.
+await page.evaluate(() => {
+  window.__startPos = null;
+  window.__game.beginSolo();
+  window.__startPos = window.__game.player.body.pos.clone();
+});
+// Wave 1 staggers its spawns, so poll for the first enemy instead of guessing
+// how long that takes on a loaded machine.
+await page.waitForFunction(() => window.__game.enemies.list.length > 0,
+  null, { timeout: 20_000, polling: 250 });
+
 const play = await page.evaluate(async () => {
   const g = window.__game;
-  g.beginSolo();
-  const start = g.player.body.pos.clone();
-  const settled = () => new Promise(r => setTimeout(r, 2500));
-  await settled();
+  const start = window.__startPos;
+  await new Promise(r => setTimeout(r, 1200));
   return {
     state: g.gs.state,
     spawned: g.enemies.list.length,

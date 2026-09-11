@@ -1,9 +1,26 @@
 import { Vector3 } from 'three';
 import { clamp, damp, rand, Spring } from '../util';
+import type { Player } from './index';
+
+/** The camera fields `initCamera` installs on the player. */
+export interface CameraState {
+  recoilPitch: Spring;
+  recoilYaw: Spring;
+  fovKick: Spring;
+  /** Landing dip; the weapon reads it through `WeaponState.landDip`. */
+  landDip: Spring;
+  /** Eye offset above the feet, 1.6 standing and 0.88 crouched. */
+  eyeHeight: number;
+  bobPhase: number;
+  bobAmt: number;
+  stepDistance: number;
+  bobX: number;
+  bobY: number;
+}
 
 const target = new Vector3(0, 10, 0);
 
-export function initCamera(p) {
+export function initCamera(p: Player): void {
   p.recoilPitch = new Spring(190, 17);
   p.recoilYaw = new Spring(190, 17);
   p.fovKick = new Spring(220, 14);
@@ -14,7 +31,7 @@ export function initCamera(p) {
   p.ctx.camera.rotation.order = 'YXZ';
 }
 
-export function updateBob(p, dt) {
+export function updateBob(p: Player, dt: number): void {
   const speed = Math.hypot(p.body.vel.x, p.body.vel.z);
   const moving = p.body.onGround && speed > 0.6 && !p.sliding;
   p.bobAmt = damp(p.bobAmt, moving ? clamp(speed / 7, 0.3, 1.4) : 0, 8, dt);
@@ -30,7 +47,7 @@ export function updateBob(p, dt) {
   p.bobX = Math.cos(p.bobPhase * 0.5) * 0.018 * p.bobAmt;
 }
 
-export function updateCamera(p, dt) {
+export function updateCamera(p: Player, dt: number): void {
   const { camera, effects } = p.ctx;
   p.recoilPitch.update(dt);
   p.recoilYaw.update(dt);
@@ -63,7 +80,7 @@ export function updateCamera(p, dt) {
   camera.updateMatrixWorld();
 }
 
-export function idleCamera(p, time) {
+export function idleCamera(p: Player, time: number): void {
   const { camera, renderer } = p.ctx;
   p._idle = true;
   camera.position.set(Math.sin(time * 0.08) * 70, 30 + Math.sin(time * 0.23) * 4, Math.cos(time * 0.08) * 70);

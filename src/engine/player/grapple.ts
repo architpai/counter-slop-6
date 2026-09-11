@@ -1,19 +1,80 @@
 import { Group, Mesh, Vector3 } from 'three';
+import type { Object3D } from 'three';
 import { alignSegment, clamp } from '../util';
 import { cylGeo, torusGeo, surfMat, unlitMat, TONE, TONE_HEX } from '../render/index';
+import type { BoxFilter, Ctx, Enemy, GrappleMover } from '../types';
+import type { Player } from './index';
+
+/** Idle, hook in flight, or attached and swinging. */
+export type GrappleMode = 'idle' | 'fly' | 'on';
+
+/** `p.grapple`. The three fields in `ARCHITECTURE.md` §6.10 plus its own bookkeeping. */
+export interface Grapple {
+  mode: GrappleMode;
+  /** Where the rope currently ends: lerped while flying, the anchor once attached. */
+  hook: Vector3;
+  /** What the rope is tied to. Follows a mover. */
+  anchor: Vector3;
+  /** Hand position when the hook was fired. */
+  origin: Vector3;
+  /** Rope start, recomputed every frame. */
+  hand: Vector3;
+  rope: Mesh;
+  marker: Group;
+  enemy: Enemy | null;
+  mover: GrappleMover | null;
+  flyTime: number;
+  flyDuration: number;
+  ropeLength: number;
+  cooldown: number;
+  /** Seconds of blocked line of sight; detaches past 0.3. */
+  blocked: number;
+  checkTime: number;
+  swingTime: number;
+  reticleTime: number;
+}
+
+/** What a grapple search found. Reused, never stored. */
+interface GrappleTarget {
+  point: Vector3;
+  enemy: Enemy | null;
+  mover: GrappleMover | null;
+}
+
+/** The grapple fields `initGrapple` installs on the player. */
+export interface GrappleState {
+  grapple: Grapple;
+  _grappleTarget: GrappleTarget;
+}
+
+/** The slice of the enemy manager the grapple uses. */
+interface EnemiesLike {
+  raycast(origin: Vector3, dir: Vector3, max: number): { enemy: Enemy; point: Vector3 } | null;
+  list: Enemy[];
+  yank(enemy: Enemy, target: Vector3): void;
+}
+
+const isEnemies = (v: unknown): v is EnemiesLike =>
+  typeof v === 'object' && v !== null && 'raycast' in v && 'list' in v && 'yank' in v;
+
+// TODO(phase5): `ctx.enemies` is `unknown` until `enemies/` is ported, so narrow it here.
+const enemyManager = (ctx: Ctx): EnemiesLike | null => (isEnemies(ctx.enemies) ? ctx.enemies : null);
+
+/** Duck-typed like the rest of three, so a mesh from any build still matches. */
+const isMesh = (node: Object3D): node is Mesh => 'isMesh' in node && node.isMesh === true;
 
 const relative = new Vector3();
 const direction = new Vector3();
 const saved = new Vector3();
-const noGrapple = box => !!box.data.noGrapple;
+const noGrapple: BoxFilter = box => !!box.data.noGrapple;
 
-export function initGrapple(p) {
+export function initGrapple(p: Player): void {
   const rope = new Mesh(cylGeo(1, 1, 6), unlitMat(TONE_HEX[TONE.PRIMARY]));
   const marker = new Group();
   const ring = new Mesh(torusGeo(0.11, 0.018, 6, 12), surfMat('accent'));
   ring.rotation.x = Math.PI / 2;
   marker.add(ring, new Mesh(cylGeo(0.014, 0.2, 6), surfMat('metal')));
-  marker.traverse(obj => { if (obj.isMesh) obj.castShadow = true; });
+  marker.traverse(obj => { if (isMesh(obj)) obj.castShadow = true; });
   rope.visible = marker.visible = false;
   p.ctx.scene.add(rope, marker);
   p.grapple = {
@@ -24,13 +85,14 @@ export function initGrapple(p) {
   p._grappleTarget = { point: new Vector3(), enemy: null, mover: null };
 }
 
-function target(p) {
-  const { world, enemies, level } = p.ctx;
+function target(p: Player): GrappleTarget | null {
+  const { world, level } = p.ctx;
+  const enemies = enemyManager(p.ctx);
   const result = p._grappleTarget;
   result.enemy = result.mover = null;
   const wall = world.raycast(p.eye, p.forward, 75, noGrapple);
   const wallDist = wall ? wall.dist : 75;
-  const exact = enemies.raycast(p.eye, p.forward, Math.min(50, wallDist + 0.5));
+  const exact = enemies?.raycast(p.eye, p.forward, Math.min(50, wallDist + 0.5));
   if (exact) {
     result.point.copy(exact.point);
     result.enemy = exact.enemy;
@@ -50,7 +112,7 @@ function target(p) {
   }
   if (result.mover) return result;
   bestLateral = Infinity;
-  for (const enemy of enemies.list) {
+  for (const enemy of enemies?.list ?? []) {
     if (!enemy.alive || enemy.state === 'spawn') continue;
     relative.copy(enemy.center).sub(p.eye);
     const t = relative.dot(p.forward);
@@ -82,16 +144,17 @@ function target(p) {
   return null;
 }
 
-function hand(p) {
+function hand(p: Player): Vector3 {
   const handPos = p.grapple.hand;
   handPos.copy(p.eye).addScaledVector(p.right, -0.55).addScaledVector(p.forward, 0.9);
   handPos.y -= 0.42;
   return handPos;
 }
 
-export function updateGrapple(p, dt) {
+export function updateGrapple(p: Player, dt: number): void {
   const g = p.grapple, b = p.body;
-  const { input, audio, hud, enemies, game, world } = p.ctx;
+  const { input, audio, hud, game, world } = p.ctx;
+  const enemies = enemyManager(p.ctx);
   g.cooldown -= dt;
   if (g.mode === 'idle') {
     g.reticleTime -= dt;
@@ -129,7 +192,7 @@ export function updateGrapple(p, dt) {
     if (f < 1) return;
     if (g.enemy) {
       if (g.enemy.alive) {
-        enemies.yank(g.enemy, p.center);
+        enemies?.yank(g.enemy, p.center);
         game.addScore(30, 'YANKED');
         audio.grappleHit();
         input.rumble(0.5, 0.5, 90);
@@ -183,7 +246,7 @@ export function updateGrapple(p, dt) {
   }
 }
 
-export function detachGrapple(p, boost) {
+export function detachGrapple(p: Player, boost: boolean): void {
   const g = p.grapple;
   if (g.mode === 'idle') return;
   const attached = g.mode === 'on';
@@ -206,7 +269,7 @@ export function detachGrapple(p, boost) {
   }
 }
 
-export function updateBreath(p, dt) {
+export function updateBreath(p: Player, dt: number): void {
   p.breath = clamp(p.breath + (p.grapple.mode === 'on' ? -0.09 : p.body.onGround ? 0.45 : 0.16) * dt, 0, 1);
   if (p.grapple.mode === 'on' && p.breath <= 0) {
     detachGrapple(p, false);
@@ -214,7 +277,7 @@ export function updateBreath(p, dt) {
   }
 }
 
-export function updateGrappleVisual(p) {
+export function updateGrappleVisual(p: Player): void {
   const g = p.grapple;
   if (g.mode === 'idle') return;
   alignSegment(g.rope, hand(p), g.hook, 0.008);

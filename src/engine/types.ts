@@ -30,8 +30,8 @@ import type { Hud } from './hud/index';
 /** A module that has not been converted yet. Replace with a real import type. */
 type UNPORTED = unknown;
 
-export type Player = UNPORTED; // player/index.js   — phase 4
-export type Weapon = UNPORTED; // weapons/index.js  — phase 4
+export type Player = import('./player/index').Player; // player/index.ts  — phase 4
+export type Weapon = import('./weapons/index').Weapon; // weapons/index.ts — phase 4
 export type EnemyManager = UNPORTED; // enemies/index.js  — phase 5
 export type EnemyType = UNPORTED; // enemies/types.js  — phase 5
 export type RemotePlayer = UNPORTED; // players.js        — phase 5
@@ -114,14 +114,19 @@ export interface GameHooks {
 /** Anything an enemy or a blast can hurt: the local player and every remote. */
 export interface Target {
   alive: boolean;
-  isLocal: boolean;
   name: string;
   body: Pick<Body, 'pos' | 'vel' | 'halfW' | 'height' | 'onGround'>;
+  /**
+   * The five below are `readonly` because every implementation backs them with
+   * a getter. Declared mutable, TypeScript would happily typecheck a write
+   * through a `Target` reference that throws at runtime.
+   */
+  readonly isLocal: boolean;
   /** Feet + height * 0.55. A live vector: copy it before storing. */
-  center: THREE.Vector3;
-  eye: THREE.Vector3;
-  forward: THREE.Vector3;
-  right: THREE.Vector3;
+  readonly center: THREE.Vector3;
+  readonly eye: THREE.Vector3;
+  readonly forward: THREE.Vector3;
+  readonly right: THREE.Vector3;
   /** Speed of travel. Remote players always report 0. */
   readonly speed: number;
   /** Local: 0.95 while guarding and off cooldown, else 0. Remote: always 0. */

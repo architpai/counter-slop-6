@@ -1,6 +1,37 @@
 import { Vector3 } from 'three';
 import { clamp } from '../util';
 import { TONE } from '../render/index';
+import type { Player } from './index';
+
+/** The movement fields `initMovement` installs on the player. */
+export interface MovementState {
+  /** Stick/keys this frame, -1..1 on each axis. */
+  move: { x: number; y: number };
+  /** Yaw only, ignoring pitch. A live vector. */
+  flatForward: Vector3;
+  /** Unit wish direction in world space. A live vector. */
+  wish: Vector3;
+  /** Normal of the wall last touched in the air. */
+  wallNormal: Vector3;
+  sprinting: boolean;
+  /** Held on a keyboard, toggled on a gamepad. */
+  sprintToggle: boolean;
+  crouching: boolean;
+  sliding: boolean;
+  aiming: boolean;
+  slideTime: number;
+  coyote: number;
+  jumpBuffer: number;
+  wallJumpCd: number;
+  mantleCd: number;
+  dashCd: number;
+  landGrace: number;
+  airTime: number;
+  /** Seconds since the last wall touch. Starts "long ago". */
+  wallTouch: number;
+  airJumps: number;
+  wasGround: boolean;
+}
 
 const point = new Vector3();
 const probe = new Vector3();
@@ -8,7 +39,7 @@ const lower = new Vector3();
 const upper = new Vector3();
 const down = new Vector3(0, -1, 0);
 
-export function initMovement(p) {
+export function initMovement(p: Player): void {
   p.move = { x: 0, y: 0 };
   p.flatForward = new Vector3(0, 0, -1);
   p.wish = new Vector3();
@@ -20,7 +51,7 @@ export function initMovement(p) {
   p.wasGround = true;
 }
 
-export function updateMovement(p, dt) {
+export function updateMovement(p: Player, dt: number): void {
   const { input, world, audio, effects } = p.ctx;
   const b = p.body, v = b.vel;
   p.move.x = input.move.x;
@@ -153,7 +184,7 @@ export function updateMovement(p, dt) {
   v.y -= 26 * p.gravityScale * (p.grapple.mode === 'on' ? 0.88 : 1) * dt;
 }
 
-function accelerate(velocity, wish, amount, cap, acceleration) {
+function accelerate(velocity: Vector3, wish: Vector3, amount: number, cap: number, acceleration: number): void {
   if (amount <= 0) return;
   const current = velocity.x * wish.x + velocity.z * wish.z;
   const add = Math.min(cap * amount - current, acceleration);
@@ -163,7 +194,7 @@ function accelerate(velocity, wish, amount, cap, acceleration) {
   }
 }
 
-export function integrateMovement(p, dt) {
+export function integrateMovement(p: Player, dt: number): void {
   const b = p.body, { world, audio, effects, input, level, hud } = p.ctx;
   if (!b.onGround && p.mantleCd <= 0 && p.move.y > 0.3 && b.vel.y < 8 && p.grapple.mode !== 'on') {
     point.copy(b.pos).y += 1;

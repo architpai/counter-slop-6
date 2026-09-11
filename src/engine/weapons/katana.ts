@@ -2,13 +2,71 @@ import { Vector3 } from 'three';
 import { clamp, damp, easeInOut, rand } from '../util';
 import { TONE } from '../render/index';
 import { ViewModel } from './gun';
-import { makeKatanaModel } from './models';
+import { makeKatanaModel, smearThreshold } from './models';
+import type { Ctx, Enemy, HitInfo, Player, WeaponState } from '../types';
+import type { Weapon } from './index';
 
 const GUARD_POS = new Vector3(0.21, -0.31, -0.36);
 const GUARD_ROT = new Vector3(1.40, 0.30, 1.24);
 
-export class Katana extends ViewModel {
-  constructor(ctx, player) {
+/** The slice of the enemy manager the katana uses. */
+interface EnemiesLike {
+  inArc(pos: Vector3, dir: Vector3, range: number, cosHalf: number): { enemy: Enemy; dist: number }[];
+  damage(enemy: Enemy, amount: number, info: HitInfo): void;
+}
+
+const isEnemies = (v: unknown): v is EnemiesLike =>
+  typeof v === 'object' && v !== null && 'inArc' in v && 'damage' in v;
+
+// TODO(phase5): `ctx.enemies` is `unknown` until `enemies/` is ported, so narrow it here.
+const enemyManager = (ctx: Ctx): EnemiesLike | null => (isEnemies(ctx.enemies) ? ctx.enemies : null);
+
+/**
+ * A remote player carries a live torso centre. `RemotePlayer` is `unknown` until
+ * `players.js` is ported, so read the one field this file needs.
+ */
+// TODO(phase5): drop this once `RemotePlayer` is a real type.
+const centerOf = (v: unknown): Vector3 | undefined =>
+  (typeof v === 'object' && v !== null && 'center' in v && v.center instanceof Vector3 ? v.center : undefined);
+
+/** The blade state `resetAmmo` owns, which the constructor calls. */
+export interface Katana {
+  /** Guard is up: aim held, not slashing, off cooldown. */
+  blocking: boolean;
+  /** Seconds the current guard has been up. Under 0.26 a deflect is perfect. */
+  blockT: number;
+  cooldown: number;
+  /** Blade blood, 0..1. Decays; +0.42 per katana kill. */
+  blood: number;
+  combo: number;
+  /** Seconds left of the current slash. */
+  _slashT: number;
+  _comboT: number;
+  _blockAmt: number;
+  _parrySwing: number;
+  _deflectKick: number;
+  /** Side of the next parry flick, +1 or -1. */
+  _parryDir: number;
+  /** The hit test of this slash has run. */
+  _hitDone: boolean;
+}
+
+export class Katana extends ViewModel implements Weapon {
+  readonly kind: 'katana';
+  readonly name: string;
+  readonly hint: string;
+  readonly isGun: false;
+  readonly scope: false;
+  readonly adsFov: number;
+  mag: number;
+  reserve: number;
+  magSize: number;
+  reloading: boolean;
+  _arcA: Vector3;
+  _arcB: Vector3;
+  _hitDir: Vector3;
+
+  constructor(ctx: Ctx, player: Player) {
     super(ctx, player, makeKatanaModel(), [0.27, -0.25, -0.40], [0.75, 0.15, -0.35]);
     this.kind = 'katana';
     this.name = 'KATANA';
@@ -37,18 +95,18 @@ export class Katana extends ViewModel {
     for (const smear of this._model.bloodSmears) smear.visible = false;
   }
 
-  addBlood(amount) {
+  addBlood(amount: number) {
     if (Number.isFinite(amount)) this.blood = clamp(this.blood + amount, 0, 1);
   }
 
-  onDeflect(perfect) {
+  onDeflect(perfect: boolean) {
     this._parrySwing = 1;
     this._parryDir *= -1;
     this.kickRot(perfect ? -3.5 : -2, this._parryDir * 2, this._parryDir * 2.5);
     this.kickPos(this._parryDir * 0.15, 0.15, 1.2);
   }
 
-  startSlash(st) {
+  startSlash(st: WeaponState) {
     if (this._disposed) return;
     this._slashT = 0.27;
     this._hitDone = false;
@@ -67,13 +125,13 @@ export class Katana extends ViewModel {
     }
   }
 
-  _arcPoint(angle, side, out) {
+  _arcPoint(angle: number, side: number, out: Vector3) {
     out.copy(this._player.eye).addScaledVector(this._player.forward, 1.3)
       .addScaledVector(this._player.right, Math.cos(angle) * 0.9 * side);
     out.y += Math.sin(angle) * 0.55 - 0.1;
   }
 
-  animate(st, dt) {
+  animate(st: WeaponState, dt: number) {
     if (this._disposed || !this._equipped) return;
     this._pose(st, dt);
     this.cooldown -= dt;
@@ -83,7 +141,7 @@ export class Katana extends ViewModel {
     this._parrySwing = Math.max(0, this._parrySwing - 4.5 * dt);
     this.blood = Math.max(0, this.blood - 0.05 * dt);
     for (const smear of this._model.bloodSmears) {
-      const threshold = smear.userData.threshold;
+      const threshold = smearThreshold(smear);
       smear.visible = this.blood > threshold;
       if (smear.visible) {
         const f = clamp((this.blood - threshold) / 0.28, 0.2, 1);
@@ -127,8 +185,9 @@ export class Katana extends ViewModel {
     if (st.meleePressed && this._slashT <= 0 && this.cooldown <= 0) this.startSlash(st);
   }
 
-  _hit(side) {
-    const { enemies, game, effects, audio, input } = this._ctx;
+  _hit(side: number) {
+    const { game, effects, audio, input } = this._ctx;
+    const enemies = enemyManager(this._ctx);
     const p = this._player, d = this._hitDir;
     d.copy(p.forward);
     d.x += -p.forward.z * 0.7 * side;
@@ -136,14 +195,14 @@ export class Katana extends ViewModel {
     d.y -= 0.35;
     d.normalize();
     let hit = false;
-    for (const { enemy } of enemies.inArc(p.eye, p.forward, 3, Math.cos(0.95))) {
+    for (const { enemy } of enemies?.inArc(p.eye, p.forward, 3, Math.cos(0.95)) ?? []) {
       const point = enemy.center.clone();
       point.y += rand(-0.2, 0.4);
-      enemies.damage(enemy, 75, { point, dir: d, part: 'torso', source: 'katana', crit: false, slashDir: side });
+      enemies?.damage(enemy, 75, { point, dir: d, part: 'torso', source: 'katana', crit: false, slashDir: side });
       hit = true;
     }
     for (const remote of game.playersInArc(p.eye, p.forward, 3, Math.cos(0.95))) {
-      game.hitPlayer(remote, 55, { point: remote.center, dir: d, part: 'torso', source: 'katana', crit: false });
+      game.hitPlayer(remote, 55, { point: centerOf(remote), dir: d, part: 'torso', source: 'katana', crit: false });
       hit = true;
     }
     if (game.cutRopes(p.eye, p.forward, 3.4)) hit = true;

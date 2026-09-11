@@ -1,4 +1,60 @@
-export const GUN_STATS = {
+export type GunKind = 'rifle' | 'shotgun' | 'sniper' | 'revolver';
+
+/** How the magazine is refilled, and which pose plays while it is. */
+export type ReloadType = 'magazine' | 'shells' | 'cylinder';
+
+/** The `Audio` cue played on every shot. */
+export type FireCue = 'shot' | 'shotgunFire' | 'sniperFire' | 'revolver';
+
+/** `[x, y, z]` offsets and positions, straight into `Vector3`. */
+export type Triple = [number, number, number];
+
+/** `[fullRange, zeroRange, minScale]`: full damage to `fullRange`, `minScale` past `zeroRange`. */
+export type Falloff = [number, number, number];
+
+/** One row of `ARCHITECTURE.md` §6.11 / `weapons.md` §4, one field per table column. */
+export interface GunStats {
+  kind: GunKind;
+  name: string;
+  hint: string;
+  scope: boolean;
+  magSize: number;
+  startingReserve: number;
+  maxReserve: number;
+  fireInterval: number;
+  automatic: boolean;
+  damage: number;
+  headMult: number;
+  pellets: number;
+  hipSpread: number;
+  adsSpread: number;
+  spreadKick: number;
+  spreadMax: number;
+  moveSpread: number;
+  adsFov: number;
+  /** `[pitch, yaw]` */
+  camKick: [number, number];
+  /** `[posX, posY, posZ, rotX, rotY, rotZ]` spring kicks. */
+  modelKick: [number, number, number, number, number, number];
+  fovKick: number;
+  reloadDuration: number;
+  reloadType: ReloadType;
+  falloff: Falloff | null;
+  tracerThickness: number;
+  flashScale: number;
+  fireCue: FireCue;
+  /** `[size, tone]` of the ejected shell, or null for a gun that keeps its brass. */
+  casing: [number, number] | null;
+  cycleDuration: number;
+  /** `[damage, headMult, falloff]` against other players. */
+  pvp: [number, number, Falloff | null];
+  restPos: Triple;
+  /** Sight position in model space; drives the aim pose. */
+  sight: Triple;
+  eyeDistance: number;
+}
+
+export const GUN_STATS: Record<GunKind, GunStats> = {
   rifle: {
     kind: 'rifle', name: 'RIFLE', hint: 'auto · put the red dot on them', scope: false,
     magSize: 35, startingReserve: 175, maxReserve: 350, fireInterval: 1 / 11, automatic: true,
