@@ -89,7 +89,7 @@ export function Controls({ pad }: { pad: boolean }) {
     <div className="screen-controls">
       {([
         ['keyboard', 'MOUSE + KEYBOARD', KEYBOARD_ROWS, !pad],
-        ['gamepad', 'PS5 CONTROLLER', PAD_ROWS, pad],
+        ['gamepad', 'CONTROLLER', PAD_ROWS, pad],
       ] as const).map(([device, title, rows, active]) => (
         <section className={`control-column${active ? ' current-device' : ''}`} data-device={device} key={device}>
           <h3>{title}</h3>
