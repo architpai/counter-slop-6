@@ -15,12 +15,14 @@ const cases = [
   ['house 1->2', [-24.5, 7, -45], -Math.PI / 2, 11],
   ['house 3->2', [10.5, 7, -45], Math.PI / 2, 11],
 ];
+// House is drawn at 1.3x (see house.ts).
+const S = 1.3;
 const houseCases = [
   ['front stairs', [2, 0, 7.2], 0, 3.6],
   ['back hall', [-5.1, -3.6, 2.5], 0, 0],
   ['front well', [-11.8, -3.6, 6], Math.PI, 0],
   ['driveway', [13.5, -3.6, 7], Math.PI, 0],
-];
+].map(([name, pos, yaw, top]) => [name, pos.map(v => v * S), yaw, top * S]);
 const browser = await chromium.launch({ headless: true, args: ['--use-gl=angle', '--use-angle=metal', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 const url = process.argv[2] ?? 'http://localhost:3000/';

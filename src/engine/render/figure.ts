@@ -374,6 +374,8 @@ export function makeFigure(o: FigureOpts): Figure {
       if (!mount) return;
       if (weapon) release(weapon);
       weapon = weaponProp(kind, color);
+      // Props point down +z; the forearm hangs down -y. Lay the prop along the forearm so a raised arm aims it forward.
+      weapon.rotation.x = Math.PI / 2;
       mount.add(weapon);
       parts.weapon = weapon;
       parts.tip = group(weapon, 'tip', 0, 0.05, kind === 'blade' ? 0.92 : kind === 'hammer' ? 0.4 : 0.78);
