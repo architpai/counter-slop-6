@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { rand } from '../util';
 import { TONE, TONE_HEX, makeFigure, surfMat } from '../render/index';
 import type { SurfKey } from '../render/palette';
 import type { BreakableKind } from '../types';
@@ -18,23 +17,32 @@ type HumanoidJoints = Required<Pick<FigureParts,
 type Point = readonly [number, number, number];
 type Box6 = readonly [number, number, number, number, number, number];
 
-const ORANGE: BuildOpts = { tone: TONE.ACCENT };
+const ORANGE: BuildOpts = { mat: 'accent' };
+const TERRACOTTA: BuildOpts = { mat: 'roof' };
+const ROCK: BuildOpts = { mat: 'sandstone' };
+const WHITE: BuildOpts = { mat: 'siding' };
 const DARK_VISUAL: BuildOpts = { tone: TONE.DARK, noCollide: true };
 const HALF_PI = Math.PI / 2;
 
-// Mexico retains the known defects listed in levels.md §7 until its release gate passes.
+/** Fixed pseudo-random offsets so every peer builds the same colliders (levels.md §7). */
+const JITTER = [-1.1, 0.7, 0.2, -0.6, 1.0, -0.3, 0.9, -0.9, 0.4, -1.2] as const;
+const jitter = (i: number) => JITTER[((i % JITTER.length) + JITTER.length) % JITTER.length] ?? 0;
+
 export function buildMexico(b: LevelBuilder) {
   b.level.key = 'mexico';
   b.level.playerStart.set(0, 0, 16);
   b.level.bounds = { minX: -62, maxX: 62, minZ: -62, maxZ: 62 };
-  b.box(0, -1, 0, 134, 1, 134, { surface: 'ground' });
+  b.level.mood = { horizon: 0xf7d9a8, zenith: 0x3f7fd6, fog: 0xf0d8b0, sun: 0xfff1cc, sunIntensity: 2.6, hemiIntensity: 1.3, hemiSky: 0xcfe0f0, hemiGround: 0xc9a77a };
+  b.box(0, -1, 0, 134, 1, 134, { mat: 'sand' });
   b.collider(0, 62, 0, 164, 6, 164, { noNav: true, noGrapple: true });
+  let k = 0;
   for (let i = -2; i <= 2; i++) {
     for (const [x, z, w, d] of [[24 * i, -62, 19, 8], [24 * i, 62, 19, 8],
       [-62, 24 * i, 8, 19], [62, 24 * i, 8, 19]] as const) {
-      b.box(x, 0, z, w, 11, d);
-      b.box(x + rand(-1.2, 1.2), 11, z + rand(-1.2, 1.2), 0.78 * w, 7, 0.78 * d);
-      b.box(x + rand(-1, 1), 18, z + rand(-1, 1), 0.5 * w, 5, 0.5 * d);
+      b.box(x, 0, z, w, 11, d, ROCK);
+      b.box(x + jitter(k), 11, z + jitter(k + 3), 0.78 * w, 7, 0.78 * d, ROCK);
+      b.box(x + jitter(k + 5), 18, z + jitter(k + 7), 0.5 * w, 5, 0.5 * d, ROCK);
+      k++;
     }
   }
   for (let i = -2; i <= 1; i++) {
@@ -42,11 +50,11 @@ export function buildMexico(b: LevelBuilder) {
     for (const [x, z] of [[q, -57], [q, 57], [-57, q], [57, q]] as const) b.marker('spawns', x, 0, z);
   }
 
-  b.slab(-24, -24, 24, 24, 0.15, 0.15, { surface: 'ground' });
-  b.cylinder(0, 0, 0, 5.5, 1.1);
-  b.cylinder(0, 1.1, 0, 1.2, 2.6);
-  b.cylinder(0, 3.7, 0, 2.4, 0.5);
-  b.sphere(0, 5.4, 0, 0.7);
+  b.slab(-24, -24, 24, 24, 0.15, 0.15, { mat: 'paving' });
+  b.cylinder(0, 0, 0, 5.5, 1.1, WHITE);
+  b.cylinder(0, 1.1, 0, 1.2, 2.6, WHITE);
+  b.cylinder(0, 3.7, 0, 2.4, 0.5, WHITE);
+  b.sphere(0, 5.4, 0, 0.7, WHITE);
   b.cylinder(0, 1.06, 0, 5.1, 0.08, { noCollide: true, segments: 20, surface: 'water' });
   for (let k = 0; k < 8; k++) {
     const a = k * Math.PI / 4;
@@ -76,25 +84,27 @@ export function buildMexico(b: LevelBuilder) {
 
   for (const [x, z, r] of [[-52, -46, 2.2], [52, 48, 2.6], [-52, 48, 1.8],
     [52, -48, 2], [0, -52, 1.6], [0, 52, 1.6]] as const) {
-    b.sphere(x, 0.55 * r, z, r);
+    b.sphere(x, 0.55 * r, z, r, ROCK);
     b.collider(x, 0, z, 1.5 * r, 1.2 * r, 1.5 * r);
   }
   for (const [x, z, w, d] of [[-12, -12, 8, 0.5], [12, -12, 8, 0.5],
-    [-30, 34, 0.5, 8], [30, 34, 0.5, 8]] as const) b.box(x, 0, z, w, 1.1, d, ORANGE);
-  b.cylinder(-14, 0, 8, 1.3, 1);
+    [-30, 34, 0.5, 8], [30, 34, 0.5, 8]] as const) b.box(x, 0, z, w, 1.1, d, TERRACOTTA);
+  b.cylinder(-14, 0, 8, 1.3, 1, ROCK);
   b.box(-14, 1, 8, 0.15, 2, 0.15, DARK_VISUAL);
   b.box(-14, 3, 8, 2.2, 0.3, 0.3, DARK_VISUAL);
 
-  const snipers: readonly Point[] = [[-10, 30.6, 46], [10, 15, 46], [-40, 7.5, 14], [40, 7, -18],
-    [0, 5.9, -26], [0, 13.45, 0]];
+  // Every marker sits on a real surface: house roofs are h + 0.35, the bandstand roof 5.9,
+  // the sombrero brim 13.45, the church roof 11 and the belfry deck 30.6.
+  const snipers: readonly Point[] = [[-10, 30.6, 48.5], [6, 11, 38], [-40, 7.85, 14], [40, 7.35, -18],
+    [0, 5.9, -26], [0, 13.45, 5.8]];
   for (const p of snipers) b.marker('snipers', ...p);
-  const pickups: readonly Point[] = [[22, 0, 6.5], [26, 0, 6.5], [24, 0, 1.5], [0, 1.25, 8],
-    [-20, 0, 0], [20, 0, -14], [0, 0, -36], [-40, 6, -20], [40, 5.5, 0],
-    [0, 11, 44], [0, 13.5, 0], [-24, 0, 24], [24, 0, 24]];
+  const pickups: readonly Point[] = [[22, 0.15, 6.5], [26, 0, 6.5], [24, 0.15, 1.5], [0, 1.25, 8],
+    [-20, 0.15, 0], [20, 0.15, -14], [0, 0, -36], [-40, 6.35, -20], [40, 5.85, 0],
+    [0, 11, 49], [5.8, 13.45, 0], [-23, 0.15, 23], [23, 0.15, 23]];
   for (const p of pickups) b.marker('pickups', ...p);
-  const arenaSpawns: readonly Point[] = [[-40, 6.2, -20], [40, 7.2, -18], [-40, 7.7, 14], [40, 6.7, 16],
-    [0, 11.2, 44], [0, 5.6, -26], [-46, 0, 0], [46, 0, 0], [0, 0, -50],
-    [-30, 0, 46], [30, 0, 46], [0, 13.6, 0], [-10, 30.8, 46]];
+  const arenaSpawns: readonly Point[] = [[-40, 6.35, -20], [40, 7.35, -18], [-40, 7.85, 14], [40, 6.85, 16],
+    [0, 11, 39], [0, 5.9, -26], [-46, 0, 0], [46, 0, 0], [0, 0, -50],
+    [-30, 0, 46], [30, 0, 46], [0, 13.45, -5.8], [-8, 30.6, 44]];
   for (const p of arenaSpawns) b.marker('arenaSpawns', ...p);
 
   b.sphere(70, 95, -150, 14, ORANGE);
@@ -105,22 +115,22 @@ export function buildMexico(b: LevelBuilder) {
   }
   for (const [x, z, w, h] of [[-120, -160, 60, 30], [40, -190, 90, 36],
     [150, -120, 70, 26], [-170, 60, 50, 24], [160, 90, 80, 30], [-60, 190, 100, 34]] as const) {
-    b.box(x, 0, z, w, h, 30, { noCollide: true });
-    b.box(x, h, z, 0.6 * w, 0.5 * h, 22, { noCollide: true });
+    b.box(x, 0, z, w, h, 30, { ...ROCK, noCollide: true });
+    b.box(x, h, z, 0.6 * w, 0.5 * h, 22, { ...ROCK, noCollide: true });
   }
   b.planes(3, 30, 26, { scale: 1.4, radiusStep: 8, heightStep: 6, speed: 0.11 });
 }
 
 function bandstand(b: LevelBuilder) {
-  b.cylinder(0, 0, -26, 6.5, 1.2);
-  b.stairs(0, 0, -19.5, '-z', 4, 4.5, { rise: 0.3, run: 0.5 });
+  b.cylinder(0, 0, -26, 6.5, 1.2, WHITE);
+  b.stairs(0, 0, -19.5, '-z', 4, 4.5, { rise: 0.3, run: 0.5, mat: 'paving' });
   for (let k = 0; k < 8; k++) {
     const a = k * Math.PI / 4 + Math.PI / 8;
     b.cylinder(5.6 * Math.cos(a), 1.2, -26 + 5.6 * Math.sin(a), 0.22, 4.2,
-      { ...ORANGE, noCollide: true });
+      { mat: 'wood', noCollide: true });
   }
-  b.mesh(new THREE.ConeGeometry(7.6, 3.2, 8), [0, 7, -26], ORANGE);
-  b.cylinder(0, 5.4, -26, 7.6, 0.3, { segments: 8, noCollide: true });
+  b.mesh(new THREE.ConeGeometry(7.6, 3.2, 8), [0, 7, -26], TERRACOTTA);
+  b.cylinder(0, 5.4, -26, 7.6, 0.3, { segments: 8, noCollide: true, mat: 'wood' });
   b.collider(0, 5.4, -26, 9, 0.5, 9, { noNav: true });
   b.ring(0, 9.4, -26);
   for (const [x, z, yaw, trumpet] of [[-2.6, -27.5, 0.4, false], [0, -28.5, 0, true],
@@ -166,40 +176,43 @@ function church(b: LevelBuilder) {
     [-10, 0, 46, 6, 26, 6], [-10, 30, 46, 7.2, 0.6, 7.2],
     [-10, 30.6, 46, 0.3, 3, 0.3], [-10, 32.4, 46, 1.6, 0.3, 0.3],
     [10, 0, 46, 6, 15, 6], [10, 20.8, 46, 0.3, 2, 0.3]];
-  for (const box of shell) b.box(...box);
-  b.slab(-7, 33.5, 7, 36.5, 0.8, 0.8);
+  for (const box of shell) b.box(...box, WHITE);
+  b.slab(-7, 33.5, 7, 36.5, 0.8, 0.8, { mat: 'paving' });
   for (const x of [-3.2, 3.2]) b.box(x, 0, 35.8, 0.5, 5.4, 0.5, DARK_VISUAL);
   b.mesh(new THREE.TorusGeometry(3.2, 0.25, 6, 16, Math.PI), [0, 5.4, 35.8], { tone: TONE.DARK });
   for (const x of [-8, 8]) for (const y of [3, 7]) b.box(x, y, 35.9, 1.6, 2.2, 0.3, DARK_VISUAL);
-  for (const x of [-12.5, -7.5]) for (const z of [43.5, 48.5]) b.box(x, 26, z, 0.6, 4, 0.6);
+  for (const x of [-12.5, -7.5]) for (const z of [43.5, 48.5]) b.box(x, 26, z, 0.6, 4, 0.6, WHITE);
   b.sphere(-10, 28.2, 46, 0.95, ORANGE);
   b.ring(-10, 27.4, 42.2);
   b.ring(-10, 33.8, 46);
-  for (const y of [8, 15, 21]) b.box(-10, y, 42.4, 6, 0.4, 1.3, ORANGE);
-  for (const y of [11, 18, 24]) b.box(-13.6, y, 46, 1.3, 0.4, 6, ORANGE);
-  b.sphere(10, 17.4, 46, 3.6, ORANGE);
+  for (const y of [8, 15, 21]) b.box(-10, y, 42.4, 6, 0.4, 1.3, TERRACOTTA);
+  for (const y of [11, 18, 24]) b.box(-13.6, y, 46, 1.3, 0.4, 6, TERRACOTTA);
+  b.sphere(10, 17.4, 46, 3.6, TERRACOTTA);
   b.collider(10, 15, 46, 6, 5, 6, { noNav: true });
   b.ring(10, 21.6, 46);
-  for (const y of [6, 11]) b.box(13.6, y, 46, 1.3, 0.4, 6, ORANGE);
+  for (const y of [6, 11]) b.box(13.6, y, 46, 1.3, 0.4, 6, TERRACOTTA);
 }
 
 function houses(b: LevelBuilder) {
+  const walls: readonly BuildOpts[] = [{ mat: 'adobe' }, WHITE, { mat: 'plaster' }];
+  let n = 0;
   for (const [x, z, w, d, h, tone, side] of [
     [-40, -20, 11, 9, 6, TONE.HEAL, 1], [-40, -4, 9, 8, 5, TONE.BOSS, 1],
     [-40, 14, 12, 10, 7.5, TONE.ACCENT, 1], [40, -18, 12, 9, 7, TONE.BOSS, -1],
     [40, 0, 9, 8, 5.5, TONE.HEAL, -1], [40, 16, 11, 10, 6.5, TONE.ACCENT, -1],
   ] as const) {
-    b.box(x, 0, z, w, h, d);
-    b.box(x, h, z, w + 0.6, 0.35, d + 0.6, ORANGE);
-    b.rail(x - w / 2, z - d / 2, x + w / 2, z - d / 2, h + 0.35, ORANGE);
+    b.box(x, 0, z, w, h, d, walls[n++ % walls.length]);
+    b.box(x, h, z, w + 0.6, 0.35, d + 0.6, TERRACOTTA);
+    b.rail(x - w / 2, z - d / 2, x + w / 2, z - d / 2, h + 0.35, { mat: 'wood' });
     const doorX = x + side * (w / 2 + 0.01);
     b.box(doorX, 0, z, 0.15, 2.6, 1.4, { tone, noCollide: true });
     b.box(doorX, 2.6, z, 0.15, 0.3, 1.8, DARK_VISUAL);
     for (const s of [-1, 1]) b.box(doorX, 1.6, z + s * 0.32 * d, 0.12, 1.1, 1.1, DARK_VISUAL);
-    const n = Math.round(h / 0.3);
-    b.stairs(x - side * (w / 2 + 0.3), 0, z + d / 2 + 0.9, side > 0 ? '+x' : '-x', n, 1.6,
-      { rise: h / n, run: 0.42 });
-    b.box(x, h + 0.35, z + d / 2 - 1.2, 2.2, 0.9, 1.4, ORANGE);
+    // The flight lands level with the roof slab and clears its 0.3 overhang, so the nav grid links the two.
+    const top = h + 0.35, steps = Math.round(top / 0.3);
+    b.stairs(x - side * (w / 2 + 0.3), 0, z + d / 2 + 1.2, side > 0 ? '+x' : '-x', steps, 1.6,
+      { rise: top / steps, run: 0.42, mat: 'paving' });
+    b.box(x, h + 0.35, z + d / 2 - 1.2, 2.2, 0.9, 1.4, TERRACOTTA);
     b.ring(x, h + 3.2, z);
   }
 }
@@ -234,9 +247,9 @@ function market(b: LevelBuilder) {
     [0, 6.4, 8], [-9, 9.5, 12], [9, 9.5, 12]] as const) prop(b, 'pinata', x, y, z);
   for (const [x, z] of [[-17.5, 24.5], [-9.5, 24.5], [16.5, 24.5], [23.5, 24.5],
     [-27.5, -9], [-27.5, -15], [29, -5], [29, -11]] as const) prop(b, 'crate', x, 0, z);
-  for (const [x, z] of [[-33, -14], [-33, -12.6], [-33, -6], [-33, 10], [-33, 20], [33, -12],
-    [33, -3], [33, 6], [33, 22], [-6, 30], [6, 30], [-18, 31], [18, 31], [-3, -33], [3, -33]] as const)
-    prop(b, rand() < 0.3 ? 'potL' : 'potS', x, 0, z);
+  [[-33, -14], [-33, -12.6], [-33, -6], [-33, 10], [-33, 20], [33, -12],
+    [33, -3], [33, 6], [33, 22], [-6, 30], [6, 30], [-18, 31], [18, 31], [-3, -33], [3, -33]].forEach(([x, z], i) =>
+    prop(b, i % 3 === 0 ? 'potL' : 'potS', x ?? 0, 0, z ?? 0));
   for (const [x, z] of [[-18, -30], [18, -30], [-30, 30], [30, 30]] as const) prop(b, 'barrel', x, 0, z);
   for (const [x, z, h] of [[-46, -40, 2.8], [-50, -28, 2.2], [-48, 30, 3], [-44, 44, 2.4],
     [46, -44, 2.6], [50, -30, 2.2], [48, 34, 3.2], [44, 46, 2.5], [-30, -48, 2.8],
@@ -301,7 +314,7 @@ function part(geometry: THREE.BufferGeometry, x: number, y: number, z: number, s
 
 function tacoCart(b: LevelBuilder) {
   b.box(24, 0, 4, 3.2, 1.3, 1.6, ORANGE);
-  b.box(24, 1.3, 4, 3.4, 0.9, 1.8);
+  b.box(24, 1.3, 4, 3.4, 0.9, 1.8, WHITE);
   for (const x of [22.5, 25.5]) b.box(x, 0, 4, 0.14, 3.6, 0.14, DARK_VISUAL);
   for (let i = 0; i < 4; i++) b.box(24, 3.59, 3 + 0.55 * i, 3.6, 0.06, 0.55,
     { noCollide: true, tone: i % 2 ? TONE.HEAL : TONE.ACCENT });

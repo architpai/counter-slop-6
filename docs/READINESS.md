@@ -2,7 +2,7 @@
 
 Checked on 2026-09-08. The user selected the local documents as the build target.
 
-Status: ready to implement Downtown after the corrections below. All listed corrections were applied and cross-checked before app code was started. Mexico remains gated. Build acceptance is a separate step.
+Status: ready to implement Downtown after the corrections below. All listed corrections were applied and cross-checked before app code was started. Mexico shipped once its colliders were made deterministic and its markers corrected. Build acceptance is a separate step.
 
 ## Target and scope
 
@@ -10,7 +10,7 @@ Status: ready to implement Downtown after the corrections below. All listed corr
 - Use `spec/*.md` for game rules, with the corrections recorded below.
 - Deliver static JavaScript modules. Use the pinned Three.js and PeerJS versions. No bundler, package installation, framework, or server application.
 - The first release exposes Downtown solo and Downtown free-for-all. FFA supports eight players, 20 kills, and the documented 480-second match clock.
-- Keep Mexico disabled. Keep the revolver out of the loadout. Enemy replication remains dormant in FFA.
+- Keep the revolver out of the loadout. Enemy replication remains dormant in FFA.
 - Use keyboard/mouse and standard gamepad input. Touch controls are outside the documented scope.
 
 
@@ -45,7 +45,6 @@ All ten original documents were read across four independent audits. The subsyst
 
 ## Gates that remain closed
 
-Mexico must not be enabled until its random collider geometry is shared or fixed, and its blocked spawn/pickup markers are corrected.
 These issues do not block Downtown.
 
 The documented client-owned hit and health model is retained. Shape and sender checks do not provide server-authoritative anti-cheat.

@@ -32,11 +32,9 @@ There are two maps. Each map is built by one shared builder into:
 
 | Key | Display name | Blurb | Available |
 |---|---|---|---|
-| `downtown` | COUNTER SLOP 6 | "streets, rooftops and fire escapes" | Always |
-| `mexico` | MEXICO | "a sun-baked plaza · piñatas, tacos and mariachi" | Only when the **Mexico-ready flag** is true. In the design this flag is **false**, so the list contains only Downtown. |
-
-The initial release includes Downtown only. Keep the Mexico-ready flag **false** until the
-checks at the start of section 7 pass.
+| `downtown` | DOWNTOWN | "streets, rooftops and fire escapes" | Always |
+| `house` | THE HOUSE | "a suburban home · basement to rooftop" | Always |
+| `mexico` | MEXICO | "a sun-baked plaza · piñatas, tacos and mariachi" | Always |
 
 Rules that use the list:
 
@@ -791,23 +789,7 @@ railings at all).
 
 Bounds ±62 (P = 62). Player start (0, 0, 16). Key `mexico`. Same geometry in solo and arena.
 
-**Before enabling Mexico:** keep this map disabled until both checks below pass. The tables
-retain the design data; they do not yet define a safe set of spawn and pickup positions.
-
-- **Shared colliders:** replace random solid mesa offsets (7.1) and random pot collider sizes
-  (7.7) with fixed collider data, or specify shared build randomness for every peer. Matching
-  breakable ids alone does not make the collision worlds match. Verify that peers build the
-  same colliders before a match starts.
-- **Marker clearance:** check every sniper and arena spawn with its full body box, and check
-  that every pickup can be collected. Resolve these known overlaps before enabling the map:
-  sniper (10, 15, 46) is inside the dome collider (7.4); sniper (0, 13.45, 0), arena spawn
-  (0, 13.6, 0), and pickup (0, 13.5, 0) are inside the sombrero crown (7.2); sniper
-  (−10, 30.6, 46) and arena spawn (−10, 30.8, 46) intersect the belfry cross post (7.4);
-  arena spawn (0, 11.2, 44) and pickup (0, 11, 44) intersect the church roof ridge (7.4).
-  The house sniper points (−40, 7.5, 14) and (40, 7, −18), and house arena points
-  (−40, 6.2, −20), (40, 7.2, −18), (−40, 7.7, 14), (40, 6.7, 16), are below the roof
-  surfaces in 7.5. The bandstand arena point (0, 5.6, −26) is below its roof top 5.9 (7.3).
-  Do not depend on physics push-out to repair these initial positions.
+Build randomness is fixed (mesa offsets come from a constant table, pot sizes cycle by index), so every peer builds the same colliders. Every sniper, arena and pickup marker sits on a real surface; the church roof, belfry and sombrero brim are reached by grapple only.
 
 ### 7.1 Ground, mesas, sky lid, edge spawns
 
