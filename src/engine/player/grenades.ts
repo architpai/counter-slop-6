@@ -61,25 +61,6 @@ export interface GrenadeState {
   _grenade: GrenadeResources;
 }
 
-/** The slice of the enemy manager a grenade blast uses. */
-interface EnemiesLike {
-  blastEnemies(center: Vector3, radius: number, base: number): void;
-}
-
-const isEnemies = (v: unknown): v is EnemiesLike =>
-  typeof v === 'object' && v !== null && 'blastEnemies' in v;
-
-// TODO(phase5): `ctx.enemies` is `unknown` until `enemies/` is ported, so narrow it here.
-const enemyManager = (ctx: Ctx): EnemiesLike | null => (isEnemies(ctx.enemies) ? ctx.enemies : null);
-
-/**
- * `ctx.remotes` holds `RemotePlayer`, which is `unknown` until `players.js` is
- * ported. Every remote is a `Target`, which is all a blast needs.
- */
-// TODO(phase5): drop this once `RemotePlayer` is a real type.
-const isTarget = (v: unknown): v is Target =>
-  typeof v === 'object' && v !== null && 'alive' in v && 'center' in v;
-
 const RADIUS = 0.16;
 const BLAST = 6.4;
 const HURT_RADIUS = BLAST * 0.95;
@@ -217,7 +198,7 @@ function explode(p: Player, n: Nade): void {
   ctx.audio.explosion(center);
   ctx.input.rumble(0.9, 0.9, 220);
   if (n.mine) {
-    enemyManager(ctx)?.blastEnemies(center, BLAST, 120);
+    ctx.enemies?.blastEnemies(center, BLAST, 120);
     ctx.game.blastBreakables(center, BLAST * 0.9);
   }
   const distance = p.center.distanceTo(center);
@@ -227,7 +208,7 @@ function explode(p: Player, n: Nade): void {
   }
   if (n.mine) {
     for (const target of ctx.remotes.values()) {
-      if (!isTarget(target) || !target.alive || !ctx.game.canHurt(target)) continue;
+      if (!target.alive || !ctx.game.canHurt(target)) continue;
       const d = target.center.distanceTo(center);
       if (d < HURT_RADIUS) {
         ctx.game.hitPlayer(target, 12 + 50 * (1 - d / HURT_RADIUS), { point: center, source: 'grenade' });

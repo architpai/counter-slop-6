@@ -9,25 +9,6 @@ import type { Weapon } from './index';
 const GUARD_POS = new Vector3(0.21, -0.31, -0.36);
 const GUARD_ROT = new Vector3(1.40, 0.30, 1.24);
 
-/** The slice of the enemy manager the katana uses. */
-interface EnemiesLike {
-  inArc(pos: Vector3, dir: Vector3, range: number, cosHalf: number): { enemy: Enemy; dist: number }[];
-  damage(enemy: Enemy, amount: number, info: HitInfo): void;
-}
-
-const isEnemies = (v: unknown): v is EnemiesLike =>
-  typeof v === 'object' && v !== null && 'inArc' in v && 'damage' in v;
-
-// TODO(phase5): `ctx.enemies` is `unknown` until `enemies/` is ported, so narrow it here.
-const enemyManager = (ctx: Ctx): EnemiesLike | null => (isEnemies(ctx.enemies) ? ctx.enemies : null);
-
-/**
- * A remote player carries a live torso centre. `RemotePlayer` is `unknown` until
- * `players.js` is ported, so read the one field this file needs.
- */
-// TODO(phase5): drop this once `RemotePlayer` is a real type.
-const centerOf = (v: unknown): Vector3 | undefined =>
-  (typeof v === 'object' && v !== null && 'center' in v && v.center instanceof Vector3 ? v.center : undefined);
 
 /** The blade state `resetAmmo` owns, which the constructor calls. */
 export interface Katana {
@@ -187,7 +168,7 @@ export class Katana extends ViewModel implements Weapon {
 
   _hit(side: number) {
     const { game, effects, audio, input } = this._ctx;
-    const enemies = enemyManager(this._ctx);
+    const enemies = this._ctx.enemies;
     const p = this._player, d = this._hitDir;
     d.copy(p.forward);
     d.x += -p.forward.z * 0.7 * side;
@@ -202,7 +183,7 @@ export class Katana extends ViewModel implements Weapon {
       hit = true;
     }
     for (const remote of game.playersInArc(p.eye, p.forward, 3, Math.cos(0.95))) {
-      game.hitPlayer(remote, 55, { point: centerOf(remote), dir: d, part: 'torso', source: 'katana', crit: false });
+      game.hitPlayer(remote, 55, { point: remote.center, dir: d, part: 'torso', source: 'katana', crit: false });
       hit = true;
     }
     if (game.cutRopes(p.eye, p.forward, 3.4)) hit = true;

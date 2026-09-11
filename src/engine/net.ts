@@ -1,4 +1,6 @@
 import Peer from 'peerjs';
+import type { DataConnection, PeerError, PeerOptions } from 'peerjs';
+import type { Envelope } from './types';
 
 export const NET = Object.freeze({
   PREFIX_LIVE: 'shooter-rebuild-v1-', PREFIX_DEV: 'shooter-rebuild-dev-v1-',
@@ -7,34 +9,54 @@ export const NET = Object.freeze({
   QUICK_TIMEOUT: 11000, REFUSE_CLOSE_DELAY: 400, SILENT_TIMEOUT: 9000,
 });
 
+/** One registered message handler. Payloads arrive untrusted: narrow before use. */
+export type NetHandler = (data: unknown, from: string) => void;
+/** Removes the listener it was made for. */
+type Unlisten = () => void;
+/** Connection metadata: the joiner's name, cleaned. */
+export interface PeerMeta { name: string }
+/** The `welcome` payload, the one the join race reads back. */
+interface Welcome { hostId: string; code: string; isPublic: boolean }
+/** One lobby a knock is racing. */
+interface Attempt { conn: DataConnection; id: string; code: string; failed: boolean; welcome: Welcome | null }
+
 const HOST = new Set(['lobby', 'leave', 'start', 'end', 'backtolobby', 'score', 'pickup', 'taken', 'refused']);
 const REQUEST = new Set(['startreq', 'take']);
 const ADDRESSED = new Set(['pdmg', 'parry', 'cut']);
 const BROADCAST = new Set(['ps', 'shots', 'pdead', 'nade', 'brk']);
 const TYPES = new Set(['welcome', ...HOST, ...REQUEST, ...ADDRESSED, ...BROADCAST]);
 const encoder = new TextEncoder();
-const own = (o, k) => Object.hasOwn(o, k);
-const object = o => o !== null && typeof o === 'object' && !Array.isArray(o) &&
+/** `Object.hasOwn` as a predicate, so an optional field reads as present. */
+const own = <T extends object, K extends string>(o: T, k: K): o is T & { [P in K]-?: P extends keyof T ? NonNullable<T[P]> : unknown } =>
+  Object.hasOwn(o, k);
+const object = (o: unknown): o is Record<string, unknown> => o !== null && typeof o === 'object' && !Array.isArray(o) &&
   (Object.getPrototypeOf(o) === Object.prototype || Object.getPrototypeOf(o) === null);
-const text = (s, max, min = 0) => typeof s === 'string' && s.length >= min && s.length <= max;
-const peerId = s => text(s, 128, 1);
-const integer = n => Number.isSafeInteger(n) && n >= 0;
-const bounded = (n, limit = 10000) => Number.isFinite(n) && Math.abs(n) <= limit;
-const vector = (v, limit = 10000) => Array.isArray(v) && v.length === 3 && v.every(n => bounded(n, limit));
-const optional = (o, k, check) => !own(o, k) || check(o[k]);
-const fields = (o, required, extra = []) => object(o) && required.every(k => own(o, k)) &&
+/** `o?.k` for anything object-like, including class instances `object()` rejects. */
+const prop = (o: unknown, k: string): unknown => o !== null && typeof o === 'object' ? Reflect.get(o, k) : undefined;
+const array = (a: unknown): a is unknown[] => Array.isArray(a);
+const text = (s: unknown, max: number, min = 0): s is string => typeof s === 'string' && s.length >= min && s.length <= max;
+const peerId = (s: unknown): s is string => text(s, 128, 1);
+const integer = (n: unknown): n is number => typeof n === 'number' && Number.isSafeInteger(n) && n >= 0;
+const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n);
+const bounded = (n: unknown, limit = 10000): n is number => finite(n) && Math.abs(n) <= limit;
+const vector = (v: unknown, limit = 10000) => array(v) && v.length === 3 && v.every(n => bounded(n, limit));
+const optional = (o: Record<string, unknown>, k: string, check: (v: unknown) => boolean) => !own(o, k) || check(o[k]);
+const fields = (o: unknown, required: string[], extra: string[] = []): o is Record<string, unknown> =>
+  object(o) && required.every(k => own(o, k)) &&
   Object.keys(o).every(k => required.includes(k) || extra.includes(k));
-const empty = o => fields(o, []);
-const idRecord = (o, positive = false) => fields(o, ['id']) && integer(o.id) && (!positive || o.id > 0);
-const rows = (arr, score = false) => Array.isArray(arr) && arr.length <= NET.MAX_PLAYERS &&
-  new Set(arr.map(row => row?.id)).size === arr.length && arr.every(row =>
+const empty = (o: unknown) => fields(o, []);
+const idRecord = (o: unknown, positive = false) => fields(o, ['id']) && integer(o.id) && (!positive || o.id > 0);
+const rows = (arr: unknown, score = false) => array(arr) && arr.length <= NET.MAX_PLAYERS &&
+  new Set(arr.map(row => prop(row, 'id'))).size === arr.length && arr.every(row =>
     fields(row, score ? ['id', 'name', 'kills', 'deaths'] : ['id', 'name']) &&
     peerId(row.id) && text(row.name, 14) && (!score || integer(row.kills) && integer(row.deaths)));
+/** The `welcome` case of `validPayload`, named so the join race can read the payload back. */
+const welcomeOf = (d: unknown): d is Welcome => fields(d, ['hostId', 'code', 'isPublic']) && peerId(d.hostId) &&
+  text(d.code, 64, 1) && typeof d.isPublic === 'boolean';
 
-function validPayload(type, d) {
+function validPayload(type: string, d: unknown) {
   switch (type) {
-    case 'welcome': return fields(d, ['hostId', 'code', 'isPublic']) && peerId(d.hostId) &&
-      text(d.code, 64, 1) && typeof d.isPublic === 'boolean';
+    case 'welcome': return welcomeOf(d);
     case 'refused': return fields(d, [], ['reason']) && optional(d, 'reason', s => text(s, 256));
     case 'lobby': return fields(d, ['players', 'hostId', 'isPublic'], ['map']) &&
       rows(d.players) && peerId(d.hostId) && typeof d.isPublic === 'boolean' && optional(d, 'map', s => text(s, 64));
@@ -44,17 +66,17 @@ function validPayload(type, d) {
       optional(d, 'map', s => text(s, 64)) && optional(d, 'late', b => typeof b === 'boolean') &&
       optional(d, 'spawn', integer) && optional(d, 'spawns', s => object(s) &&
         Object.keys(s).length <= NET.MAX_PLAYERS && Object.entries(s).every(([id, index]) => peerId(id) && integer(index))) &&
-      optional(d, 'broken', a => Array.isArray(a) && a.length <= 4096 && a.every(integer));
+      optional(d, 'broken', a => array(a) && a.length <= 4096 && a.every(integer));
     case 'end': return fields(d, ['id', 'name']) && peerId(d.id) && text(d.name, 14);
     case 'score': return rows(d, true);
-    case 'ps': return Array.isArray(d) && [8, 11, 14].includes(d.length) &&
-      d.slice(0, 3).every(n => bounded(n)) && Number.isFinite(d[3]) && bounded(d[4], 1.6) &&
+    case 'ps': return array(d) && [8, 11, 14].includes(d.length) &&
+      d.slice(0, 3).every(n => bounded(n)) && finite(d[3]) && bounded(d[4], 1.6) &&
       Number.isSafeInteger(d[5]) && integer(d[6]) && d[6] <= 511 && integer(d[7]) && d[7] <= 120 &&
       d.slice(8).every(n => bounded(n));
-    case 'shots': return fields(d, ['k', 'e']) && text(d.k, 32) && Array.isArray(d.e) &&
+    case 'shots': return fields(d, ['k', 'e']) && text(d.k, 32) && array(d.e) &&
       d.e.length > 0 && d.e.length <= 90 && d.e.length % 3 === 0 && d.e.every(n => bounded(n));
     case 'pdmg': return fields(d, ['amount', 'from', 'by', 'src'], ['crit']) &&
-      Number.isFinite(d.amount) && d.amount > 0 && d.amount <= 100000 &&
+      finite(d.amount) && d.amount > 0 && d.amount <= 100000 &&
       (d.from === null || vector(d.from)) && peerId(d.by) && text(d.src, 32) &&
       optional(d, 'crit', b => typeof b === 'boolean');
     case 'pdead': return fields(d, ['killer', 'dir', 'over', 'how', 'crit']) &&
@@ -64,22 +86,34 @@ function validPayload(type, d) {
     case 'nade': return fields(d, ['pos', 'vel']) && vector(d.pos) && vector(d.vel);
     case 'brk': return idRecord(d);
     case 'pickup': return fields(d, ['id', 'kind', 'pos']) && integer(d.id) && d.id > 0 &&
-      ['ammo', 'health'].includes(d.kind) && vector(d.pos);
+      typeof d.kind === 'string' && ['ammo', 'health'].includes(d.kind) && vector(d.pos);
     case 'take': case 'taken': return idRecord(d, true);
     default: return false;
   }
 }
 
-function validEnvelope(m) {
+function validEnvelope(m: unknown): m is Envelope {
   try {
-    return fields(m, ['t', 'd'], ['from', 'to', 'relay']) && TYPES.has(m.t) &&
+    return fields(m, ['t', 'd'], ['from', 'to', 'relay']) && text(m.t, 64, 1) && TYPES.has(m.t) &&
       optional(m, 'from', peerId) && optional(m, 'to', peerId) &&
       optional(m, 'relay', b => typeof b === 'boolean') && validPayload(m.t, m.d) &&
       encoder.encode(JSON.stringify(m)).byteLength <= 16384;
   } catch { return false; }
 }
 
-function listen(emitter, type, fn) {
+/**
+ * `emitter` is generic over the exact handler type so that PeerJS's own event
+ * signatures decide whether `fn` is right; `NoInfer` keeps the emitter from
+ * widening `type` and `fn` back out.
+ */
+interface Listenable<K extends string, F> {
+  on(type: K, fn: F): unknown;
+  off?(type: K, fn: F): unknown;
+  removeListener?(type: K, fn: F): unknown;
+}
+
+function listen<K extends string, F extends (...args: never[]) => void>(
+  emitter: Listenable<NoInfer<K>, NoInfer<F>>, type: K, fn: F): Unlisten {
   emitter.on(type, fn);
   return () => {
     if (typeof emitter.off === 'function') emitter.off(type, fn);
@@ -87,13 +121,16 @@ function listen(emitter, type, fn) {
   };
 }
 
-function stop(conn) { try { conn.close(); } catch { /* Already closed. */ } }
-function destroy(peer) { try { peer.destroy(); } catch { /* Already destroyed. */ } }
-function errorOf(error, fallback) {
-  return error instanceof Error ? error : new Error(text(error?.message, 256, 1) ? error.message : fallback);
+function stop(conn: DataConnection) { try { conn.close(); } catch { /* Already closed. */ } }
+function destroy(peer: Peer) { try { peer.destroy(); } catch { /* Already destroyed. */ } }
+function errorOf(error: unknown, fallback: string): Error {
+  if (error instanceof Error) return error;
+  const message = prop(error, 'message');
+  return new Error(text(message, 256, 1) ? message : fallback);
 }
-function metadata(meta) {
-  return { name: typeof meta?.name === 'string' ? meta.name.trim().slice(0, 14) || 'recruit' : 'recruit' };
+function metadata(meta: unknown): PeerMeta {
+  const name = prop(meta, 'name');
+  return { name: typeof name === 'string' ? name.trim().slice(0, 14) || 'recruit' : 'recruit' };
 }
 function prefix() {
   return ['localhost', '127.0.0.1', '[::1]'].includes(globalThis.location?.hostname) ? NET.PREFIX_DEV : NET.PREFIX_LIVE;
@@ -103,21 +140,30 @@ function randomCode() {
 }
 
 export class Net {
-  #peer = null;
-  #id = null;
-  #code = null;
+  #peer: Peer | null = null;
+  #id: string | null = null;
+  #code: string | null = null;
   #connected = false;
   #epoch = 0;
   #leaving = false;
-  #conns = new Map();
-  #allConns = new Set();
-  #bindings = new Map();
-  #peerBindings = [];
-  #cancels = new Set();
-  #timers = new Set();
-  #handlers = new Map();
+  #conns = new Map<string, DataConnection>();
+  #allConns = new Set<DataConnection>();
+  #bindings = new Map<DataConnection, Unlisten[]>();
+  #peerBindings: Unlisten[] = [];
+  #cancels = new Set<() => void>();
+  /** `Window.setTimeout` handles, numbers. Never `NodeJS.Timeout`. */
+  #timers = new Set<number>();
+  #handlers = new Map<string, NetHandler>();
   #sent = 0;
   #received = 0;
+
+  hostId: string | null;
+  isHost: boolean;
+  isPublic: boolean;
+  accepting: boolean;
+  onPeerJoin: ((id: string, meta: PeerMeta) => void) | null;
+  onPeerLeave: ((id: string) => void) | null;
+  onDisconnect: (() => void) | null;
 
   constructor() {
     this.hostId = null;
@@ -132,9 +178,9 @@ export class Net {
   get id() { return this.#id; }
   get code() { return this.#code; }
   get active() { return !!this.#peer && this.#connected; }
-  get conns() { return this.#conns; }
+  get conns(): Map<string, DataConnection> { return this.#conns; }
 
-  async host(o = {}) {
+  async host(o: { isPublic?: boolean; code?: string } = {}): Promise<void> {
     this.leave();
     const epoch = this.#epoch;
     this.isHost = true;
@@ -154,8 +200,8 @@ export class Net {
         return;
       } catch (error) {
         if (epoch !== this.#epoch) throw error;
-        if (error.type !== 'unavailable-id' || explicit !== null || i === count - 1) {
-          if (this.isPublic && explicit === null && error.type === 'unavailable-id') {
+        if (prop(error, 'type') !== 'unavailable-id' || explicit !== null || i === count - 1) {
+          if (this.isPublic && explicit === null && prop(error, 'type') === 'unavailable-id') {
             throw new Error('all public lobbies are busy - host a private one');
           }
           throw error;
@@ -164,7 +210,7 @@ export class Net {
     }
   }
 
-  async join(code, meta) {
+  async join(code: string, meta?: unknown): Promise<void> {
     this.leave();
     const epoch = this.#epoch;
     code = typeof code === 'string' ? code.trim().toUpperCase() : '';
@@ -174,7 +220,7 @@ export class Net {
     await this.#knock([code], meta, NET.JOIN_TIMEOUT, epoch, false);
   }
 
-  async quickJoin(meta, onStatus) {
+  async quickJoin(meta?: unknown, onStatus?: (s: string) => void): Promise<void> {
     this.leave();
     const epoch = this.#epoch;
     onStatus?.('looking for an open lobby…');
@@ -189,7 +235,7 @@ export class Net {
     }
   }
 
-  leave() {
+  leave(): void {
     this.#leaving = true;
     this.#epoch++;
     for (const cancel of [...this.#cancels]) cancel();
@@ -210,7 +256,7 @@ export class Net {
     this.#leaving = false;
   }
 
-  close(id) {
+  close(id: string): void {
     const conn = this.#conns.get(id);
     if (!conn) return;
     this.#conns.delete(id);
@@ -218,54 +264,59 @@ export class Net {
     if (!this.isHost && id === this.hostId) this.#connected = false;
   }
 
-  on(type, fn) {
+  on(type: string, fn: NetHandler): void {
     if (TYPES.has(type) && typeof fn === 'function') this.#handlers.set(type, fn);
   }
 
-  send(type, data, relay = false) {
+  send(type: string, data: unknown, relay = false): void {
     if (!this.active || type === 'welcome' || ADDRESSED.has(type)) return;
     if (this.isHost) {
       if (!HOST.has(type) && !BROADCAST.has(type)) return;
-      const m = type === 'refused' ? { t: type, d: data } : { t: type, d: data, from: this.#id };
+      const m: Envelope = type === 'refused' ? { t: type, d: data } : { t: type, d: data, from: this.#id ?? undefined };
       if (validEnvelope(m)) for (const conn of this.#conns.values()) this.#write(conn, m);
     } else {
       if (!REQUEST.has(type) && !(BROADCAST.has(type) && relay === true)) return;
       if (REQUEST.has(type) && relay) return;
-      const m = { t: type, d: data, relay };
-      if (validEnvelope(m)) this.#write(this.#conns.get(this.hostId), m);
+      const m: Envelope = { t: type, d: data, relay };
+      if (validEnvelope(m)) this.#write(this.#hostConn(), m);
     }
   }
 
-  broadcast(type, data) { this.send(type, data, true); }
+  broadcast(type: string, data: unknown): void { this.send(type, data, true); }
 
-  sendTo(id, type, data) {
+  sendTo(id: string, type: string, data: unknown): void {
     if (!this.active || !peerId(id) || id === this.#id || type === 'welcome') return;
     if (this.isHost) {
       if (!HOST.has(type) && !BROADCAST.has(type) && !ADDRESSED.has(type)) return;
-      if ((type === 'pdmg' || type === 'parry') && data?.by !== this.#id) return;
-      const m = type === 'refused' ? { t: type, d: data } : { t: type, d: data, from: this.#id };
+      if ((type === 'pdmg' || type === 'parry') && prop(data, 'by') !== this.#id) return;
+      const m: Envelope = type === 'refused' ? { t: type, d: data } : { t: type, d: data, from: this.#id ?? undefined };
       if (validEnvelope(m)) this.#write(this.#conns.get(id), m);
     } else {
-      if (!ADDRESSED.has(type) || ((type === 'pdmg' || type === 'parry') && data?.by !== this.#id)) return;
-      const m = { t: type, d: data, to: id, from: this.#id };
-      if (validEnvelope(m)) this.#write(this.#conns.get(this.hostId), m);
+      if (!ADDRESSED.has(type) || ((type === 'pdmg' || type === 'parry') && prop(data, 'by') !== this.#id)) return;
+      const m: Envelope = { t: type, d: data, to: id, from: this.#id ?? undefined };
+      if (validEnvelope(m)) this.#write(this.#hostConn(), m);
     }
   }
 
-  #delay(fn, ms) {
-    const timer = setTimeout(() => { this.#timers.delete(timer); fn(); }, ms);
+  /** The connection to the host, if this peer is a client and knows one. */
+  #hostConn(): DataConnection | undefined {
+    return this.hostId === null ? undefined : this.#conns.get(this.hostId);
+  }
+
+  #delay(fn: () => void, ms: number): number {
+    const timer = window.setTimeout(() => { this.#timers.delete(timer); fn(); }, ms);
     this.#timers.add(timer);
     return timer;
   }
 
-  #clearTimer(timer) { clearTimeout(timer); this.#timers.delete(timer); }
+  #clearTimer(timer: number) { clearTimeout(timer); this.#timers.delete(timer); }
 
-  #openPeer(id, epoch) {
+  #openPeer(id: string | null, epoch: number): Promise<Peer> {
     return new Promise((resolve, reject) => {
       if (typeof Peer !== 'function') { reject(new Error('networking library did not load')); return; }
       let peer;
       try {
-        const options = { debug: 0, config: { iceServers: [
+        const options: PeerOptions = { debug: 0, config: { iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
           { urls: 'stun:stun1.l.google.com:19302' },
           { urls: 'stun:stun.cloudflare.com:3478' },
@@ -274,9 +325,9 @@ export class Net {
       } catch (error) { reject(errorOf(error, 'could not connect')); return; }
       this.#peer = peer;
       let settled = false;
-      const off = [];
+      const off: Unlisten[] = [];
       const cancel = () => finish(new Error('connection request cancelled'));
-      const finish = (error, openedId) => {
+      const finish = (error: Error | null, openedId?: string) => {
         if (settled) return;
         settled = true;
         this.#clearTimer(timer);
@@ -288,14 +339,14 @@ export class Net {
           reject(error || new Error('connection request cancelled'));
           return;
         }
-        this.#id = openedId;
+        this.#id = openedId ?? null;
         this.#peerBindings = [
           listen(peer, 'disconnected', () => {
             if (this.#peer === peer && epoch === this.#epoch && !peer.destroyed) {
               try { peer.reconnect(); } catch { /* Retry on the next disconnect. */ }
             }
           }),
-          listen(peer, 'connection', conn => {
+          listen(peer, 'connection', (conn: DataConnection) => {
             if (this.#peer === peer && epoch === this.#epoch && this.isHost) this.#accept(conn, epoch);
             else stop(conn);
           }),
@@ -310,28 +361,29 @@ export class Net {
       };
       const timer = this.#delay(() => finish(new Error('signalling server timed out')), NET.SIGNAL_TIMEOUT);
       this.#cancels.add(cancel);
-      off.push(listen(peer, 'open', openedId => {
+      off.push(listen(peer, 'open', (openedId: string) => {
         if (peerId(openedId) && (id === null || openedId === id)) finish(null, openedId);
         else finish(new Error('could not connect'));
-      }), listen(peer, 'error', error => finish(errorOf(error, 'could not connect'))));
+      }), listen(peer, 'error', (error: PeerError<string>) => finish(errorOf(error, 'could not connect'))));
     });
   }
 
-  #knock(codes, meta, timeout, epoch, quick) {
+  #knock(codes: string[], meta: unknown, timeout: number, epoch: number, quick: boolean): Promise<void> {
     const peer = this.#peer;
     return new Promise((resolve, reject) => {
-      const attempts = new Map();
+      if (!peer) { reject(new Error('could not connect')); return; }
+      const attempts = new Map<string, Attempt>();
       let settled = false;
       let remaining = codes.length;
       const cancel = () => finish(null, new Error('connection request cancelled'));
-      const offError = listen(peer, 'error', error => {
+      const offError = listen(peer, 'error', (error: PeerError<string>) => {
         if (error?.type !== 'peer-unavailable') return;
         const id = typeof error.message === 'string' ? /\bpeer\s+(\S+)/i.exec(error.message)?.[1] : null;
-        const attempt = attempts.get(id);
+        const attempt = typeof id === 'string' ? attempts.get(id) : undefined;
         if (attempt) fail(attempt, new Error('no lobby with that code'));
       });
       const timer = this.#delay(() => finish(null, new Error(quick ? 'no open public lobbies' : 'no answer from that lobby')), timeout);
-      const finish = (winner, error) => {
+      const finish = (winner: Attempt | null, error?: Error) => {
         if (settled) return;
         settled = true;
         this.#clearTimer(timer);
@@ -341,7 +393,9 @@ export class Net {
           this.#unwire(attempt.conn);
           if (attempt !== winner) this.#forget(attempt.conn);
         }
-        if (!winner || epoch !== this.#epoch) {
+        // A winner always carries its welcome; the null check is only for the type.
+        const welcome = winner?.welcome;
+        if (!winner || !welcome || epoch !== this.#epoch) {
           if (winner) this.#forget(winner.conn);
           reject(error || new Error('connection request cancelled'));
           return;
@@ -349,14 +403,14 @@ export class Net {
         // Adopt before resolving: welcome/lobby/start can arrive in the same event-loop turn.
         this.hostId = winner.id;
         this.#code = winner.code;
-        this.isPublic = winner.welcome.isPublic;
+        this.isPublic = welcome.isPublic;
         this.#connected = true;
         this.#conns.set(winner.id, winner.conn);
         this.#wire(winner.conn);
-        this.#handlers.get('welcome')?.(winner.welcome, winner.id);
+        this.#handlers.get('welcome')?.(welcome, winner.id);
         resolve();
       };
-      const fail = (attempt, error) => {
+      const fail = (attempt: Attempt, error: Error) => {
         if (settled || attempt.failed) return;
         attempt.failed = true;
         this.#forget(attempt.conn);
@@ -375,29 +429,31 @@ export class Net {
           if (!quick || remaining === 0) finish(null, new Error(quick ? 'no open public lobbies' : 'could not start a connection'));
           continue;
         }
-        const attempt = { conn, id, code, failed: false, welcome: null };
+        const attempt: Attempt = { conn, id, code, failed: false, welcome: null };
         attempts.set(id, attempt);
         this.#allConns.add(conn);
         this.#bindings.set(conn, [
-          listen(conn, 'data', m => {
+          listen(conn, 'data', (m: unknown) => {
             if (settled || attempt.failed || epoch !== this.#epoch || !validEnvelope(m) ||
                 own(m, 'to') || own(m, 'relay')) return;
             if (m.t === 'refused' && !own(m, 'from')) {
-              fail(attempt, new Error(m.d.reason || 'the lobby turned you away'));
-            } else if (m.t === 'welcome' && m.from === id && m.d.hostId === id && m.d.code === code && conn.peer === id) {
+              const reason = prop(m.d, 'reason');
+              fail(attempt, new Error(text(reason, 256, 1) ? reason : 'the lobby turned you away'));
+            } else if (m.t === 'welcome' && m.from === id && welcomeOf(m.d) &&
+                m.d.hostId === id && m.d.code === code && conn.peer === id) {
               attempt.welcome = m.d;
               this.#received++;
               finish(attempt);
             }
           }),
           listen(conn, 'close', () => fail(attempt, new Error('the lobby closed the connection'))),
-          listen(conn, 'error', error => fail(attempt, errorOf(error, 'could not connect'))),
+          listen(conn, 'error', (error: PeerError<string>) => fail(attempt, errorOf(error, 'could not connect'))),
         ]);
       }
     });
   }
 
-  #accept(conn, epoch) {
+  #accept(conn: DataConnection, epoch: number) {
     this.#allConns.add(conn);
     const open = () => {
       if (epoch !== this.#epoch || !this.active || !this.isHost) { this.#forget(conn); return; }
@@ -411,7 +467,7 @@ export class Net {
       }
       this.#conns.set(conn.peer, conn);
       this.#wire(conn);
-      this.#write(conn, { t: 'welcome', d: { hostId: this.#id, code: this.#code, isPublic: this.isPublic }, from: this.#id });
+      this.#write(conn, { t: 'welcome', d: { hostId: this.#id, code: this.#code, isPublic: this.isPublic }, from: this.#id ?? undefined });
       if (this.#conns.get(conn.peer) === conn) this.onPeerJoin?.(conn.peer, metadata(conn.metadata));
     };
     this.#bindings.set(conn, [listen(conn, 'open', open),
@@ -419,20 +475,20 @@ export class Net {
     if (conn.open) open();
   }
 
-  #wire(conn) {
+  #wire(conn: DataConnection) {
     this.#unwire(conn);
-    this.#bindings.set(conn, [listen(conn, 'data', m => this.#receive(conn, m)),
+    this.#bindings.set(conn, [listen(conn, 'data', (m: unknown) => this.#receive(conn, m)),
       listen(conn, 'close', () => this.#drop(conn)), listen(conn, 'error', () => this.#drop(conn))]);
   }
 
-  #unwire(conn) {
+  #unwire(conn: DataConnection) {
     this.#bindings.get(conn)?.forEach(off => off());
     this.#bindings.delete(conn);
   }
 
-  #forget(conn) { this.#unwire(conn); this.#allConns.delete(conn); stop(conn); }
+  #forget(conn: DataConnection) { this.#unwire(conn); this.#allConns.delete(conn); stop(conn); }
 
-  #drop(conn) {
+  #drop(conn: DataConnection) {
     const id = conn.peer;
     if (this.#leaving || this.#conns.get(id) !== conn) return;
     this.#conns.delete(id);
@@ -446,19 +502,19 @@ export class Net {
     }
   }
 
-  #write(conn, m) {
+  #write(conn: DataConnection | undefined, m: Envelope) {
     if (!conn?.open) return;
     try { conn.send(m); this.#sent++; }
     catch { this.#drop(conn); }
   }
 
-  #receive(conn, m) {
+  #receive(conn: DataConnection, m: unknown) {
     if (!this.active || this.#conns.get(conn.peer) !== conn || !validEnvelope(m) || m.t === 'welcome') return;
-    let sender;
+    let sender: string | undefined;
     if (this.isHost) {
       sender = conn.peer;
       if (HOST.has(m.t)) return;
-      if ((m.t === 'pdmg' || m.t === 'parry') && m.d.by !== sender) return;
+      if ((m.t === 'pdmg' || m.t === 'parry') && prop(m.d, 'by') !== sender) return;
       if (REQUEST.has(m.t)) {
         if (own(m, 'to') || m.relay === true) return;
       } else if (ADDRESSED.has(m.t)) {
@@ -475,19 +531,20 @@ export class Net {
         }
       } else return;
     } else {
-      if (conn.peer !== this.hostId || own(m, 'to') || own(m, 'relay') || REQUEST.has(m.t)) return;
+      // `conn.peer` is a string, so a null `hostId` already failed the second test.
+      if (this.hostId === null || conn.peer !== this.hostId || own(m, 'to') || own(m, 'relay') || REQUEST.has(m.t)) return;
       if (m.t === 'refused') {
         if (own(m, 'from')) return;
         sender = this.hostId;
       } else {
         sender = m.from;
         if (!peerId(sender) || sender === this.#id || (HOST.has(m.t) && sender !== this.hostId)) return;
-        if (m.t === 'lobby' && m.d.hostId !== this.hostId) return;
-        if ((m.t === 'pdmg' || m.t === 'parry') && m.d.by !== sender) return;
+        if (m.t === 'lobby' && prop(m.d, 'hostId') !== this.hostId) return;
+        if ((m.t === 'pdmg' || m.t === 'parry') && prop(m.d, 'by') !== sender) return;
       }
     }
     this.#received++;
-    const data = m.t === 'pdmg' && !own(m.d, 'crit') ? { ...m.d, crit: false } : m.d;
+    const data = m.t === 'pdmg' && object(m.d) && !own(m.d, 'crit') ? { ...m.d, crit: false } : m.d;
     this.#handlers.get(m.t)?.(data, sender);
   }
 }

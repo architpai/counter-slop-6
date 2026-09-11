@@ -32,10 +32,10 @@ type UNPORTED = unknown;
 
 export type Player = import('./player/index').Player; // player/index.ts  — phase 4
 export type Weapon = import('./weapons/index').Weapon; // weapons/index.ts — phase 4
-export type EnemyManager = UNPORTED; // enemies/index.js  — phase 5
-export type EnemyType = UNPORTED; // enemies/types.js  — phase 5
-export type RemotePlayer = UNPORTED; // players.js        — phase 5
-export type Net = UNPORTED; // net.js            — phase 5
+export type EnemyManager = import('./enemies/index').EnemyManager; // enemies/index.ts  — phase 5
+export type EnemyType = import('./enemies/types').EnemyType; // enemies/types.ts  — phase 5
+export type RemotePlayer = import('./players').RemotePlayer; // players.ts        — phase 5
+export type Net = import('./net').Net; // net.ts            — phase 5
 
 // ---------------------------------------------------------------- 5.1 context
 

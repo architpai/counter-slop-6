@@ -1,33 +1,67 @@
 import { Vector3 } from 'three';
+import type { Group, Object3D } from 'three';
 import { makeFigure, TONE_HEX, setFlash } from '../render/index';
+import type { Figure, FigureAnchorName, FigureAnchors, FigureParts, WeaponPropKind } from '../render/figure';
 import { clamp, damp, rand, wrapAngle } from '../util';
+import type { EnemyType } from './types';
+import type { EnemyRecord } from './index';
+
+/**
+ * Every part and anchor in `FigureParts` / `FigureAnchors` is optional, because
+ * blobs and flyers have no limbs. The aliases below name what a given code path
+ * has already established the figure carries, derived from the real types so a
+ * rename in `render/figure` breaks here instead of drifting.
+ */
+/** Both body kinds that walk: humanoids and blobs. */
+export type GroundJoints = FigureParts & Required<Pick<FigureParts,
+  'hips' | 'torso' | 'head' | 'upperL' | 'upperR' | 'foreL' | 'foreR' | 'thighL' | 'thighR' | 'shinL' | 'shinR'>>;
+/** The flyer poses its body and its two wings. */
+type FlyerJoints = FigureParts & Required<Pick<FigureParts, 'torso' | 'wingL' | 'wingR'>>;
+/** Every kind gets a torso and a muzzle tip from `makeFigure`. */
+export type CoreParts = FigureParts & Required<Pick<FigureParts, 'torso' | 'tip'>>;
+/** `head` exists on humanoids only; every kind gets a torso anchor. */
+export type EyeAnchors = FigureAnchors & Required<Pick<FigureAnchors, 'torso'>>;
+
+/** One hit sphere: the anchor it rides, its world centre and its radius. */
+export interface HitSphere {
+  part: FigureAnchorName;
+  r: number;
+  obj: Object3D;
+  center: Vector3;
+}
 
 const delta = new Vector3();
-const RADII = { head: 0.3, torso: 0.33, hips: 0.2, armL: 0.11, armR: 0.11, foreL: 0.1, foreR: 0.1, legL: 0.13, legR: 0.13, shinL: 0.11, shinR: 0.11, shield: 0.66 };
+const RADII = { head: 0.3, torso: 0.33, hips: 0.2, armL: 0.11, armR: 0.11, foreL: 0.1, foreR: 0.1, legL: 0.13, legR: 0.13, shinL: 0.11, shinR: 0.11, shield: 0.66 } satisfies Partial<Record<FigureAnchorName, number>>;
+const PROPS: readonly string[] = ['rifle', 'shotgun', 'sniper', 'blade'];
+const carriesProp = (weapon: string): weapon is 'rifle' | 'shotgun' | 'sniper' | 'blade' => PROPS.includes(weapon);
 
-export function makeModel(stats) {
-  const weapon = stats.weapon === 'boss' ? (stats.kind === 'humanoid' ? 'hammer' : 'none')
-    : stats.weapon === 'pistol' ? 'rifle' : ['rifle', 'shotgun', 'sniper', 'blade'].includes(stats.weapon) ? stats.weapon : 'none';
+export function makeModel(stats: EnemyType): { figure: Figure; root: Group; hits: HitSphere[] } {
+  const weapon: WeaponPropKind = stats.weapon === 'boss' ? (stats.kind === 'humanoid' ? 'hammer' : 'none')
+    : stats.weapon === 'pistol' ? 'rifle' : carriesProp(stats.weapon) ? stats.weapon : 'none';
   const figure = makeFigure({ ...stats, color: TONE_HEX[stats.tone], weapon });
-  const radii = stats.kind === 'humanoid' ? RADII : { torso: stats.flying ? 0.48 : 0.5 };
-  const hits = Object.entries(radii).filter(([part]) => figure.anchors[part]).map(([part, r]) => ({ part, r: r * stats.scale, obj: figure.anchors[part], center: new Vector3() }));
+  const radii: Partial<Record<FigureAnchorName, number>> = stats.kind === 'humanoid' ? RADII : { torso: stats.flying ? 0.48 : 0.5 };
+  const hits: HitSphere[] = [];
+  for (const [part, r] of Object.entries(radii) as [FigureAnchorName, number][]) {
+    const obj = figure.anchors[part];
+    if (obj) hits.push({ part, r: r * stats.scale, obj, center: new Vector3() });
+  }
   figure.root.scale.setScalar(0.001);
   return { figure, root: figure.root, hits };
 }
 
-export function syncModel(e) {
+export function syncModel(e: EnemyRecord): void {
   e.root.updateMatrixWorld(true);
   for (const hit of e.hits) hit.obj.getWorldPosition(hit.center);
-  e.figure.anchors.torso.getWorldPosition(e.center);
+  (e.figure.anchors as EyeAnchors).torso.getWorldPosition(e.center);
 }
 
-export function flash(e, on) {
+export function flash(e: EnemyRecord, on: boolean): void {
   if (e.flashOn === on) return;
   e.flashOn = on;
   setFlash(e.root, on, e.stats.tone);
 }
 
-export function spawnPose(e) {
+export function spawnPose(e: EnemyRecord): void {
   const f = clamp(e.age / 0.6, 0, 1);
   e.root.scale.setScalar(Math.max(0.001, f * e.stats.scale * (1 + Math.sin(60 * e.age) * 0.12 * (1 - f))));
   if (e.age >= 0.6) { e.state = 'hunt'; e.root.scale.setScalar(e.stats.scale); }
@@ -36,13 +70,13 @@ export function spawnPose(e) {
   syncModel(e);
 }
 
-export function animate(e, dt) {
-  const p = e.figure.parts;
+export function animate(e: EnemyRecord, dt: number): void {
   const speed = Math.hypot(e.body.vel.x, e.body.vel.z);
   e.walkAmt = damp(e.walkAmt, clamp(speed / 4, 0, 1), 10, dt);
   e.phase += (speed * 2.2 + (speed > 0.4 ? 3 : 0)) * dt;
   const s = Math.sin(e.phase), c = Math.cos(e.phase), w = e.walkAmt;
   if (e.stats.flying) {
+    const p = e.figure.parts as FlyerJoints;
     p.torso.position.y = 0.6 + Math.sin(3 * e.age) * 0.1;
     p.torso.rotation.z = e.state === 'stunned' ? e.age * 12 : clamp((e.body.vel.x * Math.cos(e.yaw) - e.body.vel.z * Math.sin(e.yaw)) * -0.08, -0.8, 0.8);
     p.torso.rotation.x = clamp(-e.body.vel.y * 0.06, -0.6, 0.6);
@@ -50,6 +84,7 @@ export function animate(e, dt) {
     p.wingR.rotation.z = -p.wingL.rotation.z;
     return;
   }
+  const p = e.figure.parts as GroundJoints;
   const blob = e.stats.kind === 'blob';
   p.hips.position.y = (blob ? 0.5 : 0.86) + Math.abs(c) * 0.07 * w - (e.body.onGround ? 0 : 0.05);
   p.torso.rotation.set(e.flinch * (blob ? 0.4 : 0.35), 0, 0);
@@ -105,7 +140,7 @@ export function animate(e, dt) {
   }
 }
 
-export function corpse(e, dt) {
+export function corpse(e: EnemyRecord, dt: number): void {
   e.deadT += dt;
   if (e.rootDetached) return;
   if (e.topple) {

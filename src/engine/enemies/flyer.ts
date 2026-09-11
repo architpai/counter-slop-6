@@ -1,11 +1,12 @@
 import { Vector3 } from 'three';
 import { rand } from '../util';
 import { seeThrough } from '../physics';
+import type { EnemyManager, EnemyRecord } from './index';
 
 const want = new Vector3(), delta = new Vector3(), heading = new Vector3();
 const down = new Vector3(0, -1, 0);
 
-function flyTo(m, e, goal, speed, accel, dt) {
+function flyTo(m: EnemyManager, e: EnemyRecord, goal: Vector3, speed: number, accel: number, dt: number): void {
   delta.subVectors(goal, e.body.pos);
   const dist = delta.length();
   if (dist > 0.0001) delta.multiplyScalar(speed * m.mods.speed / dist);
@@ -14,7 +15,7 @@ function flyTo(m, e, goal, speed, accel, dt) {
   if (dist < 0.3) e.body.vel.multiplyScalar(Math.max(0, 1 - 4 * dt));
 }
 
-export function flyerThink(m, e, dt) {
+export function flyerThink(m: EnemyManager, e: EnemyRecord, dt: number): void {
   if (!e.target) return;
   const c = e.target.center, pos = e.body.pos;
   e.flightT -= dt; e.attackCd -= dt;

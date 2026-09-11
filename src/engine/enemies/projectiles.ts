@@ -2,12 +2,20 @@ import { Mesh, Vector3 } from 'three';
 import { clamp, alignSegment } from '../util';
 import { seeThrough } from '../physics';
 import { boxGeo, unlitMat, TONE, TONE_HEX } from '../render/index';
+import type { Projectile, Target } from '../types';
+import type { EnemyManager, EnemyRecord } from './index';
+
+/** The runtime projectile: the replicated record plus its segment mesh. */
+export interface ProjectileRecord extends Projectile {
+  owner: EnemyRecord | null;
+  mesh: Mesh;
+}
 
 const MAX = 240;
 const half = new Vector3(), a = new Vector3(), b = new Vector3(), seg = new Vector3(), sample = new Vector3();
 const closest = new Vector3(), dir = new Vector3(), away = new Vector3();
 
-function draw(p) {
+function draw(p: ProjectileRecord): void {
   const speed = p.vel.length();
   if (speed < 1e-5) { p.mesh.visible = false; return; }
   const len = p.blast ? p.thickness : clamp(speed * 0.02, 0.35, 0.9);
@@ -15,9 +23,10 @@ function draw(p) {
   alignSegment(p.mesh, a.subVectors(p.pos, half), b.addVectors(p.pos, half), p.thickness);
 }
 
-export function spawnProjectile(m, pos, direction, speed, damage, owner, tone, thickness, blast, id) {
+export function spawnProjectile(m: EnemyManager, pos: Vector3, direction: Vector3, speed: number, damage: number,
+  owner: EnemyRecord | null, tone: number, thickness: number, blast: boolean, id?: number): ProjectileRecord {
   if (m.projectiles.length >= MAX) removeProjectile(m, 0);
-  const p = {
+  const p: ProjectileRecord = {
     id: id ?? m.ids++, pos: pos.clone(), prev: pos.clone(), vel: direction.clone().normalize().multiplyScalar(speed),
     damage, owner, life: 4, deflected: false, tone, thickness, origin: pos.clone(), blast,
     mesh: new Mesh(boxGeo(1, 1, 1), unlitMat(TONE_HEX[tone] ?? TONE_HEX[TONE.HOSTILE])),
@@ -30,25 +39,28 @@ export function spawnProjectile(m, pos, direction, speed, damage, owner, tone, t
   return p;
 }
 
-export function removeProjectile(m, index) {
+export function removeProjectile(m: EnemyManager, index: number): void {
   const [p] = m.projectiles.splice(index, 1);
-  p.mesh.removeFromParent();
+  p?.mesh.removeFromParent();
 }
 
 // Closest point on segment prev->pos to `point`, distance compared against r.
-function segmentHits(p, point, r) {
+function segmentHits(p: ProjectileRecord, point: Vector3, r: number): boolean {
   seg.subVectors(p.pos, p.prev);
   const l2 = seg.lengthSq();
   const t = l2 > 0 ? clamp(sample.subVectors(point, p.prev).dot(seg) / l2, 0, 1) : 0;
   return closest.copy(p.prev).addScaledVector(seg, t).distanceTo(point) <= r;
 }
 
-function hitsTarget(p, t, r) {
+// ponytail: the third probe below passes `sample` as `point`, which `segmentHits`
+// then overwrites with `point - prev` before measuring against it, so the feet
+// test reads a relative vector as a world point. Left as found.
+function hitsTarget(p: ProjectileRecord, t: Target, r: number): boolean {
   return segmentHits(p, t.center, r) || segmentHits(p, t.eye, r)
     || segmentHits(p, sample.set(t.center.x, t.center.y - 0.55, t.center.z), r - 0.05);
 }
 
-export function burst(m, p, point) {
+export function burst(m: EnemyManager, p: ProjectileRecord, point: Vector3): void {
   const { effects, audio, player } = m.ctx;
   effects.explosion(point, 2.5, TONE.DARK);
   audio.explosion(point);
@@ -62,20 +74,22 @@ export function burst(m, p, point) {
   if (!m.mirror) m.blastEnemies(point, 3.5, 1.5 * p.damage, p.owner);
 }
 
-export function deflect(m, p, perfect) {
+export function deflect(m: EnemyManager, p: ProjectileRecord, perfect: boolean): void {
+  // Only the local player deflects, so `ctx.player` is set on every live path;
+  // the guards below are there for the type.
   const player = m.ctx.player;
   p.deflected = true; p.tone = TONE.PRIMARY; p.damage *= perfect ? 3.5 : 2.2; p.life = 3;
   p.mesh.material = unlitMat(TONE_HEX[TONE.PRIMARY]);
-  let target = perfect && p.owner?.alive ? p.owner : null;
-  if (!target) target = m.nearestVisible(player.eye, player.forward, Math.cos(0.7), 70) || (p.owner?.alive ? p.owner : null);
+  let target: EnemyRecord | null = perfect && p.owner?.alive ? p.owner : null;
+  if (!target && player) target = m.nearestVisible(player.eye, player.forward, Math.cos(0.7), 70) || (p.owner?.alive ? p.owner : null);
   const speed = p.vel.length() * 1.6;
-  if (target) dir.subVectors(target.center, p.pos).normalize(); else dir.copy(player.forward);
+  if (target) dir.subVectors(target.center, p.pos).normalize(); else if (player) dir.copy(player.forward);
   p.vel.copy(dir).multiplyScalar(speed);
   m.ctx.effects.sparks(p.pos, dir, TONE.ACCENT, 10, 9);
   m.ctx.effects.strokeBurst(p.pos, TONE.PRIMARY, 8, 4, { life: 0.2 });
 }
 
-export function deflectArc(m, pos, direction, range, cosHalf) {
+export function deflectArc(m: EnemyManager, pos: Vector3, direction: Vector3, range: number, cosHalf: number): number {
   let n = 0;
   for (const p of m.projectiles) {
     if (p.deflected) continue;
@@ -86,10 +100,11 @@ export function deflectArc(m, pos, direction, range, cosHalf) {
   return n;
 }
 
-export function updateProjectiles(m, dt) {
+export function updateProjectiles(m: EnemyManager, dt: number): void {
   const { world, effects, audio, game } = m.ctx;
   for (let i = m.projectiles.length - 1; i >= 0; i--) {
     const p = m.projectiles[i];
+    if (!p) continue;
     p.life -= dt;
     if (p.life <= 0) { removeProjectile(m, i); continue; }
     p.prev.copy(p.pos);

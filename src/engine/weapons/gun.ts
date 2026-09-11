@@ -23,20 +23,6 @@ interface EnemyRayHit {
   point: Vector3;
 }
 
-/** The slice of the enemy manager a gun uses. */
-interface EnemiesLike {
-  raycast(origin: Vector3, dir: Vector3, max: number): EnemyRayHit | null;
-  damage(enemy: Enemy, amount: number, info: HitInfo): void;
-}
-
-// TODO(phase5): `ctx.enemies` is `unknown` until `enemies/` is ported, so narrow it here.
-const enemyManager = (ctx: Ctx): EnemiesLike | null => {
-  const manager = ctx.enemies;
-  return isEnemies(manager) ? manager : null;
-};
-const isEnemies = (v: unknown): v is EnemiesLike =>
-  typeof v === 'object' && v !== null && 'raycast' in v && 'damage' in v;
-
 /** What `_damage` needs of a hit to scale it: the part struck and how far the ray ran. */
 interface Falloffable {
   part: string;
@@ -326,7 +312,7 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
 
   _ray(dir: Vector3) {
     const { world, game, effects, audio } = this._ctx, s = this._stats;
-    const enemies = enemyManager(this._ctx);
+    const enemies = this._ctx.enemies;
     const eye = this._player.eye;
     const enemy = enemies?.raycast(eye, dir, 300) ?? null;
     const wall = world.raycast(eye, dir, 300, seeThrough);

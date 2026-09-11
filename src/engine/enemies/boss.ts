@@ -1,15 +1,32 @@
 import { Vector3 } from 'three';
 import { damp, rand, TAU } from '../util';
 import { spawnProjectile } from './projectiles';
+import { rollCooldown } from './types';
+import type { EyeAnchors } from './model';
+import type { EnemyManager, EnemyRecord } from './index';
+
+/** A wind-up with a single firing frame: stomp, throw, wipe, summon. */
+export interface Telegraph<K extends string> {
+  kind: K;
+  t: number;
+  fired: boolean;
+}
+export type AdminAttack = Telegraph<'stomp' | 'throw'>;
+export type HitboxAttack = Telegraph<'wipe'>
+  | { kind: 'charge'; t: number; dir: Vector3 | null; hit: boolean; dustT: number };
+export type LagSpikeAttack = Telegraph<'summon'> | { kind: 'spray'; t: number; shots: number };
+/** `enemy.bossAttack`: whichever of the three a boss is running. */
+export type BossAttack = AdminAttack | HitboxAttack | LagSpikeAttack;
 
 const origin = new Vector3(), direction = new Vector3(), particlePos = new Vector3(), particleVel = new Vector3();
 
-function stop(e, rate, dt) {
+function stop(e: EnemyRecord, rate: number, dt: number): void {
   e.body.vel.x = damp(e.body.vel.x, 0, rate, dt);
   e.body.vel.z = damp(e.body.vel.z, 0, rate, dt);
 }
 
-function hitRing(m, e, radius, height, damage, force, absoluteHeight = false) {
+function hitRing(m: EnemyManager, e: EnemyRecord, radius: number, height: number, damage: number, force: number,
+  absoluteHeight = false): void {
   for (const t of m.ctx.game.targets()) {
     if (!t.alive || Math.hypot(t.body.pos.x - e.body.pos.x, t.body.pos.z - e.body.pos.z) >= radius) continue;
     if (absoluteHeight ? Math.abs(t.body.pos.y - e.body.pos.y) >= height : t.body.pos.y >= e.body.pos.y + height) continue;
@@ -19,12 +36,14 @@ function hitRing(m, e, radius, height, damage, force, absoluteHeight = false) {
   }
 }
 
-function endAttack(e, factor = 1) {
+function endAttack(e: EnemyRecord, factor = 1): void {
   e.bossAttack = null;
-  e.attackCd = rand(...e.stats.cooldown) * factor;
+  e.attackCd = rollCooldown(e.stats) * factor;
 }
 
-function admin(m, e, dt, dist, dy, yaw) {
+function admin(m: EnemyManager, e: EnemyRecord, dt: number, dist: number, dy: number, yaw: number): void {
+  const target = e.target;
+  if (!target) return;
   e.aimAmt = damp(e.aimAmt, e.hasLOS ? 1 : 0, 6, dt);
   if (!e.bossAttack && e.attackCd <= 0 && e.hasLOS) {
     if (dist < 7 && Math.abs(dy) < 3) {
@@ -32,7 +51,8 @@ function admin(m, e, dt, dist, dy, yaw) {
       m.ctx.audio.bossRoar(e.center);
     } else if (dist < 32) e.bossAttack = { kind: 'throw', t: 0, fired: false };
   }
-  const a = e.bossAttack;
+  // The admin only ever runs its own two attacks.
+  const a = e.bossAttack as AdminAttack | null;
   if (!a) { move(m, e, dt, dist, dy, yaw, 14); return; }
   a.t += dt; e.yawTo = yaw; stop(e, 5, dt);
   if (a.kind === 'stomp') {
@@ -53,8 +73,9 @@ function admin(m, e, dt, dist, dy, yaw) {
   } else {
     if (a.t > 0.6 && !a.fired) {
       a.fired = true;
-      (e.figure.anchors.head || e.figure.anchors.torso).getWorldPosition(origin); origin.y += 1;
-      direction.subVectors(e.target.center, origin).normalize(); direction.y += 0.012 * dist; direction.normalize();
+      const anchors = e.figure.anchors as EyeAnchors;
+      (anchors.head || anchors.torso).getWorldPosition(origin); origin.y += 1;
+      direction.subVectors(target.center, origin).normalize(); direction.y += 0.012 * dist; direction.normalize();
       spawnProjectile(m, origin, direction, 24, 19.8, e, 2, 0.4, true);
       m.ctx.audio.enemyShot(origin);
     }
@@ -62,14 +83,15 @@ function admin(m, e, dt, dist, dy, yaw) {
   }
 }
 
-function hitbox(m, e, dt, dist, dy, yaw) {
+function hitbox(m: EnemyManager, e: EnemyRecord, dt: number, dist: number, dy: number, yaw: number): void {
   e.aimAmt = damp(e.aimAmt, 0, 6, dt);
   if (!e.bossAttack && e.attackCd <= 0 && e.hasLOS) {
     if (e.chargeCount % 3 === 2 && dist < 12) {
       e.bossAttack = { kind: 'wipe', t: 0, fired: false }; e.chargeCount++;
     } else if (dist > 3 && dist < 30) e.bossAttack = { kind: 'charge', t: 0, dir: null, hit: false, dustT: 0 };
   }
-  const a = e.bossAttack;
+  // The hitbox only ever runs its own two attacks.
+  const a = e.bossAttack as HitboxAttack | null;
   if (!a) { move(m, e, dt, dist, dy, yaw, 16); return; }
   a.t += dt;
   if (a.kind === 'wipe') {
@@ -91,10 +113,12 @@ function hitbox(m, e, dt, dist, dy, yaw) {
   if (a.t > 0.55 && !a.dir) {
     a.dir = new Vector3(Math.sin(yaw), 0, Math.cos(yaw)); m.ctx.audio.bossRoar(e.center);
   }
-  e.yawTo = a.dir ? Math.atan2(a.dir.x, a.dir.z) : yaw;
+  // Any frame past 0.7 has already run the branch above, so `dir` is set.
+  const charge = a.dir;
+  e.yawTo = charge ? Math.atan2(charge.x, charge.z) : yaw;
   if (a.t <= 0.7) stop(e, 8, dt);
-  else if (a.t < 1.9) {
-    e.body.vel.x = a.dir.x * 17 * m.mods.speed; e.body.vel.z = a.dir.z * 17 * m.mods.speed;
+  else if (charge && a.t < 1.9) {
+    e.body.vel.x = charge.x * 17 * m.mods.speed; e.body.vel.z = charge.z * 17 * m.mods.speed;
     if (!a.hit) for (const target of m.ctx.game.targets()) {
       if (!target.alive || Math.hypot(target.body.pos.x - e.body.pos.x, target.body.pos.z - e.body.pos.z) >= 2.6 || Math.abs(target.body.pos.y - e.body.pos.y) >= 3) continue;
       a.hit = true;
@@ -116,7 +140,7 @@ function hitbox(m, e, dt, dist, dy, yaw) {
   if (a.t > 2.7) { e.chargeCount++; endAttack(e); }
 }
 
-function lagspike(m, e, dt, dist, dy, yaw) {
+function lagspike(m: EnemyManager, e: EnemyRecord, dt: number, dist: number, dy: number, yaw: number): void {
   e.aimAmt = damp(e.aimAmt, e.hasLOS ? 1 : 0, 6, dt);
   if (!e.bossAttack) {
     e.hopT -= dt;
@@ -133,7 +157,8 @@ function lagspike(m, e, dt, dist, dy, yaw) {
       else if (dist < 34) e.bossAttack = { kind: 'spray', t: 0, shots: 0 };
     }
   }
-  const a = e.bossAttack;
+  // The lagspike only ever runs its own two attacks.
+  const a = e.bossAttack as LagSpikeAttack | null;
   if (!a) {
     if (!e.hopping) move(m, e, dt, dist, dy, yaw, 14);
     else if (e.hasLOS) e.yawTo = yaw;
@@ -164,13 +189,15 @@ function lagspike(m, e, dt, dist, dy, yaw) {
   }
 }
 
-function move(m, e, dt, dist, dy, yaw, directRange) {
-  if (e.hasLOS && dist < directRange && Math.abs(dy) < 2) m._steer(e, e.target.body.pos, e.stats.speed, 30, dt);
-  else m._follow(e, e.target.body.pos, e.stats.speed, dt);
+function move(m: EnemyManager, e: EnemyRecord, dt: number, dist: number, dy: number, yaw: number, directRange: number): void {
+  const target = e.target;
+  if (!target) return;
+  if (e.hasLOS && dist < directRange && Math.abs(dy) < 2) m._steer(e, target.body.pos, e.stats.speed, 30, dt);
+  else m._follow(e, target.body.pos, e.stats.speed, dt);
   if (e.hasLOS) e.yawTo = yaw;
 }
 
-export function bossThink(m, e, dt, dist, dy, dx, dz) {
+export function bossThink(m: EnemyManager, e: EnemyRecord, dt: number, dist: number, dy: number, dx: number, dz: number): void {
   const yaw = Math.atan2(dx, dz);
   if (e.type === 'boss') admin(m, e, dt, dist, dy, yaw);
   else if (e.type === 'hitbox') hitbox(m, e, dt, dist, dy, yaw);
