@@ -1,17 +1,47 @@
 import { Vector3 } from 'three';
-import { clamp } from './util.js';
+import { clamp } from './util';
+import type { BoxData, BoxFilter, RayHit } from './types';
+
+/** One static AABB collider. `min`/`max` are copied on add. */
+export interface Box {
+  min: Vector3;
+  max: Vector3;
+  data: BoxData;
+  id: number;
+}
+
+/** Internal: `World` stamps its own boxes for per-query de-duplication. */
+interface StampedBox extends Box {
+  _stamp: number;
+}
+
+type Axis = 'x' | 'y' | 'z';
 
 export const EPS = 1e-4;
-export const seeThrough = box => !!box.data.noShoot;
-const cellKey = (x, z) => (x + 4096) * 8192 + z + 4096;
-const finiteVector = v => v && Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
-const overlaps = (box, min, max) => box.min.x < max.x && box.max.x > min.x
+export const seeThrough: BoxFilter = box => !!box.data.noShoot;
+const cellKey = (x: number, z: number): number => (x + 4096) * 8192 + z + 4096;
+const finiteVector = (v: Vector3 | null | undefined) => v && Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
+const overlaps = (box: Box, min: Vector3, max: Vector3): boolean => box.min.x < max.x && box.max.x > min.x
   && box.min.y < max.y && box.max.y > min.y && box.min.z < max.z && box.max.z > min.z;
-const axes = ['x', 'y', 'z'];
+const axes: readonly Axis[] = ['x', 'y', 'z'];
 const down = new Vector3(0, -1, 0);
 
 export class Body {
-  constructor(pos, halfW, height, stepHeight = 0.55) {
+  pos: Vector3;
+  vel: Vector3;
+  halfW: number;
+  height: number;
+  stepHeight: number;
+  onGround: boolean;
+  hitWall: boolean;
+  hitCeil: boolean;
+  noSnap: boolean;
+  alwaysStep: boolean;
+  wallNormal: Vector3;
+  landVel: number;
+  blockedX: number;
+  blockedZ: number;
+  constructor(pos: Vector3, halfW: number, height: number, stepHeight = 0.55) {
     this.pos = new Vector3().copy(pos);
     this.vel = new Vector3();
     this.halfW = halfW;
@@ -21,32 +51,33 @@ export class Body {
     this.wallNormal = new Vector3();
     this.landVel = this.blockedX = this.blockedZ = 0;
   }
-  min(out = new Vector3()) {
+  min(out = new Vector3()): Vector3 {
     return out.set(this.pos.x - this.halfW + EPS, this.pos.y + EPS, this.pos.z - this.halfW + EPS);
   }
-  max(out = new Vector3()) {
+  max(out = new Vector3()): Vector3 {
     return out.set(this.pos.x + this.halfW - EPS, this.pos.y + this.height - EPS, this.pos.z + this.halfW - EPS);
   }
 }
 
 export class World {
-  #hash = new Map();
+  boxes: Box[];
+  #hash = new Map<number, StampedBox[]>();
   #stamp = 0;
   #min = new Vector3();
   #max = new Vector3();
-  #hits = [];
+  #hits: Box[] = [];
   #rayOrigin = new Vector3();
   #rayDir = new Vector3();
 
   constructor() { this.boxes = []; }
-  addBox(min, max, data = {}) {
-    const box = { min: new Vector3().copy(min), max: new Vector3().copy(max), data, id: this.boxes.length, _stamp: -1 };
+  addBox(min: Vector3, max: Vector3, data: BoxData = {}): Box {
+    const box: StampedBox = { min: new Vector3().copy(min), max: new Vector3().copy(max), data, id: this.boxes.length, _stamp: -1 };
     this.boxes.push(box);
     return box;
   }
-  finalize() {
+  finalize(): void {
     this.#hash.clear();
-    for (const box of this.boxes) {
+    for (const box of this.boxes as StampedBox[]) {
       for (let x = Math.floor(box.min.x / 8); x <= Math.floor(box.max.x / 8); x++) {
         for (let z = Math.floor(box.min.z / 8); z <= Math.floor(box.max.z / 8); z++) {
           const key = cellKey(x, z);
@@ -57,14 +88,14 @@ export class World {
       }
     }
   }
-  removeBox(box) {
+  removeBox(box: Box): void {
     const index = this.boxes.indexOf(box);
     if (index < 0) return;
     this.boxes.splice(index, 1);
     this.finalize();
   }
-  clear() { this.boxes.length = 0; this.#hash.clear(); this.#stamp = 0; }
-  query(min, max, out = []) {
+  clear(): void { this.boxes.length = 0; this.#hash.clear(); this.#stamp = 0; }
+  query(min: Vector3, max: Vector3, out: Box[] = []): Box[] {
     out.length = 0;
     if (!finiteVector(min) || !finiteVector(max)) return out;
     const stamp = ++this.#stamp;
@@ -81,10 +112,10 @@ export class World {
     }
     return out;
   }
-  overlapsAABB(min, max) { return this.query(min, max, this.#hits).length > 0; }
-  overlapsBody(body) { return this.overlapsAABB(body.min(this.#min), body.max(this.#max)); }
+  overlapsAABB(min: Vector3, max: Vector3): boolean { return this.query(min, max, this.#hits).length > 0; }
+  overlapsBody(body: Body): boolean { return this.overlapsAABB(body.min(this.#min), body.max(this.#max)); }
 
-  #push(body, axis, move) {
+  #push(body: Body, axis: Axis, move: number): number {
     const dir = Math.sign(move), limit = Math.abs(move) + 0.03;
     let sign = 0;
     for (let pass = 0; pass < 4; pass++) {
@@ -105,7 +136,7 @@ export class World {
     }
     return sign;
   }
-  #horizontal(body, dx, dz, canStep) {
+  #horizontal(body: Body, dx: number, dz: number, canStep: boolean): void {
     body.blockedX = body.blockedZ = 0;
     if (dx === 0 && dz === 0) return;
     const { x: ox, y: oy, z: oz } = body.pos;
@@ -143,7 +174,7 @@ export class World {
     body.hitWall = true;
     body.wallNormal.set(rx, 0, rz).normalize();
   }
-  #step(body, dt) {
+  #step(body: Body, dt: number): void {
     body.hitWall = body.hitCeil = false;
     body.wallNormal.set(0, 0, 0);
     body.landVel = 0;
@@ -171,7 +202,7 @@ export class World {
       } else body.pos.y += body.stepHeight;
     }
   }
-  moveBody(body, dt) {
+  moveBody(body: Body, dt: number): void {
     if (!Number.isFinite(dt) || dt < 0 || !finiteVector(body.pos) || !finiteVector(body.vel)) return;
     const n = clamp(Math.ceil(body.vel.length() * dt / Math.max(0.2, 0.8 * body.halfW)), 1, 10);
     if (n === 1) { this.#step(body, dt); return; }
@@ -187,12 +218,12 @@ export class World {
     body.wallNormal.set(nx, 0, nz);
     body.landVel = land;
   }
-  raycast(origin, dir, maxDist = 1000, ignore) {
+  raycast(origin: Vector3, dir: Vector3, maxDist = 1000, ignore?: BoxFilter): RayHit | null {
     if (!finiteVector(origin) || !finiteVector(dir) || !(maxDist > 0)) return null;
-    let best = maxDist, hitBox = null, hitAxis = '', hitSign = 0;
+    let best = maxDist, hitBox: Box | null = null, hitAxis: Axis | '' = '', hitSign = 0;
     for (const box of this.boxes) {
       if (ignore?.(box)) continue;
-      let tmin = 0, tmax = best, entryAxis = '', entrySign = 0, missed = false;
+      let tmin = 0, tmax = best, entryAxis: Axis | '' = '', entrySign = 0, missed = false;
       for (const axis of axes) {
         if (Math.abs(dir[axis]) < 1e-9) {
           if (origin[axis] < box.min[axis] || origin[axis] > box.max[axis]) { missed = true; break; }
@@ -212,15 +243,16 @@ export class World {
         hitSign = entrySign;
       }
     }
-    if (!hitBox) return null;
+    // `hitAxis` is always set together with `hitBox`; the second test is for the type only.
+    if (!hitBox || !hitAxis) return null;
     const normal = new Vector3();
     normal[hitAxis] = hitSign;
     return { dist: best, point: new Vector3().copy(origin).addScaledVector(dir, best), normal, box: hitBox };
   }
-  groundBelow(x, y, z, maxDrop = 100) {
+  groundBelow(x: number, y: number, z: number, maxDrop = 100): number {
     return this.raycast(this.#rayOrigin.set(x, y, z), down, maxDrop)?.point.y ?? y - maxDrop;
   }
-  lineOfSight(a, b, ignore) {
+  lineOfSight(a: Vector3, b: Vector3, ignore?: BoxFilter): boolean {
     if (!finiteVector(a) || !finiteVector(b)) return false;
     this.#rayDir.subVectors(b, a);
     const distance = this.#rayDir.length();

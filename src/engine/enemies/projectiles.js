@@ -1,7 +1,7 @@
 import { Mesh, Vector3 } from 'three';
-import { clamp, alignSegment } from '../util.js';
-import { seeThrough } from '../physics.js';
-import { boxGeo, unlitMat, TONE, TONE_HEX } from '../render/index.js';
+import { clamp, alignSegment } from '../util';
+import { seeThrough } from '../physics';
+import { boxGeo, unlitMat, TONE, TONE_HEX } from '../render/index';
 
 const MAX = 240;
 const half = new Vector3(), a = new Vector3(), b = new Vector3(), seg = new Vector3(), sample = new Vector3();

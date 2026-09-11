@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import { clamp, choose, rand } from '../util.js';
-import { TYPES, BOSS_ORDER } from '../enemies/index.js';
-import { TONE } from '../render/index.js';
+import { clamp, choose, rand } from '../util';
+import { TYPES, BOSS_ORDER } from '../enemies/index';
+import { TONE } from '../render/index';
 
 const ROSTER = [['grunt', 1, 10], ['rusher', 2, 6], ['bomber', 3, 3], ['sniper', 3, 4], ['flyer', 4, 4], ['heavy', 5, 4], ['shield', 6, 4]];
 const MODS = [

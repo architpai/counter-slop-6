@@ -1,12 +1,12 @@
 import { Vector3 } from 'three';
-import { clamp, damp, rand, angleLerp, round2, choose, shuffle, TAU } from '../util.js';
-import { Body, seeThrough } from '../physics.js';
-import { TONE } from '../render/index.js';
-import { TYPES, BOSS_ORDER } from './types.js';
-import { makeModel, syncModel, flash, spawnPose, animate, corpse } from './model.js';
-import { groundThink, wander, steer, follow } from './ai.js';
-import { flyerThink } from './flyer.js';
-import { updateProjectiles, removeProjectile } from './projectiles.js';
+import { clamp, damp, rand, angleLerp, round2, choose, shuffle, TAU } from '../util';
+import { Body, seeThrough } from '../physics';
+import { TONE } from '../render/index';
+import { TYPES, BOSS_ORDER } from './types';
+import { makeModel, syncModel, flash, spawnPose, animate, corpse } from './model';
+import { groundThink, wander, steer, follow } from './ai';
+import { flyerThink } from './flyer';
+import { updateProjectiles, removeProjectile } from './projectiles';
 
 export { TYPES, BOSS_ORDER };
 

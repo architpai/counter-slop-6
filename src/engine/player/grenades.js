@@ -1,6 +1,6 @@
 import { Group, Mesh, Vector3 } from 'three';
-import { rand, round2 } from '../util.js';
-import { surfMat, unlitMat, TONE, TONE_HEX, sphereGeo, torusGeo, cylGeo, ringGeo } from '../render/index.js';
+import { rand, round2 } from '../util';
+import { surfMat, unlitMat, TONE, TONE_HEX, sphereGeo, torusGeo, cylGeo, ringGeo } from '../render/index';
 
 const RADIUS = 0.16;
 const BLAST = 6.4;

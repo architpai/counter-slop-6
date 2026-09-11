@@ -1,6 +1,6 @@
 import { Vector3 } from 'three';
-import { makeFigure, TONE_HEX, setFlash } from '../render/index.js';
-import { clamp, damp, rand, wrapAngle } from '../util.js';
+import { makeFigure, TONE_HEX, setFlash } from '../render/index';
+import { clamp, damp, rand, wrapAngle } from '../util';
 
 const delta = new Vector3();
 const RADII = { head: 0.3, torso: 0.33, hips: 0.2, armL: 0.11, armR: 0.11, foreL: 0.1, foreR: 0.1, legL: 0.13, legR: 0.13, shinL: 0.11, shinR: 0.11, shield: 0.66 };

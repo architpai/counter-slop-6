@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { TONE, cylGeo, coneGeo, torusGeo } from '../render/index.js';
+import { TONE, cylGeo, coneGeo, torusGeo } from '../render/index';
 
 const visual = { noCollide: true };
 const dark = { mat: 'dark', noCollide: true };

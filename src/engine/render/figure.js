@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import { rand } from '../util.js';
-import { TONE, TONE_HEX, WHITE_HEX } from './palette.js';
-import { charMat, unlitMat, makeLabelMaterial } from './materials.js';
-import { boxGeo, cylGeo, sphereGeo, coneGeo, torusGeo } from './prims.js';
+import { rand } from '../util';
+import { TONE, TONE_HEX, WHITE_HEX } from './palette';
+import { charMat, unlitMat, makeLabelMaterial } from './materials';
+import { boxGeo, cylGeo, sphereGeo, coneGeo, torusGeo } from './prims';
 
 const DARK = TONE_HEX[TONE.DARK], ACCENT = TONE_HEX[TONE.ACCENT];
 

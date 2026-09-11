@@ -1,6 +1,6 @@
 import { Vector3 } from 'three';
-import { rand } from '../util.js';
-import { seeThrough } from '../physics.js';
+import { rand } from '../util';
+import { seeThrough } from '../physics';
 
 const want = new Vector3(), delta = new Vector3(), heading = new Vector3();
 const down = new Vector3(0, -1, 0);

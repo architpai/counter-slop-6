@@ -1,6 +1,6 @@
 import { Vector3 } from 'three';
-import { damp, rand, TAU } from '../util.js';
-import { spawnProjectile } from './projectiles.js';
+import { damp, rand, TAU } from '../util';
+import { spawnProjectile } from './projectiles';
 
 const origin = new Vector3(), direction = new Vector3(), particlePos = new Vector3(), particleVel = new Vector3();
 

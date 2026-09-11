@@ -1,9 +1,9 @@
 import { Mesh, Vector3 } from 'three';
-import { clamp, damp, rand, alignSegment } from '../util.js';
-import { seeThrough } from '../physics.js';
-import { boxGeo, unlitMat, TONE_HEX } from '../render/index.js';
-import { bossThink } from './boss.js';
-import { spawnProjectile } from './projectiles.js';
+import { clamp, damp, rand, alignSegment } from '../util';
+import { seeThrough } from '../physics';
+import { boxGeo, unlitMat, TONE_HEX } from '../render/index';
+import { bossThink } from './boss';
+import { spawnProjectile } from './projectiles';
 
 const down = new Vector3(0, -1, 0);
 const eye = new Vector3(), probe = new Vector3(), muzzle = new Vector3(), shot = new Vector3();

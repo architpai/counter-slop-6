@@ -1,6 +1,6 @@
 import { Vector3 } from 'three';
-import { clamp } from '../util.js';
-import { TONE } from '../render/index.js';
+import { clamp } from '../util';
+import { TONE } from '../render/index';
 
 const point = new Vector3();
 const probe = new Vector3();

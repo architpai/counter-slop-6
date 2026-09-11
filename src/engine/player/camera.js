@@ -1,5 +1,5 @@
 import { Vector3 } from 'three';
-import { clamp, damp, rand, Spring } from '../util.js';
+import { clamp, damp, rand, Spring } from '../util';
 
 const target = new Vector3(0, 10, 0);
 

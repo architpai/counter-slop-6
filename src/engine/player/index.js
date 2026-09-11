@@ -1,12 +1,12 @@
 import { Vector3 } from 'three';
-import { Body } from '../physics.js';
-import { clamp, damp, rand } from '../util.js';
-import { TONE } from '../render/index.js';
-import { makeLoadout, GUN_STATS } from '../weapons/index.js';
-import { initCamera, updateBob, updateCamera, idleCamera } from './camera.js';
-import { initMovement, updateMovement, integrateMovement } from './movement.js';
-import { initGrapple, updateGrapple, detachGrapple, updateBreath, updateGrappleVisual } from './grapple.js';
-import { initGrenades, updateGrenades, throwGrenade, clearNades } from './grenades.js';
+import { Body } from '../physics';
+import { clamp, damp, rand } from '../util';
+import { TONE } from '../render/index';
+import { makeLoadout, GUN_STATS } from '../weapons/index';
+import { initCamera, updateBob, updateCamera, idleCamera } from './camera';
+import { initMovement, updateMovement, integrateMovement } from './movement';
+import { initGrapple, updateGrapple, detachGrapple, updateBreath, updateGrappleVisual } from './grapple';
+import { initGrenades, updateGrenades, throwGrenade, clearNades } from './grenades';
 
 const direction = new Vector3();
 const point = new Vector3();

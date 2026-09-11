@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import { choose, shuffle, round1, round2, clamp } from '../util.js';
-import { RemotePlayer, encodeState } from '../players.js';
-import { validKey } from '../level/index.js';
-import { Screens } from '../hud/index.js';
-import { TONE } from '../render/index.js';
+import { choose, shuffle, round1, round2, clamp } from '../util';
+import { RemotePlayer, encodeState } from '../players';
+import { validKey } from '../level/index';
+import { Screens } from '../hud/index';
+import { TONE } from '../render/index';
 
 const KILL_TARGET = 20, TIME_LIMIT = 480, RESPAWN = 3.5, SILENT_MS = 9000;
 const HOW = { rifle: 'rifle', shotgun: 'shotgun', sniper: 'sniper', katana: 'katana', grenade: 'grenade', deflect: 'their own bullet' };

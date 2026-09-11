@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { LIGHT, SURF } from './palette.js';
-import { Composite } from './postfx.js';
+import { LIGHT, SURF } from './palette';
+import { Composite } from './postfx';
 
-export { TONE, TONE_HEX, WHITE_HEX, SMOKE_HEX, SURF } from './palette.js';
-export { surfMat, charMat, toneMat, unlitMat, setFlash, mergeByMaterial } from './materials.js';
-export { boxGeo, cylGeo, sphereGeo, coneGeo, torusGeo, starGeo, ringGeo } from './prims.js';
-export { makeFigure, makeWeaponProp, makeNameTag } from './figure.js';
+export { TONE, TONE_HEX, WHITE_HEX, SMOKE_HEX, SURF } from './palette';
+export { surfMat, charMat, toneMat, unlitMat, setFlash, mergeByMaterial } from './materials';
+export { boxGeo, cylGeo, sphereGeo, coneGeo, torusGeo, starGeo, ringGeo } from './prims';
+export { makeFigure, makeWeaponProp, makeNameTag } from './figure';
 
 export class Renderer {
   constructor(canvas) {

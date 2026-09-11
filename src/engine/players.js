@@ -1,6 +1,6 @@
 import { Mesh, Object3D, Vector3 } from 'three';
-import { alignSegment, clamp, damp, rand, round1, round2, wrapAngle } from './util.js';
-import { makeFigure, makeNameTag, cylGeo, sphereGeo, surfMat, setFlash, TONE, TONE_HEX } from './render/index.js';
+import { alignSegment, clamp, damp, rand, round1, round2, wrapAngle } from './util';
+import { makeFigure, makeNameTag, cylGeo, sphereGeo, surfMat, setFlash, TONE, TONE_HEX } from './render/index';
 
 const WEAPONS = ['rifle', 'shotgun', 'sniper', 'blade'];
 const HIT_RADII = { head: 0.30, torso: 0.33, hips: 0.20, armL: 0.11, armR: 0.11,

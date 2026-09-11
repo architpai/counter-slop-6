@@ -2,7 +2,11 @@
 <html lang="en"><head><meta charset="utf-8"><title>checks</title>
 <script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}</script>
 <style>body{font:14px/1.5 monospace;padding:1rem;white-space:pre-wrap}.fail{color:#c00}.ok{color:#080}</style>
-</head><body><script type="module">
+</head><body>
+<!-- BROKEN since phase 2: the engine is part TypeScript and these imports are
+     extensionless, neither of which a browser can load directly. Phase 9 moves
+     these checks to Vitest browser mode. Until then use `npm run smoke`. -->
+<script type="module">
 const files = ['foundation', 'input', 'effects', 'audio', 'audio-tunes', 'players', 'weapons', 'ffa'];
 const out = (cls, text) => { const p = document.createElement('div'); p.className = cls; p.textContent = text; document.body.append(p); };
 let pass = 0, fail = 0;

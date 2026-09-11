@@ -1,5 +1,5 @@
-import { LevelBuilder } from './build.js';
-import { buildDowntown } from './downtown.js';
+import { LevelBuilder } from './build';
+import { buildDowntown } from './downtown';
 
 export const MEXICO_READY = false;
 export const LEVELS = [

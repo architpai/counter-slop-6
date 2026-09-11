@@ -1,6 +1,6 @@
 import { Group, Mesh, Vector3 } from 'three';
-import { alignSegment, clamp } from '../util.js';
-import { cylGeo, torusGeo, surfMat, unlitMat, TONE, TONE_HEX } from '../render/index.js';
+import { alignSegment, clamp } from '../util';
+import { cylGeo, torusGeo, surfMat, unlitMat, TONE, TONE_HEX } from '../render/index';
 
 const relative = new Vector3();
 const direction = new Vector3();

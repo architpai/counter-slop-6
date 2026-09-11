@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { surfMat, TONE, boxGeo, cylGeo, sphereGeo, coneGeo, torusGeo } from '../render/index.js';
+import { surfMat, TONE, boxGeo, cylGeo, sphereGeo, coneGeo, torusGeo } from '../render/index';
 
 const surfaces = ['block', 'hot', 'dark', 'accent', 'foliage', 'boss'];
 const yAxis = new THREE.Vector3(0, 1, 0);

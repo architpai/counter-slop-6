@@ -1,7 +1,7 @@
-import { Gun } from './gun.js';
-import { Katana } from './katana.js';
+import { Gun } from './gun';
+import { Katana } from './katana';
 
-export { GUN_STATS } from './stats.js';
+export { GUN_STATS } from './stats';
 export { Gun, Katana };
 
 export function makeLoadout(ctx, player) {

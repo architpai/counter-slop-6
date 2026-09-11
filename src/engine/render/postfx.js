@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { SURF, TONE, TONE_HEX } from './palette.js';
-import { makePostMaterial } from './materials.js';
+import { SURF, TONE, TONE_HEX } from './palette';
+import { makePostMaterial } from './materials';
 
 export class Composite {
   constructor() {

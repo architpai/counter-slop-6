@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { rand, choose } from '../util.js';
-import { surfMat, unlitMat, TONE, TONE_HEX } from '../render/index.js';
+import { rand, choose } from '../util';
+import { surfMat, unlitMat, TONE, TONE_HEX } from '../render/index';
 
 export function createPickups(ctx) {
   const items = [];

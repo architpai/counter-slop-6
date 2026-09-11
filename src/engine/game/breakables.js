@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { rand } from '../util.js';
-import { TONE } from '../render/index.js';
+import { rand } from '../util';
+import { TONE } from '../render/index';
 
 export function createBreakables(ctx, pickups) {
   const delta = new THREE.Vector3();

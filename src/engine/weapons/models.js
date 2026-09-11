@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { TONE, TONE_HEX, toneMat, unlitMat, boxGeo, cylGeo, sphereGeo, torusGeo, starGeo } from '../render/index.js';
+import { TONE, TONE_HEX, toneMat, unlitMat, boxGeo, cylGeo, sphereGeo, torusGeo, starGeo } from '../render/index';
 
 const PRIMARY = TONE.PRIMARY, DARK = TONE.DARK, SIGHT = TONE.HOSTILE;
 

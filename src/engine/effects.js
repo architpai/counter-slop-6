@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { clamp, lerp, rand, randInt, TAU } from './util.js';
-import { TONE, TONE_HEX, WHITE_HEX, SMOKE_HEX, unlitMat } from './render/index.js';
+import { clamp, lerp, rand, randInt, TAU } from './util';
+import { TONE, TONE_HEX, WHITE_HEX, SMOKE_HEX, unlitMat } from './render/index';
 
 const UP = new THREE.Vector3(0, 1, 0);
 const DOWN = new THREE.Vector3(0, -1, 0);

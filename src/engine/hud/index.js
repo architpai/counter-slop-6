@@ -1,6 +1,6 @@
-import { createElements, setText, setHTML, setBoldText } from './elements.js';
-import { key, controlsHTML } from './labels.js';
-export { Screens } from './screens.js';
+import { createElements, setText, setHTML, setBoldText } from './elements';
+import { key, controlsHTML } from './labels';
+export { Screens } from './screens';
 
 const number = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 const fraction = value => Math.min(1, Math.max(0, number(value)));

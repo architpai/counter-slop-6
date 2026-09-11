@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { rand } from '../util.js';
-import { TONE, TONE_HEX, makeFigure, surfMat } from '../render/index.js';
+import { rand } from '../util';
+import { TONE, TONE_HEX, makeFigure, surfMat } from '../render/index';
 
 const ORANGE = { tone: TONE.ACCENT };
 const DARK_VISUAL = { tone: TONE.DARK, noCollide: true };

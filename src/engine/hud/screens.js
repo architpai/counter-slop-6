@@ -1,4 +1,4 @@
-import { controlsHTML } from './labels.js';
+import { controlsHTML } from './labels';
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',

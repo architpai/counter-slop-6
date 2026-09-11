@@ -30,6 +30,25 @@ const report = await page.evaluate(async () => {
   };
 });
 
+// Physics, nav and the springs only run during play, so the menu alone proves
+// very little about them. Start a solo wave and let it simulate.
+const play = await page.evaluate(async () => {
+  const g = window.__game;
+  g.beginSolo();
+  const start = g.player.body.pos.clone();
+  const settled = () => new Promise(r => setTimeout(r, 2500));
+  await settled();
+  return {
+    state: g.gs.state,
+    spawned: g.enemies.list.length,
+    // Gravity alone must resolve the player onto the ground via World.moveBody.
+    onGround: g.player.body.onGround,
+    finite: Number.isFinite(g.player.body.pos.y) && g.player.body.pos.distanceTo(start) < 1e3,
+    navNodes: g.nav.nodes.length,
+    hp: g.player.hp,
+  };
+});
+
 const shot = await page.screenshot();
 const blank = shot.length < 8000;
 
@@ -59,6 +78,12 @@ check(report.advancing, 'frame loop is advancing gs.time');
 check(report.hasHud, 'HUD elements mounted');
 check(report.screen !== null, `main screen rendered (${report.screen})`);
 check(!blank, `canvas is drawing (screenshot ${shot.length} bytes)`);
+check(play.state === 'play', `solo wave started (state ${play.state})`);
+check(play.navNodes > 0, `nav grid built (${play.navNodes} nodes)`);
+check(play.onGround, 'physics resolved the player onto the ground');
+check(play.finite, 'player position stayed finite and bounded');
+check(play.spawned > 0, `enemies spawned (${play.spawned})`);
+check(play.hp > 0, `player alive after 2.5 s (hp ${play.hp})`);
 check(teardown.live === 0, `dispose() drops the instance count (got ${teardown.live})`);
 check(teardown.frozen, 'dispose() stops the frame loop');
 check(teardown.idempotent, 'dispose() is idempotent');

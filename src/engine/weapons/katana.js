@@ -1,8 +1,8 @@
 import { Vector3 } from 'three';
-import { clamp, damp, easeInOut, rand } from '../util.js';
-import { TONE } from '../render/index.js';
-import { ViewModel } from './gun.js';
-import { makeKatanaModel } from './models.js';
+import { clamp, damp, easeInOut, rand } from '../util';
+import { TONE } from '../render/index';
+import { ViewModel } from './gun';
+import { makeKatanaModel } from './models';
 
 const GUARD_POS = new Vector3(0.21, -0.31, -0.36);
 const GUARD_ROT = new Vector3(1.40, 0.30, 1.24);

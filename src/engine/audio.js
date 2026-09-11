@@ -1,5 +1,5 @@
-import { clamp, rand } from './util.js';
-import { TUNES, scheduleStep } from './audio.tunes.js';
+import { clamp, rand } from './util';
+import { TUNES, scheduleStep } from './audio.tunes';
 
 export class Audio {
   #ctx = null;

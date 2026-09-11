@@ -1,21 +1,21 @@
-import { clamp, randInt, store, SKEY } from './util.js';
-import { Renderer } from './render/index.js';
-import { World } from './physics.js';
-import { NavGrid } from './nav.js';
-import { Audio } from './audio.js';
-import { Net } from './net.js';
-import { Input } from './input.js';
-import { Hud } from './hud/index.js';
-import { Effects } from './effects.js';
-import { buildLevel, disposeLevel, validKey } from './level/index.js';
-import { EnemyManager } from './enemies/index.js';
-import { Player } from './player/index.js';
-import { makeGameState } from './game/state.js';
-import { createSolo } from './game/solo.js';
-import { createFFA } from './game/ffa.js';
-import { createUI } from './game/ui.js';
-import { createPickups } from './game/pickups.js';
-import { createBreakables } from './game/breakables.js';
+import { clamp, randInt, store, SKEY } from './util';
+import { Renderer } from './render/index';
+import { World } from './physics';
+import { NavGrid } from './nav';
+import { Audio } from './audio';
+import { Net } from './net';
+import { Input } from './input';
+import { Hud } from './hud/index';
+import { Effects } from './effects';
+import { buildLevel, disposeLevel, validKey } from './level/index';
+import { EnemyManager } from './enemies/index';
+import { Player } from './player/index';
+import { makeGameState } from './game/state';
+import { createSolo } from './game/solo';
+import { createFFA } from './game/ffa';
+import { createUI } from './game/ui';
+import { createPickups } from './game/pickups';
+import { createBreakables } from './game/breakables';
 
 // Live instance count. A StrictMode remount or an HMR reload must leave this at
 // 1: anything higher means a leaked WebGL context, audio graph and rAF chain.

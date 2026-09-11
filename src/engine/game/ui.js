@@ -1,6 +1,6 @@
-import { clamp, store, SKEY } from '../util.js';
-import { Screens } from '../hud/index.js';
-import { LEVELS, validKey } from '../level/index.js';
+import { clamp, store, SKEY } from '../util';
+import { Screens } from '../hud/index';
+import { LEVELS, validKey } from '../level/index';
 
 export function createUI(app) {
   const { ctx, gs, lobby, scores, settings } = app;

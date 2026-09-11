@@ -1,9 +1,9 @@
 import { Vector3 } from 'three';
-import { Spring3, clamp, damp, easeOut, rand, TAU } from '../util.js';
-import { TONE } from '../render/index.js';
-import { seeThrough } from '../physics.js';
-import { GUN_STATS } from './stats.js';
-import { makeGunModel } from './models.js';
+import { Spring3, clamp, damp, easeOut, rand, TAU } from '../util';
+import { TONE } from '../render/index';
+import { seeThrough } from '../physics';
+import { GUN_STATS } from './stats';
+import { makeGunModel } from './models';
 
 // Shared by guns and the katana; only the concrete weapons are public.
 export class ViewModel {
