@@ -55,7 +55,7 @@ The documented slow match clock while a host tab is hidden is also retained.
 
 These checks define evidence to collect after implementation. They are not results.
 
-1. Serve the folder with a static HTTP server (`python3 -m http.server`). Open `tests/index.html` to run the module checks in the browser; the page title reports passed/failed counts. Load all modules without syntax, import, shader, or runtime errors.
+1. Run `npm test` for the module checks. They run in a real headless Chromium through Vitest browser mode, so WebGL, `AudioContext` and pointer lock are the real ones. Load all modules without syntax, import, shader, or runtime errors.
 2. Show a useful failure message if WebGL cannot start. Failure of PeerJS must not prevent solo play.
 3. Check the main menu at 1440x900 and 900x600. Reach all buttons and settings with scrolling and keyboard focus.
 4. Start solo, move, jump, slide, switch all four weapons, fire, reload, grapple, throw a grenade, pause, resume, die, and retry.

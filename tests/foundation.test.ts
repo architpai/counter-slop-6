@@ -1,11 +1,20 @@
+import { expect, test } from 'vitest';
 import { Object3D, Vector3 } from 'three';
-import { Spring, Spring3, Cooldown, clamp, damp, wrapAngle, angleLerp, alignSegment, round2 } from '../src/engine/util.js';
-import { Body, EPS, World, seeThrough } from '../src/engine/physics.js';
-import { NavGrid } from '../src/engine/nav.js';
+import { Spring, Spring3, Cooldown, clamp, damp, wrapAngle, angleLerp, alignSegment, round2 } from '@/engine/util';
+import { Body, EPS, World, seeThrough } from '@/engine/physics';
+import { NavGrid } from '@/engine/nav';
 
-export async function run(assert) {
-  const v = (x = 0, y = 0, z = 0) => new Vector3(x, y, z);
-  const near = (a, b, message) => assert(Math.abs(a - b) < 1e-8, message);
+const assert = (cond: unknown, message: string): void => { expect(cond, message).toBeTruthy(); };
+const near = (a: number | undefined, b: number, message: string): void =>
+  assert(a !== undefined && Math.abs(a - b) < 1e-8, message);
+/** `noUncheckedIndexedAccess` makes every lookup optional; this keeps `!` out. */
+const must = <T>(value: T | undefined | null, what: string): T => {
+  if (value === undefined || value === null) throw new Error(`missing ${what}`);
+  return value;
+};
+const v = (x = 0, y = 0, z = 0): Vector3 => new Vector3(x, y, z);
+
+test('math helpers, springs, cooldowns and segments', () => {
   near(clamp(3, 5, 2), 5, 'clamp preserves the lower-bound-first rule');
   near(damp(damp(0, 1, 4, 0.02), 1, 4, 0.02), damp(0, 1, 4, 0.04), 'damp is frame-rate independent');
   near(wrapAngle(-Math.PI * 3), -Math.PI, 'negative angles wrap into [-PI, PI)');
@@ -34,7 +43,9 @@ export async function run(assert) {
   near(v(0, 1, 0).applyQuaternion(segment.quaternion).distanceTo(v(1, 0, 0)), 0, 'segment rotates +Y onto its direction');
   alignSegment(segment, v(), v());
   assert(!segment.visible && segment.position.equals(v(1, 0, 0)), 'zero segment hides without moving');
+});
 
+test('world colliders, rays and body resolution', () => {
   const world = new World(), min = v(-10, -1, -10), max = v(10, 0, 10);
   const floor = world.addBox(min, max);
   min.y = -50; max.y = 50;
@@ -76,8 +87,12 @@ export async function run(assert) {
   world.removeBox(rail);
   assert(world.raycast(v(0, 1, 0), v(1, 0, 0), 10)?.box === wall, 'removal updates flat box list');
   assert(!world.overlapsAABB(v(2, 1, -0.5), v(2.1, 2, 0.5)), 'removal rebuilds the hash');
+  world.clear();
+  assert(world.boxes.length === 0 && !world.overlapsAABB(v(-2, -2, -2), v(2, 2, 2)), 'world clear empties colliders and hash');
+});
 
-  for (const [height, canClimb] of [[0.4, true], [0.7, false]]) {
+test('steps and ceilings', () => {
+  for (const [height, canClimb] of [[0.4, true], [0.7, false]] as const) {
     const stairs = new World();
     stairs.addBox(v(-5, -1, -5), v(5, 0, 5));
     stairs.addBox(v(0.5, 0, -2), v(2, height, 2));
@@ -96,37 +111,40 @@ export async function run(assert) {
   ceilingWorld.moveBody(jumper, 0.05);
   assert(jumper.hitCeil && jumper.vel.y === 0 && !jumper.onGround, 'ceiling contact is kept across substeps');
   near(jumper.pos.y, 0.25, 'head rests flush below the ceiling');
+});
 
+test('nav grid nodes and A* paths', () => {
   const field = new World();
   field.addBox(v(0, -1, 0), v(5, 0, 3)); field.finalize();
   const grid = new NavGrid(field, { minX: 0, maxX: 5, minZ: 0, maxZ: 3 }); grid.build();
-  assert(grid.nodes.length === 15 && grid.nodes[5].z === 1.5, 'nodes are created at row-major cell centers');
-  const path = grid.findPath(v(0.5, 0, 0.5), v(4.5, 0, 2.5));
+  assert(grid.nodes.length === 15 && grid.nodes[5]?.z === 1.5, 'nodes are created at row-major cell centers');
+  const path = must(grid.findPath(v(0.5, 0, 0.5), v(4.5, 0, 2.5)), 'path');
   assert(path.complete && path.length === 5 && path.every(p => p.isVector3), 'A* returns raw Vector3 node centers');
-  assert(grid.findPath(v(4.5, 0, 2.5), v(0.5, 0, 0.5)).complete, 'search stamps keep later paths independent');
-  const capped = grid.findPath(v(0.5, 0, 0.5), v(4.5, 0, 2.5), 0);
+  assert(grid.findPath(v(4.5, 0, 2.5), v(0.5, 0, 0.5))?.complete, 'search stamps keep later paths independent');
+  const capped = must(grid.findPath(v(0.5, 0, 0.5), v(4.5, 0, 2.5), 0), 'capped path');
   assert(!capped.complete && capped.length === 1, 'expansion cap returns an incomplete start path');
   assert(grid.nearest(v(-100, 0, 0)) === -1, 'outside search windows do not clamp to the grid');
   assert(grid.nearest(v(0.5, 100, 0.5), 0) === 0, 'nearest falls back when no height is eligible');
+});
 
+test('nav links across tiers and blocked corners', () => {
   const tiers = new World();
   tiers.addBox(v(0, -1, 0), v(3, 0, 1));
   tiers.addBox(v(0, 0, 0), v(1, 4, 1)); tiers.finalize();
   const tierGrid = new NavGrid(tiers, { minX: 0, maxX: 3, minZ: 0, maxZ: 1 }); tierGrid.build();
-  const high = tierGrid.nodes.find(n => n.y === 4), low = tierGrid.nodes.find(n => n.x === 1.5);
-  const drop = high.links.find(l => l.to === low.id);
+  const high = must(tierGrid.nodes.find(n => n.y === 4), 'high node');
+  const low = must(tierGrid.nodes.find(n => n.x === 1.5), 'low node');
+  const drop = must(high.links.find(l => l.to === low.id), 'drop link');
   near(drop.cost, Math.sqrt(17) + 1.4, 'directed drop has its distance surcharge');
   assert(!low.links.some(l => l.to === high.id), 'a large drop has no reverse climb');
-  assert(!tierGrid.findPath(v(2.5, 0, 0.5), v(0.5, 4, 0.5)).complete, 'unreachable height returns an incomplete path');
+  assert(!tierGrid.findPath(v(2.5, 0, 0.5), v(0.5, 4, 0.5))?.complete, 'unreachable height returns an incomplete path');
 
   const corner = new World();
   corner.addBox(v(0, -1, 0), v(2, 0, 2));
   corner.addBox(v(1, 0, 0), v(2, 3, 1), { noNav: true }); corner.finalize();
   const cornerGrid = new NavGrid(corner, { minX: 0, maxX: 2, minZ: 0, maxZ: 2 }); cornerGrid.build();
-  const a = cornerGrid.nodes.find(n => n.x === 0.5 && n.z === 0.5);
-  const b = cornerGrid.nodes.find(n => n.x === 1.5 && n.z === 1.5);
+  const a = must(cornerGrid.nodes.find(n => n.x === 0.5 && n.z === 0.5), 'corner node a');
+  const b = must(cornerGrid.nodes.find(n => n.x === 1.5 && n.z === 1.5), 'corner node b');
   assert(!a.links.some(l => l.to === b.id), 'diagonal paths cannot cut a blocked cardinal corner');
   assert(cornerGrid.nodes.length === 3, 'noNav boxes block clearance and never make top nodes');
-  world.clear();
-  assert(world.boxes.length === 0 && !world.overlapsAABB(v(-2, -2, -2), v(2, 2, 2)), 'world clear empties colliders and hash');
-}
+});

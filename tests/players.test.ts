@@ -1,35 +1,66 @@
-import { Scene, PerspectiveCamera, Vector3 } from 'three';
-import { encodeState, RemotePlayer } from '../src/engine/players.js';
+import { afterAll, expect, test } from 'vitest';
+import { Mesh, Object3D, PerspectiveCamera, Scene, Vector3 } from 'three';
+import { encodeState, RemotePlayer } from '@/engine/players';
+import type { Ctx, Enemy, Player } from '@/engine/types';
 
-export function run(assert) {
-  const near = (actual, expected, message) => assert(Math.abs(actual - expected) < 1e-8, message);
-  const calls = { tracers: [], sounds: [], debris: [], blood: 0, pools: 0 };
-  const scene = new Scene();
-  const ctx = {
-    scene, camera: new PerspectiveCamera(), player: { eye: new Vector3(5, 2, 6) },
-    effects: {
-      tracer: (from, to, tone, thick, life) => calls.tracers.push({ from: from.clone(), to: to.clone(), tone, thick, life }),
-      debris: (mesh, pos, vel, spin, options) => {
-        scene.attach(mesh);
-        calls.debris.push({ mesh, pos: pos.clone(), vel, spin, options });
-      },
-      blood: () => calls.blood++, bloodPool: () => calls.pools++,
+const assert = (cond: unknown, message: string): void => { expect(cond, message).toBeTruthy(); };
+const near = (actual: number | undefined, expected: number, message: string): void =>
+  assert(actual !== undefined && Math.abs(actual - expected) < 1e-8, message);
+const must = <T>(value: T | undefined | null, what: string): T => {
+  if (value === undefined || value === null) throw new Error(`missing ${what}`);
+  return value;
+};
+
+interface TracerCall { from: Vector3; to: Vector3; tone?: number; thick?: number; life?: number }
+interface DebrisCall { mesh: Object3D; pos: Vector3; vel: Vector3; spin: Vector3; options?: unknown }
+const calls: { tracers: TracerCall[]; sounds: string[]; debris: DebrisCall[]; blood: number; pools: number } =
+  { tracers: [], sounds: [], debris: [], blood: 0, pools: 0 };
+const scene = new Scene();
+
+// Only the `Ctx` members `RemotePlayer` reaches for. A real one needs a WebGL
+// renderer, a net peer and a level, none of which this check exercises.
+const ctx = {
+  scene, camera: new PerspectiveCamera(), player: { eye: new Vector3(5, 2, 6) },
+  effects: {
+    tracer: (from: Vector3, to: Vector3, tone?: number, thick?: number, life?: number) =>
+      calls.tracers.push({ from: from.clone(), to: to.clone(), tone, thick, life }),
+    debris: (mesh: Object3D, pos: Vector3, vel: Vector3, spin: Vector3, options?: unknown) => {
+      scene.attach(mesh);
+      calls.debris.push({ mesh, pos: pos.clone(), vel, spin, options });
     },
-    audio: { remoteShot: kind => calls.sounds.push(kind) },
-  };
-  const player = {
-    body: { pos: new Vector3(1.234, 2.346, -3.456), vel: new Vector3(1.24, -2.36, 3.45), onGround: true },
-    yaw: 0.234, pitch: -0.456, wi: 3, hp: 100.6,
-    crouching: true, sliding: true, blocking: true, aiming: true, firing: true, alive: true, parryWindow: true,
-    grapple: { mode: 'on', hook: new Vector3(8.16, 9.24, -10.38) },
-  };
-  const packet = encodeState(player);
+    blood: () => calls.blood++, bloodPool: () => calls.pools++,
+  },
+  audio: { remoteShot: (kind: string) => calls.sounds.push(kind) },
+} as unknown as Ctx;
+
+const player = {
+  body: { pos: new Vector3(1.234, 2.346, -3.456), vel: new Vector3(1.24, -2.36, 3.45), onGround: true },
+  yaw: 0.234, pitch: -0.456, wi: 3, hp: 100.6,
+  crouching: true, sliding: true, blocking: true, aiming: true, firing: true, alive: true, parryWindow: true,
+  grapple: { mode: 'on', hook: new Vector3(8.16, 9.24, -10.38) },
+} as unknown as Player;
+
+const packet = encodeState(player);
+const remote = new RemotePlayer(ctx, 'remote', '  FourteenCharacterName  ');
+const moving = new RemotePlayer(ctx, 'moving', 'moving');
+const state = (x: number, yaw = 0, flags = 80, wi = 0, vx = 0): number[] => [x, 0, 0, yaw, 0, wi, flags, 110, vx, 0, 0];
+let damage = 0;
+
+afterAll(() => {
+  for (const { mesh } of calls.debris) {
+    mesh.removeFromParent();
+    mesh.traverse(part => { if (part instanceof Mesh) part.geometry.dispose(); });
+  }
+});
+
+test('state encoding', () => {
   assert(JSON.stringify(packet) === JSON.stringify([1.23, 2.35, -3.46, 0.23, -0.46, 3, 511, 101, 1.2, -2.4, 3.5, 8.2, 9.2, -10.4]),
     'State encoding keeps field order, rounding, all nine flags, and grapple coordinates.');
   player.grapple.mode = 'idle';
-  assert(encodeState(player).length === 11 && !(encodeState(player)[6] & 128), 'Idle grapple has no hook fields or flag.');
+  assert(encodeState(player).length === 11 && !(must(encodeState(player)[6], 'flags') & 128), 'Idle grapple has no hook fields or flag.');
+});
 
-  const remote = new RemotePlayer(ctx, 'remote', '  FourteenCharacterName  ');
+test('a remote decodes its first state', () => {
   assert(remote.name === 'FourteenCharac' && !remote.visible && remote.body.pos.y === -50 && remote.hp === 100,
     'Remote starts hidden with a bounded name and initial health.');
   assert(remote.isLocal === false && remote.speed === 0 && remote.blockRadius === 0, 'Remote implements the Target constants.');
@@ -44,20 +75,25 @@ export function run(assert) {
   near(remote.center.y, 2.35 + 1.05 * 0.55, 'Crouching center follows body height.');
   near(remote.forward.length(), 1, 'Forward is normalized.');
   near(remote.right.dot(remote.forward), 0, 'Right is perpendicular to forward.');
-  near(remote._figure.anchors.armL.position.y, -0.15, 'Remote upper-arm hit anchor uses the midpoint.');
-  near(remote._figure.anchors.foreL.position.y, -0.14, 'Remote forearm hit anchor uses the midpoint.');
-  assert(remote._figure.parts.upperR.rotation.x === -1.8, 'Katana guard raises the right arm.');
+  const figure = must(remote._figure, 'figure');
+  near(must(figure.anchors.armL, 'armL anchor').position.y, -0.15, 'Remote upper-arm hit anchor uses the midpoint.');
+  near(must(figure.anchors.foreL, 'foreL anchor').position.y, -0.14, 'Remote forearm hit anchor uses the midpoint.');
+  assert(must(figure.parts.upperR, 'upperR').rotation.x === -1.8, 'Katana guard raises the right arm.');
+});
 
+test('invalid packets are rejected whole', () => {
   const seen = remote.lastSeen;
-  const invalid = [null, {}, [], packet.slice(0, 10), [...packet, 2]];
-  for (const [index, value] of [[0, Infinity], [2, 10001], [3, NaN], [4, 1.61], [5, 0.2], [6, 512], [7, -1], [7, 121], [8, 10001], [12, NaN]]) {
+  const invalid: unknown[] = [null, {}, [], packet.slice(0, 10), [...packet, 2]];
+  const mutations: [number, number][] = [[0, Infinity], [2, 10001], [3, NaN], [4, 1.61], [5, 0.2],
+    [6, 512], [7, -1], [7, 121], [8, 10001], [12, NaN]];
+  for (const [index, value] of mutations) {
     const bad = [...packet]; bad[index] = value; invalid.push(bad);
   }
   for (const bad of invalid) remote.push(bad, 2);
   assert(remote.lastSeen === seen && remote.hp === 101, 'Invalid packets make no partial change.');
+});
 
-  const state = (x, yaw = 0, flags = 80, wi = 0, vx = 0) => [x, 0, 0, yaw, 0, wi, flags, 110, vx, 0, 0];
-  const moving = new RemotePlayer(ctx, 'moving', 'moving');
+test('delayed interpolation and extrapolation', () => {
   moving.push(state(0, 3.1), 1);
   moving.push(state(2, -3.1, 80, 0, 2), 1.1);
   moving.update(0.05, 1.13);
@@ -75,7 +111,9 @@ export function run(assert) {
   moving.push(state(40, -1e308), 12);
   moving.update(0.05, 12.08);
   assert(Number.isFinite(moving.forward.x), 'Finite extreme yaw cannot overflow its interpolation delta.');
+});
 
+test('optional triples, weapon fallback and the name tag', () => {
   const hook = remote.hook.clone();
   remote.push(state(0, 0, 208, 99).slice(0, 8), 3);
   remote.update(0.05, 3.08);
@@ -85,12 +123,14 @@ export function run(assert) {
   remote.name = '<script>name';
   remote.update(0.01, 3.09);
   assert(remote._tagName === '<script>name', 'A bounded name change rebuilds the canvas label.');
+});
 
+test('shot batches, the muzzle flash and damage', () => {
   remote.shots('sniper', [1, 2, 3, 4, 5, 6]);
-  assert(calls.tracers.length === 2 && calls.tracers[0].thick === 0.03 && calls.tracers[0].life === 0.06 &&
+  assert(calls.tracers.length === 2 && must(calls.tracers[0], 'tracer').thick === 0.03 && must(calls.tracers[0], 'tracer').life === 0.06 &&
     calls.sounds[0] === 'sniper', 'Shot endpoints become the correct tracers and one sound.');
   remote.shots('unknown', [1, 2, 3]);
-  assert(calls.tracers[2].thick === 0.02 && calls.sounds[1] === 'rifle', 'Unknown shot kind uses rifle cues.');
+  assert(must(calls.tracers[2], 'tracer').thick === 0.02 && calls.sounds[1] === 'rifle', 'Unknown shot kind uses rifle cues.');
   remote.shots('rifle', [1, 2, 3, 4, NaN, 6]);
   remote.shots('rifle', [1, 2]);
   remote.shots('rifle', Array(93).fill(0));
@@ -100,21 +140,23 @@ export function run(assert) {
   remote.update(0.04, 3.18);
   near(remote._flashT, 0, 'Flash ends after 80 ms.');
 
-  let damage = 0;
   remote.onDamage = amount => { damage += amount; };
   remote.takeDamage(12, new Vector3());
   remote.takeDamage(NaN);
   remote.takeDamage(-1);
-  remote.takeDamage(12, [0, 0, 0]);
+  remote.takeDamage(12, [0, 0, 0] as unknown as Vector3);
   assert(damage === 12 && remote.hp === 110, 'Remote damage validates and forwards without changing owner health.');
   remote.blocking = true;
-  assert(remote.tryBlockMelee({ center: remote.eye.clone().add(remote.forward) }), 'A guard blocks a front melee hit.');
-  assert(!remote.tryBlockMelee({ center: remote.eye.clone().sub(remote.forward) }) && !remote.tryDeflect(),
+  const melee = (center: Vector3) => ({ center }) as unknown as Enemy;
+  assert(remote.tryBlockMelee(melee(remote.eye.clone().add(remote.forward))), 'A guard blocks a front melee hit.');
+  assert(!remote.tryBlockMelee(melee(remote.eye.clone().sub(remote.forward))) && !remote.tryDeflect(),
     'A guard does not block from behind or deflect projectiles locally.');
+});
 
+test('death, ragdoll and respawn', () => {
   remote.push(state(0, 0, 16), 4);
   remote.update(0.05, 4.08);
-  assert(!remote.alive && remote._figure.root.rotation.x > 0 && remote.deadT === 0.05, 'Dead flag starts the slump and dead timer.');
+  assert(!remote.alive && must(remote._figure, 'figure').root.rotation.x > 0 && remote.deadT === 0.05, 'Dead flag starts the slump and dead timer.');
   const tracers = calls.tracers.length;
   remote.shots('rifle', [1, 2, 3]);
   remote.takeDamage(12);
@@ -139,8 +181,10 @@ export function run(assert) {
     'Respawn clears the old interpolation and uses the default rifle for one packet.');
   remote.push(state(8, 0, 80, 2), 5.05);
   assert(remote._wi === 2, 'The packet after respawn applies the selected weapon.');
+});
 
-  const figureRoot = remote._figure.root;
+test('disposal', () => {
+  const figureRoot = must(remote._figure, 'figure').root;
   remote.dispose();
   remote.dispose();
   moving.dispose();
@@ -149,8 +193,4 @@ export function run(assert) {
   remote.push(state(10), 6);
   assert(!remote.visible, 'A disposed remote cannot be revived by a late packet.');
   assert(calls.debris.every(item => scene.children.includes(item.mesh)), 'Disposal preserves debris owned by effects.');
-  for (const { mesh } of calls.debris) {
-    mesh.removeFromParent();
-    mesh.traverse(part => part.geometry?.dispose());
-  }
-}
+});
