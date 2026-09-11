@@ -145,6 +145,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
   function makeLevel(arena: boolean, resolved: LevelKey): { level: Level; nav: NavGrid } {
     const level = buildLevel(scene, world, resolved, { arena });
     renderer.setLevelShadow(level.shadow.center, level.shadow.radius);
+    renderer.setMood(level.mood);
     const nav = new NavGrid(world, level.bounds, 1);
     nav.build();
     audio.setTune(resolved);

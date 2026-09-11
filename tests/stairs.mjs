@@ -1,8 +1,9 @@
-// Every Downtown staircase must be climbable by walking straight at it, and the eye
+// Every Downtown and House staircase must be climbable by walking straight at it, and the eye
 // must ease over each step rather than pop. Run against `npm run dev`.
 //   node tests/stairs.mjs [url]
 import { chromium } from 'playwright';
 const cases = [
+  // downtown
   ['tower f0', [-6.5, 0, -8.3], -Math.PI / 2, 4],
   ['tower f1', [2.8, 4, -10.3], Math.PI / 2, 8],
   ['A f0', [-27, 0, 21.2], Math.PI / 2, 4],
@@ -14,6 +15,12 @@ const cases = [
   ['house 1->2', [-24.5, 7, -45], -Math.PI / 2, 11],
   ['house 3->2', [10.5, 7, -45], Math.PI / 2, 11],
 ];
+const houseCases = [
+  ['front stairs', [2, 0, 7.2], 0, 3.6],
+  ['back hall', [-5.1, -3.6, 2.5], 0, 0],
+  ['front well', [-11.8, -3.6, 6], Math.PI, 0],
+  ['driveway', [13.5, -3.6, 7], Math.PI, 0],
+];
 const browser = await chromium.launch({ headless: true, args: ['--use-gl=angle', '--use-angle=metal', '--ignore-gpu-blocklist'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 const url = process.argv[2] ?? 'http://localhost:3000/';
@@ -23,6 +30,7 @@ await page.waitForTimeout(1000);
 await page.click('.screen-button[data-act="start"]');
 await page.waitForTimeout(1500);
 let failed = false;
+async function run(cases) {
 for (const [name, pos, yaw, top] of cases) {
   await page.evaluate(([pos, yaw]) => { const g = window.__game; g.enemies.clear(); const p = g.player; p.body.pos.set(...pos); p.body.vel.set(0,0,0); p.yaw = yaw; p.pitch = 0; p.hp = 9999; p.stepOffset = 0; window.__ys = []; }, [pos, yaw]);
   await page.keyboard.down('KeyW');
@@ -35,5 +43,16 @@ for (const [name, pos, yaw, top] of cases) {
   failed ||= !ok;
   console.log(name.padEnd(12), 'reached y', y.toFixed(2), 'target', top, ok ? 'OK' : 'FAIL', 'max eye dy', maxEye.toFixed(3));
 }
+}
+await run(cases);
+await page.evaluate(() => localStorage.setItem('cs6_map', 'house'));
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForFunction(() => window.__game !== undefined);
+await page.waitForTimeout(1000);
+await page.click('.screen-button[data-act="start"]');
+await page.waitForTimeout(1500);
+console.log('-- house');
+await run(houseCases);
+await page.evaluate(() => localStorage.setItem('cs6_map', 'downtown'));
 await browser.close();
 process.exit(failed ? 1 : 0);

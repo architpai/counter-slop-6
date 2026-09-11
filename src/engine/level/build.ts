@@ -64,9 +64,9 @@ export class LevelBuilder {
     this.world = world;
     this.tone = TONE;
     this.parts = new Map();
-    const p = key === 'mexico' ? 62 : arena ? 68 : 55;
+    const p = key === 'mexico' ? 62 : key === 'house' ? 30 : arena ? 68 : 55;
     this.level = {
-      key, arena, playerStart: new THREE.Vector3(0, 0, key === 'mexico' ? 16 : 42),
+      key, arena, playerStart: new THREE.Vector3(0, 0, key === 'mexico' || key === 'house' ? 16 : 42),
       bounds: { minX: -p, maxX: p, minZ: -p, maxZ: p },
       spawns: [], snipers: [], pickups: [], rings: [], arenaSpawns: [], teamSpawns: [],
       movers: [], animated: [], breakables: [], meshes: [],

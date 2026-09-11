@@ -130,8 +130,8 @@ export class Audio {
     }
   }
 
-  setTune(key: TuneKey): void {
-    const tune = key === 'mexico' ? 'mexico' : 'downtown';
+  setTune(key: string): void {
+    const tune: TuneKey = key === 'mexico' ? 'mexico' : 'downtown';
     if (tune === this.#tune) return;
     const running = this.#musicTimer !== null;
     this.#tune = tune;

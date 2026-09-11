@@ -198,7 +198,19 @@ export type BoxFilter = (box: Box) => boolean;
 
 // ------------------------------------------------------------------ 5.6 level
 
-export type LevelKey = 'downtown' | 'mexico';
+export type LevelKey = 'downtown' | 'mexico' | 'house';
+
+/** Sky and light colours a level asks the renderer for. Missing fields keep the default. */
+export interface Mood {
+  horizon?: number;
+  zenith?: number;
+  fog?: number;
+  sun?: number;
+  sunIntensity?: number;
+  hemiIntensity?: number;
+  hemiSky?: number;
+  hemiGround?: number;
+}
 
 export interface Bounds {
   minX: number;
@@ -260,6 +272,7 @@ export interface Level {
   meshes: THREE.Object3D[];
   /** Directional-light shadow fit. */
   shadow: { center: THREE.Vector3; radius: number };
+  mood?: Mood;
 }
 
 // ----------------------------------------------------------------- 5.7 pickup
