@@ -15,6 +15,8 @@
 html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: var(--panel); }
 #game { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
 .game-hud {
+  --spread: 10px; --health: 100%; --breath: 100%; --focus: 0%; --boss: 100%;
+  --focus-mark-x: 50%; --focus-mark-y: 50%;
   position: fixed; inset: 0; overflow: hidden; pointer-events: none; user-select: none;
   font-family: var(--font-display), var(--font-body), system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-weight: 500; color: var(--fg); line-height: 1.2; font-variant-numeric: tabular-nums;
@@ -28,7 +30,7 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .game-hud.gamepad .pad-only { display: initial; }
 .game-hud.gamepad .keyboard-only { display: none; }
 
-.crosshair { --spread: 10px; position: absolute; left: 50%; top: 50%; color: var(--hot); filter: drop-shadow(0 0 1px var(--fg)); }
+.crosshair { position: absolute; left: 50%; top: 50%; color: var(--hot); filter: drop-shadow(0 0 1px var(--fg)); }
 .crosshair .tick, .crosshair .dot { position: absolute; display: block; background: currentColor; border-radius: 2px; }
 .crosshair .tick { transition: top .06s, left .06s; }
 .crosshair .top, .crosshair .bottom { width: 3px; height: 12px; left: -1.5px; }
@@ -55,7 +57,7 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .grapple-reticle[data-state="1"] { opacity: .9; transform: translate(-50%, -50%) scale(1) rotate(20deg); }
 .grapple-reticle[data-state="2"] { opacity: .9; border-style: solid; transform: translate(-50%, -50%) scale(.65); }
 .grapple-breath { position: absolute; left: 50%; top: calc(50% + 26px); transform: translateX(-50%); width: 64px; height: 5px; border: 1.5px solid var(--cool); opacity: .8; }
-.grapple-breath > div { height: 100%; background: var(--cool); }
+.grapple-breath > div { width: var(--breath); height: 100%; background: var(--cool); }
 .grapple-breath.low { border-color: var(--hot); }
 .grapple-breath.low > div { background: var(--hot); }
 .hit-marker { position: absolute; left: 50%; top: 50%; width: 28px; height: 28px; opacity: 0; transform: translate(-50%, -50%); color: var(--cool); }
@@ -87,11 +89,11 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .boss-bar.is-visible { opacity: 1; }
 .boss-name { font-size: 26px; margin-bottom: 6px; text-shadow: 0 1px 3px var(--panel); }
 .boss-track { width: 420px; max-width: 100%; height: 20px; border: 2.5px solid var(--cool); border-radius: var(--r); overflow: hidden; background: rgba(19, 26, 38, .65); }
-.boss-track > div { height: 100%; background: var(--hot); transition: width .15s; }
+.boss-track > div { width: var(--boss); height: 100%; background: var(--hot); transition: width .15s; }
 .bottom-left { left: 9%; bottom: 5%; }
 .health-row { display: flex; align-items: center; gap: 10px; font-size: 26px; }
 .health-track { width: 210px; height: 16px; border: 2.5px solid var(--cool); border-radius: var(--r); overflow: hidden; background: rgba(19, 26, 38, .65); }
-.health-track > div { width: 100%; height: 100%; background: var(--cool); transition: width .15s; }
+.health-track > div { width: var(--health); height: 100%; background: var(--cool); transition: width .15s; }
 .low-health .health-track { border-color: var(--hot); }
 .low-health .health-track > div { background: var(--hot); }
 .ammo-row { display: flex; align-items: baseline; gap: 6px; }
@@ -130,7 +132,7 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .focus-meter.is-visible { opacity: 1; }
 .focus-label { font-size: 17px; letter-spacing: 2px; opacity: .8; margin-bottom: 28px; }
 .focus-tube { position: relative; width: 26px; height: 168px; margin: auto; border: 3px solid var(--cool); border-radius: var(--r); background: rgba(19, 26, 38, .5); }
-.focus-fill { position: absolute; bottom: 0; left: 0; width: 100%; height: 0; border-radius: 0 0 6px 6px; background: var(--cool); transition: height .18s; }
+.focus-fill { position: absolute; bottom: 0; left: 0; width: 100%; height: var(--focus); border-radius: 0 0 6px 6px; background: var(--cool); transition: height .18s; }
 .focus-ready { margin-top: 10px; font-size: 15px; color: var(--hot); visibility: hidden; }
 .focus-flames { position: absolute; top: -4px; left: 50%; display: none; }
 .focus-flames > i { position: absolute; bottom: 0; left: -8px; width: 16px; height: 22px; background: var(--hot); clip-path: polygon(50% 0, 65% 35%, 85% 25%, 100% 80%, 72% 100%, 20% 90%, 0 58%, 30% 65%); animation: flame .42s ease-in-out infinite alternate; }
@@ -140,7 +142,7 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .focus-meter.ready .focus-fill { background: var(--hot); }
 .focus-meter.ready .focus-flames { display: block; }
 .focus-meter.ready .focus-ready { visibility: visible; animation: blink 1s ease-in-out infinite; }
-.focus-mark { position: absolute; width: 60px; height: 60px; opacity: 0; transform: translate(-50%, -50%); transition: opacity .1s; }
+.focus-mark { position: absolute; left: var(--focus-mark-x); top: var(--focus-mark-y); width: 60px; height: 60px; opacity: 0; transform: translate(-50%, -50%); transition: opacity .1s; }
 .focus-mark.is-visible { opacity: 1; animation: focus-pulse .5s ease-in-out infinite alternate; }
 .focus-mark > i { position: absolute; width: 20px; height: 20px; border: solid var(--hot); border-width: 3px 0 0 3px; }
 .focus-mark > i:nth-child(2) { right: 0; border-width: 3px 3px 0 0; }

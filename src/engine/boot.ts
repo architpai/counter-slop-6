@@ -5,7 +5,6 @@ import { NavGrid } from './nav';
 import { Audio } from './audio';
 import { Net } from './net';
 import { Input } from './input';
-import { Hud } from './hud/index';
 import { Effects } from './effects';
 import { buildLevel, disposeLevel, validKey } from './level/index';
 import { EnemyManager } from './enemies/index';
@@ -22,6 +21,7 @@ import type { FfaApi } from './game/ffa';
 import type { UiApi, ScreenName } from './game/ui';
 import type { PickupsApi } from './game/pickups';
 import type { BreakablesApi } from './game/breakables';
+import type { HudView } from './hud/view';
 
 export interface Settings {
   mapKey: LevelKey;
@@ -80,7 +80,7 @@ export interface GameHandle {
   pickups: Pickup[];
   level: Level;
   nav: NavGrid;
-  hud: Hud;
+  hud: HudView;
   effects: Effects;
   input: Input;
   world: World;
@@ -99,12 +99,12 @@ let live = 0;
 export const liveInstances = (): number => live;
 
 /**
- * Boot one game instance against a canvas and a HUD root.
+ * Boot one game instance against a canvas and an externally owned HUD view.
  *
  * Every browser resource this creates is released by `handle.dispose()`, so a
  * React StrictMode double-mount produces one live instance, not two.
  */
-export function boot(canvas: HTMLCanvasElement, hudRoot: HTMLElement): GameHandle {
+export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
   live++;
   let lastStep = performance.now();
   let disposed = false;
@@ -156,7 +156,6 @@ export function boot(canvas: HTMLCanvasElement, hudRoot: HTMLElement): GameHandl
   const first = makeLevel(false, settings.mapKey);
 
   const input = new Input(canvas);
-  const hud = new Hud(hudRoot);
   const effects = new Effects(scene, world);
   function applyLook(): void {
     input.mouseSens = 0.0022 * settings.sens / 100;

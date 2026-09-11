@@ -1,7 +1,7 @@
 import { clamp, store, SKEY } from '../util';
-import { Screens } from '../hud/index';
+import { Screens } from '../hud/screens';
 import { LEVELS, validKey } from '../level/index';
-import type { UiAction } from '../hud/index';
+import type { UiAction } from '../hud/screens';
 import type { App } from '../boot';
 
 export type ScreenName = 'main' | 'online' | 'lobby' | 'pause' | 'menu' | 'matchOn' | 'dead' | 'over';

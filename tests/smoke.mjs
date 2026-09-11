@@ -104,6 +104,29 @@ const driven = await page.evaluate(async () => {
 });
 await page.keyboard.up('w');
 
+// Phase 7: continuous HUD writes must bypass React. Keep the engine in active
+// gameplay with no enemies or solo-wave events, then compare React work with
+// browser frames over two seconds.
+const hudWork = await page.evaluate(async () => {
+  const g = window.__game;
+  g.enemies.clear();
+  g.gs.queue.length = 0;
+  g.gs.mode = 'ffa';
+  await new Promise(r => setTimeout(r, 250));
+  const before = window.__hudRenderCount ?? 0;
+  let frames = 0;
+  const end = performance.now() + 2000;
+  await new Promise(resolve => {
+    const tick = now => {
+      frames++;
+      if (now >= end) resolve();
+      else requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+  return { frames, renders: (window.__hudRenderCount ?? 0) - before };
+});
+
 const shot = await page.screenshot();
 const blank = shot.length < 8000;
 
@@ -147,6 +170,8 @@ check(driven.moved > 0.5, `player moved under key input (${driven.moved.toFixed(
 check(driven.audioState !== 'none', `audio context opened (${driven.audioState})`);
 check(driven.magazine === '30', `HUD magazine reflects engine state (${driven.magazine})`);
 check(driven.hp === '120', `HUD health reflects engine state (${driven.hp})`);
+check(hudWork.frames > 0 && hudWork.renders < Math.max(5, hudWork.frames / 5),
+  `HUD React work stays far below frame count (${hudWork.renders} renders / ${hudWork.frames} frames)`);
 check(teardown.live === 0, `dispose() drops the instance count (got ${teardown.live})`);
 check(teardown.frozen, 'dispose() stops the frame loop');
 check(teardown.idempotent, 'dispose() is idempotent');

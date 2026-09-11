@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { Hud } from '@/components/hud/Hud';
+import { HudStore } from '@/engine/hud/store';
 import type { GameHandle } from '@/engine/boot';
 
 declare global {
@@ -20,21 +22,23 @@ declare global {
  */
 export default function GameMount() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const hudRef = useRef<HTMLDivElement>(null);
+  const [store] = useState(() => new HudStore());
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    const hud = hudRef.current;
-    if (!canvas || !hud) return;
+    if (!canvas) return;
 
+    // StrictMode replays this effect with the same React-owned store. Make the
+    // view available before boot, so even an early boot failure stays visible.
+    store.activate();
     let cancelled = false;
     let handle: GameHandle | null = null;
 
     import('@/engine/boot')
       .then(({ boot }) => {
         if (cancelled) return;
-        handle = boot(canvas, hud);
+        handle = boot(canvas, store);
         window.__game = handle;
       })
       .catch((cause: unknown) => {
@@ -48,14 +52,14 @@ export default function GameMount() {
       if (window.__game === handle) delete window.__game;
       handle = null;
     };
-  }, []);
+  }, [store]);
 
   return (
     <>
       <canvas ref={canvasRef} id="game" aria-label="First-person game view" />
-      <div ref={hudRef} id="hud">
+      <Hud store={store}>
         {error !== null && <BootError message={error} />}
-      </div>
+      </Hud>
     </>
   );
 }

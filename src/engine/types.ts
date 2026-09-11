@@ -19,13 +19,13 @@ export type { Renderer } from './render/index';
 export type { Effects } from './effects';
 export type { Audio } from './audio';
 export type { Input } from './input';
-export type { Hud } from './hud/index';
+export type { HudView } from './hud/view';
 
 import type { Renderer } from './render/index';
 import type { Effects } from './effects';
 import type { Audio } from './audio';
 import type { Input } from './input';
-import type { Hud } from './hud/index';
+import type { HudView } from './hud/view';
 
 /** A module that has not been converted yet. Replace with a real import type. */
 type UNPORTED = unknown;
@@ -54,7 +54,7 @@ export interface Ctx {
   level: Level;
 
   input: Input;
-  hud: Hud;
+  hud: HudView;
   effects: Effects;
   audio: Audio;
   net: Net;
