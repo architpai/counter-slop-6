@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { choose, shuffle, round1, round2, clamp } from '../util';
 import { RemotePlayer, encodeState } from '../players';
 import { validKey } from '../level/index';
-import { Screens } from '../hud/screens';
 import { TONE } from '../render/index';
 import type { BoardRow } from '../hud/screens';
 import type { HitInfo, PlayerHit, ScoreRow, Target } from '../types';
@@ -91,14 +90,14 @@ export function createFFA(app: App): FfaApi {
   // ---- scores
   function refreshScoreHud(): void {
     if (!isOnline()) return;
-    hud.setPvpScore(Screens.pvpScore({ rows: boardRows(), selfId: net.id ?? '' }));
+    hud.setPvpScore({ rows: boardRows(), selfId: net.id ?? '' });
     hud.setModifier('');
-    if (boardShown) hud.setBoard(Screens.scoreboard({ rows: boardRows(), code: net.code ?? lobby.code ?? '' }));
+    if (boardShown) hud.setBoard({ rows: boardRows(), code: net.code ?? lobby.code ?? '' });
   }
   function showBoard(on: boolean): void {
     if (on === boardShown) return;
     boardShown = on;
-    hud.setBoard(on ? Screens.scoreboard({ rows: boardRows(), code: net.code ?? lobby.code ?? '' }) : null);
+    hud.setBoard(on ? { rows: boardRows(), code: net.code ?? lobby.code ?? '' } : null);
   }
   function applyScores(list: unknown[]): void {
     scores.clear();

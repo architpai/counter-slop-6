@@ -1,10 +1,10 @@
 import { clamp, store, SKEY } from '../util';
-import { Screens } from '../hud/screens';
 import { LEVELS, validKey } from '../level/index';
-import type { UiAction } from '../hud/screens';
+import type { ScreenView, UiAction } from '../hud/screens';
 import type { App } from '../boot';
 
-export type ScreenName = 'main' | 'online' | 'lobby' | 'pause' | 'menu' | 'matchOn' | 'dead' | 'over';
+/** One name per member of `ScreenView`, so the two can never drift apart. */
+export type ScreenName = ScreenView['kind'];
 
 export interface UiApi {
   showScreen(kind: ScreenName): void;
@@ -41,14 +41,14 @@ export function createUI(app: App): UiApi {
   function showScreen(kind: ScreenName): void {
     app.screen = kind;
     switch (kind) {
-      case 'main': hud.showScreen(Screens.main(models.main())); break;
-      case 'online': hud.showScreen(Screens.online(models.online())); break;
-      case 'lobby': hud.showScreen(Screens.lobby(models.lobby())); break;
-      case 'pause': hud.showScreen(Screens.pause(models.pause())); break;
-      case 'menu': hud.showScreen(Screens.menu(models.menu())); break;
-      case 'matchOn': hud.showScreen(Screens.matchOn(models.matchOn())); break;
-      case 'dead': hud.showScreen(Screens.dead(models.dead())); break;
-      case 'over': hud.showScreen(Screens.over(models.over())); break;
+      case 'main': hud.showScreen({ kind, model: models.main() }); break;
+      case 'online': hud.showScreen({ kind, model: models.online() }); break;
+      case 'lobby': hud.showScreen({ kind, model: models.lobby() }); break;
+      case 'pause': hud.showScreen({ kind, model: models.pause() }); break;
+      case 'menu': hud.showScreen({ kind, model: models.menu() }); break;
+      case 'matchOn': hud.showScreen({ kind, model: models.matchOn() }); break;
+      case 'dead': hud.showScreen({ kind, model: models.dead() }); break;
+      case 'over': hud.showScreen({ kind, model: models.over() }); break;
     }
   }
   const redraw = (): void => { if (app.screen) showScreen(app.screen); };

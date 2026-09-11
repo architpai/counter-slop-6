@@ -53,6 +53,19 @@ const report = await page.evaluate(async () => {
   };
 });
 
+// Phase 8: screens are React components wired to real callbacks. Click the
+// actual START button rather than calling the engine, because the risk in
+// dropping [data-act] delegation is that a button stops reaching game/ui.
+await page.click('.screen-button[data-act="start"]');
+const clicked = await page.evaluate(() => window.__game.gs.state);
+
+// Back to the main screen, then prove the backdrop still advances the screen:
+// a click that misses every [data-ui-block] must reach onScreenClick.
+await page.evaluate(() => window.__game.hud.onUiAction?.('mainMenu', null, new Event('click')));
+await page.waitForFunction(() => window.__game.gs.state === 'start');
+await page.mouse.click(20, 20);
+const backdrop = await page.evaluate(() => window.__game.gs.state);
+
 // Physics, nav and the springs only run during play, so the menu alone proves
 // very little about them. Start a solo wave and let it simulate.
 await page.evaluate(() => {
@@ -155,6 +168,8 @@ check(report.live === 1, `one live engine instance (got ${report.live})`);
 check(report.advancing, 'frame loop is advancing gs.time');
 check(report.hasHud, 'HUD elements mounted');
 check(report.screen !== null, `main screen rendered (${report.screen})`);
+check(clicked === 'play', `clicking the real START button starts the game (state ${clicked})`);
+check(backdrop === 'play', `a backdrop click still advances the screen (state ${backdrop})`);
 check(report.ctxComplete.length === 0,
   `ctx fully populated at boot${report.ctxComplete.length ? `; null: ${report.ctxComplete.join(', ')}` : ''}`);
 check(report.ctxAgreesWithHandle, 'ctx.level/nav and the debug handle are the same objects');

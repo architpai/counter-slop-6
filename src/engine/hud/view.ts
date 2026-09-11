@@ -6,10 +6,11 @@
  * without the engine noticing — which is the point of the interface.
  *
  * `docs/ARCHITECTURE.md` §6.9 is the source of truth for every member here, and
- * for the rule that the HUD has setters only. `boardHidden()` is the single
- * permitted read-back.
+ * for the rule that the HUD has setters only. The doc reserves `boardHidden()`
+ * as the one permitted read-back, but nothing ever called it -- not even the
+ * vanilla original -- so the surface is setter-only in practice.
  */
-import type { UiAction } from './screens';
+import type { BoardModel, PvpModel, ScreenView, UiAction } from './screens';
 
 export interface SlotView {
   name: string;
@@ -27,7 +28,6 @@ export interface HudView {
   setGameplayVisible(on: boolean): void;
   setDevice(pad: boolean): void;
   key(action: string): string;
-  controlsHTML(): string;
 
   setAmmo(mag: number, reserve: number, magSize: number, reloading: boolean): void;
   setKatanaAmmo(): void;
@@ -55,11 +55,10 @@ export interface HudView {
   tip(html: string, dur?: number): void;
   kill(text: string, pts?: number): void;
 
-  setPvpScore(html: string | null): void;
-  setBoard(html: string | null): void;
-  boardHidden(): boolean;
+  setPvpScore(model: PvpModel | null): void;
+  setBoard(model: BoardModel | null): void;
 
-  showScreen(html: string): void;
+  showScreen(view: ScreenView): void;
   hideScreen(): void;
 
   dispose(): void;

@@ -11,7 +11,8 @@ export function key(action: string, pad = false): string {
   return labels ? labels[pad ? 1 : 0] : String(action);
 }
 
-const KEYBOARD_ROWS: readonly string[] = [
+/** Row text for the control columns. `<b>` is the only markup React renders. */
+export const KEYBOARD_ROWS: readonly string[] = [
   '<b>WASD</b> move   <b>Mouse</b> look   <b>Shift</b> sprint',
   '<b>LMB</b> fire / slash   <b>RMB</b> aim down sights / block',
   '<b>Space</b> jump (again on a wall = wall jump)',
@@ -25,7 +26,7 @@ const KEYBOARD_ROWS: readonly string[] = [
   '<b>1-4 / wheel</b> rifle · shotgun · sniper · katana',
 ];
 
-const PAD_ROWS: readonly string[] = [
+export const PAD_ROWS: readonly string[] = [
   '<b>L stick</b> move   <b>R stick</b> look   <b>L3</b> sprint',
   '<b>R2</b> fire / slash   <b>L2</b> aim / block',
   '<b>✕</b> jump   <b>○</b> slide · air dash',
@@ -36,12 +37,3 @@ const PAD_ROWS: readonly string[] = [
   '<b>R3 / d-pad up</b> grenade · hold to throw further',
   '<b>Create</b> scoreboard (online)   <b>Options</b> pause',
 ];
-
-export function controlsHTML(pad = false): string {
-  return `<div class="screen-controls">${([
-    ['keyboard', 'MOUSE + KEYBOARD', KEYBOARD_ROWS, !pad],
-    ['gamepad', 'PS5 CONTROLLER', PAD_ROWS, pad],
-  ] as const).map(([device, title, rows, active]) => `<section class="control-column${active ? ' current-device' : ''}" data-device="${device}">
-    <h3>${title}</h3><ol>${rows.map(row => `<li class="control-row">${row}</li>`).join('')}</ol>
-  </section>`).join('')}</div>`;
-}

@@ -23,9 +23,9 @@
  * The net effect: a frame in which nothing discrete changed costs a handful of
  * `style.setProperty` calls and no React work at all.
  */
-import { key as keyLabel, controlsHTML } from './labels';
+import { key as keyLabel } from './labels';
 import type { HudView, SlotView } from './view';
-import type { UiAction } from './screens';
+import type { BoardModel, PvpModel, ScreenView, UiAction } from './screens';
 
 const number = (value: unknown, fallback = 0): number =>
   Number.isFinite(Number(value)) ? Number(value) : fallback;
@@ -61,7 +61,6 @@ export interface TipState { html: string; nonce: number }
 export interface KillLine { id: number; text: string; points: number }
 export interface DamageMark { id: number; angle: number }
 export interface HitmarkerState { kill: boolean; crit: boolean; nonce: number }
-export interface ScreenState { html: string | null }
 
 /** Snapshot type for each subscription key. */
 export interface HudState {
@@ -84,9 +83,9 @@ export interface HudState {
   killFeed: readonly KillLine[];
   damage: readonly DamageMark[];
   hitmarker: HitmarkerState;
-  pvp: string | null;
-  board: string | null;
-  screen: ScreenState;
+  pvp: PvpModel | null;
+  board: BoardModel | null;
+  screen: ScreenView | null;
   device: boolean;
   gameplay: boolean;
   breath: BreathState;
@@ -135,9 +134,9 @@ export class HudStore implements HudView {
   killFeed: readonly KillLine[] = [];
   damage: readonly DamageMark[] = [];
   hitmarkerState: HitmarkerState = { kill: false, crit: false, nonce: 0 };
-  pvp: string | null = null;
-  board: string | null = null;
-  screen: ScreenState = { html: null };
+  pvp: PvpModel | null = null;
+  board: BoardModel | null = null;
+  screen: ScreenView | null = null;
   device = false;
   gameplay = false;
 
@@ -245,7 +244,6 @@ export class HudStore implements HudView {
   }
 
   key(action: string): string { return keyLabel(action, this.device); }
-  controlsHTML(): string { return controlsHTML(this.device); }
 
   setAmmo(mag: number, reserve: number, magSize: number, reloading: boolean): void {
     const rounds = count(mag);
@@ -458,32 +456,29 @@ export class HudStore implements HudView {
     this.#emit('killFeed');
   }
 
-  setPvpScore(html: string | null): void {
-    const next = html == null ? null : String(html);
-    if (next !== this.pvp) {
-      this.pvp = next;
+  setPvpScore(model: PvpModel | null): void {
+    if (model !== null || this.pvp !== null) {
+      this.pvp = model;
       this.#emit('pvp');
     }
-    if (next != null) this.setModifier('');
+    if (model != null) this.setModifier('');
   }
 
-  setBoard(html: string | null): void {
-    const next = html == null ? null : String(html);
-    if (next === this.board) return;
-    this.board = next;
+  setBoard(model: BoardModel | null): void {
+    if (model === null && this.board === null) return;
+    this.board = model;
     this.#emit('board');
   }
 
-  boardHidden(): boolean { return this.board == null || this.screen.html != null; }
 
-  showScreen(html: string): void {
-    this.screen = { html: String(html ?? '') };
+  showScreen(view: ScreenView): void {
+    this.screen = view;
     this.#emit('screen');
   }
 
   hideScreen(): void {
-    if (this.screen.html === null) return;
-    this.screen = { html: null };
+    if (this.screen === null) return;
+    this.screen = null;
     this.#emit('screen');
   }
 

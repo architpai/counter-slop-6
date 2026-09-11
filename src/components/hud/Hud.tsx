@@ -7,13 +7,12 @@ import {
   useSyncExternalStore,
 } from 'react';
 import type {
-  FormEvent,
   KeyboardEvent as ReactKeyboardEvent,
   MouseEvent as ReactMouseEvent,
   ReactNode,
 } from 'react';
-import { isUiAction } from '@/engine/hud/screens';
 import type { DamageMark, HudStore, KillLine as KillLineState } from '@/engine/hud/store';
+import { Bold, BoardPanel, PvpPanel, Screen, SCREEN_TITLE_ID } from './Screens';
 import { useHud } from './useHud';
 
 declare global {
@@ -42,20 +41,12 @@ export function Hud({ store, children }: HudProps) {
     return () => store.bindRoot(null);
   }, [store]);
 
-  // Screen HTML is deliberately still opaque until phase 8. Keep its device
-  // markers current without making that HTML part of React's state model.
-  useEffect(() => {
-    for (const el of rootRef.current?.querySelectorAll<HTMLElement>('[data-device]') ?? []) {
-      el.classList.toggle('current-device', el.dataset.device === (device ? 'gamepad' : 'keyboard'));
-    }
-  }, [device, screen.html]);
-
   const className = [
     'game-hud',
     !gameplay && 'no-gameplay',
     device && 'gamepad',
     health.low && 'low-health',
-    screen.html !== null && 'screen-open',
+    screen !== null && 'screen-open',
   ].filter(Boolean).join(' ');
 
   return (
@@ -309,107 +300,48 @@ export const CentreMessage = memo(function CentreMessage({ store }: { store: Hud
   return <div className={`center-message${shown ? ' is-visible' : ''}`} data-hud="message" role="status"><div ref={mainRef} className="message-main" data-hud="messageMain">{state.main}</div><div className="message-sub" data-hud="messageSub">{state.sub}</div></div>;
 });
 
-/** Exact equivalent of the old sanitizer: keep text and nested bold only. */
-function setBoldText(el: HTMLElement, value: string): void {
-  const template = el.ownerDocument.createElement('template');
-  template.innerHTML = value;
-  const copy = (source: Node, target: ParentNode): void => {
-    for (const node of source.childNodes) {
-      if (node.nodeType === Node.TEXT_NODE) target.append(el.ownerDocument.createTextNode(node.textContent ?? ''));
-      else if (node.nodeType === Node.ELEMENT_NODE) {
-        if (node.nodeName === 'SCRIPT' || node.nodeName === 'STYLE') continue;
-        if (node.nodeName === 'B' || node.nodeName === 'STRONG') {
-          const bold = el.ownerDocument.createElement('b');
-          copy(node, bold);
-          target.append(bold);
-        } else copy(node, target);
-      }
-    }
-  };
-  const fragment = el.ownerDocument.createDocumentFragment();
-  copy(template.content, fragment);
-  el.replaceChildren(fragment);
-}
-
 export const TipLine = memo(function TipLine({ store }: { store: HudStore }) {
   rendered();
   const state = useHud(store, 'tip');
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (ref.current) setBoldText(ref.current, state.html);
-  }, [state.html, state.nonce]);
-  return <div ref={ref} className={`tip-line${state.html ? ' is-visible' : ''}`} data-hud="tip" role="status" />;
+  return <div className={`tip-line${state.html ? ' is-visible' : ''}`} data-hud="tip" role="status"><Bold text={state.html} /></div>;
 });
 
 export const PvpScore = memo(function PvpScore({ store }: { store: HudStore }) {
   rendered();
-  const html = useHud(store, 'pvp');
+  const model = useHud(store, 'pvp');
   return (
-    <div className={`top-right hud-block${html !== null ? ' pvp' : ''}`} data-hud="topRight">
+    <div className={`top-right hud-block${model !== null ? ' pvp' : ''}`} data-hud="topRight">
       <WaveBlock store={store} />
-      <div className="pvp-score" data-hud="pvpScore" hidden={html === null} dangerouslySetInnerHTML={{ __html: html ?? '' }} />
+      <div className="pvp-score" data-hud="pvpScore" hidden={model === null}>{model === null ? null : <PvpPanel model={model} />}</div>
     </div>
   );
 });
 
 export const Scoreboard = memo(function Scoreboard({ store }: { store: HudStore }) {
   rendered();
-  const html = useHud(store, 'board');
-  return <div className="scoreboard" data-hud="board" hidden={html === null} dangerouslySetInnerHTML={{ __html: html ?? '' }} />;
+  const model = useHud(store, 'board');
+  return <div className="scoreboard" data-hud="board" hidden={model === null}>{model === null ? null : <BoardPanel model={model} />}</div>;
 });
-
-interface ActTarget extends HTMLElement {
-  disabled?: boolean;
-  value?: string;
-  type?: string;
-  checked?: boolean;
-}
-
-const asTarget = (target: EventTarget | null): ActTarget | null => target instanceof HTMLElement ? target : null;
 
 export const ScreenOverlay = memo(function ScreenOverlay({ store }: { store: HudStore }) {
   rendered();
-  const state = useHud(store, 'screen');
+  const view = useHud(store, 'screen');
+  const device = useHud(store, 'device');
   const panelRef = useRef<HTMLElement>(null);
 
-  const act = (el: ActTarget | null, event: Event): void => {
-    if (!el || el.disabled) return;
-    let value = el.dataset.val ?? (el.matches('input,select,textarea') ? el.value ?? null : null);
-    if (el.type === 'checkbox') value = el.checked ? '1' : '0';
-    if (el.type === 'radio' && !el.checked) return;
-    if (isUiAction(el.dataset.act)) store.onUiAction?.(el.dataset.act, value, event);
-  };
-
   const click = (event: ReactMouseEvent<HTMLDivElement>): void => {
-    const target = asTarget(event.target);
-    const el = target?.closest<ActTarget>('[data-act]') ?? null;
-    if (el || target?.closest('[data-ui-block],input,select,textarea,button,label')) {
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    // A click inside a block belongs to the block; only the backdrop dismisses.
+    if (target?.closest('[data-ui-block],input,select,textarea,button,label')) {
       event.stopPropagation();
-      if (el && !el.matches('input,select,textarea')) act(el, event.nativeEvent);
       return;
     }
     store.onScreenClick?.();
   };
 
-  const form = (event: FormEvent<HTMLDivElement>): void => {
-    const el = asTarget(event.target)?.closest<ActTarget>('[data-act]') ?? null;
-    if (!el) return;
-    event.stopPropagation();
-    if (el.dataset.act === 'joinCode') el.value = el.value?.toUpperCase().slice(0, 5);
-    if (el.dataset.act === 'sens') {
-      const output = panelRef.current?.querySelector<HTMLElement>('[data-sens-output]');
-      if (output) output.textContent = `${el.value}%`;
-    }
-    act(el, event.nativeEvent);
-  };
-
   const key = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
-    const target = asTarget(event.target);
+    const target = event.target instanceof HTMLElement ? event.target : null;
     if (target?.closest('[data-ui-input-block],input,select,textarea,button')) event.stopPropagation();
-    if (event.type === 'keydown' && event.key === 'Enter' && target?.matches('[data-act="joinCode"]')) {
-      event.preventDefault();
-      act(target, event.nativeEvent);
-    }
     if (event.type !== 'keydown' || event.key !== 'Tab') return;
     const panel = panelRef.current;
     if (!panel) return;
@@ -422,21 +354,21 @@ export const ScreenOverlay = memo(function ScreenOverlay({ store }: { store: Hud
     else if (!event.shiftKey && active === last) { event.preventDefault(); first.focus(); }
   };
 
+  // A screen change resets the scroll and takes focus; a redraw of the same
+  // screen (a status line landing, say) must not yank focus out of an input.
+  const kind = view?.kind ?? null;
   useEffect(() => {
     const panel = panelRef.current;
-    if (!panel || state.html === null) return;
+    if (!panel || kind === null) return;
     panel.scrollTop = 0;
-    const title = panel.querySelector('h1');
-    if (title) {
-      title.id = 'hud-screen-title';
-      panel.setAttribute('aria-labelledby', title.id);
-    } else panel.removeAttribute('aria-labelledby');
     panel.focus({ preventScroll: true });
-  }, [state.html]);
+  }, [kind]);
 
   return (
-    <div className="screen-overlay" data-hud="screen" hidden={state.html === null} onClick={click} onChange={form} onKeyDown={key} onKeyUp={key}>
-      <section ref={panelRef} className="screen-panel" data-hud="panel" role="dialog" aria-modal="true" aria-label="Game menu" tabIndex={-1} dangerouslySetInnerHTML={{ __html: state.html ?? '' }} />
+    <div className="screen-overlay" data-hud="screen" hidden={view === null} onClick={click} onKeyDown={key} onKeyUp={key}>
+      <section ref={panelRef} className="screen-panel" data-hud="panel" role="dialog" aria-modal="true" aria-label="Game menu" aria-labelledby={SCREEN_TITLE_ID} tabIndex={-1}>
+        {view === null ? null : <Screen view={view} pad={device} onAction={(act, value, ev) => store.onUiAction?.(act, value, ev)} />}
+      </section>
     </div>
   );
 });
