@@ -313,11 +313,8 @@ export function boot(canvas: HTMLCanvasElement, hudRoot: HTMLElement): GameHandl
   input.onLockChange = locked => {
     if (!locked && gs.state === 'play' && !gs.menu && !input.usingGamepad) app.pause();
   };
-  input.onDeviceChange = pad => {
-    // ponytail: `pad` is the device name ('keyboard' | 'gamepad'), not a boolean,
-    // so this is always truthy — the HUD sticks to gamepad glyphs after the first
-    // device switch. `Boolean(pad)` preserves the behaviour exactly.
-    hud.setDevice(Boolean(pad)); hud.setWeapon(player.weapon.name, player.weapon.hint);
+  input.onDeviceChange = device => {
+    hud.setDevice(device === 'gamepad'); hud.setWeapon(player.weapon.name, player.weapon.hint);
     if (app.screen && gs.state !== 'play') app.ui.redraw();
   };
   listen(window, 'pagehide', () => { if (net.active) net.leave(); });

@@ -14,6 +14,9 @@ export interface ProjectileRecord extends Projectile {
 const MAX = 240;
 const half = new Vector3(), a = new Vector3(), b = new Vector3(), seg = new Vector3(), sample = new Vector3();
 const closest = new Vector3(), dir = new Vector3(), away = new Vector3();
+// `hitsTarget` needs a scratch of its own: `segmentHits` writes through `sample`,
+// so passing `sample` in as `point` would alias the value being measured.
+const feet = new Vector3();
 
 function draw(p: ProjectileRecord): void {
   const speed = p.vel.length();
@@ -52,12 +55,9 @@ function segmentHits(p: ProjectileRecord, point: Vector3, r: number): boolean {
   return closest.copy(p.prev).addScaledVector(seg, t).distanceTo(point) <= r;
 }
 
-// ponytail: the third probe below passes `sample` as `point`, which `segmentHits`
-// then overwrites with `point - prev` before measuring against it, so the feet
-// test reads a relative vector as a world point. Left as found.
 function hitsTarget(p: ProjectileRecord, t: Target, r: number): boolean {
   return segmentHits(p, t.center, r) || segmentHits(p, t.eye, r)
-    || segmentHits(p, sample.set(t.center.x, t.center.y - 0.55, t.center.z), r - 0.05);
+    || segmentHits(p, feet.set(t.center.x, t.center.y - 0.55, t.center.z), r - 0.05);
 }
 
 export function burst(m: EnemyManager, p: ProjectileRecord, point: Vector3): void {
