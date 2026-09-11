@@ -1,0 +1,343 @@
+'use client';
+
+import { useState } from 'react';
+import type { ReactNode } from 'react';
+import { KEYBOARD_ROWS, PAD_ROWS } from '@/engine/hud/labels';
+import type {
+  BoardModel, BoardRow, DeadModel, LobbyModel, MainModel, MatchOnModel, MenuModel,
+  OnlineModel, OverModel, PauseModel, PvpModel, ScreenView, UiAction,
+} from '@/engine/hud/screens';
+
+/**
+ * The rendering half of the menus. Models come from the engine through
+ * `hud.showScreen`; every control reports back through one `onAction` prop, so
+ * there is no click delegation and no markup string anywhere in the path.
+ */
+export type Act = (act: UiAction, value: string | null, ev: Event) => void;
+
+/** The id every screen's `<h1>` carries, so the panel can label itself. */
+export const SCREEN_TITLE_ID = 'hud-screen-title';
+
+// ------------------------------------------------------------------- helpers
+
+const count = (value: number): number => Number.isFinite(value) ? Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, Math.floor(value))) : 0;
+const list = <T,>(value: T[] | undefined): T[] => Array.isArray(value) ? value.filter(item => item && typeof item === 'object') : [];
+const sorted = (rows: BoardRow[]): BoardRow[] => list(rows).slice().sort((a, b) => count(b.kills) - count(a.kills) || count(a.deaths) - count(b.deaths));
+
+/** The subset of any model that `Settings` renders. */
+type SettingsModel = Pick<PauseModel, 'sens' | 'invert' | 'music'>;
+/** The subset of any model that `Maps` renders. */
+type MapsModel = Pick<MainModel, 'maps' | 'mapKey'>;
+
+const BOLD = /<(b|strong)>([\s\S]*?)<\/\1>/gi;
+
+/**
+ * The one bold-markup renderer: control rows and engine tips are plain text
+ * with `<b>` in it. Anything else stays literal text — no HTML is parsed.
+ */
+export function Bold({ text }: { text: string }) {
+  const parts: ReactNode[] = [];
+  let last = 0;
+  for (const match of text.matchAll(BOLD)) {
+    const at = match.index ?? last;
+    if (at > last) parts.push(text.slice(last, at));
+    parts.push(<b key={at}>{match[2]}</b>);
+    last = at + match[0].length;
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return <>{parts}</>;
+}
+
+// ------------------------------------------------------------------- pieces
+
+function Title({ text, sub = '' }: { text: string; sub?: string }) {
+  return <><h1 className="screen-title" id={SCREEN_TITLE_ID}>{text}</h1>{sub ? <h2 className="screen-subtitle">{sub}</h2> : null}</>;
+}
+
+function Status({ text }: { text: string }) {
+  return <p className="screen-status" role="status" aria-live="polite">{text}</p>;
+}
+
+interface ButtonProps {
+  act: UiAction; text: string; onAction: Act;
+  value?: string | null; primary?: boolean; sub?: string; disabled?: boolean;
+}
+
+function Button({ act, text, onAction, value = null, primary = false, sub = '', disabled = false }: ButtonProps) {
+  return (
+    <button type="button" className={`screen-button${primary ? ' primary' : ''}`} data-act={act} disabled={disabled}
+      onClick={event => onAction(act, value, event.nativeEvent)}>
+      {text}{sub ? <small>{sub}</small> : null}
+    </button>
+  );
+}
+
+function MainMenu({ onAction }: { onAction: Act }) {
+  return <div className="screen-actions" data-ui-block=""><Button act="mainMenu" text="MAIN MENU" onAction={onAction} /></div>;
+}
+
+function Prompt({ confirmKey, end, start = 'CLICK ANYWHERE' }: { confirmKey: string; end: string; start?: string }) {
+  return <p className="screen-prompt">{start} (or press <span data-control="confirm">{confirmKey}</span>) {end}</p>;
+}
+
+/**
+ * The current device comes from the store, not from guessing at a key label.
+ * `ScreenOverlay` subscribes and passes it down.
+ */
+export function Controls({ pad }: { pad: boolean }) {
+  return (
+    <div className="screen-controls">
+      {([
+        ['keyboard', 'MOUSE + KEYBOARD', KEYBOARD_ROWS, !pad],
+        ['gamepad', 'PS5 CONTROLLER', PAD_ROWS, pad],
+      ] as const).map(([device, title, rows, active]) => (
+        <section className={`control-column${active ? ' current-device' : ''}`} data-device={device} key={device}>
+          <h3>{title}</h3>
+          <ol>{rows.map((row, index) => <li className="control-row" key={index}><Bold text={row} /></li>)}</ol>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function Settings({ model, onAction }: { model: SettingsModel; onAction: Act }) {
+  const sens = Number.isFinite(model.sens) ? Math.min(250, Math.max(25, Math.round(model.sens / 5) * 5)) : 100;
+  // The readout is the slider's own business; nothing else ever reads it.
+  const [readout, setReadout] = useState(sens);
+  return (
+    <div className="settings" data-ui-block="" data-ui-input-block="">
+      <label className="settings-row">look sensitivity <input type="range" data-act="sens" min={25} max={250} step={5} defaultValue={sens} onChange={event => { setReadout(Number(event.target.value)); onAction('sens', event.target.value, event.nativeEvent); }} /><output>{readout}%</output></label>
+      {/*
+        Uncontrolled on purpose: toggling one does not make the engine redraw,
+        so a controlled box would freeze at its old value. The key remounts it
+        when the engine changes the setting behind our back -- the M key toggles
+        music with a menu open -- which is what rebuilding the HTML used to do.
+      */}
+      <label className="settings-row"><input type="checkbox" data-act="invert" key={`invert-${model.invert}`} defaultChecked={model.invert} onChange={event => onAction('invert', event.target.checked ? '1' : '0', event.nativeEvent)} /> invert vertical look</label>
+      <label className="settings-row"><input type="checkbox" data-act="music" key={`music-${model.music}`} defaultChecked={model.music} onChange={event => onAction('music', event.target.checked ? '1' : '0', event.nativeEvent)} /> music <span className="dim">(M)</span></label>
+    </div>
+  );
+}
+
+function Checkpoints({ wave, onAction }: { wave: number; onAction: Act }) {
+  // ponytail: render at most 1,000 checkpoint buttons; paginate if runs pass wave 5,000.
+  const n = Math.min(1000, Math.floor(count(wave) / 5));
+  if (!n) return null;
+  return (
+    <div className="checkpoints" data-ui-block="">
+      <h3>checkpoints</h3>
+      {Array.from({ length: n }, (_, i) => (
+        <Button act="checkpoint" text={`WAVE ${(i + 1) * 5}`} value={String((i + 1) * 5)} onAction={onAction} key={i} />
+      ))}
+    </div>
+  );
+}
+
+function Maps({ model, onAction, disabled = false }: { model: MapsModel; onAction: Act; disabled?: boolean }) {
+  const choices = list(model.maps);
+  if (choices.length < 2) return null;
+  return (
+    <div className="map-picker" data-ui-block="">
+      <h3>map</h3>
+      {choices.map(map => {
+        const selected = map.key === model.mapKey;
+        return (
+          <button type="button" className={`screen-button map-choice${selected ? ' selected' : ''}`} data-act="pickMap"
+            aria-pressed={selected} disabled={disabled} key={map.key}
+            onClick={event => onAction('pickMap', map.key, event.nativeEvent)}>
+            <span>{map.name}</span><small>{map.blurb}</small>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function ScoreRows({ rows, full = false }: { rows: BoardRow[]; full?: boolean }) {
+  return (
+    <div className="score-rows">
+      {sorted(rows).map(row => (
+        <div className={row.self ? 'self' : undefined} key={row.id}>
+          <span>{row.name}{full && row.self ? ' (you)' : ''}</span>
+          <span>{`${count(row.kills)} ${full ? 'kills' : 'K'} · ${count(row.deaths)} ${full ? 'deaths' : 'D'}`}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------ screens
+
+function MainScreen({ model, pad, onAction }: { model: MainModel; pad: boolean; onAction: Act }) {
+  return (
+    <>
+      <Title text="COUNTER SLOP 6" sub="a tactical survival shooter, allegedly" />
+      <div className="screen-actions" data-ui-block="">
+        <Button act="start" text="START" primary sub="solo · survive the waves" onAction={onAction} />
+        <Button act="online" text="PLAY ONLINE" sub="free for all · up to 8 players" onAction={onAction} />
+      </div>
+      <Maps model={model} onAction={onAction} />
+      <Controls pad={pad} />
+      <Settings model={model} onAction={onAction} />
+      <Checkpoints wave={model.checkpoint} onAction={onAction} />
+      {count(model.best) > 0 ? <p className="screen-footer">best score: {count(model.best)}</p> : null}
+    </>
+  );
+}
+
+function CodeInput({ code, onAction }: { code: string; onAction: Act }) {
+  const [value, setValue] = useState(() => String(code ?? '').toUpperCase().slice(0, 5));
+  const send = (next: string, ev: Event): void => { setValue(next); onAction('joinCode', next, ev); };
+  return (
+    <input type="text" data-act="joinCode" maxLength={5} placeholder="CODE" value={value} autoComplete="off"
+      autoCapitalize="characters" spellCheck={false} aria-label="Lobby code"
+      onChange={event => send(event.target.value.toUpperCase().slice(0, 5), event.nativeEvent)}
+      onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); send(value, event.nativeEvent); } }} />
+  );
+}
+
+function OnlineScreen({ model, onAction }: { model: OnlineModel; onAction: Act }) {
+  const isPublic = model.isPublic !== false;
+  return (
+    <>
+      <Title text="PLAY ONLINE" sub="free for all · first to 20 · up to 8 players" />
+      <div className="online-box" data-ui-block="" data-ui-input-block="">
+        <label className="settings-row">your name <input type="text" data-act="name" maxLength={14} defaultValue={String(model.name ?? '').slice(0, 14)} autoComplete="nickname" spellCheck={false} onChange={event => onAction('name', event.target.value, event.nativeEvent)} /></label>
+        <div className="screen-actions"><Button act="quickPlay" text="QUICK PLAY" primary disabled={model.busy} onAction={onAction} /></div>
+        <p className="screen-footer">jumps into an open public lobby, or opens one for you</p>
+        <p className="online-or">or</p>
+        <div className="screen-actions"><Button act="create" text="CREATE LOBBY" disabled={model.busy} onAction={onAction} /></div>
+        <div className="visibility-options" role="group" aria-label="Lobby visibility">
+          <label><input type="radio" name="lobby-visibility" data-act="visibility" value="public" defaultChecked={isPublic} onChange={event => onAction('visibility', 'public', event.nativeEvent)} /> public</label>
+          <label><input type="radio" name="lobby-visibility" data-act="visibility" value="private" defaultChecked={!isPublic} onChange={event => onAction('visibility', 'private', event.nativeEvent)} /> private · friends only</label>
+        </div>
+        <div className="settings-row"><label>have a code? <CodeInput code={model.code} onAction={onAction} /></label><Button act="join" text="JOIN" disabled={model.busy} onAction={onAction} /></div>
+        <Status text={model.status} />
+        <div className="screen-actions"><Button act="back" text="BACK" onAction={onAction} /></div>
+      </div>
+    </>
+  );
+}
+
+function LobbyScreen({ model, onAction }: { model: LobbyModel; onAction: Act }) {
+  const players = list(model.players);
+  return (
+    <>
+      <Title text="LOBBY" sub={`free for all · first to 20 · ${players.length}/8 players`} />
+      <p>code <strong className="lobby-code">{model.code}</strong></p>
+      <Maps model={model} onAction={onAction} disabled={!model.isHost} />
+      <p className="screen-footer">{model.isPublic
+        ? 'this lobby is public: anyone can quick play in, or type the code'
+        : 'private lobby: friends type this code under PLAY ONLINE → JOIN'}</p>
+      <div className="lobby-players">
+        {players.map(player => (
+          <div className={player.self ? 'self' : undefined} key={player.id}>
+            <span>{player.name}{player.host ? <span className="dim"> · host</span> : null}</span>
+            <span>{player.self ? 'you' : ''}</span>
+          </div>
+        ))}
+      </div>
+      <div className="screen-actions" data-ui-block="">
+        <Button act="startMatch" text="START MATCH" primary onAction={onAction} />
+        <Button act="leave" text="LEAVE" onAction={onAction} />
+      </div>
+      <Status text={model.status} />
+      <p className="screen-footer">anyone can start · {players.length < 2 ? 'people can still join once it is running' : `${players.length} players in`}</p>
+    </>
+  );
+}
+
+function PauseScreen({ model, pad, onAction }: { model: PauseModel; pad: boolean; onAction: Act }) {
+  return (
+    <>
+      <Title text="PAUSED" sub={`wave ${count(model.wave)} · score ${count(model.score)}`} />
+      <Controls pad={pad} />
+      <Settings model={model} onAction={onAction} />
+      <MainMenu onAction={onAction} />
+      <Prompt confirmKey={model.confirmKey} end="TO RESUME" />
+    </>
+  );
+}
+
+function MenuScreen({ model, pad, onAction }: { model: MenuModel; pad: boolean; onAction: Act }) {
+  return (
+    <>
+      <Title text="MENU" sub={`free for all · lobby ${model.code ?? ''}`} />
+      <ScoreRows rows={model.rows} />
+      <Controls pad={pad} />
+      <Settings model={model} onAction={onAction} />
+      <div className="screen-actions" data-ui-block=""><Button act="leaveMatch" text="LEAVE MATCH" onAction={onAction} /></div>
+      <Prompt confirmKey={model.confirmKey} end="TO KEEP PLAYING" />
+    </>
+  );
+}
+
+function MatchOnScreen({ model }: { model: MatchOnModel }) {
+  return <><Title text="MATCH ON" sub="free for all · first to 20" /><Prompt confirmKey={model.confirmKey} end="TO PLAY" /></>;
+}
+
+function DeadScreen({ model, onAction }: { model: DeadModel; onAction: Act }) {
+  const waves = count(model.waves);
+  return (
+    <>
+      <Title text="ELIMINATED" />
+      <p className="screen-stats">you survived <b>{waves}</b> {waves === 1 ? 'wave' : 'waves'} · <b>{count(model.kills)}</b> kills · score <b>{count(model.score)}</b> · {model.newBest ? <b>NEW BEST</b> : `best ${count(model.best)}`}</p>
+      <Checkpoints wave={model.checkpoint} onAction={onAction} />
+      <MainMenu onAction={onAction} />
+      <Prompt confirmKey={model.confirmKey} end="TO DRAW AGAIN" start="CLICK" />
+    </>
+  );
+}
+
+function OverScreen({ model }: { model: OverModel }) {
+  return (
+    <>
+      <Title text={model.youWin ? 'YOU WIN' : `${model.winnerName || 'someone'} WINS`} />
+      <ScoreRows rows={model.rows} />
+      <p className="screen-prompt">back to the lobby in a moment…</p>
+    </>
+  );
+}
+
+/** Picks the screen off `kind`; the model is narrowed with it. */
+export function Screen({ view, pad, onAction }: { view: ScreenView; pad: boolean; onAction: Act }) {
+  switch (view.kind) {
+    case 'main': return <MainScreen model={view.model} pad={pad} onAction={onAction} />;
+    case 'online': return <OnlineScreen model={view.model} onAction={onAction} />;
+    case 'lobby': return <LobbyScreen model={view.model} onAction={onAction} />;
+    case 'pause': return <PauseScreen model={view.model} pad={pad} onAction={onAction} />;
+    case 'menu': return <MenuScreen model={view.model} pad={pad} onAction={onAction} />;
+    case 'matchOn': return <MatchOnScreen model={view.model} />;
+    case 'dead': return <DeadScreen model={view.model} onAction={onAction} />;
+    case 'over': return <OverScreen model={view.model} />;
+  }
+}
+
+// ------------------------------------------------------------ online panels
+
+export function BoardPanel({ model }: { model: BoardModel }) {
+  return (
+    <>
+      <h2 className="screen-subtitle">FREE FOR ALL</h2>
+      <ScoreRows rows={model.rows} full />
+      <p className="screen-footer">first to 20 · lobby {model.code}</p>
+    </>
+  );
+}
+
+export function PvpPanel({ model }: { model: PvpModel }) {
+  return (
+    <>
+      <div className="score-rows">
+        {sorted(model.rows).map((row, rank) => ({ row, rank, self: row.id === model.selfId }))
+          .filter(({ rank, self }) => rank < 3 || self)
+          .map(({ row, rank, self }) => (
+            <div className={self ? 'self' : undefined} key={row.id}>
+              <span className="dim">{rank + 1}.</span><span>{row.name}{self ? ' (you)' : ''}</span><b>{count(row.kills)}</b>
+            </div>
+          ))}
+      </div>
+      <p className="screen-footer">first to 20</p>
+    </>
+  );
+}

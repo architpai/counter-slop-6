@@ -1,0 +1,150 @@
+import { expect, test } from 'vitest';
+import { Object3D, Vector3 } from 'three';
+import { Spring, Spring3, Cooldown, clamp, damp, wrapAngle, angleLerp, alignSegment, round2 } from '@/engine/util';
+import { Body, EPS, World, seeThrough } from '@/engine/physics';
+import { NavGrid } from '@/engine/nav';
+
+const assert = (cond: unknown, message: string): void => { expect(cond, message).toBeTruthy(); };
+const near = (a: number | undefined, b: number, message: string): void =>
+  assert(a !== undefined && Math.abs(a - b) < 1e-8, message);
+/** `noUncheckedIndexedAccess` makes every lookup optional; this keeps `!` out. */
+const must = <T>(value: T | undefined | null, what: string): T => {
+  if (value === undefined || value === null) throw new Error(`missing ${what}`);
+  return value;
+};
+const v = (x = 0, y = 0, z = 0): Vector3 => new Vector3(x, y, z);
+
+test('math helpers, springs, cooldowns and segments', () => {
+  near(clamp(3, 5, 2), 5, 'clamp preserves the lower-bound-first rule');
+  near(damp(damp(0, 1, 4, 0.02), 1, 4, 0.02), damp(0, 1, 4, 0.04), 'damp is frame-rate independent');
+  near(wrapAngle(-Math.PI * 3), -Math.PI, 'negative angles wrap into [-PI, PI)');
+  near(angleLerp(Math.PI - 0.1, -Math.PI + 0.1, 0.5), Math.PI, 'angle lerp takes the shortest arc');
+  near(round2(-1.236), -1.24, 'wire rounding handles negative values');
+  const spring = new Spring(120, 14), split = new Spring(120, 14), spring3 = new Spring3(120, 14);
+  spring.target = split.target = 1;
+  spring3.target.set(1, -2, 3);
+  spring.kick(2); split.kick(2); spring3.kick(2, -4, 6);
+  spring.update(0.03);
+  for (let i = 0; i < 3; i++) split.update(0.01);
+  near(spring.value, split.value, 'spring uses three substeps above 0.02 seconds');
+  spring3.update(0.03);
+  near(spring3.value.x, spring.value, '3D spring has the scalar spring response');
+  near(spring3.value.y, -2 * spring.value, '3D spring updates each component');
+  spring.set(4);
+  near(spring.vel, 0, 'spring set resets velocity');
+  near(spring.target, 1, 'spring set preserves target');
+  const cooldown = new Cooldown(0.2);
+  cooldown.start(); cooldown.update(0.3); cooldown.update(1);
+  assert(cooldown.ready() && cooldown.frac() === 0, 'cooldown becomes ready');
+  near(cooldown.t, -0.1, 'expired cooldown does not keep decrementing');
+  const segment = new Object3D();
+  alignSegment(segment, v(0, 0, 0), v(2, 0, 0), 0.1);
+  assert(segment.position.equals(v(1, 0, 0)) && segment.scale.equals(v(0.1, 2, 0.1)), 'segment placement and scale');
+  near(v(0, 1, 0).applyQuaternion(segment.quaternion).distanceTo(v(1, 0, 0)), 0, 'segment rotates +Y onto its direction');
+  alignSegment(segment, v(), v());
+  assert(!segment.visible && segment.position.equals(v(1, 0, 0)), 'zero segment hides without moving');
+});
+
+test('world colliders, rays and body resolution', () => {
+  const world = new World(), min = v(-10, -1, -10), max = v(10, 0, 10);
+  const floor = world.addBox(min, max);
+  min.y = -50; max.y = 50;
+  assert(floor.min.y === -1 && floor.max.y === 0, 'world copies collider corners');
+  assert(world.query(v(-1, -2, -1), v(1, 1, 1)).length === 0, 'queries wait for finalize');
+  assert(world.raycast(v(0, 1, 0), v(0, -1, 0))?.box === floor, 'rays see unfinalized boxes');
+  world.finalize();
+  assert(world.query(v(-20, -2, -20), v(20, 1, 20)).length === 1, 'hash de-duplicates large boxes');
+  assert(!world.overlapsAABB(v(-1, 0, -1), v(1, 1, 1)), 'touching faces do not overlap');
+  const body = new Body(v(0, 0.1, 0), 0.35, 1.75);
+  near(body.min().x, -0.35 + EPS, 'body minimum uses its skin');
+  body.vel.y = -4;
+  world.moveBody(body, 0.05);
+  assert(body.onGround && body.landVel === -4 && body.vel.y === 0, 'fall resolves and preserves impact speed');
+  near(body.pos.y, 0, 'floor contact places feet exactly on the surface');
+  world.moveBody(body, 0.05);
+  assert(body.onGround, 'ground snap preserves stationary contact without gravity');
+  body.noSnap = true;
+  world.moveBody(body, 0.05);
+  assert(!body.onGround, 'noSnap disables the stationary ground probe');
+  const rail = world.addBox(v(2, 0, -1), v(2.12, 4, 1), { noShoot: true });
+  const wall = world.addBox(v(4, 0, -1), v(4.12, 4, 1));
+  world.finalize();
+  const hit = world.raycast(v(0, 1, 0), v(1, 0, 0), 10, seeThrough);
+  assert(hit?.box === wall && hit.normal.x === -1 && hit.dist === 4, 'rays honor ignore and return outward entry normal');
+  assert(world.raycast(v(4.05, 1, 0), v(1, 0, 0), 10) === null, 'ray ignores its containing box');
+  assert(world.raycast(v(0, 1, 2), v(1, 0, 0), 10) === null, 'parallel ray outside the slab misses');
+  assert(world.raycast(v(0, 1, 0), v(1, 0, 0), 2) === null, 'ray endpoint is excluded');
+  assert(!world.lineOfSight(v(0, 1, 0), v(3, 1, 0)), 'solid rail blocks default line of sight');
+  assert(world.lineOfSight(v(0, 1, 0), v(3, 1, 0), seeThrough), 'seeThrough ray passes the rail');
+  assert(world.lineOfSight(v(), v(0.00001, 0, 0)), 'degenerate line of sight succeeds');
+  near(world.groundBelow(0, 2, 0), 0, 'ground probe returns surface height');
+  near(world.groundBelow(50, 2, 50, 4), -2, 'ground probe returns drop limit on a miss');
+  body.pos.set(0, 0, 0); body.vel.set(48, -1, 2); body.noSnap = false; body.onGround = true;
+  world.moveBody(body, 0.05);
+  assert(body.hitWall && body.wallNormal.x === -1 && body.vel.x === 0, 'substeps stop a fast body at a thin rail');
+  assert(body.pos.z > 0 && body.vel.z === 2, 'wall contact preserves tangential motion');
+  near(body.pos.x, 2 - body.halfW, 'wall push cancels the body skin');
+  world.removeBox(rail);
+  assert(world.raycast(v(0, 1, 0), v(1, 0, 0), 10)?.box === wall, 'removal updates flat box list');
+  assert(!world.overlapsAABB(v(2, 1, -0.5), v(2.1, 2, 0.5)), 'removal rebuilds the hash');
+  world.clear();
+  assert(world.boxes.length === 0 && !world.overlapsAABB(v(-2, -2, -2), v(2, 2, 2)), 'world clear empties colliders and hash');
+});
+
+test('steps and ceilings', () => {
+  for (const [height, canClimb] of [[0.4, true], [0.7, false]] as const) {
+    const stairs = new World();
+    stairs.addBox(v(-5, -1, -5), v(5, 0, 5));
+    stairs.addBox(v(0.5, 0, -2), v(2, height, 2));
+    stairs.finalize();
+    const walker = new Body(v(), 0.35, 1.75);
+    walker.onGround = true; walker.vel.set(8, -1, 0);
+    stairs.moveBody(walker, 0.05);
+    assert(!stairs.overlapsBody(walker), 'step attempt never leaves an overlap');
+    assert(canClimb ? walker.pos.x > 0.3 && !walker.hitWall : walker.hitWall && walker.vel.x === 0, 'step height controls ledge access');
+    near(walker.pos.y, canClimb ? height : 0, 'step attempt accepts or restores its vertical position');
+  }
+  const ceilingWorld = new World();
+  ceilingWorld.addBox(v(-2, 2, -2), v(2, 2.12, 2)); ceilingWorld.finalize();
+  const jumper = new Body(v(), 0.35, 1.75);
+  jumper.vel.y = 10;
+  ceilingWorld.moveBody(jumper, 0.05);
+  assert(jumper.hitCeil && jumper.vel.y === 0 && !jumper.onGround, 'ceiling contact is kept across substeps');
+  near(jumper.pos.y, 0.25, 'head rests flush below the ceiling');
+});
+
+test('nav grid nodes and A* paths', () => {
+  const field = new World();
+  field.addBox(v(0, -1, 0), v(5, 0, 3)); field.finalize();
+  const grid = new NavGrid(field, { minX: 0, maxX: 5, minZ: 0, maxZ: 3 }); grid.build();
+  assert(grid.nodes.length === 15 && grid.nodes[5]?.z === 1.5, 'nodes are created at row-major cell centers');
+  const path = must(grid.findPath(v(0.5, 0, 0.5), v(4.5, 0, 2.5)), 'path');
+  assert(path.complete && path.length === 5 && path.every(p => p.isVector3), 'A* returns raw Vector3 node centers');
+  assert(grid.findPath(v(4.5, 0, 2.5), v(0.5, 0, 0.5))?.complete, 'search stamps keep later paths independent');
+  const capped = must(grid.findPath(v(0.5, 0, 0.5), v(4.5, 0, 2.5), 0), 'capped path');
+  assert(!capped.complete && capped.length === 1, 'expansion cap returns an incomplete start path');
+  assert(grid.nearest(v(-100, 0, 0)) === -1, 'outside search windows do not clamp to the grid');
+  assert(grid.nearest(v(0.5, 100, 0.5), 0) === 0, 'nearest falls back when no height is eligible');
+});
+
+test('nav links across tiers and blocked corners', () => {
+  const tiers = new World();
+  tiers.addBox(v(0, -1, 0), v(3, 0, 1));
+  tiers.addBox(v(0, 0, 0), v(1, 4, 1)); tiers.finalize();
+  const tierGrid = new NavGrid(tiers, { minX: 0, maxX: 3, minZ: 0, maxZ: 1 }); tierGrid.build();
+  const high = must(tierGrid.nodes.find(n => n.y === 4), 'high node');
+  const low = must(tierGrid.nodes.find(n => n.x === 1.5), 'low node');
+  const drop = must(high.links.find(l => l.to === low.id), 'drop link');
+  near(drop.cost, Math.sqrt(17) + 1.4, 'directed drop has its distance surcharge');
+  assert(!low.links.some(l => l.to === high.id), 'a large drop has no reverse climb');
+  assert(!tierGrid.findPath(v(2.5, 0, 0.5), v(0.5, 4, 0.5))?.complete, 'unreachable height returns an incomplete path');
+
+  const corner = new World();
+  corner.addBox(v(0, -1, 0), v(2, 0, 2));
+  corner.addBox(v(1, 0, 0), v(2, 3, 1), { noNav: true }); corner.finalize();
+  const cornerGrid = new NavGrid(corner, { minX: 0, maxX: 2, minZ: 0, maxZ: 2 }); cornerGrid.build();
+  const a = must(cornerGrid.nodes.find(n => n.x === 0.5 && n.z === 0.5), 'corner node a');
+  const b = must(cornerGrid.nodes.find(n => n.x === 1.5 && n.z === 1.5), 'corner node b');
+  assert(!a.links.some(l => l.to === b.id), 'diagonal paths cannot cut a blocked cardinal corner');
+  assert(cornerGrid.nodes.length === 3, 'noNav boxes block clearance and never make top nodes');
+});
