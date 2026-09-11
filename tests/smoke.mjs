@@ -44,6 +44,12 @@ const report = await page.evaluate(async () => {
     canvases: document.querySelectorAll('canvas').length,
     hasHud: !!document.querySelector('#hud .crosshair'),
     screen: document.querySelector('.screen-title')?.textContent ?? null,
+    // ARCHITECTURE.md section 8: ctx is built complete at step 9, with only the
+    // two actors still null. Nothing in it may be null behind a non-null type.
+    ctxComplete: ['scene', 'camera', 'renderer', 'world', 'nav', 'level',
+      'input', 'hud', 'effects', 'audio', 'net', 'game']
+      .filter(k => g.ctx[k] == null),
+    ctxAgreesWithHandle: g.ctx.level === g.level && g.ctx.nav === g.nav,
   };
 });
 
@@ -126,6 +132,9 @@ check(report.live === 1, `one live engine instance (got ${report.live})`);
 check(report.advancing, 'frame loop is advancing gs.time');
 check(report.hasHud, 'HUD elements mounted');
 check(report.screen !== null, `main screen rendered (${report.screen})`);
+check(report.ctxComplete.length === 0,
+  `ctx fully populated at boot${report.ctxComplete.length ? `; null: ${report.ctxComplete.join(', ')}` : ''}`);
+check(report.ctxAgreesWithHandle, 'ctx.level/nav and the debug handle are the same objects');
 check(!blank, `canvas is drawing (screenshot ${shot.length} bytes)`);
 check(play.state === 'play', `solo wave started (state ${play.state})`);
 check(play.navNodes > 0, `nav grid built (${play.navNodes} nodes)`);

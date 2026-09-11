@@ -1,4 +1,6 @@
-export function makeGameState() {
+import type { GameState } from '../types';
+
+export function makeGameState(): GameState {
   return {
     state: 'start', mode: 'solo', menu: false, time: 0,
     hitstopT: 0, hitstopScale: 1, wave: 0, score: 0, combo: 0, comboT: 0, kills: 0,

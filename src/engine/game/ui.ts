@@ -1,12 +1,24 @@
 import { clamp, store, SKEY } from '../util';
 import { Screens } from '../hud/index';
 import { LEVELS, validKey } from '../level/index';
+import type { UiAction } from '../hud/index';
+import type { App } from '../boot';
 
-export function createUI(app) {
+export type ScreenName = 'main' | 'online' | 'lobby' | 'pause' | 'menu' | 'matchOn' | 'dead' | 'over';
+
+export interface UiApi {
+  showScreen(kind: ScreenName): void;
+  redraw(): void;
+  screenClick(): void;
+  onUiAction(act: UiAction, value: string | null, ev: Event): void;
+  readonly screen: ScreenName | null;
+}
+
+export function createUI(app: App): UiApi {
   const { ctx, gs, lobby, scores, settings } = app;
   const { hud, net } = ctx;
   let joinCode = '';
-  const look = () => ({ sens: settings.sens, invert: settings.invert, music: settings.music, confirmKey: hud.key('confirm') });
+  const look = (): { sens: number; invert: boolean; music: boolean; confirmKey: string } => ({ sens: settings.sens, invert: settings.invert, music: settings.music, confirmKey: hud.key('confirm') });
 
   const models = {
     main: () => ({ best: settings.best, checkpoint: settings.checkpoint, mapKey: settings.mapKey, maps: LEVELS, ...look() }),
@@ -26,19 +38,28 @@ export function createUI(app) {
     over: () => ({ youWin: gs.over?.id === net.id, winnerName: gs.over?.name ?? '', rows: app.ffa.boardRows() }),
   };
 
-  function showScreen(kind) {
+  function showScreen(kind: ScreenName): void {
     app.screen = kind;
-    hud.showScreen(Screens[kind](models[kind]()));
+    switch (kind) {
+      case 'main': hud.showScreen(Screens.main(models.main())); break;
+      case 'online': hud.showScreen(Screens.online(models.online())); break;
+      case 'lobby': hud.showScreen(Screens.lobby(models.lobby())); break;
+      case 'pause': hud.showScreen(Screens.pause(models.pause())); break;
+      case 'menu': hud.showScreen(Screens.menu(models.menu())); break;
+      case 'matchOn': hud.showScreen(Screens.matchOn(models.matchOn())); break;
+      case 'dead': hud.showScreen(Screens.dead(models.dead())); break;
+      case 'over': hud.showScreen(Screens.over(models.over())); break;
+    }
   }
-  const redraw = () => { if (app.screen) showScreen(app.screen); };
+  const redraw = (): void => { if (app.screen) showScreen(app.screen); };
 
-  function screenClick() {
+  function screenClick(): void {
     if (gs.state === 'start') { if (app.screen === 'main') app.beginSolo(); }
     else if (gs.state === 'play' && gs.menu) app.resume();
     else if (gs.state === 'pause' || gs.state === 'dead') app.resume();
   }
 
-  const actions = {
+  const actions: Record<UiAction, (value: string | null, ev: Event) => void> = {
     start: () => app.beginSolo(),
     online: () => { lobby.status = ''; showScreen('online'); },
     back: () => { lobby.status = ''; showScreen('main'); },
@@ -49,7 +70,7 @@ export function createUI(app) {
     visibility: value => { lobby.isPublic = value !== 'private'; },
     name: value => {
       const name = String(value ?? '').trim().slice(0, 14);
-      if (name) { settings.name = name; store.set(SKEY.NAME, name); ctx.player.name = name; }
+      if (name) { settings.name = name; store.set(SKEY.NAME, name); const player = ctx.player; if (player !== null) player.name = name; }
     },
     pickMap: value => {
       const key = validKey(value);
@@ -68,7 +89,7 @@ export function createUI(app) {
     invert: value => { settings.invert = value === '1'; app.applyLook(); },
     music: value => { app.setMusic(value === '1'); },
   };
-  function onUiAction(act, value, ev) { actions[act]?.(value, ev); }
+  function onUiAction(act: UiAction, value: string | null, ev: Event): void { actions[act]?.(value, ev); }
 
   return { showScreen, redraw, screenClick, onUiAction, get screen() { return app.screen; } };
 }
