@@ -46,12 +46,12 @@ export class Renderer {
     this.rig = new THREE.Group();
     this.rig.name = 'viewModelRig';
     this.camera.add(this.rig);
-    this.sun = new THREE.DirectionalLight(LIGHT.sun, 2.2);
+    this.sun = new THREE.DirectionalLight(LIGHT.sun, 2.0);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
     this.sun.shadow.bias = -0.0004;
     this.sun.shadow.normalBias = 0.03;
-    this.hemi = new THREE.HemisphereLight(LIGHT.sky, LIGHT.ground, 1.25);
+    this.hemi = new THREE.HemisphereLight(LIGHT.sky, LIGHT.ground, 1.0);
     this.scene.add(this.sun, this.sun.target, this.hemi);
     this.post = new Composite();
     this._clearRigDepth = () => {
@@ -101,8 +101,8 @@ export class Renderer {
     paintSky(this.sky.geometry, mood.horizon ?? fog, mood.zenith ?? LIGHT.zenith);
     if (this.scene.fog instanceof THREE.Fog) this.scene.fog.color.set(fog);
     this.sun.color.set(mood.sun ?? LIGHT.sun);
-    this.sun.intensity = mood.sunIntensity ?? 2.2;
-    this.hemi.intensity = mood.hemiIntensity ?? 1.25;
+    this.sun.intensity = mood.sunIntensity ?? 2.0;
+    this.hemi.intensity = mood.hemiIntensity ?? 1.0;
     this.hemi.color.set(mood.hemiSky ?? LIGHT.sky);
     this.hemi.groundColor.set(mood.hemiGround ?? LIGHT.ground);
   }

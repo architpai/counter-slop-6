@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { TONE, TONE_HEX, toneMat, unlitMat, boxGeo, cylGeo, sphereGeo, torusGeo, starGeo } from '../render/index';
+import { TONE, TONE_HEX, toneMat, unlitMat, charMat, boxGeo, cylGeo, sphereGeo, torusGeo, starGeo } from '../render/index';
 import type { GunKind, Triple } from './stats';
 
 const PRIMARY = TONE.PRIMARY, DARK = TONE.DARK, SIGHT = TONE.HOSTILE;
@@ -79,7 +79,7 @@ function remember<T extends THREE.Object3D>(node: T): T {
 
 function hand(parent: THREE.Object3D, name: string, pos: Triple, direction: Triple) {
   const node = group(parent, name, pos);
-  sphere(node, `${name}-fist`, 0.062, [0, 0, 0]);
+  sphere(node, `${name}-fist`, 0.062, [0, 0, 0], DARK);
   const length = 0.42, dir = new THREE.Vector3(...direction).normalize();
   const geo = cylGeo(0.05, length, 7, 'y');
   const points = geo.getAttribute('position');
@@ -139,15 +139,15 @@ export function makeGunModel(kind: GunKind): GunModel {
   let muzzlePos: Triple, ejectPos: Triple, leftHand: THREE.Object3D;
   if (kind === 'rifle') {
     box(root, 'receiver', [0.09, 0.12, 0.50], [0, 0, 0]);
-    box(root, 'handguard', [0.075, 0.085, 0.36], [0, 0, -0.42]);
+    box(root, 'handguard', [0.075, 0.085, 0.36], [0, 0, -0.42], DARK);
     cylinder(root, 'barrel', 0.018, 0.42, [0, 0.02, -0.75], DARK);
-    parts.mag = remember(box(root, 'magazine', [0.06, 0.20, 0.10], [0, -0.16, -0.06], PRIMARY, [0.15, 0, 0]));
-    box(root, 'stock', [0.07, 0.11, 0.30], [0, -0.01, 0.40]);
-    box(root, 'grip', [0.05, 0.14, 0.06], [0, -0.13, 0.12], PRIMARY, [0.3, 0, 0]);
+    parts.mag = remember(box(root, 'magazine', [0.06, 0.20, 0.10], [0, -0.16, -0.06], DARK, [0.15, 0, 0]));
+    box(root, 'stock', [0.07, 0.11, 0.30], [0, -0.01, 0.40], DARK);
+    box(root, 'grip', [0.05, 0.14, 0.06], [0, -0.13, 0.12], DARK, [0.3, 0, 0]);
     const sight = group(root, 'sight-ring', [0, 0.12, -0.05]);
     for (const side of [-1, 1]) {
-      box(sight, `sight-horizontal-${side}`, [0.075, 0.012, 0.03], [0, side * 0.035, 0]);
-      box(sight, `sight-vertical-${side}`, [0.012, 0.07, 0.03], [side * 0.0375, 0, 0]);
+      box(sight, `sight-horizontal-${side}`, [0.075, 0.012, 0.03], [0, side * 0.035, 0], DARK);
+      box(sight, `sight-vertical-${side}`, [0.012, 0.07, 0.03], [side * 0.0375, 0, 0], DARK);
     }
     box(root, 'sight-base', [0.03, 0.018, 0.05], [0, 0.062, -0.05], DARK);
     mesh(root, 'reticle-ring', torusGeo(0.0075, 0.0018, 5, 14), toneMat(SIGHT), [0, 0.12, -0.05]);
@@ -158,10 +158,10 @@ export function makeGunModel(kind: GunKind): GunModel {
   } else if (kind === 'shotgun') {
     box(root, 'receiver', [0.09, 0.13, 0.42], [0, 0, 0.05]);
     cylinder(root, 'barrel', 0.021, 0.92, [0, 0.05, -0.62], DARK);
-    cylinder(root, 'tube-magazine', 0.019, 0.72, [0, -0.02, -0.50]);
-    parts.foreEnd = remember(box(root, 'fore-end', [0.078, 0.085, 0.27], [0, 0.01, -0.46]));
-    box(root, 'stock', [0.07, 0.12, 0.34], [0, -0.04, 0.42], PRIMARY, [0.08, 0, 0]);
-    box(root, 'grip', [0.05, 0.13, 0.06], [0, -0.13, 0.16], PRIMARY, [0.35, 0, 0]);
+    cylinder(root, 'tube-magazine', 0.019, 0.72, [0, -0.02, -0.50], DARK);
+    parts.foreEnd = remember(box(root, 'fore-end', [0.078, 0.085, 0.27], [0, 0.01, -0.46], DARK));
+    box(root, 'stock', [0.07, 0.12, 0.34], [0, -0.04, 0.42], DARK, [0.08, 0, 0]);
+    box(root, 'grip', [0.05, 0.13, 0.06], [0, -0.13, 0.16], DARK, [0.35, 0, 0]);
     sphere(root, 'front-bead', 0.013, [0, 0.095, -1.00], SIGHT, 6);
     box(root, 'rear-sight', [0.03, 0.025, 0.02], [0, 0.085, -0.02], DARK);
     hand(root, 'right-hand', [0.02, -0.16, 0.17], [0.5, -0.6, 1]);
@@ -171,13 +171,13 @@ export function makeGunModel(kind: GunKind): GunModel {
     box(root, 'receiver', [0.085, 0.115, 0.60], [0, 0, 0.05]);
     cylinder(root, 'barrel', 0.024, 1.25, [0, 0.02, -0.92], DARK);
     cylinder(root, 'muzzle-brake', 0.032, 0.16, [0, 0.02, -1.50], DARK);
-    parts.mag = remember(box(root, 'magazine', [0.055, 0.16, 0.14], [0, -0.14, -0.06]));
-    box(root, 'stock', [0.075, 0.13, 0.44], [0, -0.02, 0.50], PRIMARY, [0.04, 0, 0]);
-    box(root, 'grip', [0.05, 0.14, 0.07], [0, -0.13, 0.20], PRIMARY, [0.3, 0, 0]);
-    box(root, 'cheek-riser', [0.06, 0.05, 0.16], [0, 0.07, 0.42]);
-    cylinder(root, 'scope-tube', 0.052, 0.56, [0, 0.135, -0.10]);
-    cylinder(root, 'objective-bell', 0.066, 0.07, [0, 0.135, -0.36]);
-    cylinder(root, 'ocular-bell', 0.062, 0.07, [0, 0.135, 0.14]);
+    parts.mag = remember(box(root, 'magazine', [0.055, 0.16, 0.14], [0, -0.14, -0.06], DARK));
+    box(root, 'stock', [0.075, 0.13, 0.44], [0, -0.02, 0.50], DARK, [0.04, 0, 0]);
+    box(root, 'grip', [0.05, 0.14, 0.07], [0, -0.13, 0.20], DARK, [0.3, 0, 0]);
+    box(root, 'cheek-riser', [0.06, 0.05, 0.16], [0, 0.07, 0.42], DARK);
+    cylinder(root, 'scope-tube', 0.052, 0.56, [0, 0.135, -0.10], DARK);
+    cylinder(root, 'objective-bell', 0.066, 0.07, [0, 0.135, -0.36], DARK);
+    cylinder(root, 'ocular-bell', 0.062, 0.07, [0, 0.135, 0.14], DARK);
     box(root, 'scope-mount-front', [0.03, 0.09, 0.035], [0, 0.085, -0.24], DARK);
     box(root, 'scope-mount-rear', [0.03, 0.09, 0.035], [0, 0.085, 0.02], DARK);
     const reticle = group(root, 'scope-crosshair', [0, 0.135, -0.38]);
@@ -216,8 +216,8 @@ export function makeGunModel(kind: GunKind): GunModel {
 
 export function makeKatanaModel(): WeaponModel {
   const { root, bloodSmears } = model('katana');
-  box(root, 'blade', [0.012, 0.035, 1.00], [0, 0, -0.55]);
-  box(root, 'blade-tip', [0.012, 0.02, 0.08], [0, 0.007, -1.07], PRIMARY, [0.3, 0, 0]);
+  mesh(root, 'blade', boxGeo(0.012, 0.035, 1.00), charMat(0xcbdbe3), [0, 0, -0.55]);
+  mesh(root, 'blade-tip', boxGeo(0.012, 0.02, 0.08), charMat(0xcbdbe3), [0, 0.007, -1.07], [0.3, 0, 0]);
   box(root, 'guard', [0.10, 0.10, 0.02], [0, 0, -0.05], DARK);
   box(root, 'handle-core', [0.03, 0.036, 0.30], [0, 0, 0.12], DARK);
   for (let i = 0; i < 6; i++) box(root, `handle-wrap-${i}`, [0.036, 0.04, 0.02], [0, 0, 0.02 + i * 0.045]);

@@ -36,8 +36,22 @@ const collider = (b: LevelBuilder, x: number, y: number, z: number, w: number, h
   b.collider(sc(x), sc(y), sc(z), sc(w), sc(h), sc(d), opts);
 const slab = (b: LevelBuilder, x1: number, z1: number, x2: number, z2: number, top: number, thickness: number, opts?: BuildOpts) =>
   b.slab(sc(x1), sc(z1), sc(x2), sc(z2), sc(top), sc(thickness), opts);
-const wall = (b: LevelBuilder, axis: 'x' | 'z', a1: number, a2: number, fixed: number, base: number, height: number, thickness: number, gaps: readonly Gap[] = [], opts?: BuildOpts) =>
+function wall(b: LevelBuilder, axis: 'x' | 'z', a1: number, a2: number, fixed: number, base: number, height: number, thickness: number, gaps: readonly Gap[] = [], opts?: BuildOpts) {
   b.wall(axis, sc(a1), sc(a2), sc(fixed), sc(base), sc(height), sc(thickness), scaleGaps(gaps), opts);
+  if (opts?.mat !== 'siding' && opts?.mat !== 'plaster') return;
+  const trim: BuildOpts = { mat: opts.mat === 'siding' ? 'plaster' : 'siding', noCollide: true };
+  // Follow the same openings as the wall; trim never narrows a playable doorway.
+  b.wall(axis, sc(a1), sc(a2), sc(fixed), sc(base), sc(0.14), sc(thickness + 0.04), scaleGaps(gaps), trim);
+  const strip = (a: number, y: number, w: number, h: number) => box(b,
+    axis === 'x' ? a : fixed, base + y, axis === 'x' ? fixed : a,
+    axis === 'x' ? w : thickness + 0.08, h, axis === 'x' ? thickness + 0.08 : w, trim);
+  for (const [from, to, bottom = 0, top = height] of gaps) {
+    if (top >= height) continue;
+    for (const edge of [from - 0.06, to + 0.06]) strip(edge, bottom, 0.12, top - bottom);
+    strip((from + to) / 2, top, to - from + 0.24, 0.12);
+    if (bottom > 0) strip((from + to) / 2, bottom - 0.12, to - from + 0.24, 0.12);
+  }
+}
 const stairs = (b: LevelBuilder, x: number, y: number, z: number, dir: '+x' | '-x' | '+z' | '-z', n: number, width: number, opts: StairOpts = {}) =>
   b.stairs(sc(x), sc(y), sc(z), dir, n, sc(width), scaleOpts({ rise: 4 / 14, run: 0.45, ...opts }));
 const rail = (b: LevelBuilder, x1: number, z1: number, x2: number, z2: number, y: number, opts?: BuildOpts) =>
@@ -85,7 +99,7 @@ function markers(b: LevelBuilder, kind: MarkerKind, points: readonly Point[]) {
 }
 
 export function buildHouse(b: LevelBuilder) {
-  b.level.mood = { horizon: 0xf3c39a, zenith: 0x5f86c9, fog: 0xe6c6ad, sun: 0xffd6a3, sunIntensity: 2.0, hemiIntensity: 1.4, hemiSky: 0xd8c4c8, hemiGround: 0xa89e8c };
+  b.level.mood = { horizon: 0xf3caa4, zenith: 0x789ab9, fog: 0xe6cdb6, sun: 0xffdaa9, sunIntensity: 2.1, hemiIntensity: 1.05, hemiSky: 0xb4c6de, hemiGround: 0x9e907b };
   buildGround(b);
   buildBasement(b);
   buildFirst(b);
@@ -131,6 +145,7 @@ function buildGround(b: LevelBuilder) {
   box(b, 34, 0, 0, 8, 0.05, 124, path);
   box(b, 13.5, 0, 22.5, 6, 0.05, 15, path);
   box(b, -1, 0, 20.5, 2, 0.05, 20, { mat: 'plaster', noCollide: true });
+  for (let z = 12; z < 30; z += 2) box(b, -1, 0.05, z, 2, 0.008, 0.04, { mat: 'ground', noCollide: true });
   for (let x = -60; x < 60; x += 6) box(b, x + 1.5, 0.05, 34, 3, 0.02, 0.2, dark);
   for (let z = -60; z < 60; z += 6) box(b, 34, 0.05, z + 1.5, 0.2, 0.02, 3, dark);
   // Invisible bounds: the street is the edge of the map.

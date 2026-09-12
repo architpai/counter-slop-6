@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { TONE, TONE_HEX, makeFigure, surfMat } from '../render/index';
+import { TONE, TONE_HEX, makeFigure, surfMat, unlitMat, SURF } from '../render/index';
 import type { SurfKey } from '../render/palette';
 import type { BreakableKind } from '../types';
 import type { FigureParts } from '../render/figure';
@@ -32,7 +32,7 @@ export function buildMexico(b: LevelBuilder) {
   b.level.key = 'mexico';
   b.level.playerStart.set(0, 0, 16);
   b.level.bounds = { minX: -62, maxX: 62, minZ: -62, maxZ: 62 };
-  b.level.mood = { horizon: 0xf7d9a8, zenith: 0x3f7fd6, fog: 0xf0d8b0, sun: 0xfff1cc, sunIntensity: 2.6, hemiIntensity: 1.3, hemiSky: 0xcfe0f0, hemiGround: 0xc9a77a };
+  b.level.mood = { horizon: 0xf2dfbc, zenith: 0x579cc4, fog: 0xeddbba, sun: 0xffefd1, sunIntensity: 2.25, hemiIntensity: 1.05, hemiSky: 0xbddbeb, hemiGround: 0xb69d79 };
   b.box(0, -1, 0, 134, 1, 134, { mat: 'sand' });
   b.collider(0, 62, 0, 164, 6, 164, { noNav: true, noGrapple: true });
   let k = 0;
@@ -51,6 +51,16 @@ export function buildMexico(b: LevelBuilder) {
   }
 
   b.slab(-24, -24, 24, 24, 0.15, 0.15, { mat: 'paving' });
+  const joints: BuildOpts = { mat: 'sand', noCollide: true };
+  for (let p = -24; p <= 24; p += 4) {
+    b.box(p, 0.151, 0, 0.04, 0.005, 48, joints);
+    b.box(0, 0.151, p, 48, 0.005, 0.04, joints);
+  }
+  for (const side of [-1, 1]) {
+    b.box(side * 23.5, 0.157, 0, 0.5, 0.005, 47, { mat: 'adobe', noCollide: true });
+    b.box(0, 0.157, side * 23.5, 47, 0.005, 0.5, { mat: 'adobe', noCollide: true });
+  }
+  b.mesh(new THREE.RingGeometry(7.7, 8, 48).rotateX(-HALF_PI), [0, 0.163, 0], { mat: 'roof', noCollide: true });
   b.cylinder(0, 0, 0, 5.5, 1.1, WHITE);
   b.cylinder(0, 1.1, 0, 1.2, 2.6, WHITE);
   b.cylinder(0, 3.7, 0, 2.4, 0.5, WHITE);
@@ -107,11 +117,15 @@ export function buildMexico(b: LevelBuilder) {
     [-30, 0, 46], [30, 0, 46], [0, 13.45, -5.8], [-8, 30.6, 44]];
   for (const p of arenaSpawns) b.marker('arenaSpawns', ...p);
 
-  b.sphere(70, 95, -150, 14, ORANGE);
+  const glow = (mesh: THREE.Mesh) => {
+    mesh.material = unlitMat(SURF.accent);
+    mesh.castShadow = mesh.receiveShadow = false;
+  };
+  glow(b.sphere(70, 95, -150, 14, { ...ORANGE, separate: true }));
   for (let i = 0; i < 12; i++) {
     const a = i * Math.PI / 6;
-    b.mesh(new THREE.BoxGeometry(7, 0.9, 0.9), [70 + 21 * Math.cos(a), 95 + 21 * Math.sin(a), -150],
-      { ...ORANGE, rotation: new THREE.Euler(0, 0, a) });
+    glow(b.mesh(new THREE.BoxGeometry(7, 0.9, 0.9), [70 + 21 * Math.cos(a), 95 + 21 * Math.sin(a), -150],
+      { ...ORANGE, separate: true, rotation: new THREE.Euler(0, 0, a) }));
   }
   for (const [x, z, w, h] of [[-120, -160, 60, 30], [40, -190, 90, 36],
     [150, -120, 70, 26], [-170, 60, 50, 24], [160, 90, 80, 30], [-60, 190, 100, 34]] as const) {
@@ -207,7 +221,11 @@ function houses(b: LevelBuilder) {
     const doorX = x + side * (w / 2 + 0.01);
     b.box(doorX, 0, z, 0.15, 2.6, 1.4, { tone, noCollide: true });
     b.box(doorX, 2.6, z, 0.15, 0.3, 1.8, DARK_VISUAL);
-    for (const s of [-1, 1]) b.box(doorX, 1.6, z + s * 0.32 * d, 0.12, 1.1, 1.1, DARK_VISUAL);
+    for (const s of [-1, 1]) {
+      b.box(doorX, 0, z + s * 0.82, 0.18, 2.6, 0.16, { mat: 'roof', noCollide: true });
+      b.box(doorX, 1.5, z + s * 0.32 * d, 0.18, 0.1, 1.35, { mat: 'roof', noCollide: true });
+      b.box(doorX, 1.6, z + s * 0.32 * d, 0.12, 1.1, 1.1, DARK_VISUAL);
+    }
     // The flight lands level with the roof slab and clears its 0.3 overhang, so the nav grid links the two.
     const top = h + 0.35, steps = Math.round(top / 0.3);
     b.stairs(x - side * (w / 2 + 0.3), 0, z + d / 2 + 1.2, side > 0 ? '+x' : '-x', steps, 1.6,
@@ -274,9 +292,9 @@ function prop(b: LevelBuilder, kind: BreakableKind, x: number, y: number, z: num
     const radius = big ? 0.55 : 0.4, visualH = big ? 1.2 : 0.85;
     w = d = big ? 1.2 : 0.9;
     h = big ? 1.3 : 0.9;
-    cylinder(0.75 * radius, radius, visualH, 0, visualH / 2, 0, 'accent', 9);
+    cylinder(0.75 * radius, radius, visualH, 0, visualH / 2, 0, 'roof', 9);
     torus(big ? 0.396 : 0.288, 0.05, visualH, 'dark');
-    torus(big ? 0.539 : 0.392, 0.04, big ? 0.54 : 0.38, 'boss');
+    torus(big ? 0.539 : 0.392, 0.04, big ? 0.54 : 0.38, 'paving');
   } else if (kind === 'crate') {
     w = h = d = 1.1; hp = 30; tone = TONE.PRIMARY;
     box(1.1, 1.1, 1.1, 0, 0.55, 0, 'block');

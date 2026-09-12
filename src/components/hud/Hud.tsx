@@ -365,26 +365,29 @@ export const ScreenOverlay = memo(function ScreenOverlay({ store }: { store: Hud
     panel.focus({ preventScroll: true });
   }, [kind]);
 
-  // A menu must never scroll: measure the panel at its natural size and zoom
-  // it down until the whole thing fits the viewport. Re-run on every redraw
-  // (checkpoints and lobby rows change the height) and on resize.
+  // Fit legacy screens and unusually long checkpoint lists without scrolling.
+  // Observe content too: menu pages and device controls can change independently
+  // of the engine's screen model.
   useLayoutEffect(() => {
     const panel = panelRef.current;
-    if (!panel || view === null) return;
+    const content = panel?.firstElementChild;
+    if (!panel || !content || view === null) return;
     const fit = (): void => {
       panel.style.zoom = '1';
-      const zoom = Math.min(1, (window.innerWidth - 16) / panel.scrollWidth, (window.innerHeight - 16) / panel.scrollHeight);
+      const zoom = Math.min(1, (window.innerWidth - 24) / panel.scrollWidth, (window.innerHeight - 24) / panel.scrollHeight);
       panel.style.zoom = zoom.toFixed(3);
     };
+    const observer = new ResizeObserver(fit);
+    observer.observe(content);
     fit();
     window.addEventListener('resize', fit);
-    return () => window.removeEventListener('resize', fit);
+    return () => { observer.disconnect(); window.removeEventListener('resize', fit); };
   }, [view, device]);
 
   return (
     <div className="screen-overlay" data-hud="screen" hidden={view === null} onClick={click} onKeyDown={key} onKeyUp={key}>
-      <section ref={panelRef} className="screen-panel" data-hud="panel" role="dialog" aria-modal="true" aria-label="Game menu" aria-labelledby={SCREEN_TITLE_ID} tabIndex={-1}>
-        {view === null ? null : <Screen view={view} pad={device} onAction={(act, value, ev) => store.onUiAction?.(act, value, ev)} />}
+      <section ref={panelRef} className="screen-panel" data-hud="panel" data-screen-kind={kind ?? undefined} role="dialog" aria-modal="true" aria-label="Game menu" aria-labelledby={SCREEN_TITLE_ID} tabIndex={-1}>
+        <div className="screen-content">{view === null ? null : <Screen view={view} pad={device} onAction={(act, value, ev) => store.onUiAction?.(act, value, ev)} />}</div>
       </section>
     </div>
   );
