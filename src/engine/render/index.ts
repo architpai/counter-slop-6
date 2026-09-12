@@ -3,6 +3,7 @@ import { LIGHT, SURF } from './palette';
 import { Composite } from './postfx';
 import { skyMat } from './materials';
 import type { PostFX } from './postfx';
+import type { Mood } from '../types';
 
 export { TONE, TONE_HEX, WHITE_HEX, SMOKE_HEX, SURF } from './palette';
 export { surfMat, charMat, toneMat, unlitMat, setFlash, mergeByMaterial } from './materials';
@@ -18,6 +19,7 @@ export class Renderer {
   readonly sun: THREE.DirectionalLight;
   readonly post: Composite;
   readonly sky: THREE.Mesh;
+  readonly hemi: THREE.HemisphereLight;
   /** Reset before every frame; the first rig mesh drawn clears the depth buffer. */
   _rigDepthCleared = false;
   readonly _clearRigDepth: () => void;
@@ -49,7 +51,8 @@ export class Renderer {
     this.sun.shadow.mapSize.set(2048, 2048);
     this.sun.shadow.bias = -0.0004;
     this.sun.shadow.normalBias = 0.03;
-    this.scene.add(this.sun, this.sun.target, new THREE.HemisphereLight(LIGHT.sky, LIGHT.ground, 1.25));
+    this.hemi = new THREE.HemisphereLight(LIGHT.sky, LIGHT.ground, 1.25);
+    this.scene.add(this.sun, this.sun.target, this.hemi);
     this.post = new Composite();
     this._clearRigDepth = () => {
       if (!this._rigDepthCleared) {
@@ -92,6 +95,18 @@ export class Renderer {
     this.sun.shadow.needsUpdate = true;
   }
 
+  /** A level's sky and light. Called with `undefined` to restore the default. */
+  setMood(mood: Mood = {}): void {
+    const fog = mood.fog ?? SURF.fog;
+    paintSky(this.sky.geometry, mood.horizon ?? fog, mood.zenith ?? LIGHT.zenith);
+    if (this.scene.fog instanceof THREE.Fog) this.scene.fog.color.set(fog);
+    this.sun.color.set(mood.sun ?? LIGHT.sun);
+    this.sun.intensity = mood.sunIntensity ?? 2.2;
+    this.hemi.intensity = mood.hemiIntensity ?? 1.25;
+    this.hemi.color.set(mood.hemiSky ?? LIGHT.sky);
+    this.hemi.groundColor.set(mood.hemiGround ?? LIGHT.ground);
+  }
+
   dispose(): void {
     window.removeEventListener('resize', this._onResize);
     this.sky.geometry.dispose();
@@ -114,18 +129,23 @@ export class Renderer {
   }
 }
 
-/** Horizon (fog) to zenith gradient baked into vertex colours; follows the camera each frame. */
-function makeSkyDome(): THREE.Mesh {
-  const geometry = new THREE.SphereGeometry(380, 24, 12);
+/** Horizon to zenith gradient baked into vertex colours. */
+function paintSky(geometry: THREE.BufferGeometry, horizonHex: number, zenithHex: number): void {
   const position = geometry.attributes.position;
   if (!position) throw new Error('Sky dome has no positions.');
   const colors = new Float32Array(position.count * 3);
-  const horizon = new THREE.Color(SURF.fog), zenith = new THREE.Color(LIGHT.zenith), color = new THREE.Color();
+  const horizon = new THREE.Color(horizonHex), zenith = new THREE.Color(zenithHex), color = new THREE.Color();
   for (let i = 0; i < position.count; i++) {
     const t = Math.pow(Math.max(0, position.getY(i) / 380), 0.6);
     color.copy(horizon).lerp(zenith, t).toArray(colors, i * 3);
   }
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+}
+
+/** The dome follows the camera each frame. */
+function makeSkyDome(): THREE.Mesh {
+  const geometry = new THREE.SphereGeometry(380, 24, 12);
+  paintSky(geometry, SURF.fog, LIGHT.zenith);
   const mesh = new THREE.Mesh(geometry, skyMat());
   mesh.frustumCulled = false;
   mesh.renderOrder = -1;

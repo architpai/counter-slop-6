@@ -11,7 +11,7 @@ import { TYPES, BOSS_ORDER } from './types';
 import type { EnemyType } from './types';
 import { makeModel, syncModel, flash, spawnPose, animate, corpse } from './model';
 import type { GroundJoints, EyeAnchors, HitSphere } from './model';
-import { groundThink, wander, steer, follow } from './ai';
+import { groundThink, wander, steer, follow, onHit } from './ai';
 import { flyerThink } from './flyer';
 import { updateProjectiles, removeProjectile } from './projectiles';
 import type { ProjectileRecord } from './projectiles';
@@ -95,6 +95,10 @@ export interface EnemyRecord extends Enemy {
   snapOld: EnemySnap | null;
   snapNew: EnemySnap | null;
   target: Target | null;
+  /** Ranged: the spot to duck behind between bursts, and how long to keep trying. */
+  cover: Vector3 | null;
+  coverT: number;
+  wantCover: boolean;
   figure: Figure;
   root: Group;
   hits: HitSphere[];
@@ -170,7 +174,7 @@ export class EnemyManager {
       approachPoint: new Vector3(), keepMult: rand(0.75, 1.35), backoffT: 0, fuseT: -1, shieldHp: stats.shield ? 2 : 0,
       flightPhase: 'orbit', flightT: rand(0, 3), orbitDir: choose([-1, 1]), bossAttack: null, rootDetached: false,
       retargetT: 0, laser: null, chargeCount: 0, sprayCount: 0, hopT: 1, hopping: false, aimPoint: null, aimWarned: false,
-      diveHit: false, topple: null, snapOld: null, snapNew: null, target: null, figure, root, hits,
+      diveHit: false, topple: null, snapOld: null, snapNew: null, target: null, cover: null, coverT: 0, wantCover: false, figure, root, hits,
     };
     this.ids = Math.max(this.ids, e.id + 1);
     root.position.copy(position); root.rotation.y = e.yaw;
@@ -322,6 +326,7 @@ export class EnemyManager {
     hud.hitmarker(e.hp <= 0, !!info.crit);
     if (info.source !== 'deflect') input.rumble(0.1, 0.3, 30);
     if (e.state === 'spawn') { e.state = 'hunt'; e.root.scale.setScalar(e.stats.scale); }
+    else onHit(this, e);
     if (e.stats.boss) this.onBoss?.(e);
     if (e.hp <= 0) { game.hitstop(info.crit ? 0.05 : 0.025, 0.25); this.kill(e, info); }
   }

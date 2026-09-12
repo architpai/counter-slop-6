@@ -64,9 +64,9 @@ export class LevelBuilder {
     this.world = world;
     this.tone = TONE;
     this.parts = new Map();
-    const p = key === 'mexico' ? 62 : arena ? 68 : 55;
+    const p = key === 'mexico' ? 62 : key === 'house' ? 39 : arena ? 68 : 55;
     this.level = {
-      key, arena, playerStart: new THREE.Vector3(0, 0, key === 'mexico' ? 16 : 42),
+      key, arena, playerStart: new THREE.Vector3(0, 0, key === 'mexico' ? 16 : key === 'house' ? 21 : 42),
       bounds: { minX: -p, maxX: p, minZ: -p, maxZ: p },
       spawns: [], snipers: [], pickups: [], rings: [], arenaSpawns: [], teamSpawns: [],
       movers: [], animated: [], breakables: [], meshes: [],
@@ -172,7 +172,7 @@ export class LevelBuilder {
 
   cylinder(x: number, y: number, z: number, r: number, h: number,
     opts: BuildOpts = {}): Box | null {
-    this.mesh(cylGeo(r, h, opts.segments ?? 8), [x, y + h / 2, z], opts);
+    this.mesh(cylGeo(r, h, opts.segments ?? 8, 'y'), [x, y + h / 2, z], opts);
     return opts.noCollide ? null : this.collider(x, y, z, 1.6 * r, h, 1.6 * r, opts);
   }
 

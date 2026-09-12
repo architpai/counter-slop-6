@@ -1,5 +1,5 @@
 import { Mesh, Vector3 } from 'three';
-import { clamp, damp, rand, alignSegment } from '../util';
+import { clamp, damp, rand, alignSegment, wrapAngle } from '../util';
 import { seeThrough } from '../physics';
 import { boxGeo, unlitMat, TONE_HEX } from '../render/index';
 import { bossThink } from './boss';
@@ -8,10 +8,14 @@ import { rollCooldown } from './types';
 import type { RangedType } from './types';
 import type { CoreParts, EyeAnchors } from './model';
 import type { EnemyManager, EnemyRecord } from './index';
+import type { Target } from '../types';
 
 const down = new Vector3(0, -1, 0);
 const eye = new Vector3(), probe = new Vector3(), muzzle = new Vector3(), shot = new Vector3();
-const arcA = new Vector3(), arcB = new Vector3();
+const arcA = new Vector3(), arcB = new Vector3(), lead = new Vector3(), side = new Vector3();
+
+/** Rifle carriers duck behind cover between bursts and when shot at. */
+const usesCover = (e: EnemyRecord) => e.stats.weapon === 'rifle';
 
 export function stop(e: EnemyRecord, rate: number, dt: number): void {
   e.body.vel.x = damp(e.body.vel.x, 0, rate, dt);
@@ -29,11 +33,19 @@ export function steer(m: EnemyManager, e: EnemyRecord, goal: Vector3, speed: num
   e.yawTo = Math.atan2(dx, dz);
 }
 
-export function approachPoint(e: EnemyRecord, target: Vector3, dt: number): Vector3 {
+export function approachPoint(m: EnemyManager, e: EnemyRecord, target: Vector3, dt: number): Vector3 {
   e.slotT -= dt;
   if (e.slotT <= 0) {
     e.slotT = rand(2.5, 5);
-    e.slotAngle += rand(-0.7, 0.7);
+    // Of three candidate bearings take the one furthest from the pack, so a group fans out instead of queuing.
+    let bestA = e.slotAngle, bestSep = -1;
+    for (let k = 0; k < 3; k++) {
+      const a = e.slotAngle + rand(-1.4, 1.4);
+      let sep = Infinity;
+      for (const o of m.list) if (o !== e && o.alive && !o.stats.flying && o.target === e.target) sep = Math.min(sep, Math.abs(wrapAngle(a - o.slotAngle)));
+      if (sep > bestSep) { bestSep = sep; bestA = a; }
+    }
+    e.slotAngle = bestA;
     e.slotRadius = ['blade', 'bomb'].includes(e.stats.weapon) ? rand(2, 4.5) : rand(4.5, 9);
   }
   const d = Math.hypot(e.body.pos.x - target.x, e.body.pos.z - target.z);
@@ -43,9 +55,9 @@ export function approachPoint(e: EnemyRecord, target: Vector3, dt: number): Vect
   return e.approachPoint.set(target.x + Math.cos(e.slotAngle) * r, target.y, target.z + Math.sin(e.slotAngle) * r);
 }
 
-export function follow(m: EnemyManager, e: EnemyRecord, target: Vector3, speed: number, dt: number): void {
+export function follow(m: EnemyManager, e: EnemyRecord, target: Vector3, speed: number, dt: number, exact = false): void {
   e.pathT -= dt;
-  const approach = approachPoint(e, target, dt);
+  const approach = exact ? target : approachPoint(m, e, target, dt);
   const stale = !e.path || e.pathIndex >= e.path.length || (e.pathT <= 0 && (!e.pathGoal || e.pathGoal.distanceTo(approach) > 3.5 || !e.path.complete));
   if (stale && (e.pathT <= 0 || !e.path)) {
     e.pathT = 0.8 + rand(0, 0.6);
@@ -127,7 +139,7 @@ function rusher(m: EnemyManager, e: EnemyRecord, dt: number, dist: number, dy: n
     if (dist < 1.9 && Math.abs(dy) < 1.2) {
       retreat(e, nx, nz, 0.4 * e.stats.speed, 24, dt); e.yawTo = yaw;
     } else {
-      steer(m, e, dist > 4.5 ? approachPoint(e, target.body.pos, dt) : target.body.pos, e.stats.speed, 45, dt);
+      steer(m, e, dist > 4.5 ? approachPoint(m, e, target.body.pos, dt) : target.body.pos, e.stats.speed, 45, dt);
       if (e.body.onGround && e.body.hitWall) {
         e.stuckT += dt;
         if (e.stuckT > 0.25) { e.body.vel.y = 9; e.body.onGround = false; e.stuckT = 0; }
@@ -136,9 +148,14 @@ function rusher(m: EnemyManager, e: EnemyRecord, dt: number, dist: number, dy: n
   } else follow(m, e, target.body.pos, e.stats.speed, dt);
 }
 
-function oneShot(m: EnemyManager, e: EnemyRecord, aim: Vector3, speed: number, targetSpeed: number): void {
+function oneShot(m: EnemyManager, e: EnemyRecord, aim: Vector3, speed: number, targetSpeed: number, target?: Target): void {
   const s = e.stats as RangedType;
   (e.figure.parts as CoreParts).tip.getWorldPosition(muzzle);
+  if (target) {
+    // Lead a moving target by three quarters of the flight time, horizontally only.
+    const t = 0.75 * aim.distanceTo(muzzle) / speed;
+    aim = lead.copy(aim); aim.x += target.body.vel.x * t; aim.z += target.body.vel.z * t;
+  }
   shot.subVectors(aim, muzzle); shot.y += rand(-0.2, 0.3); shot.normalize();
   const spread = s.spread * (1 + targetSpeed * 0.06);
   shot.x += rand(-spread, spread); shot.y += rand(-spread, spread); shot.z += rand(-spread, spread); shot.normalize();
@@ -183,16 +200,72 @@ function fireControl(m: EnemyManager, e: EnemyRecord, dt: number, targetSpeed: n
       // ponytail: a burst type without an interval would stall here on NaN; every
       // one in the catalogue declares one, so the fallback is unreachable.
       e.burstT = s.burstInterval ?? 0; e.burstLeft--;
-      oneShot(m, e, target.center, s.projectileSpeed, targetSpeed);
+      oneShot(m, e, target.center, s.projectileSpeed, targetSpeed, target);
       m.ctx.audio.enemyShot(e.center);
-      if (e.burstLeft === 0) e.attackCd = rollCooldown(s);
+      if (e.burstLeft === 0) { e.attackCd = rollCooldown(s); if (usesCover(e) && rand() < 0.7) e.wantCover = true; }
     }
   } else if (e.attackCd <= 0) {
     if (s.weapon === 'shotgun') {
-      for (let i = 0; i < s.burst; i++) oneShot(m, e, target.center, s.projectileSpeed * rand(0.85, 1.1), targetSpeed);
+      for (let i = 0; i < s.burst; i++) oneShot(m, e, target.center, s.projectileSpeed * rand(0.85, 1.1), targetSpeed, target);
       m.ctx.audio.enemyShotgun(e.center); e.attackCd = rollCooldown(s);
       m.ctx.effects.strokeBurst(muzzle, 3, 8, 5, { life: 0.1, size: 0.04 });
     } else { e.burstLeft = s.burst; e.burstT = 0; }
+  }
+}
+
+/** A reachable nav node a few metres away that the target cannot see. Null when the ground is open. */
+function findCover(m: EnemyManager, e: EnemyRecord, target: Target): Vector3 | null {
+  const pos = e.body.pos, tc = target.center, nodes = m.ctx.nav.nodes;
+  // ponytail: linear scan of every nav node per request (~7k), once per burst per rifle; index the grid if it shows in a profile.
+  const near = [];
+  for (const n of nodes) {
+    const d = Math.hypot(n.x - pos.x, n.z - pos.z);
+    if (d < 2 || d > 8 || Math.abs(n.y - pos.y) > 1.5 || Math.hypot(n.x - tc.x, n.z - tc.z) < 4) continue;
+    near.push(n);
+  }
+  let best: Vector3 | null = null, bestD = Infinity;
+  for (let k = 0; k < 12 && near.length; k++) {
+    const i = Math.floor(rand(0, near.length)), n = near[i];
+    near[i] = near[near.length - 1]; near.pop();
+    if (!n) break;
+    const d = Math.hypot(n.x - pos.x, n.z - pos.z);
+    if (d >= bestD) continue;
+    eye.set(n.x, n.y + 1.5, n.z);
+    if (m.ctx.world.lineOfSight(eye, tc, seeThrough)) continue;
+    const path = m.ctx.nav.findPath(pos, probe.set(n.x, n.y, n.z), 4000);
+    if (!path?.complete) continue;
+    best = new Vector3(n.x, n.y, n.z); bestD = d;
+  }
+  return best;
+}
+
+/** Run from the local player's live grenades. True while dodging. */
+function dodgeNades(m: EnemyManager, e: EnemyRecord, dt: number): boolean {
+  const nades = m.ctx.player?.nades;
+  if (!nades?.length) return false;
+  const pos = e.body.pos;
+  for (const n of nades) {
+    const dx = pos.x - n.pos.x, dz = pos.z - n.pos.z, d = Math.hypot(dx, dz);
+    if (d > 4.5 || Math.abs(n.pos.y - pos.y) > 2.5) continue;
+    const nx = d > 1e-4 ? dx / d : Math.sin(e.yaw), nz = d > 1e-4 ? dz / d : Math.cos(e.yaw);
+    probe.set(pos.x + nx * 0.9, pos.y + 0.5, pos.z + nz * 0.9);
+    if (!m.ctx.world.raycast(probe, down, 3.5)) return false; // not off a ledge
+    const a = 40 * dt, speed = e.stats.speed * 1.1 * m.mods.speed;
+    e.body.vel.x += clamp(nx * speed - e.body.vel.x, -a, a);
+    e.body.vel.z += clamp(nz * speed - e.body.vel.z, -a, a);
+    return true;
+  }
+  return false;
+}
+
+/** Hit reaction: rifles break for cover, blades sidestep. Called by the manager. */
+export function onHit(m: EnemyManager, e: EnemyRecord): void {
+  if (e.stats.boss || e.stats.flying || e.state !== 'hunt') return;
+  if (usesCover(e) && rand() < 0.5) e.wantCover = true;
+  else if (e.stats.weapon === 'blade' && e.attackT <= 0 && e.body.onGround && rand() < 0.6) {
+    side.set(Math.cos(e.yaw), 0, -Math.sin(e.yaw)).multiplyScalar(6 * (rand() < 0.5 ? -1 : 1));
+    probe.copy(e.body.pos).addScaledVector(side, 0.2); probe.y += 0.5;
+    if (m.ctx.world.raycast(probe, down, 3.5)) { e.body.vel.x += side.x; e.body.vel.z += side.z; }
   }
 }
 
@@ -225,6 +298,23 @@ export function groundThink(m: EnemyManager, e: EnemyRecord, dt: number): void {
   // Everything still here is one of the four ranged classes, so it fills in the
   // fire-control block.
   const r = s as RangedType;
+  if (dodgeNades(m, e, dt)) { e.yawTo = yaw; return; }
+  if (e.wantCover) {
+    e.wantCover = false;
+    if (!e.cover && e.hasLOS) { e.cover = findCover(m, e, target); e.coverT = 3.5; }
+  }
+  if (e.cover) {
+    e.coverT -= dt;
+    const there = Math.hypot(e.cover.x - pos.x, e.cover.z - pos.z) < 0.6;
+    if (e.coverT <= 0 || (e.attackCd <= 0.3 && (there || !e.hasLOS))) e.cover = null;
+    else {
+      follow(m, e, e.cover, s.speed, dt, true);
+      if (there) stop(e, 10, dt);
+      e.aimAmt = damp(e.aimAmt, e.hasLOS ? 1 : 0, 6, dt);
+      if (e.hasLOS) e.yawTo = yaw;
+      return;
+    }
+  }
   if (e.hasLOS && dist < r.range) {
     e.aimAmt = damp(e.aimAmt, 1, 8, dt); e.yawTo = yaw;
     if (s.stationary) stop(e, 8, dt);
@@ -242,6 +332,8 @@ export function groundThink(m: EnemyManager, e: EnemyRecord, dt: number): void {
         e.strafeT -= dt;
         if (e.strafeT <= 0) { e.strafeT = rand(0.8, 2); e.strafeDir *= -1; }
         mx = -nz * e.strafeDir; mz = nx * e.strafeDir;
+        // Turn around before walking into a wall instead of grinding along it.
+        if (m.ctx.world.raycast(e.center, side.set(mx, 0, mz), 1.3)) { e.strafeDir *= -1; e.strafeT = rand(0.8, 2); mx = -mx; mz = -mz; }
       }
       probe.set(pos.x + mx * 0.9, pos.y + 0.5, pos.z + mz * 0.9);
       if (m.ctx.world.raycast(probe, down, 3.5)) {
