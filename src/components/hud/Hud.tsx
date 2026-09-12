@@ -3,6 +3,7 @@
 import {
   memo,
   useEffect,
+  useLayoutEffect,
   useRef,
   useSyncExternalStore,
 } from 'react';
@@ -363,6 +364,22 @@ export const ScreenOverlay = memo(function ScreenOverlay({ store }: { store: Hud
     panel.scrollTop = 0;
     panel.focus({ preventScroll: true });
   }, [kind]);
+
+  // A menu must never scroll: measure the panel at its natural size and zoom
+  // it down until the whole thing fits the viewport. Re-run on every redraw
+  // (checkpoints and lobby rows change the height) and on resize.
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    if (!panel || view === null) return;
+    const fit = (): void => {
+      panel.style.zoom = '1';
+      const zoom = Math.min(1, (window.innerWidth - 16) / panel.scrollWidth, (window.innerHeight - 16) / panel.scrollHeight);
+      panel.style.zoom = zoom.toFixed(3);
+    };
+    fit();
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, [view, device]);
 
   return (
     <div className="screen-overlay" data-hud="screen" hidden={view === null} onClick={click} onKeyDown={key} onKeyUp={key}>

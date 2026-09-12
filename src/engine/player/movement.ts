@@ -218,7 +218,13 @@ export function integrateMovement(p: Player, dt: number): void {
   }
   b.noSnap = p.grapple.mode === 'on' || b.vel.y > 0.5;
   if (b.vel.lengthSq() > 48 * 48) b.vel.setLength(48);
+  const groundY = b.pos.y, wasGround = b.onGround;
   world.moveBody(b, dt);
+  // A ground-to-ground height change is a stair step: hide the pop, the camera eases it out.
+  const stepped = b.pos.y - groundY;
+  if (wasGround && b.onGround && Math.abs(stepped) > 0.01 && Math.abs(stepped) <= b.stepHeight + 0.01) {
+    p.stepOffset = clamp(p.stepOffset - stepped, -b.stepHeight, b.stepHeight);
+  }
   if (b.pos.y < -12 || Math.abs(b.pos.x) > 95 || Math.abs(b.pos.z) > 95) {
     p.detachGrapple(false);
     b.pos.copy(level.playerStart);

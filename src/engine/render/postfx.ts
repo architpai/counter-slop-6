@@ -38,6 +38,8 @@ export class Composite {
       format: THREE.RGBAFormat, type: THREE.UnsignedByteType,
       colorSpace: THREE.LinearSRGBColorSpace, depthBuffer: true, stencilBuffer: false,
       minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: false,
+      // The canvas `antialias` flag does nothing for an offscreen target; MSAA has to live here.
+      samples: 4,
     });
     this.uniforms = {
       image: { value: this.target.texture }, time: { value: 0 }, aspect: { value: 1 },

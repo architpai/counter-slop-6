@@ -1,9 +1,10 @@
+// Pad labels name both common layouts (PlayStation / Xbox); any standard-mapping controller works.
 const LABELS: Record<string, readonly [string, string]> = {
-  fire: ['LMB', 'R2'], aim: ['RMB', 'L2'], block: ['RMB', 'L2'],
-  jump: ['Space', '✕'], sprint: ['Shift', 'L3'], slide: ['C', '○'], dash: ['C', '○'],
-  grapple: ['Q', 'L1'], melee: ['F', 'R1'], reload: ['R', '□'], grenade: ['G', 'R3'],
-  focus: ['both mouse buttons (or X)', 'L2 + R2'], next: ['wheel', '△'],
-  pause: ['Esc', 'Options'], confirm: ['Space', '✕'], score: ['Tab', 'Create'],
+  fire: ['LMB', 'R2 / RT'], aim: ['RMB', 'L2 / LT'], block: ['RMB', 'L2 / LT'],
+  jump: ['Space', '✕ / A'], sprint: ['Shift', 'L3 / LS'], slide: ['C', '○ / B'], dash: ['C', '○ / B'],
+  grapple: ['Q', 'L1 / LB'], melee: ['F', 'R1 / RB'], reload: ['R', '□ / X'], grenade: ['G', 'R3 / RS'],
+  focus: ['both mouse buttons (or X)', 'L2 + R2 / LT + RT'], next: ['wheel', '△ / Y'],
+  pause: ['Esc', 'Options / Menu'], confirm: ['Space', '✕ / A'], score: ['Tab', 'Create / View'],
 };
 
 export function key(action: string, pad = false): string {
@@ -27,13 +28,13 @@ export const KEYBOARD_ROWS: readonly string[] = [
 ];
 
 export const PAD_ROWS: readonly string[] = [
-  '<b>L stick</b> move   <b>R stick</b> look   <b>L3</b> sprint',
-  '<b>R2</b> fire / slash   <b>L2</b> aim / block',
-  '<b>✕</b> jump   <b>○</b> slide · air dash',
-  '<b>L1</b> grapple (hold to reel, ✕ to launch)',
+  '<b>L stick</b> move   <b>R stick</b> look   <b>L3 / LS</b> click to sprint',
+  '<b>R2 / RT</b> fire / slash   <b>L2 / LT</b> aim / block',
+  '<b>✕ / A</b> jump   <b>○ / B</b> slide · air dash',
+  '<b>L1 / LB</b> grapple (hold to reel, jump to launch)',
   '<b>L2 + R2</b> dash-slash once the katana gauge is lit',
-  '<b>R1</b> quick katana slash, then back to your gun',
-  '<b>□</b> reload   <b>△</b> next weapon',
-  '<b>R3 / d-pad up</b> grenade · hold to throw further',
-  '<b>Create</b> scoreboard (online)   <b>Options</b> pause',
+  '<b>R1 / RB</b> quick katana slash, then back to your gun',
+  '<b>□ / X</b> reload   <b>△ / Y</b> next weapon',
+  '<b>R3 / RS click</b> or <b>d-pad up</b> grenade · hold to throw further',
+  '<b>Create / View</b> scoreboard (online)   <b>Options / Menu</b> pause',
 ];

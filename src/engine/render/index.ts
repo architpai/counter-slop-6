@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { LIGHT, SURF } from './palette';
 import { Composite } from './postfx';
+import { skyMat } from './materials';
 import type { PostFX } from './postfx';
 
 export { TONE, TONE_HEX, WHITE_HEX, SMOKE_HEX, SURF } from './palette';
@@ -16,6 +17,7 @@ export class Renderer {
   readonly rig: THREE.Group;
   readonly sun: THREE.DirectionalLight;
   readonly post: Composite;
+  readonly sky: THREE.Mesh;
   /** Reset before every frame; the first rig mesh drawn clears the depth buffer. */
   _rigDepthCleared = false;
   readonly _clearRigDepth: () => void;
@@ -34,6 +36,8 @@ export class Renderer {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(SURF.sky);
     this.scene.fog = new THREE.Fog(SURF.fog, 70, 300);
+    this.sky = makeSkyDome();
+    this.scene.add(this.sky);
     this.camera = new THREE.PerspectiveCamera(80, 1, 0.08, 420);
     this.camera.rotation.order = 'YXZ';
     this.scene.add(this.camera);
@@ -45,7 +49,7 @@ export class Renderer {
     this.sun.shadow.mapSize.set(2048, 2048);
     this.sun.shadow.bias = -0.0004;
     this.sun.shadow.normalBias = 0.03;
-    this.scene.add(this.sun, this.sun.target, new THREE.HemisphereLight(LIGHT.sky, LIGHT.ground, 0.85));
+    this.scene.add(this.sun, this.sun.target, new THREE.HemisphereLight(LIGHT.sky, LIGHT.ground, 1.25));
     this.post = new Composite();
     this._clearRigDepth = () => {
       if (!this._rigDepthCleared) {
@@ -90,6 +94,8 @@ export class Renderer {
 
   dispose(): void {
     window.removeEventListener('resize', this._onResize);
+    this.sky.geometry.dispose();
+    (this.sky.material as THREE.Material).dispose();
     this.post.dispose();
     this.three.dispose();
     // Drop the WebGL context outright: browsers cap live contexts (~16), and a
@@ -100,11 +106,30 @@ export class Renderer {
   render(time: number, fx: PostFX): void {
     this.rig.traverse(this._prepareRigMesh);
     this._rigDepthCleared = false;
+    this.sky.position.copy(this.camera.position);
     this.three.setRenderTarget(this.post.target);
     this.three.clear();
     this.three.render(this.scene, this.camera);
     this.post.draw(this.three, time, fx);
   }
+}
+
+/** Horizon (fog) to zenith gradient baked into vertex colours; follows the camera each frame. */
+function makeSkyDome(): THREE.Mesh {
+  const geometry = new THREE.SphereGeometry(380, 24, 12);
+  const position = geometry.attributes.position;
+  if (!position) throw new Error('Sky dome has no positions.');
+  const colors = new Float32Array(position.count * 3);
+  const horizon = new THREE.Color(SURF.fog), zenith = new THREE.Color(LIGHT.zenith), color = new THREE.Color();
+  for (let i = 0; i < position.count; i++) {
+    const t = Math.pow(Math.max(0, position.getY(i) / 380), 0.6);
+    color.copy(horizon).lerp(zenith, t).toArray(colors, i * 3);
+  }
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  const mesh = new THREE.Mesh(geometry, skyMat());
+  mesh.frustumCulled = false;
+  mesh.renderOrder = -1;
+  return mesh;
 }
 
 /** Duck-typed like the rest of three, so a mesh from any build still matches. */
