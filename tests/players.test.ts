@@ -37,6 +37,7 @@ const player = {
   body: { pos: new Vector3(1.234, 2.346, -3.456), vel: new Vector3(1.24, -2.36, 3.45), onGround: true },
   yaw: 0.234, pitch: -0.456, wi: 3, hp: 100.6,
   crouching: true, sliding: true, blocking: true, aiming: true, firing: true, alive: true, parryWindow: true,
+  melee: { active: true },
   grapple: { mode: 'on', hook: new Vector3(8.16, 9.24, -10.38) },
 } as unknown as Player;
 
@@ -54,8 +55,8 @@ afterAll(() => {
 });
 
 test('state encoding', () => {
-  assert(JSON.stringify(packet) === JSON.stringify([1.23, 2.35, -3.46, 0.23, -0.46, 3, 511, 101, 1.2, -2.4, 3.5, 8.2, 9.2, -10.4]),
-    'State encoding keeps field order, rounding, all nine flags, and grapple coordinates.');
+  assert(JSON.stringify(packet) === JSON.stringify([1.23, 2.35, -3.46, 0.23, -0.46, 3, 1023, 101, 1.2, -2.4, 3.5, 8.2, 9.2, -10.4]),
+    'State encoding keeps field order, rounding, all ten flags, and grapple coordinates.');
   player.grapple.mode = 'idle';
   assert(encodeState(player).length === 11 && !(must(encodeState(player)[6], 'flags') & 128), 'Idle grapple has no hook fields or flag.');
 });
@@ -78,14 +79,14 @@ test('a remote decodes its first state', () => {
   const figure = must(remote._figure, 'figure');
   near(must(figure.anchors.armL, 'armL anchor').position.y, -0.15, 'Remote upper-arm hit anchor uses the midpoint.');
   near(must(figure.anchors.foreL, 'foreL anchor').position.y, -0.14, 'Remote forearm hit anchor uses the midpoint.');
-  assert(must(figure.parts.upperR, 'upperR').rotation.x === -1.8, 'Katana guard raises the right arm.');
+  assert(must(figure.parts.upperR, 'upperR').rotation.x === -1.8, 'Knife guard raises the right arm.');
 });
 
 test('invalid packets are rejected whole', () => {
   const seen = remote.lastSeen;
   const invalid: unknown[] = [null, {}, [], packet.slice(0, 10), [...packet, 2]];
   const mutations: [number, number][] = [[0, Infinity], [2, 10001], [3, NaN], [4, 1.61], [5, 0.2],
-    [6, 512], [7, -1], [7, 121], [8, 10001], [12, NaN]];
+    [6, 1024], [7, -1], [7, 121], [8, 10001], [12, NaN]];
   for (const [index, value] of mutations) {
     const bad = [...packet]; bad[index] = value; invalid.push(bad);
   }
@@ -120,6 +121,12 @@ test('optional triples, weapon fallback and the name tag', () => {
   assert(!remote.grappling && remote.hook.equals(hook) && remote.body.vel.lengthSq() === 0,
     'Missing optional triples zero velocity and retain the unused hook.');
   assert(remote._wi === 0 && remote.body.height === 1.75, 'Unknown weapon uses a rifle and standing height returns.');
+  remote.push(state(0, 0, 80, 3), 3.01);
+  assert(remote._figure?.parts.weapon?.name === 'pistol', 'Slot 4 renders the pistol, not a blade.');
+  remote.push(state(0, 0, 80 | 512, 3), 3.02);
+  assert(remote._figure?.parts.weapon?.name === 'knife' && remote._wi === 3, 'Melee renders independently of the pistol slot.');
+  remote.push(state(0, 0, 80, 3), 3.03);
+  assert(remote._figure?.parts.weapon?.name === 'pistol', 'Ending melee restores the selected gun.');
   remote.name = '<script>name';
   remote.update(0.01, 3.09);
   assert(remote._tagName === '<script>name', 'A bounded name change rebuilds the canvas label.');

@@ -1,16 +1,16 @@
 import type * as THREE from 'three';
 import type { Ctx, Player, WeaponState } from '../types';
 import { Gun } from './gun';
-import { Katana } from './katana';
+import { Melee } from './melee';
 import type { GunKind } from './stats';
 
 export { GUN_STATS } from './stats';
 export type { GunKind, GunStats } from './stats';
-export { Gun, Katana };
+export { Gun, Melee };
 
 /** What the player, the HUD and the focus system may ask of any held weapon. */
 export interface Weapon {
-  readonly kind: GunKind | 'katana';
+  readonly kind: GunKind | 'melee';
   readonly name: string;
   readonly hint: string;
   readonly isGun: boolean;
@@ -36,7 +36,7 @@ export interface Weapon {
   kickRot(x: number, y: number, z: number): void;
 }
 
-/** `[rifle, shotgun, sniper, katana]`. The revolver is built but never issued. */
+/** Four gun slots; the player owns a separate, always-available melee weapon. */
 export function makeLoadout(ctx: Ctx, player: Player): Weapon[] {
-  return [new Gun(ctx, player, 'rifle'), new Gun(ctx, player, 'shotgun'), new Gun(ctx, player, 'sniper'), new Katana(ctx, player)];
+  return [new Gun(ctx, player, 'rifle'), new Gun(ctx, player, 'shotgun'), new Gun(ctx, player, 'sniper'), new Gun(ctx, player, 'pistol')];
 }

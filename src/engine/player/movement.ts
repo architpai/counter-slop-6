@@ -64,7 +64,7 @@ export function updateMovement(p: Player, dt: number): void {
     if (input.pressed('sprint')) p.sprintToggle = !p.sprintToggle;
     if (p.move.y < 0.1) p.sprintToggle = false;
   } else p.sprintToggle = input.down('sprint');
-  p.aiming = input.down('aim') && p.weapon.isGun;
+  p.aiming = input.down('aim') && !p.melee.active && !input.down('melee');
   p.sprinting = p.sprintToggle && p.move.y > 0.1 && !p.crouching && !p.aiming;
   let speed = Math.hypot(v.x, v.z);
   if (input.pressed('crouch') && b.onGround && speed > 6.3 && !p.sliding) {

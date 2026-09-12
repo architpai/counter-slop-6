@@ -5,14 +5,11 @@ import { validKey } from '../level/index';
 import { TONE } from '../render/index';
 import type { BoardRow } from '../hud/screens';
 import type { HitInfo, PlayerHit, ScoreRow, Target } from '../types';
-import { KATANA_SLOT } from '../types';
-import type { Weapon } from '../types';
-import type { Katana } from '../weapons/index';
 import type { PeerMeta } from '../net';
 import type { App } from '../boot';
 
 const KILL_TARGET = 20, TIME_LIMIT = 480, RESPAWN = 3.5, SILENT_MS = 9000;
-const HOW: Record<string, string> = { rifle: 'rifle', shotgun: 'shotgun', sniper: 'sniper', katana: 'katana', grenade: 'grenade', deflect: 'their own bullet' };
+const HOW: Record<string, string> = { rifle: 'MP5', pistol: 'pistol', shotgun: 'shotgun', sniper: 'sniper', melee: 'knife', grenade: 'grenade', deflect: 'their own bullet' };
 const HIT_R = { head: 0.3, torso: 0.33, hips: 0.2, armL: 0.11, armR: 0.11, foreL: 0.1, foreR: 0.1, legL: 0.13, legR: 0.13, shinL: 0.11, shinR: 0.11 };
 
 const obj = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -24,7 +21,6 @@ const int = (v: unknown): v is number => typeof v === 'number' && Number.isSafeI
 const triple = (v: unknown, lim = 10000): v is number[] => Array.isArray(v) && v.length === 3 && v.every(n => num(n, lim));
 const vec = (a: number[]): THREE.Vector3 => new THREE.Vector3().fromArray(a);
 const cleanName = (v: unknown): string => (typeof v === 'string' ? v.trim().slice(0, 14) : '') || 'recruit';
-const isKatana = (w: Weapon): w is Katana => w.kind === 'katana';
 
 export interface FfaApi {
   create(isPublic: boolean): Promise<void>;
@@ -58,6 +54,8 @@ export function createFFA(app: App): FfaApi {
   let shotQueue: number[] = [];
   let boardShown = false;
   let timer: number | undefined = undefined;
+  let hitId = 0;
+  const pendingHeadshots = new Map<number, { target: string; source: string; until: number }>();
 
   const isOnline = (): boolean => gs.mode === 'ffa';
   const playing = (): boolean => gs.state === 'play' || gs.state === 'dying';
@@ -200,6 +198,7 @@ export function createFFA(app: App): FfaApi {
   }
   function leave(reason = ''): void {
     window.clearTimeout(timer);
+    pendingHeadshots.clear();
     net.leave();
     for (const rid of [...ctx.remotes.keys()]) removeRemote(rid);
     lobby.players.clear(); scores.clear(); showBoard(false);
@@ -270,7 +269,7 @@ export function createFFA(app: App): FfaApi {
     const dir = h?.from == null ? null : d1.subVectors(p.center, h.from).normalize().toArray().map(round2);
     const src = h?.src;
     const how = killer && src !== undefined ? HOW[src] ?? null : null;
-    net.broadcast('pdead', { killer, dir, over: !!h && (h.crit || h.amount >= 90 || h.src === 'katana'), how, crit: !!h?.crit });
+    net.broadcast('pdead', { killer, dir, over: !!h && (h.crit || h.amount >= 90 || h.src === 'melee'), how, crit: !!h?.crit });
     gs.respawnT = RESPAWN; gs.state = 'dying'; gs.deathT = 0;
     if (net.isHost && net.id !== null) tally(net.id, killer);
     const row = killer ? scores.get(killer) : null;
@@ -300,6 +299,7 @@ export function createFFA(app: App): FfaApi {
   // ---- network update (real dt, now in seconds)
   function update(dt: number, t: number = now()): void {
     if (!net.active) return;
+    for (const [id, hit] of pendingHeadshots) if (hit.until < t) pendingHeadshots.delete(id);
     tick++;
     for (const r of ctx.remotes.values()) r.update(dt, t);
     if (inMatch()) {
@@ -367,7 +367,7 @@ export function createFFA(app: App): FfaApi {
     });
   }
   function hitPlayer(t: RemotePlayer, damage: number, info: HitInfo = {}): void {
-    if (!canHurt(t) || !t.alive) return;
+    if (!canHurt(t) || !t.alive || !Number.isFinite(damage) || damage <= 0) return;
     const p = ctx.player;
     if (p === null) return;
     const point = info.point ?? t.center;
@@ -386,17 +386,23 @@ export function createFFA(app: App): FfaApi {
     }
     const facing = t.blocking ? d1.subVectors(p.center, t.center).normalize().dot(t.forward) : -1;
     const frontHit = /^(head|torso|arm|fore)/.test(info.part ?? '');
-    if (facing > 0.6 && frontHit && info.source === 'katana' && t.parryWindow) {
+    if (facing > 0.6 && frontHit && info.source === 'melee' && t.parryWindow) {
       ctx.effects.strokeBurst(point, TONE.ACCENT, 10, 6, { life: 0.25, size: 0.04 });
       ctx.audio.shieldHit(t.center); ctx.game.hitstop(0.08, 0.15);
-      const k = p.weapons[KATANA_SLOT];
-      if (k !== undefined && isKatana(k)) k.cooldown = Math.max(k.cooldown, 0.6);
+      p.melee.cooldown = Math.max(p.melee.cooldown, 0.6);
       ctx.input.rumble(0.6, 0.3, 90); hud.tip('PARRIED', 0.9);
       return;
     }
     ctx.effects.blood(point, info.dir ?? d1.subVectors(t.center, p.eye).normalize(), clamp(0.4 + damage / 80, 0.4, 1.6), { tone: TONE.HOSTILE });
     hud.hitmarker(false, !!info.crit); ctx.audio.hitEnemy(t.center); t.flash();
-    net.sendTo(t.id, 'pdmg', { amount: Math.round(damage), from: p.center.toArray().map(round1), by: net.id, crit: !!info.crit, src: info.source ?? 'rifle' });
+    const source = info.source ?? 'rifle';
+    const shotId = ++hitId;
+    if (info.crit && info.part === 'head' && ['rifle', 'shotgun', 'sniper', 'pistol', 'revolver'].includes(source)) {
+      if (pendingHeadshots.size >= 64) pendingHeadshots.clear();
+      pendingHeadshots.set(shotId, { target: t.id, source, until: now() + 1 });
+    }
+    net.sendTo(t.id, 'pdmg', { amount: Math.round(damage), from: p.center.toArray().map(round1), by: net.id,
+      crit: !!info.crit, src: source, hitId: shotId });
   }
   function cutRopes(eye: THREE.Vector3, dir: THREE.Vector3, range: number): boolean {
     let any = false;
@@ -518,6 +524,14 @@ export function createFFA(app: App): FfaApi {
     const pos = fromPos === null ? null : vec(fromPos);
     p.lastHitBy = from; p.lastHit = { from: pos, crit, amount, src };
     p.takeDamage(amount, pos);
+    if (crit && int(d.hitId)) net.sendTo(from, 'headshot', { hitId: d.hitId });
+  });
+  net.on('headshot', (d, from) => {
+    if (!roster(from) || !obj(d) || !int(d.hitId) || gs.state !== 'play') return;
+    const hit = pendingHeadshots.get(d.hitId);
+    if (!hit || hit.target !== from || hit.until < now()) return;
+    pendingHeadshots.delete(d.hitId);
+    ctx.player?.onHeadshot({ part: 'head', crit: true, source: hit.source });
   });
   net.on('pdead', (d, from) => {
     if (!roster(from) || !obj(d)) return;

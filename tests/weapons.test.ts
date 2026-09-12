@@ -1,6 +1,6 @@
 import { afterAll, expect, test } from 'vitest';
 import { Group, Mesh, MeshToonMaterial, Vector3 } from 'three';
-import { Gun, Katana, GUN_STATS, makeLoadout } from '@/engine/weapons/index';
+import { Gun, Melee, GUN_STATS, makeLoadout } from '@/engine/weapons/index';
 import type { GunKind } from '@/engine/weapons/index';
 import type { Breakable, Ctx, Player, WeaponState } from '@/engine/types';
 import type { Box } from '@/engine/physics';
@@ -38,7 +38,7 @@ interface PlayerHitLike { player: Foe; part: string; dist: number; point: Vector
 const ctx = {
   renderer: { rig: new Group() },
   input: { rumble: record('rumble') },
-  audio: Object.fromEntries(['shot', 'shotgunFire', 'sniperFire', 'revolver', 'reload', 'shellCue', 'cylinder',
+  audio: Object.fromEntries(['shot', 'mp5Fire', 'pistolFire', 'shotgunFire', 'sniperFire', 'revolver', 'reload', 'shellCue', 'cylinder',
     'empty', 'pump', 'ricochet', 'katanaSwing', 'katanaHit'].map(name => [name, record(name)])),
   effects: { shake: 0, ...Object.fromEntries(['strokeBurst', 'smoke', 'shell', 'bulletImpact'].map(name => [name, record(name)])),
     tracer: (a: Vector3, b: Vector3, ...args: unknown[]) => calls.push({ name: 'tracer', args: [a.clone(), b.clone(), ...args] }) },
@@ -48,6 +48,7 @@ const ctx = {
     damage: record('enemyDamage'),
   },
   world: {
+    lineOfSight: () => true,
     raycast: (((eye: Vector3, dir: Vector3, max: number, ignore: (b: Box) => boolean) => {
       assert(max === 300 && ignore({ min: new Vector3(), max: new Vector3(), id: 0, data: { noShoot: true } }),
         'Guns trace 300 m and skip noShoot boxes');
@@ -76,11 +77,9 @@ const gunAt = (i: number): Gun => {
   if (!(weapon instanceof Gun)) throw new Error(`slot ${i} is not a gun`);
   return weapon;
 };
-const rifle = gunAt(0), shotgun = gunAt(1), sniper = gunAt(2);
-const katanaSlot = loadout[3];
-if (!(katanaSlot instanceof Katana)) throw new Error('slot 3 is not a katana');
-const katana = katanaSlot;
-const all = [...loadout, revolver];
+const rifle = gunAt(0), shotgun = gunAt(1), sniper = gunAt(2), pistol = gunAt(3);
+const melee = new Melee(engineCtx, enginePlayer);
+const all = [...loadout, revolver, melee];
 const step = (weapon: { animate(st: WeaponState, dt: number): void }, duration: number, state: WeaponState = neutral) => {
   for (let left = duration; left > 1e-9;) { const dt = Math.min(0.01, left); weapon.animate(state, dt); left -= dt; }
 };
@@ -88,12 +87,12 @@ const step = (weapon: { animate(st: WeaponState, dt: number): void }, duration: 
 afterAll(() => { for (const weapon of all) weapon.dispose(); });
 
 test('loadout, view models and aim poses', () => {
-  assert(loadout.map(w => w.kind).join(',') === 'rifle,shotgun,sniper,katana', 'Loadout keeps the four fixed slots');
-  assert(katana instanceof Katana && katana.spreadPx === 4 && !katana.isGun, 'Katana exposes its melee HUD state');
-  const muzzleZ: Record<GunKind, number> = { rifle: -0.98, shotgun: -1.09, sniper: -1.60, revolver: -0.40 };
-  const expected: Record<GunKind, number[]> = { rifle: [35, 175, 350, 24, 58, 1 / 11], shotgun: [6, 36, 72, 19, 68, 0.78],
+  assert(loadout.map(w => w.kind).join(',') === 'rifle,shotgun,sniper,pistol', 'Loadout keeps four guns and independent melee');
+  assert(melee instanceof Melee && melee.spreadPx === 4 && !melee.isGun, 'Melee exposes its independent state');
+  const muzzleZ: Record<GunKind, number> = { rifle: -0.96, pistol: -0.42, shotgun: -1.09, sniper: -1.60, revolver: -0.40 };
+  const expected: Record<GunKind, number[]> = { rifle: [30, 150, 300, 22, 25, 0.075], pistol: [15, 90, 180, 34, 62, 0.18], shotgun: [6, 36, 72, 19, 68, 0.78],
     sniper: [5, 25, 50, 150, 20, 0.20], revolver: [6, 36, 72, 62, 52, 0.30] };
-  for (const gun of [rifle, shotgun, sniper, revolver]) {
+  for (const gun of [rifle, pistol, shotgun, sniper, revolver]) {
     const stats = GUN_STATS[gun.kind], actual = [gun.mag, gun.reserve, stats.maxReserve, stats.damage, gun.adsFov, stats.fireInterval];
     assert(actual.every((v, i) => near(v, must(expected[gun.kind][i], 'expected value'))), `${gun.kind} uses the documented combat values`);
     assert(!gun.root.visible && gun.root.scale.toArray().every(v => v === 0.46), `${gun.kind} starts hidden at scale 0.46`);
@@ -116,39 +115,41 @@ test('loadout, view models and aim poses', () => {
   if (!(receiver instanceof Mesh)) throw new Error('receiver is not a mesh');
   const geometry = receiver.geometry;
   geometry.computeBoundingBox();
-  assert(must(geometry.boundingBox, 'bounding box').getSize(new Vector3()).distanceTo(new Vector3(0.09, 0.12, 0.5)) < 1e-7, 'Rifle receiver retains its model dimensions');
+  assert(must(geometry.boundingBox, 'bounding box').getSize(new Vector3()).distanceTo(new Vector3(0.10, 0.13, 0.48)) < 1e-7, 'MP5 uses its compact receiver dimensions');
   assert(must(revolver.root.getObjectByName('cylinder'), 'cylinder').children.length === 7, 'Revolver has a drum and six chambers');
   const fist = must(rifle.root.getObjectByName('right-hand-fist'), 'fist'), forearm = must(rifle.root.getObjectByName('right-hand-forearm'), 'forearm');
   if (!(fist instanceof Mesh) || !(forearm instanceof Mesh)) throw new Error('hand parts are not meshes');
   const fistColor = (fist.material as MeshToonMaterial).color.getHex(), sleeveColor = (forearm.material as MeshToonMaterial).color.getHex();
   assert(fistColor !== sleeveColor, 'Fists use a distinct tone from the sleeve');
-  const blade = must(katana.root.getObjectByName('blade'), 'blade');
+  assert(rifle.root.getObjectByName('acog-tube') && !rifle.root.getObjectByName('sight-ring'), 'MP5 has an ACOG, not a holo sight');
+  assert(rifle.root.getObjectByName('magazine-lower'), 'MP5 magazine has a curved lower section');
+  const blade = must(melee.root.getObjectByName('blade'), 'blade');
   if (!(blade instanceof Mesh)) throw new Error('blade is not a mesh');
-  assert((blade.material as MeshToonMaterial).color.getHex() === 0xcbdbe3, 'Katana blade uses pale cool steel');
+  assert((blade.material as MeshToonMaterial).color.getHex() === 0xcbdbe3, 'Knife blade uses pale cool steel');
 });
 
 test('rifle magazine reload and firing', () => {
   rifle.equip();
   rifle.mag = 7;
   rifle.startReload();
-  step(rifle, 1.44, fire);
+  step(rifle, 1.64, fire);
   assert(rifle.mag === 7 && rifle.reloading, 'Magazine reload cannot fire or transfer rounds early');
   rifle.animate(fire, 0.01);
-  assert(rifle.mag === 35 && rifle.reserve === 147 && !rifle.reloading, 'Magazine reload tops up at 1.45 s and consumes the completion frame');
+  assert(rifle.mag === 30 && rifle.reserve === 127 && !rifle.reloading, 'MP5 reload tops up at 1.65 s and consumes the completion frame');
   rifle.resetAmmo();
   calls.length = 0;
   rifle.animate(fire, 0);
-  assert(rifle.mag === 34 && near(num(must(last('spread'), 'spread call')[0]), 0.018), 'Rifle samples spread before its shot kick');
-  assert(near(rifle.spreadPx, 5 + 0.029 * 900), 'Rifle bloom updates the HUD gap');
+  assert(rifle.mag === 29 && near(num(must(last('spread'), 'spread call')[0]), 0.016), 'MP5 samples spread before its shot kick');
+  assert(near(rifle.spreadPx, 5 + 0.021 * 900), 'MP5 bloom updates the HUD gap');
   const tracer = must(last('tracer'), 'tracer call');
   assert(vec(tracer[1]).distanceTo(player.eye.clone().addScaledVector(player.forward, 300)) < 1e-7, 'Hitscan starts at the eye');
   assert(vec(tracer[0]).distanceTo(must(rifle.root.getObjectByName('muzzle'), 'muzzle').getWorldPosition(new Vector3())) < 1e-7, 'Tracer starts at the model muzzle');
   rifle.animate({ ...neutral, blockFire: true }, 0.2);
-  assert(rifle.mag === 34, 'A neutral dead frame does not fire');
+  assert(rifle.mag === 29, 'A neutral dead frame does not fire');
   rifle.unequip();
   const frozenPose = rifle.root.position.clone();
   rifle.animate(fire, 0.2);
-  assert(rifle.mag === 34 && rifle.root.position.equals(frozenPose) && !rifle.root.visible, 'Holstered state does not advance or fire');
+  assert(rifle.mag === 29 && rifle.root.position.equals(frozenPose) && !rifle.root.visible, 'Holstered state does not advance or fire');
 });
 
 test('shotgun shell loading and the pump cycle', () => {
@@ -192,17 +193,17 @@ test('hitscan routing between players, props, enemies and the world', () => {
   ctx.game.raycastPlayers = () => playerHit;
   const rayShot = () => { rifle.resetAmmo(); rifle.equip(); calls.length = 0; rifle.animate(fire, 0); };
   rayShot();
-  assert(num(must(last('playerDamage'), 'playerDamage')[1]) === 19 && info(must(last('playerDamage'), 'playerDamage')[2]).part === 'blade' && !last('enemyDamage'), 'Closest remote blade routes unchanged to the PvP handler');
+  assert(num(must(last('playerDamage'), 'playerDamage')[1]) === 18 && info(must(last('playerDamage'), 'playerDamage')[2]).part === 'blade' && !last('enemyDamage'), 'Closest remote blade routes unchanged to the PvP handler');
   playerHit = null;
   worldHit.dist = 5; worldHit.box.data.breakable = prop as unknown as Breakable;
   rayShot();
-  assert(num(must(last('breakHit'), 'breakHit')[1]) === 24 && !last('enemyDamage'), 'Closer prop receives unscaled base damage');
+  assert(num(must(last('breakHit'), 'breakHit')[1]) === 22 && !last('enemyDamage'), 'Closer prop receives unscaled base damage');
   worldHit.dist = 30;
   rayShot();
-  assert(near(num(must(last('enemyDamage'), 'enemyDamage')[1]), 62.4) && info(must(last('enemyDamage'), 'enemyDamage')[2]).crit, 'Closer enemy head receives rifle head damage');
+  assert(near(num(must(last('enemyDamage'), 'enemyDamage')[1]), 57.2 * (1 - 2 / 37)) && info(must(last('enemyDamage'), 'enemyDamage')[2]).crit, 'Closer enemy head receives rifle head damage');
   enemyHit = { enemy: foe, part: 'shield', dist: 20, point: new Vector3(0, 0, -20) };
   rayShot();
-  assert(info(must(last('enemyDamage'), 'enemyDamage')[2]).part === 'shield' && num(must(last('enemyDamage'), 'enemyDamage')[1]) === 24, 'Shield damage routes unchanged to the enemy handler');
+  assert(info(must(last('enemyDamage'), 'enemyDamage')[2]).part === 'shield' && near(num(must(last('enemyDamage'), 'enemyDamage')[1]), 22 * (1 - 2 / 37)), 'Shield damage routes unchanged to the enemy handler');
   enemyHit = null; worldHit.box.data = {};
   rayShot();
   assert(named('bulletImpact').length === 1 && !last('enemyDamage'), 'Solid world hit creates an impact');
@@ -214,33 +215,50 @@ test('hitscan routing between players, props, enemies and the world', () => {
   enemyHit = null;
 });
 
-test('katana guard, slashes and blade blood', () => {
-  const foe: Foe = { center: new Vector3(0, 1, -3) }, remote: Foe = { center: new Vector3(0, 1, -2) }, prop: Prop = { pos: new Vector3(0, 1, -1) };
-  katana.equip();
+test('melee guard, single strikes, obstruction and blade blood', () => {
+  const foe: Foe = { center: new Vector3(0, 1, -2) }, remote: Foe = { center: new Vector3(0, 1, -2) }, prop: Prop = { pos: new Vector3(0, 1, -1) };
+  melee.equip();
   calls.length = 0;
-  katana.animate({ ...neutral, aim: true }, 0.05);
-  assert(katana.blocking && near(katana.blockT, 0.05), 'Guard entry starts its held timer');
-  katana.animate({ ...neutral, blockFire: true }, 0.05);
-  assert(!katana.blocking && named('katanaSwing').length === 0, 'Neutral state releases guard without starting a slash');
+  melee.animate({ ...neutral, aim: true }, 0.05);
+  assert(melee.blocking && near(melee.blockT, 0.05), 'Held melee raises the guard');
+  melee.animate({ ...neutral, blockFire: true }, 0.05);
+  assert(!melee.blocking && !melee.root.visible, 'Dead state clears melee');
   ctx.enemies.inArc = () => [{ enemy: foe, dist: 2 }];
   ctx.game.playersInArc = () => [remote];
   ctx.game.breakablesInArc = () => [prop];
-  katana.startSlash(neutral);
-  assert(named('tracer').length === 9, 'Slash emits nine arc segments');
-  step(katana, 0.08);
-  assert(!last('enemyDamage'), 'Slash damage waits for the documented hit moment');
-  step(katana, 0.01);
-  assert(num(must(last('enemyDamage'), 'enemyDamage')[1]) === 75 && num(must(last('playerDamage'), 'playerDamage')[1]) === 55 && num(must(last('breakHit'), 'breakHit')[1]) === 75, 'Katana routes its three damage values');
-  step(katana, 0.18);
-  assert(named('enemyDamage').length === 1, 'A slash hits each target once');
-  step(katana, 0.07, { ...neutral, fire: true });
-  assert(katana.combo === 2 && named('katanaSwing').length === 2, 'Held fire chains the alternate slash after cooldown');
-  katana.addBlood(0.84); katana.animate(neutral, 0);
-  const smears = katana.root.children.filter(child => child.name.startsWith('blood-smear-'));
-  assert(smears.length === 6 && smears.filter(smear => smear.visible).length === 5, 'Blood thresholds reveal five of six smears at 0.84');
-  assert(smears.map(smear => smear.userData.threshold).join(',') === '0,0.18,0.4,0.58,0.74,0.88', 'Blade smear thresholds match the specification');
-  katana.resetAmmo();
-  assert(katana.blood === 0 && katana.combo === 0 && !katana.blocking && smears.every(smear => !smear.visible), 'Reset clears katana combat and blade state');
+  melee.startSlash(neutral);
+  step(melee, 0.08);
+  assert(!last('enemyDamage'), 'Melee damage waits for contact');
+  step(melee, 0.01);
+  assert(num(must(last('enemyDamage'), 'enemyDamage')[1]) === 75 && num(must(last('playerDamage'), 'playerDamage')[1]) === 55 && num(must(last('breakHit'), 'breakHit')[1]) === 75, 'Melee routes enemy, player and prop damage');
+  step(melee, 0.3, { ...neutral, fire: true });
+  assert(named('enemyDamage').length === 1 && melee.combo === 1, 'One strike hits once; holding gun fire does not chain it');
+  ctx.world.lineOfSight = () => false;
+  melee.startSlash(neutral); step(melee, 0.1);
+  assert(named('enemyDamage').length === 1, 'A knife cannot hit an enemy through a wall');
+  ctx.world.lineOfSight = () => true;
+  melee.addBlood(0.84); melee.animate(neutral, 0);
+  const smears = melee.root.children.filter(child => child.name.startsWith('blood-smear-'));
+  assert(smears.length === 6 && smears.filter(smear => smear.visible).length === 5, 'Blood follows the knife smear thresholds');
+  melee.resetAmmo();
+  assert(melee.blood === 0 && melee.combo === 0 && !melee.active && smears.every(smear => !smear.visible), 'Reset clears melee state');
+  ctx.enemies.inArc = () => [];
+  ctx.game.playersInArc = () => [];
+  ctx.game.breakablesInArc = () => [];
+});
+
+test('pistol fires once per press, cycles its slide and reloads', () => {
+  pistol.resetAmmo(); pistol.equip(); calls.length = 0;
+  pistol.animate(fire, 0);
+  assert(pistol.mag === 14 && named('pistolFire').length === 1, 'Pistol fires on the trigger edge');
+  const slide = must(pistol.root.getObjectByName('slide'), 'slide');
+  assert(slide.position.z > -0.10, 'Slide recoils on firing');
+  step(pistol, 0.3, { ...neutral, fire: true });
+  assert(pistol.mag === 14 && near(slide.position.z, -0.10), 'Held trigger does not auto-fire and the slide returns');
+  pistol.animate(fire, 0);
+  assert(pistol.mag === 13, 'A new press fires the next round');
+  pistol.startReload(); step(pistol, 1.25);
+  assert(pistol.mag === 15 && pistol.reserve === 88, 'Pistol reload conserves ammo');
 });
 
 test('real-time auto-reload', async () => {
@@ -248,8 +266,8 @@ test('real-time auto-reload', async () => {
   assert(!rifle.reloading, 'Empty magazine does not reload before the real-time delay');
   await new Promise(resolve => window.setTimeout(resolve, 280));
   assert(rifle.reloading && rifle.mag === 0, 'Real-time auto-reload starts while holstered without animation');
-  rifle.equip(); step(rifle, 1.45);
-  assert(rifle.mag === 35 && !rifle.reloading, 'Auto-reload advances after re-equip');
+  rifle.equip(); step(rifle, 1.65);
+  assert(rifle.mag === 30 && !rifle.reloading, 'Auto-reload advances after re-equip');
   sniper.equip(); sniper.mag = 1; sniper.animate(fire, 0);
   await new Promise(resolve => window.setTimeout(resolve, 280));
   assert(sniper.reloading, 'Sniper auto-reload can start during its frozen bolt cycle');

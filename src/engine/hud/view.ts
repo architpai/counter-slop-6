@@ -30,15 +30,14 @@ export interface HudView {
   key(action: string): string;
 
   setAmmo(mag: number, reserve: number, magSize: number, reloading: boolean): void;
-  setKatanaAmmo(): void;
   setSlots(slots: SlotView[]): void;
   setGrenades(n: number): void;
   setBreath(frac: number): void;
   setHealth(hp: number, max: number): void;
   setSpread(px: number): void;
-  setCrosshairMode(mode: '' | 'katana'): void;
+  setCrosshairMode(mode: '' | 'melee'): void;
   setAds(on: boolean): void;
-  setScope(on: boolean): void;
+  setScope(on: boolean, kind?: 'sniper' | 'acog'): void;
   setGrappleTarget(state: 0 | 1 | 2): void;
   setFocusMeter(show: boolean, frac: number, ready: boolean, label: string): void;
   setFocusMark(x: number | null, y?: number): void;

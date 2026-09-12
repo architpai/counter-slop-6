@@ -308,13 +308,13 @@ export class EnemyManager {
   _bloodTone(e: EnemyRecord): ToneId { return e.stats.tone === TONE.DARK ? TONE.DARK : TONE.HOSTILE; }
 
   damage(e: EnemyRecord, amount: number, info: HitInfo = {}): void {
-    if (!e?.alive || !Number.isFinite(amount)) return;
+    if (!e?.alive || !Number.isFinite(amount) || amount <= 0) return;
     const { effects, audio, hud, input, game } = this.ctx;
     const point = info.point ?? e.center, dir = info.dir ?? up;
     if (info.part === 'shield') {
       effects.sparks(point, scratch.copy(dir).negate(), TONE.ACCENT, 8, 8);
       audio.shieldHit(point); hud.hitmarker(false, false);
-      if ((info.source === 'katana' || info.source === 'blast') && e.shieldHp > 0 && --e.shieldHp <= 0) this._breakShield(e);
+      if ((info.source === 'melee' || info.source === 'blast') && e.shieldHp > 0 && --e.shieldHp <= 0) this._breakShield(e);
       return;
     }
     e.flinch = 1; e.flashT = 0.07; flash(e, true);
@@ -322,6 +322,7 @@ export class EnemyManager {
     if (this.mirror) { hud.hitmarker(false, !!info.crit); this.onClientHit?.(e, amount, info); return; }
     amount *= this.mods.damage;
     e.hp -= amount;
+    if (amount > 0) this.ctx.player?.onHeadshot(info);
     if (info.crit) audio.headshot(point); else audio.hitEnemy(point);
     hud.hitmarker(e.hp <= 0, !!info.crit);
     if (info.source !== 'deflect') input.rumble(0.1, 0.3, 30);
@@ -358,8 +359,8 @@ export class EnemyManager {
       effects.debris(e.root, e.body.pos, vel, spin.set(rand(-9, 9), rand(-9, 9), rand(-9, 9)), { radius: 0.5, blood: true, life: 8 });
       effects.blood(e.center, dir, 1, { tone }); done(true); return;
     }
-    const src = info.source, slash = src === 'katana' || src === 'focus';
-    const overkill = -e.hp > 0.35 * e.maxHp || src === 'katana' || !!info.crit || src === 'deflect' || src === 'blast';
+    const src = info.source, slash = src === 'melee' || src === 'focus';
+    const overkill = -e.hp > 0.35 * e.maxHp || src === 'melee' || !!info.crit || src === 'deflect' || src === 'blast';
     if (overkill) {
       audio.gib(e.center);
       // Bombers and flyers have returned above; every kind still here walks.

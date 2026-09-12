@@ -89,7 +89,7 @@ export const Crosshair = memo(function Crosshair({ store }: { store: HudStore })
   rendered();
   const state = useHud(store, 'crosshair');
   return (
-    <div className={`crosshair${state.katana ? ' katana' : ''}${state.ads ? ' ads' : ''}`} data-hud="crosshair" aria-hidden="true">
+    <div className={`crosshair${state.melee ? ' melee' : ''}${state.ads ? ' ads' : ''}`} data-hud="crosshair" aria-hidden="true">
       <i className="tick top" /><i className="tick bottom" /><i className="tick left" /><i className="tick right" /><i className="dot" />
     </div>
   );
@@ -129,6 +129,7 @@ export const Ammo = memo(function Ammo({ store }: { store: HudStore }) {
 export const Slots = memo(function Slots({ store }: { store: HudStore }) {
   rendered();
   const slots = useHud(store, 'slots');
+  const pad = useHud(store, 'device');
   return (
     <div className="weapon-slots" data-hud="slots">
       {slots.map((slot, index) => (
@@ -136,6 +137,7 @@ export const Slots = memo(function Slots({ store }: { store: HudStore }) {
           <span className="slot-badge">{index + 1}</span><span>{slot.name}</span><span className="slot-ammo">{slot.ammo}</span>
         </div>
       ))}
+      <div className="melee-hint"><b>{pad ? 'R1 / RB' : 'F / V'}</b> MELEE <span>∞</span></div>
     </div>
   );
 });
@@ -218,8 +220,20 @@ export const Breath = memo(function Breath({ store }: { store: HudStore }) {
 
 export const Scope = memo(function Scope({ store }: { store: HudStore }) {
   rendered();
-  const shown = useHud(store, 'scope');
-  return <div className={`scope${shown ? ' is-visible' : ''}`} data-hud="scope" aria-hidden={!shown}><div className="scope-ring" /><div className="scope-cross horizontal" /><div className="scope-cross vertical" /><div className="scope-dot" /></div>;
+  const state = useHud(store, 'scope');
+  return (
+    <div className={`scope ${state.kind}${state.shown ? ' is-visible' : ''}`} data-hud="scope" data-kind={state.kind} aria-hidden={!state.shown}>
+      <div className="scope-ring" />
+      {state.kind === 'acog' ? <>
+        <svg className="acog-reticle" viewBox="0 0 200 200" aria-hidden="true">
+          <path className="acog-chevron" d="M90 110 L100 100 L110 110" />
+          <path d="M100 116 V156 M90 126 H110 M93 138 H107 M96 150 H104 M40 112 H70 M130 112 H160" />
+          <text x="116" y="129">4</text><text x="113" y="141">6</text>
+        </svg>
+        <div className="acog-label">ACOG · 4×</div>
+      </> : <><div className="scope-cross horizontal" /><div className="scope-cross vertical" /><div className="scope-dot" /></>}
+    </div>
+  );
 });
 
 export const GrappleReticle = memo(function GrappleReticle({ store }: { store: HudStore }) {

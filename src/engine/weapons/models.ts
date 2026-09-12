@@ -27,13 +27,14 @@ export interface ModelParts {
   cylinder?: THREE.Object3D;
   foreEnd?: THREE.Object3D;
   bolt?: THREE.Object3D;
+  slide?: THREE.Object3D;
 }
 
 /** What a `ViewModel` needs from any view model. */
 export interface WeaponModel {
   root: THREE.Group;
   parts: ModelParts;
-  /** Gun: the barrel end. Katana: the blade tip. */
+  /** Gun: the barrel end. Melee: the knife tip. */
   muzzle: THREE.Group;
   bloodSmears: THREE.Mesh[];
 }
@@ -134,27 +135,59 @@ function model(name: string): Draft {
 }
 
 export function makeGunModel(kind: GunKind): GunModel {
-  if (!['rifle', 'shotgun', 'sniper', 'revolver'].includes(kind)) throw new RangeError(`Unknown gun kind: ${kind}`);
+  if (!['rifle', 'pistol', 'shotgun', 'sniper', 'revolver'].includes(kind)) throw new RangeError(`Unknown gun kind: ${kind}`);
   const result = model(kind), { root, parts } = result;
   let muzzlePos: Triple, ejectPos: Triple, leftHand: THREE.Object3D;
   if (kind === 'rifle') {
-    box(root, 'receiver', [0.09, 0.12, 0.50], [0, 0, 0]);
-    box(root, 'handguard', [0.075, 0.085, 0.36], [0, 0, -0.42], DARK);
-    cylinder(root, 'barrel', 0.018, 0.42, [0, 0.02, -0.75], DARK);
-    parts.mag = remember(box(root, 'magazine', [0.06, 0.20, 0.10], [0, -0.16, -0.06], DARK, [0.15, 0, 0]));
-    box(root, 'stock', [0.07, 0.11, 0.30], [0, -0.01, 0.40], DARK);
-    box(root, 'grip', [0.05, 0.14, 0.06], [0, -0.13, 0.12], DARK, [0.3, 0, 0]);
-    const sight = group(root, 'sight-ring', [0, 0.12, -0.05]);
-    for (const side of [-1, 1]) {
-      box(sight, `sight-horizontal-${side}`, [0.075, 0.012, 0.03], [0, side * 0.035, 0], DARK);
-      box(sight, `sight-vertical-${side}`, [0.012, 0.07, 0.03], [side * 0.0375, 0, 0], DARK);
+    box(root, 'receiver', [0.10, 0.13, 0.48], [0, 0, 0], DARK);
+    box(root, 'receiver-trim', [0.106, 0.035, 0.42], [0, 0.066, 0.01], PRIMARY);
+    parts.mag = remember(group(root, 'magazine', [0, -0.06, -0.04]));
+    box(parts.mag, 'magazine-upper', [0.062, 0.13, 0.09], [0, -0.055, 0], DARK, [0.12, 0, 0]);
+    box(parts.mag, 'magazine-middle', [0.062, 0.105, 0.09], [0, -0.16, -0.024], DARK, [0.30, 0, 0]);
+    box(parts.mag, 'magazine-lower', [0.062, 0.10, 0.09], [0, -0.245, -0.06], DARK, [0.46, 0, 0]);
+    box(root, 'magazine-lip', [0.065, 0.025, 0.12], [0, -0.055, -0.04], PRIMARY, [0.18, 0, 0]);
+    const handguard = group(root, 'ribbed-handguard', [0, 0, -0.39]);
+    box(handguard, 'handguard-core', [0.082, 0.09, 0.32], [0, 0, 0], DARK);
+    for (let i = 0; i < 5; i++) box(handguard, `handguard-rib-${i}`, [0.088, 0.012, 0.035], [0, 0.05, -0.13 + i * 0.065], PRIMARY);
+    cylinder(root, 'barrel', 0.018, 0.38, [0, 0.015, -0.75], DARK);
+    mesh(root, 'front-sight-hood', torusGeo(0.034, 0.007, 5, 12), toneMat(DARK), [0, 0.083, -0.88]);
+    box(root, 'front-sight-post', [0.008, 0.036, 0.015], [0, 0.066, -0.88], DARK);
+    for (const side of [-1, 1]) cylinder(root, `stock-rail-${side}`, 0.009, 0.30, [side * 0.052, 0.018, 0.36], DARK);
+    box(root, 'stock-end', [0.085, 0.17, 0.035], [0, -0.025, 0.51], DARK);
+    box(root, 'grip', [0.052, 0.15, 0.065], [0, -0.14, 0.13], DARK, [0.3, 0, 0]);
+    box(root, 'charging-handle', [0.018, 0.025, 0.11], [-0.06, 0.075, -0.08], PRIMARY, [0, 0.2, 0]);
+    cylinder(root, 'acog-tube', 0.045, 0.34, [0, 0.145, -0.10], DARK);
+    cylinder(root, 'acog-objective', 0.062, 0.055, [0, 0.145, -0.29], PRIMARY);
+    cylinder(root, 'acog-ocular', 0.052, 0.05, [0, 0.145, 0.09], PRIMARY);
+    box(root, 'acog-mount-front', [0.035, 0.085, 0.035], [0, 0.087, -0.20], DARK);
+    box(root, 'acog-mount-rear', [0.035, 0.085, 0.035], [0, 0.087, 0.04], DARK);
+    const reticle = group(root, 'acog-red-chevron', [0, 0.145, -0.325]);
+    box(reticle, 'chevron-left', [0.006, 0.026, 0.004], [-0.012, 0.008, 0], SIGHT, [0, 0, -0.65]);
+    box(reticle, 'chevron-right', [0.006, 0.026, 0.004], [0.012, 0.008, 0], SIGHT, [0, 0, 0.65]);
+    box(reticle, 'chevron-point', [0.006, 0.018, 0.004], [0, -0.006, 0], SIGHT);
+    hand(root, 'right-hand', [0.02, -0.15, 0.14], [0.5, -0.6, 1]);
+    leftHand = hand(root, 'left-hand', [-0.05, -0.08, -0.38], [-0.35, -0.9, 0.9]);
+    muzzlePos = [0, 0.015, -0.96]; ejectPos = [0.06, 0.02, 0.02];
+  } else if (kind === 'pistol') {
+    box(root, 'frame', [0.065, 0.12, 0.24], [0, 0, 0], DARK);
+    parts.slide = remember(box(root, 'slide', [0.07, 0.075, 0.30], [0, 0.065, -0.10], PRIMARY));
+    box(root, 'slide-serration-front', [0.075, 0.012, 0.04], [0, 0.09, -0.20], DARK);
+    box(root, 'barrel', [0.035, 0.04, 0.24], [0, 0.055, -0.28], DARK);
+    box(root, 'grip', [0.06, 0.22, 0.08], [0, -0.13, 0.10], DARK, [0.18, 0, 0]);
+    parts.mag = remember(box(root, 'magazine', [0.045, 0.19, 0.065], [0, -0.12, 0.10], DARK, [0.18, 0, 0]));
+    box(root, 'trigger-guard', [0.055, 0.035, 0.10], [0, -0.055, -0.02], DARK, [0.2, 0, 0]);
+    box(root, 'trigger', [0.012, 0.04, 0.018], [0, -0.055, -0.015], PRIMARY, [0.2, 0, 0]);
+    box(root, 'front-sight', [0.012, 0.025, 0.02], [0, 0.115, -0.27], SIGHT);
+    box(root, 'rear-sight-left', [0.012, 0.022, 0.018], [-0.022, 0.108, 0.035], DARK);
+    box(root, 'rear-sight-right', [0.012, 0.022, 0.018], [0.022, 0.108, 0.035], DARK);
+    root.updateMatrixWorld(true);
+    for (const name of ['slide-serration-front', 'front-sight', 'rear-sight-left', 'rear-sight-right']) {
+      const part = root.getObjectByName(name);
+      if (part) parts.slide.attach(part);
     }
-    box(root, 'sight-base', [0.03, 0.018, 0.05], [0, 0.062, -0.05], DARK);
-    mesh(root, 'reticle-ring', torusGeo(0.0075, 0.0018, 5, 14), toneMat(SIGHT), [0, 0.12, -0.05]);
-    sphere(root, 'reticle-dot', 0.0015, [0, 0.12, -0.05], SIGHT, 5);
-    hand(root, 'right-hand', [0.02, -0.15, 0.13], [0.5, -0.6, 1]);
-    leftHand = hand(root, 'left-hand', [-0.05, -0.08, -0.40], [-0.35, -0.9, 0.9]);
-    muzzlePos = [0, 0.02, -0.98]; ejectPos = [0.06, 0.02, 0.02];
+    hand(root, 'right-hand', [0.02, -0.13, 0.12], [0.4, -0.6, 1]);
+    leftHand = hand(root, 'left-hand', [-0.045, -0.16, 0.08], [-0.35, -0.8, 1]);
+    muzzlePos = [0, 0.055, -0.42]; ejectPos = [0.05, 0.08, -0.08];
   } else if (kind === 'shotgun') {
     box(root, 'receiver', [0.09, 0.13, 0.42], [0, 0, 0.05]);
     cylinder(root, 'barrel', 0.021, 0.92, [0, 0.05, -0.62], DARK);
@@ -214,18 +247,17 @@ export function makeGunModel(kind: GunKind): GunModel {
   return { root, parts: { ...parts, leftHand }, muzzle, eject, flash: flash(muzzle), bloodSmears: result.bloodSmears };
 }
 
-export function makeKatanaModel(): WeaponModel {
-  const { root, bloodSmears } = model('katana');
-  mesh(root, 'blade', boxGeo(0.012, 0.035, 1.00), charMat(0xcbdbe3), [0, 0, -0.55]);
-  mesh(root, 'blade-tip', boxGeo(0.012, 0.02, 0.08), charMat(0xcbdbe3), [0, 0.007, -1.07], [0.3, 0, 0]);
-  box(root, 'guard', [0.10, 0.10, 0.02], [0, 0, -0.05], DARK);
-  box(root, 'handle-core', [0.03, 0.036, 0.30], [0, 0, 0.12], DARK);
-  for (let i = 0; i < 6; i++) box(root, `handle-wrap-${i}`, [0.036, 0.04, 0.02], [0, 0, 0.02 + i * 0.045]);
-  hand(root, 'front-hand', [0, -0.005, 0.05], [0.5, -0.5, 1]);
-  const leftHand = hand(root, 'rear-hand', [0, -0.005, 0.20], [-0.4, -0.7, 1]);
-  const muzzle = group(root, 'tip', [0, 0, -1.05]);
-  /** `[centre, length, bloodThreshold, side]` */
-  const smears: [number, number, number, number][] = [[-0.34, 0.30, 0, 1], [-0.70, 0.26, 0.18, -1], [-0.95, 0.17, 0.40, 1], [-0.52, 0.22, 0.58, -1], [-0.20, 0.20, 0.74, 1], [-0.84, 0.20, 0.88, -1]];
+export function makeMeleeModel(): WeaponModel {
+  const { root, bloodSmears } = model('melee');
+  mesh(root, 'blade', boxGeo(0.012, 0.035, 0.42), charMat(0xcbdbe3), [0, 0, -0.25]);
+  mesh(root, 'blade-tip', boxGeo(0.012, 0.02, 0.07), charMat(0xcbdbe3), [0, 0.007, -0.49], [0.3, 0, 0]);
+  box(root, 'guard', [0.10, 0.07, 0.02], [0, 0, -0.04], DARK);
+  box(root, 'textured-grip', [0.035, 0.042, 0.18], [0, 0, 0.07], DARK);
+  for (let i = 0; i < 4; i++) box(root, `grip-ridge-${i}`, [0.041, 0.048, 0.018], [0, 0, 0.005 + i * 0.045], PRIMARY);
+  hand(root, 'striking-right-hand', [0, -0.005, 0.01], [0.5, -0.5, 1]);
+  const leftHand = hand(root, 'supporting-left-hand', [-0.05, -0.035, 0.12], [-0.4, -0.7, 1]);
+  const muzzle = group(root, 'tip', [0, 0, -0.47]);
+  const smears: [number, number, number, number][] = [[-0.15, 0.12, 0, 1], [-0.29, 0.11, 0.18, -1], [-0.42, 0.08, 0.40, 1], [-0.22, 0.10, 0.58, -1], [-0.10, 0.08, 0.74, 1], [-0.36, 0.09, 0.88, -1]];
   smears.forEach(([center, length, threshold, side], i) => {
     const bottom = -0.92 * 0.0168, top: Triple[] = [], vertices: number[] = [];
     for (let k = 0; k <= 12; k++) {
@@ -235,7 +267,6 @@ export function makeKatanaModel(): WeaponModel {
       top.push([0, v, u]);
     }
     for (let k = 0; k < 12; k++) {
-      // 13 ridge points make 12 quads, so both ends of every quad exist.
       const from = top[k], to = top[k + 1];
       if (!from || !to) continue;
       const a: Triple = [0, bottom, from[2]], b: Triple = [0, bottom, to[2]];

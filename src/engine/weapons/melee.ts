@@ -2,7 +2,7 @@ import { Vector3 } from 'three';
 import { clamp, damp, easeInOut, rand } from '../util';
 import { TONE } from '../render/index';
 import { ViewModel } from './gun';
-import { makeKatanaModel, smearThreshold } from './models';
+import { makeMeleeModel, smearThreshold } from './models';
 import type { Ctx, Enemy, HitInfo, Player, WeaponState } from '../types';
 import type { Weapon } from './index';
 
@@ -11,7 +11,7 @@ const GUARD_ROT = new Vector3(1.40, 0.30, 1.24);
 
 
 /** The blade state `resetAmmo` owns, which the constructor calls. */
-export interface Katana {
+export interface Melee {
   /** Guard is up: aim held, not slashing, off cooldown. */
   blocking: boolean;
   /** Seconds the current guard has been up. Under 0.26 a deflect is perfect. */
@@ -32,8 +32,8 @@ export interface Katana {
   _hitDone: boolean;
 }
 
-export class Katana extends ViewModel implements Weapon {
-  readonly kind: 'katana';
+export class Melee extends ViewModel implements Weapon {
+  readonly kind: 'melee';
   readonly name: string;
   readonly hint: string;
   readonly isGun: false;
@@ -48,10 +48,10 @@ export class Katana extends ViewModel implements Weapon {
   _hitDir: Vector3;
 
   constructor(ctx: Ctx, player: Player) {
-    super(ctx, player, makeKatanaModel(), [0.27, -0.25, -0.40], [0.75, 0.15, -0.35]);
-    this.kind = 'katana';
-    this.name = 'KATANA';
-    this.hint = 'slash · hold aim to block & return bullets';
+    super(ctx, player, makeMeleeModel(), [0.23, -0.20, -0.32], [0.35, 0.10, -0.45]);
+    this.kind = 'melee';
+    this.name = 'KNIFE';
+    this.hint = 'tap melee to strike · hold melee to guard';
     this.isGun = false;
     this.scope = false;
     this.adsFov = 60;
@@ -63,6 +63,7 @@ export class Katana extends ViewModel implements Weapon {
     this.resetAmmo();
   }
 
+  get active() { return this._slashT > 0 || this.blocking || this._blockAmt > 0.1; }
   get spreadPx() { return 4; }
   addAmmo() {}
 
@@ -73,6 +74,7 @@ export class Katana extends ViewModel implements Weapon {
     this._parryDir = 1;
     this._hitDone = false;
     this._resetPose();
+    this.root.visible = false;
     for (const smear of this._model.bloodSmears) smear.visible = false;
   }
 
@@ -88,15 +90,17 @@ export class Katana extends ViewModel implements Weapon {
   }
 
   startSlash(st: WeaponState) {
-    if (this._disposed) return;
+    if (this._disposed || st.blockFire || this.cooldown > 0 || this._slashT > 0) return;
     this._slashT = 0.27;
+    this.blocking = false;
+    this.root.visible = true;
     this._hitDone = false;
     this.combo++;
     this._comboT = 0.9;
     this.cooldown = 0.33;
     this._ctx.audio.katanaSwing();
     this._player.kickFov(2);
-    if (st.sprinting || !st.grounded) this._player.lunge(5.5);
+    if (st.sprinting || !st.grounded) this._player.lunge(3.5);
     const side = this.combo % 2 ? 1 : -1;
     for (let i = 0; i < 9; i++) {
       const a = (-1.1 + 2.2 * i / 8) * side, b = a + 0.12 * side;
@@ -114,7 +118,11 @@ export class Katana extends ViewModel implements Weapon {
 
   animate(st: WeaponState, dt: number) {
     if (this._disposed || !this._equipped) return;
-    this._pose(st, dt);
+    if (st.blockFire) {
+      this.resetAmmo();
+      return;
+    }
+    this._pose({ ...st, aim: false }, dt);
     this.cooldown -= dt;
     this._comboT -= dt;
     if (this._comboT <= 0) this.combo = 0;
@@ -129,7 +137,7 @@ export class Katana extends ViewModel implements Weapon {
         smear.scale.set(1, 0.35 + 0.65 * f, 0.4 + 0.6 * f);
       }
     }
-    const wantBlock = st.aim && !st.fire && this._slashT <= 0 && this.cooldown <= 0;
+    const wantBlock = st.aim && !st.meleePressed && this._slashT <= 0 && this.cooldown <= 0;
     if (wantBlock && !this.blocking) this.blockT = 0;
     this.blocking = wantBlock;
     if (this.blocking) this.blockT += dt;
@@ -160,10 +168,9 @@ export class Katana extends ViewModel implements Weapon {
         this._hitDone = true;
         this._hit(side);
       }
-    } else if ((st.firePressed || (st.fire && this.combo > 0)) && this.cooldown <= 0 && !st.blockFire) {
-      this.startSlash(st);
     }
-    if (st.meleePressed && this._slashT <= 0 && this.cooldown <= 0) this.startSlash(st);
+    if (st.meleePressed) this.startSlash(st);
+    this.root.visible = this._equipped && this.active;
   }
 
   _hit(side: number) {
@@ -176,18 +183,19 @@ export class Katana extends ViewModel implements Weapon {
     d.y -= 0.35;
     d.normalize();
     let hit = false;
-    for (const { enemy } of enemies?.inArc(p.eye, p.forward, 3, Math.cos(0.95)) ?? []) {
+    for (const { enemy } of enemies?.inArc(p.eye, p.forward, 2.1, Math.cos(0.8)) ?? []) {
+      if (!this._ctx.world.lineOfSight(p.eye, enemy.center)) continue;
       const point = enemy.center.clone();
       point.y += rand(-0.2, 0.4);
-      enemies?.damage(enemy, 75, { point, dir: d, part: 'torso', source: 'katana', crit: false, slashDir: side });
+      enemies?.damage(enemy, 75, { point, dir: d, part: 'torso', source: 'melee', crit: false, slashDir: side });
       hit = true;
     }
-    for (const remote of game.playersInArc(p.eye, p.forward, 3, Math.cos(0.95))) {
-      game.hitPlayer(remote, 55, { point: remote.center, dir: d, part: 'torso', source: 'katana', crit: false });
+    for (const remote of game.playersInArc(p.eye, p.forward, 2.1, Math.cos(0.8))) {
+      game.hitPlayer(remote, 55, { point: remote.center, dir: d, part: 'torso', source: 'melee', crit: false });
       hit = true;
     }
-    if (game.cutRopes(p.eye, p.forward, 3.4)) hit = true;
-    for (const prop of game.breakablesInArc(p.eye, p.forward, 3.2, Math.cos(1))) {
+    if (game.cutRopes(p.eye, p.forward, 2.4)) hit = true;
+    for (const prop of game.breakablesInArc(p.eye, p.forward, 2.2, Math.cos(0.8))) {
       game.breakHit(prop, 75, prop.pos, d);
       hit = true;
     }

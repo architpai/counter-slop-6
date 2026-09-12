@@ -6,6 +6,10 @@ import type { Player } from './index';
 export interface CameraState {
   recoilPitch: Spring;
   recoilYaw: Spring;
+  /** Brief shooter-side feedback and follow-up recoil recovery after a headshot. */
+  headshotRoll: Spring;
+  headshotT: number;
+  headshotSide: number;
   fovKick: Spring;
   /** Landing dip; the weapon reads it through `WeaponState.landDip`. */
   landDip: Spring;
@@ -25,6 +29,9 @@ const target = new Vector3(0, 10, 0);
 export function initCamera(p: Player): void {
   p.recoilPitch = new Spring(190, 17);
   p.recoilYaw = new Spring(190, 17);
+  p.headshotRoll = new Spring(360, 25);
+  p.headshotT = 0;
+  p.headshotSide = 1;
   p.fovKick = new Spring(220, 14);
   p.landDip = new Spring(170, 15);
   p.eyeHeight = 1.6;
@@ -52,8 +59,13 @@ export function updateBob(p: Player, dt: number): void {
 
 export function updateCamera(p: Player, dt: number): void {
   const { camera, effects } = p.ctx;
+  const settle = p.headshotT > 0 ? Math.exp(-12 * dt) : 1;
+  p.recoilPitch.vel *= settle;
+  p.recoilYaw.vel *= settle;
   p.recoilPitch.update(dt);
   p.recoilYaw.update(dt);
+  p.headshotRoll.update(dt);
+  p.headshotT = Math.max(0, p.headshotT - dt);
   p.fovKick.update(dt);
   p.landDip.update(dt);
   p.stepOffset = damp(p.stepOffset, 0, 22, dt);
@@ -68,13 +80,13 @@ export function updateCamera(p: Player, dt: number): void {
   camera.rotation.set(
     p.pitch + p.recoilPitch.value + rand(-0.5, 0.5) * shake * 0.035,
     p.yaw + p.recoilYaw.value + rand(-0.5, 0.5) * shake * 0.035,
-    p.roll + Math.sin(p.bobPhase * 0.5) * 0.004 * p.bobAmt,
+    p.roll + p.headshotRoll.value + Math.sin(p.bobPhase * 0.5) * 0.004 * p.bobAmt,
     'YXZ',
   );
   const targetFov = p.aiming ? p.weapon.adsFov
     : 82 + clamp((p.speed - 7) / 16, 0, 1) * 8 + (p.sprinting ? 3 : 0)
       + (p.sliding ? 4 : 0) + (p.grapple.mode === 'on' ? 3 : 0) + p.fovKick.value;
-  const fov = damp(camera.fov, targetFov, p.aiming ? 16 : 8, dt);
+  const fov = damp(camera.fov, targetFov, p.aiming || p.melee.active ? 16 : 8, dt);
   if (Math.abs(fov - camera.fov) > 0.01) {
     camera.fov = fov;
     camera.updateProjectionMatrix();

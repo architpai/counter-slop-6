@@ -29,7 +29,7 @@ interface Falloffable {
   dist: number;
 }
 
-// Shared by guns and the katana; only the concrete weapons are public.
+// Shared by guns and the always-available melee view model.
 export abstract class ViewModel<M extends WeaponModel = WeaponModel> {
   /** Set by the concrete weapon: a scoped gun hides its model at full aim. */
   abstract readonly scope: boolean;
@@ -242,7 +242,9 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
     const stats = this._stats;
     const base = st.aim ? stats.adsSpread : stats.hipSpread;
     const move = st.speed * stats.moveSpread + (st.grounded ? 0 : 0.01) + (st.sliding ? 0.008 : 0);
-    this._spread = damp(this._spread, base + move, 7, dt);
+    this._spread = damp(this._spread, base + move, this._player.headshotT > 0 ? 22 : 7, dt);
+    const slide = this._model.parts.slide;
+    if (slide) slide.position.z = restPose(slide).restPos.z + Math.max(0, this._flashT) / 0.045 * 0.07;
     if (this._pumpT > 0) this._cycle(dt);
     if (this.reloading) {
       this._reload(dt);
@@ -268,10 +270,11 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
 
   _fire(st: WeaponState) {
     const s = this._stats, { effects, audio, input, game } = this._ctx;
+    const followUp = this._player.headshotT > 0 ? 0.6 : 1;
     this._fireT = s.fireInterval;
     this.mag--;
     const spreadNow = this._spread;
-    this._spread = Math.min(this._spread + s.spreadKick, s.spreadMax);
+    this._spread = Math.min(this._spread + s.spreadKick * followUp, s.spreadMax);
     this._model.muzzle.getWorldPosition(this._muzzle);
     let hits = 0;
     for (let i = 0; i < s.pellets; i++) {
@@ -281,6 +284,7 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
     const flash = this._model.flash;
     flash.visible = true;
     this._flashT = 0.045;
+    if (this._model.parts.slide) this._model.parts.slide.position.z = restPose(this._model.parts.slide).restPos.z + 0.07;
     flash.rotation.z = rand(0, TAU);
     flash.scale.setScalar(s.flashScale * rand(0.8, 1.4));
     effects.strokeBurst(this._muzzle, TONE.ACCENT, 4 + s.pellets, 6 * s.flashScale,
@@ -293,9 +297,9 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
       if (s.reloadType === 'shells') this._needPump = true;
     }
     const k = s.modelKick;
-    this.kickPos(rand(-k[0], k[0]), rand(0.4 * k[1], k[1]), k[2]);
-    this.kickRot(k[3], rand(-k[4], k[4]), rand(-k[5], k[5]));
-    this._player.recoil(s.camKick[0] * (st.aim ? 0.7 : 1) + rand(0, s.camKick[0] * 0.3), rand(-s.camKick[1], s.camKick[1]));
+    this.kickPos(rand(-k[0], k[0]) * followUp, rand(0.4 * k[1], k[1]) * followUp, k[2] * followUp);
+    this.kickRot(k[3] * followUp, rand(-k[4], k[4]) * followUp, rand(-k[5], k[5]) * followUp);
+    this._player.recoil((s.camKick[0] * (st.aim ? 0.7 : 1) + rand(0, s.camKick[0] * 0.3)) * followUp, rand(-s.camKick[1], s.camKick[1]) * followUp);
     this._player.kickFov(s.fovKick);
     audio[s.fireCue]();
     input.rumble(0.15 + s.fovKick * 0.08, 0.5, 40 + s.fovKick * 15);

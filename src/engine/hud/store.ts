@@ -55,7 +55,8 @@ export interface WaveState { wave: number; left: number }
 export interface WeaponState { name: string; hint: string }
 export interface BossState { name: string | null }
 export interface FocusState { show: boolean; ready: boolean; label: string }
-export interface CrosshairState { katana: boolean; ads: boolean }
+export interface CrosshairState { melee: boolean; ads: boolean }
+export interface ScopeState { shown: boolean; kind: 'sniper' | 'acog' }
 export interface MessageState { main: string; sub: string; nonce: number }
 export interface TipState { html: string; nonce: number }
 export interface KillLine { id: number; text: string; points: number }
@@ -76,7 +77,7 @@ export interface HudState {
   boss: BossState;
   focus: FocusState;
   crosshair: CrosshairState;
-  scope: boolean;
+  scope: ScopeState;
   grapple: 0 | 1 | 2;
   message: MessageState;
   tip: TipState;
@@ -123,11 +124,11 @@ export class HudStore implements HudView {
   wave: WaveState = { wave: 1, left: 0 };
   modifier = '';
   timer = '';
-  weapon: WeaponState = { name: 'RIFLE', hint: '' };
+  weapon: WeaponState = { name: 'MP5', hint: '' };
   boss: BossState = { name: null };
-  focus: FocusState = { show: false, ready: false, label: 'KATANA' };
-  crosshair: CrosshairState = { katana: false, ads: false };
-  scope = false;
+  focus: FocusState = { show: false, ready: false, label: 'MELEE' };
+  crosshair: CrosshairState = { melee: false, ads: false };
+  scope: ScopeState = { shown: false, kind: 'sniper' };
   grapple: 0 | 1 | 2 = 0;
   messageState: MessageState = { main: '', sub: '', nonce: 0 };
   tipState: TipState = { html: '', nonce: 0 };
@@ -261,12 +262,6 @@ export class HudStore implements HudView {
     this.#emit('ammo');
   }
 
-  setKatanaAmmo(): void {
-    if (this.ammo.magazine === '∞') return;
-    this.ammo = { magazine: '∞', reserve: '', reloading: false, tally: 0, label: 'Unlimited' };
-    this.#emit('ammo');
-  }
-
   setSlots(slots: SlotView[]): void {
     const rows = Array.isArray(slots) ? slots : [];
     const same = rows.length === this.slots.length && rows.every((slot, i) => {
@@ -320,10 +315,10 @@ export class HudStore implements HudView {
     this.#setVar('--spread', `${Math.max(0, number(px)).toFixed(1)}px`);
   }
 
-  setCrosshairMode(mode: '' | 'katana'): void {
-    const katana = mode === 'katana';
-    if (this.crosshair.katana === katana) return;
-    this.crosshair = { ...this.crosshair, katana };
+  setCrosshairMode(mode: '' | 'melee'): void {
+    const melee = mode === 'melee';
+    if (this.crosshair.melee === melee) return;
+    this.crosshair = { ...this.crosshair, melee };
     this.#emit('crosshair');
   }
 
@@ -333,9 +328,9 @@ export class HudStore implements HudView {
     this.#emit('crosshair');
   }
 
-  setScope(on: boolean): void {
-    if (this.scope === !!on) return;
-    this.scope = !!on;
+  setScope(on: boolean, kind: 'sniper' | 'acog' = 'sniper'): void {
+    if (this.scope.shown === !!on && this.scope.kind === kind) return;
+    this.scope = { shown: !!on, kind };
     this.#emit('scope');
   }
 

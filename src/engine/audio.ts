@@ -302,6 +302,16 @@ export class Audio {
     this.#noise({ type: 'highpass', freq: 2800, duration: 0.06, gain: 0.45 });
     this.#tone({ type: 'triangle', freq: 160, end: 40, duration: 0.15, gain: 0.6 });
   }
+  mp5Fire(pos?: Vector3): void {
+    this.#noise({ type: 'bandpass', freq: 1550, end: 420, Q: 0.7, duration: 0.09, gain: 0.52, pos });
+    this.#noise({ type: 'highpass', freq: 3400, duration: 0.028, gain: 0.32, pos });
+    this.#tone({ type: 'triangle', freq: 185, end: 70, duration: 0.075, gain: 0.36, pos });
+  }
+  pistolFire(pos?: Vector3): void {
+    this.#noise({ type: 'bandpass', freq: 1700, end: 240, duration: 0.13, gain: 0.62, pos });
+    this.#noise({ type: 'highpass', freq: 3200, duration: 0.035, gain: 0.4, pos });
+    this.#tone({ type: 'triangle', freq: 210, end: 65, duration: 0.11, gain: 0.42, pos });
+  }
   shotgunFire(): void {
     this.#noise({ freq: 1800, end: 120, duration: 0.32, gain: 0.9 });
     this.#noise({ type: 'highpass', freq: 2500, duration: 0.08, gain: 0.5 });
@@ -468,11 +478,8 @@ export class Audio {
     } else if (kind === 'sniper') {
       this.#noise({ type: 'bandpass', freq: 750, end: 120, Q: 0.5, duration: 0.4, gain: 1, pos });
       this.#tone({ type: 'sawtooth', freq: 420, end: 50, duration: 0.32, gain: 0.5, pos });
-    } else {
-      this.#noise({ type: 'bandpass', freq: rand(1000, 1500), end: 220, Q: 0.8, duration: 0.16, gain: 0.85, pos });
-      this.#noise({ type: 'highpass', freq: 2600, duration: 0.05, gain: 0.4, pos });
-      this.#tone({ type: 'square', freq: 200, end: 50, duration: 0.12, gain: 0.45, pos });
-    }
+    } else if (kind === 'pistol') this.pistolFire(pos);
+    else this.mp5Fire(pos);
   }
   enemyShot(pos: Vector3): void {
     this.#noise({ type: 'bandpass', freq: rand(900, 1500), end: 200, Q: 0.8, duration: 0.14, gain: 0.5, pos });
