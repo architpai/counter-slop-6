@@ -387,7 +387,7 @@ export function createFFA(app: App): FfaApi {
       return;
     }
     ctx.effects.blood(point, info.dir ?? d1.subVectors(t.center, p.eye).normalize(), clamp(0.4 + damage / 80, 0.4, 1.6), { tone: TONE.HOSTILE });
-    hud.hitmarker(false, !!info.crit); ctx.audio.hitEnemy(t.center); t.flash();
+    hud.hitmarker(false, !!info.crit); ctx.audio.hitEnemy(); t.flash();
     const source = info.source ?? 'rifle';
     const shotId = ++hitId;
     if (info.crit && info.part === 'head' && Object.hasOwn(GUN_STATS, source)) {

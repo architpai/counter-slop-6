@@ -26,6 +26,8 @@ interface HeapItem {
   f: number;
 }
 
+/** Half-width of the node and link clearance tests. Must cover the widest common walker (heavy: halfW 0.41). */
+const CLEARANCE = 0.42;
 const directions: readonly (readonly [number, number])[] = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 const finiteVector = (v: Vector3 | null | undefined) => v && Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
 
@@ -112,7 +114,7 @@ export class NavGrid {
         const heights = new Set<number>();
         for (const box of boxes) if (!box.data.noNav) heights.add(box.max.y);
         for (const y of [...heights].sort((a, b) => a - b)) {
-          if (y < -5 || y > 70 || this.#blocked(x - 0.3, y + 0.5, z - 0.3, x + 0.3, y + 1.85, z + 0.3)) continue;
+          if (y < -5 || y > 70 || this.#blocked(x - CLEARANCE, y + 0.5, z - CLEARANCE, x + CLEARANCE, y + 1.85, z + CLEARANCE)) continue;
           const id = this.nodes.length;
           this.nodes.push({ id, x, y, z, ix, iz, links: [] });
           const index = iz * this.#nx + ix;
@@ -131,8 +133,8 @@ export class NavGrid {
           if (dy > 1.35 || dy < -8) continue;
           if (dx && dz && (!this.#cornerOpen(a.ix + dx, a.iz, a, b) || !this.#cornerOpen(a.ix, a.iz + dz, a, b))) continue;
           const base = Math.max(a.y, b.y);
-          if (this.#blocked(Math.min(a.x, b.x) - 0.25, base + 0.5, Math.min(a.z, b.z) - 0.25,
-            Math.max(a.x, b.x) + 0.25, base + 1.7, Math.max(a.z, b.z) + 0.25)) continue;
+          if (this.#blocked(Math.min(a.x, b.x) - CLEARANCE, base + 0.5, Math.min(a.z, b.z) - CLEARANCE,
+            Math.max(a.x, b.x) + CLEARANCE, base + 1.7, Math.max(a.z, b.z) + CLEARANCE)) continue;
           if (dy < -0.6 && this.#blocked(b.x - 0.2, b.y + 0.05, b.z - 0.2, b.x + 0.2, a.y + 0.05, b.z + 0.2)) continue;
           let cost = Math.sqrt(this.#cell ** 2 * (dx * dx + dz * dz) + dy * dy);
           if (dy > 0.6) cost *= 1 + 1.1 * dy;

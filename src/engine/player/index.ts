@@ -8,7 +8,7 @@ import { MAX_GRENADES } from '../types';
 import type { Ctx, Enemy, HitInfo, LastHit, Projectile, Target, WeaponState } from '../types';
 import { initCamera, updateBob, updateCamera, idleCamera } from './camera';
 import type { CameraState } from './camera';
-import { initMovement, updateMovement, integrateMovement } from './movement';
+import { initMovement, updateMovement, integrateMovement, AIR_JUMPS } from './movement';
 import type { MovementState } from './movement';
 import { initGrapple, updateGrapple, detachGrapple, updateBreath, updateGrappleVisual } from './grapple';
 import type { GrappleState } from './grapple';
@@ -168,7 +168,7 @@ export class Player implements Target {
     this.crouching = this.sliding = this.dashLock = false;
     this.sinceDamage = 10;
     this.dashCd = 0;
-    this.airJumps = 1;
+    this.airJumps = AIR_JUMPS;
     this.gravityScale = 1;
     this.eyeHeight = 1.6;
     this.stepOffset = 0;
@@ -218,7 +218,7 @@ export class Player implements Target {
     updateMovement(this, dt);
     updateGrapple(this, dt);
     integrateMovement(this, dt);
-    if (this.sinceDamage > this.regenDelay && !this.sprinting && this.grapple.mode === 'idle') this.heal(this.regenRate * dt);
+    if (this.sinceDamage > this.regenDelay) this.heal(this.regenRate * dt);
     this.blockHeld = this.blocking ? this.blockHeld + dt : 0;
     updateBreath(this, dt);
     updateBob(this, dt);
@@ -398,6 +398,12 @@ export class Player implements Target {
     }
     this.ctx.audio.dash();
     this.kickFov(3);
+  }
+
+  /** A flat forward push with no hop and no cue: the knife's step-in. */
+  step(speed: number): void {
+    if (!Number.isFinite(speed)) return;
+    this.body.vel.addScaledVector(this.flatForward, speed);
   }
 
   aimDir(spread: number, out = new Vector3()): Vector3 {

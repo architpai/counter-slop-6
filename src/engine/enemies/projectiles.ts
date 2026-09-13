@@ -123,7 +123,8 @@ export function updateProjectiles(m: EnemyManager, dt: number): void {
     if (!p.deflected) {
       for (const t of game.targets()) {
         if (!t.alive) continue;
-        const tight = p.blast ? 0.9 : 0.5;
+        // 0.42 around centre/eye/feet approximates the 0.35 body capsule; 0.5 made the player 40 % fatter to bullets than to walls.
+        const tight = p.blast ? 0.9 : 0.42;
         if (!hitsTarget(p, t, Math.max(tight, t.isLocal ? t.blockRadius : 0))) continue;
         if (t.isLocal) {
           const r = t.tryDeflect(p);

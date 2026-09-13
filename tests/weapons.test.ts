@@ -28,7 +28,7 @@ const neutral: WeaponState = { fire: false, firePressed: false, aim: false, relo
   lookDelta: { x: 0, y: 0 }, strafe: 0, bobPhase: 0, bobAmt: 0, landDip: 0, slideTilt: 0, blockFire: false };
 const fire: WeaponState = { ...neutral, fire: true, firePressed: true };
 
-interface Foe { center: Vector3 }
+interface Foe { center: Vector3; stats: { boss: boolean } }
 interface Prop { pos: Vector3 }
 interface EnemyHit { enemy: Foe; part: string; dist: number; point: Vector3 }
 interface WorldHit { dist: number; point: Vector3; normal: Vector3; box: { data: Box['data'] } }
@@ -67,7 +67,7 @@ const ctx = {
 };
 
 const player = { eye: new Vector3(2, 3, 4), forward: new Vector3(0, 0, -1), right: new Vector3(1, 0, 0),
-  recoil: record('recoil'), kickFov: record('kickFov'), lunge: record('lunge'),
+  recoil: record('recoil'), kickFov: record('kickFov'), lunge: record('lunge'), step: record('step'),
   aimDir: (spread: number, out: Vector3) => { calls.push({ name: 'spread', args: [spread] }); return out.copy(player.forward); } };
 
 const engineCtx = ctx as unknown as Ctx;
@@ -84,6 +84,8 @@ const all = [...loadout, revolver, melee];
 const step = (weapon: { animate(st: WeaponState, dt: number): void }, duration: number, state: WeaponState = neutral) => {
   for (let left = duration; left > 1e-9;) { const dt = Math.min(0.01, left); weapon.animate(state, dt); left -= dt; }
 };
+/** Equip and wait out the longest draw (sniper 0.6 s), so the first `animate` can fire. */
+const draw = (weapon: { equip(): void; animate(st: WeaponState, dt: number): void }) => { weapon.equip(); step(weapon, 0.7); };
 
 afterAll(() => { for (const weapon of all) weapon.dispose(); });
 
@@ -99,7 +101,7 @@ test('loadout, view models and aim poses', () => {
     assert(!gun.root.visible && gun.root.scale.toArray().every(v => v === 0.46), `${gun.kind} starts hidden at scale 0.46`);
     assert(near(must(gun.root.getObjectByName('muzzle'), 'muzzle').position.z, muzzleZ[gun.kind]), `${gun.kind} uses the documented muzzle anchor`);
     assert(must(gun.root.getObjectByName('muzzle-flash'), 'flash').children.length === 3, `${gun.kind} has three flash stars`);
-    gun.equip();
+    draw(gun);
     step(gun, 1);
     assert(gun.root.position.distanceTo(new Vector3(...stats.restPos)) < 1e-8, `${gun.kind} raises to its camera-space rest position`);
     step(gun, 2, { ...neutral, aim: true });
@@ -147,7 +149,7 @@ test('R4-C and MP5 optics change independently without changing combat stats', (
     expect(gun.root.getObjectByName('holo')?.visible).toBe(true);
     expect(gun.root.getObjectByName('acog')?.visible).toBe(false);
     expect(other.scopeKind).toBe('acog');
-    gun.resetAmmo(); gun.equip();
+    gun.resetAmmo(); draw(gun);
     step(gun, 1, { ...neutral, aim: true });
     expect(gun.scopeKind).toBe('holo');
     expect(gun.root.visible).toBe(false);
@@ -167,7 +169,7 @@ test('R4-C and MP5 optics change independently without changing combat stats', (
 });
 
 test('rifle magazine reload and firing', () => {
-  rifle.equip();
+  draw(rifle);
   rifle.mag = 7;
   rifle.startReload();
   step(rifle, 1.64, fire);
@@ -192,6 +194,11 @@ test('rifle magazine reload and firing', () => {
 
 test('R4-C holds automatic fire at 80 ms and reloads at 2.2 seconds', () => {
   r4c.resetAmmo(); r4c.equip(); calls.length = 0;
+  step(r4c, 0.3, fire);
+  assert(r4c.mag === 30, 'No shot before the 0.42 s draw completes');
+  step(r4c, 0.15, neutral);
+  assert(r4c.drawn, 'Drawn once the raise passes 85 %');
+  r4c.resetAmmo(); calls.length = 0;
   r4c.animate(fire, 0);
   expect(r4c.mag).toBe(29);
   r4c.animate({ ...neutral, fire: true }, 0.079);
@@ -220,7 +227,7 @@ test('accepted spread and recoil settings', () => {
 });
 
 test('shotgun shell loading and the pump cycle', () => {
-  shotgun.equip();
+  draw(shotgun);
   shotgun.mag = 0;
   shotgun.startReload();
   step(shotgun, 0.44);
@@ -238,7 +245,7 @@ test('shotgun shell loading and the pump cycle', () => {
 });
 
 test('revolver cylinder reload', () => {
-  revolver.equip();
+  draw(revolver);
   revolver.mag = 2;
   calls.length = 0;
   revolver.startReload();
@@ -250,7 +257,7 @@ test('revolver cylinder reload', () => {
 });
 
 test('hitscan routing between players, props, enemies and the world', () => {
-  const foe: Foe = { center: new Vector3(0, 1, -3) }, remote: Foe = { center: new Vector3(0, 1, -2) }, prop: Prop = { pos: new Vector3(0, 1, -1) };
+  const foe: Foe = { center: new Vector3(0, 1, -3), stats: { boss: false } }, remote: Foe = { center: new Vector3(0, 1, -2), stats: { boss: false } }, prop: Prop = { pos: new Vector3(0, 1, -1) };
   let enemyHit: EnemyHit | null = { enemy: foe, part: 'head', dist: 20, point: new Vector3(0, 0, -20) };
   const worldHit: WorldHit = { dist: 30, point: new Vector3(0, 0, -30), normal: new Vector3(0, 0, 1), box: { data: {} } };
   let liveWorldHit: WorldHit | null = worldHit;
@@ -258,7 +265,7 @@ test('hitscan routing between players, props, enemies and the world', () => {
   ctx.enemies.raycast = () => enemyHit;
   ctx.world.raycast = () => liveWorldHit;
   ctx.game.raycastPlayers = () => playerHit;
-  const rayShot = () => { rifle.resetAmmo(); rifle.equip(); calls.length = 0; rifle.animate(fire, 0); };
+  const rayShot = () => { rifle.resetAmmo(); draw(rifle); calls.length = 0; rifle.animate(fire, 0); };
   rayShot();
   assert(num(must(last('playerDamage'), 'playerDamage')[1]) === 18 && info(must(last('playerDamage'), 'playerDamage')[2]).part === 'blade' && !last('enemyDamage'), 'Closest remote blade routes unchanged to the PvP handler');
   playerHit = null;
@@ -283,7 +290,7 @@ test('hitscan routing between players, props, enemies and the world', () => {
 });
 
 test('real rays use separate PvE and PvP damage, headshots and distance falloff', () => {
-  const target: Foe = { center: new Vector3() };
+  const target: Foe = { center: new Vector3(), stats: { boss: false } };
   const saved = { enemy: ctx.enemies.raycast, world: ctx.world.raycast, remote: ctx.game.raycastPlayers };
   const cases: [Gun, number, number, number, number, number][] = [
     // gun, metres, PvE body, PvE head, PvP body, PvP head
@@ -317,13 +324,21 @@ test('real rays use separate PvE and PvP damage, headshots and distance falloff'
         expect(named(online ? 'enemyDamage' : 'playerDamage')).toHaveLength(0);
       }
     }
+    // Boss heads: multiplier capped at 1.5 so a boss is not a two-second headshot magazine.
+    const boss: Foe = { center: new Vector3(), stats: { boss: true } };
+    ctx.game.raycastPlayers = () => null;
+    ctx.enemies.raycast = () => ({ enemy: boss, part: 'head', dist: 10, point: new Vector3(0, 0, -10) });
+    calls.length = 0; r4c._ray(player.forward);
+    expect(must(last('enemyDamage'), 'boss damage')[1]).toBeCloseTo(36 * 1.5, 8);
+    calls.length = 0; sniper._ray(player.forward);
+    expect(must(last('enemyDamage'), 'boss damage')[1]).toBeCloseTo(150 * 1.5, 8);
   } finally {
     ctx.enemies.raycast = saved.enemy; ctx.world.raycast = saved.world; ctx.game.raycastPlayers = saved.remote;
   }
 });
 
 test('melee guard, single strikes, obstruction and blade blood', () => {
-  const foe: Foe = { center: new Vector3(0, 1, -2) }, remote: Foe = { center: new Vector3(0, 1, -2) }, prop: Prop = { pos: new Vector3(0, 1, -1) };
+  const foe: Foe = { center: new Vector3(0, 1, -2), stats: { boss: false } }, remote: Foe = { center: new Vector3(0, 1, -2), stats: { boss: false } }, prop: Prop = { pos: new Vector3(0, 1, -1) };
   melee.equip();
   calls.length = 0;
   melee.animate({ ...neutral, aim: true }, 0.05);
@@ -355,7 +370,7 @@ test('melee guard, single strikes, obstruction and blade blood', () => {
 });
 
 test('pistol fires once per press, cycles its slide and reloads', () => {
-  pistol.resetAmmo(); pistol.equip(); calls.length = 0;
+  pistol.resetAmmo(); draw(pistol); calls.length = 0;
   pistol.animate(fire, 0);
   assert(pistol.mag === 14 && named('pistolFire').length === 1, 'Pistol fires on the trigger edge');
   const slide = must(pistol.root.getObjectByName('slide'), 'slide');
@@ -364,20 +379,27 @@ test('pistol fires once per press, cycles its slide and reloads', () => {
   assert(pistol.mag === 14 && near(slide.position.z, -0.10), 'Held trigger does not auto-fire and the slide returns');
   pistol.animate(fire, 0);
   assert(pistol.mag === 13, 'A new press fires the next round');
+  // A press 60 ms before the interval ends is buffered and fires when it does.
+  pistol.animate(fire, 0.12);
+  assert(pistol.mag === 13, 'Buffered press waits for the interval');
+  pistol.animate({ ...neutral, fire: false }, 0.07);
+  assert(pistol.mag === 12, 'Buffered press fires once the interval ends');
+  step(pistol, 0.3, { ...neutral, fire: false });
+  assert(pistol.mag === 12, 'The buffer is consumed, not replayed');
   pistol.startReload(); step(pistol, 0.99, fire);
-  assert(pistol.mag === 13 && pistol.reloading, 'Pistol cannot reload or fire before one second');
+  assert(pistol.mag === 12 && pistol.reloading, 'Pistol cannot reload or fire before one second');
   pistol.animate(fire, 0.01);
-  assert(pistol.mag === 15 && pistol.reserve === 88 && !pistol.reloading, 'Pistol reload conserves ammo at one second');
+  assert(pistol.mag === 15 && pistol.reserve === 87 && !pistol.reloading, 'Pistol reload conserves ammo at one second');
 });
 
 test('real-time auto-reload', async () => {
-  rifle.resetAmmo(); rifle.equip(); rifle.mag = 1; rifle.animate(fire, 0); rifle.unequip();
+  rifle.resetAmmo(); draw(rifle); rifle.mag = 1; rifle.animate(fire, 0); rifle.unequip();
   assert(!rifle.reloading, 'Empty magazine does not reload before the real-time delay');
   await new Promise(resolve => window.setTimeout(resolve, 280));
   assert(rifle.reloading && rifle.mag === 0, 'Real-time auto-reload starts while holstered without animation');
-  rifle.equip(); step(rifle, 1.65);
+  draw(rifle); step(rifle, 1.65);
   assert(rifle.mag === 30 && !rifle.reloading, 'Auto-reload advances after re-equip');
-  sniper.equip(); sniper.mag = 1; sniper.animate(fire, 0);
+  draw(sniper); sniper.mag = 1; sniper.animate(fire, 0);
   await new Promise(resolve => window.setTimeout(resolve, 280));
   assert(sniper.reloading, 'Sniper auto-reload can start during its frozen bolt cycle');
   rifle.resetAmmo(); rifle.mag = 1; rifle.animate(fire, 0); rifle.resetAmmo(); rifle.mag = 0;

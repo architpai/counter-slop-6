@@ -95,6 +95,8 @@ export interface GameHandle {
   world: World;
   beginSolo(): void;
   beginTraining(): void;
+  /** Debug only: restart the solo run at wave `n`. No UI reaches this. */
+  jumpToWave(n: number): void;
   step(nowMs: number): void;
   dispose(): void;
   /** Live engine instances. Must be 1; higher means a leaked mount. */
@@ -316,6 +318,10 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     ctx, gs, player, enemies, net, remotes: ctx.remotes, lobby, scores, pickups: app.pickups.items,
     level: ctx.level, nav: ctx.nav, hud, effects, input, world,
     beginSolo: app.beginSolo, beginTraining: app.beginTraining, step: t => step(t),
+    jumpToWave: n => {
+      if (!Number.isInteger(n) || n < 1) return;
+      gs.mode = 'solo'; loadLevel(false, settings.mapKey); app.beginCommon(); app.resetRun(); app.solo.startWave(n); gs.state = 'play';
+    },
     dispose,
     get live() { return live; },
   };

@@ -201,7 +201,7 @@ test('real gun rays keep close-range kill thresholds for recruits and 110 HP onl
 });
 
 test('accepted gun headshots give a bounded screen wobble and a brief follow-up bonus', () => {
-  const { p, ctx, enemies, hud } = setup();
+  const { p, ctx, enemies, hud, frame } = setup();
   const head = { part: 'head', crit: true, source: 'r4c' };
   const enemy = enemies.spawn('shield', new Vector3(0, 0, -10));
   enemies.damage(enemy, 10, { ...head, part: 'shield' });
@@ -224,6 +224,7 @@ test('accepted gun headshots give a bounded screen wobble and a brief follow-up 
   expect(p.forward.equals(aim)).toBe(true);
 
   const gun = p.weapon as Gun, st = { ...p.weaponState(), fire: true, firePressed: true };
+  for (let i = 0; i < 70; i++) frame(); // wait out the draw
   vi.spyOn(Math, 'random').mockReturnValue(0.5);
   p.headshotT = 0; gun.resetAmmo(); p.pitch = 0; gun.animate(st, 0);
   const normalKick = p.pitch, normalSpread = gun.spreadPx;

@@ -16,8 +16,7 @@ export function key(action: string, pad = false): string {
 export const KEYBOARD_ROWS: readonly string[] = [
   '<b>WASD</b> move   <b>Mouse</b> look   <b>Shift</b> sprint',
   '<b>LMB</b> fire   <b>RMB</b> aim down sights',
-  '<b>Space</b> jump (again on a wall = wall jump)',
-  '<b>Space</b> again in the air = double jump',
+  '<b>Space</b> jump · again on a wall = wall jump',
   '<b>C / Ctrl</b> slide on the ground · air dash in the air',
   '<b>Q / E</b> grapple: tap to swing, hold to reel, jump to launch',
   '<b>F / V / 6</b> melee · hold to guard   <b>R</b> reload   <b>M</b> music',
@@ -25,6 +24,7 @@ export const KEYBOARD_ROWS: readonly string[] = [
   '<b>Tab</b> scoreboard (online)   <b>Esc</b> pause',
   '<b>Both mouse buttons</b> dash-slash once the gauge is lit',
   '<b>1-5 / wheel</b> R4-C · MP5 · shotgun · sniper · pistol',
+  '<b>Enter</b> skips the break between waves',
 ];
 
 export const PAD_ROWS: readonly string[] = [

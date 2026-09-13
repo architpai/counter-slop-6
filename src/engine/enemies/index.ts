@@ -335,7 +335,7 @@ export class EnemyManager {
     amount *= this.mods.damage;
     e.hp -= amount;
     if (amount > 0) this.ctx.player?.onHeadshot(info);
-    if (info.crit) audio.headshot(point); else audio.hitEnemy(point);
+    if (info.crit) audio.headshot(); else audio.hitEnemy();
     hud.hitmarker(e.hp <= 0, !!info.crit);
     if (info.source !== 'deflect') input.rumble(0.1, 0.3, 30);
     if (e.state === 'spawn') { e.state = 'hunt'; e.root.scale.setScalar(e.stats.scale); }

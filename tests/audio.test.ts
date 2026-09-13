@@ -104,7 +104,7 @@ const layers: [string, number, (a: Audio) => void][] = [
   ['footstep', 1, a => a.footstep(1)], ['jump', 2, a => a.jump()], ['land', 1, a => a.land(1)],
   ['slide', 1, a => a.slide()], ['wallJump', 2, a => a.wallJump()], ['mantle', 1, a => a.mantle()],
   ['dash', 1, a => a.dash()], ['hurt', 2, a => a.hurt()], ['death', 2, a => a.death()],
-  ['hitEnemy', 2, a => a.hitEnemy(ZERO)], ['headshot', 2, a => a.headshot(ZERO)], ['kill', 3, a => a.kill()],
+  ['hitEnemy', 2, a => a.hitEnemy()], ['headshot', 2, a => a.headshot()], ['kill', 3, a => a.kill()],
   ['enemyDie', 3, a => a.enemyDie(ZERO)], ['gib', 2, a => a.gib(ZERO)], ['spawn', 5, a => a.spawn(ZERO)],
   ['lunge', 1, a => a.lunge(ZERO)], ['bulletImpact', 1, a => a.bulletImpact(ZERO)], ['ricochet', 1, a => a.ricochet(ZERO)],
   ['pickup', 2, a => a.pickup()], ['wave', 4, a => a.wave()], ['waveClear', 4, a => a.waveClear()],
@@ -218,10 +218,13 @@ test('positional gain and panning', () => {
   audio.setListener(eye, right);
   eye.x = 100; right.x = -1;
   let before = sources(context).length;
-  audio.hitEnemy(new Vector3(3, 4, 0));
+  audio.bulletImpact(new Vector3(3, 4, 0));
   const voices = sources(context).slice(before);
-  assert(near(peak(must(voices[0], 'hit voice'))[1], 0.3 / 1.45), 'Distance gain includes vertical distance and copies listener');
-  assert(near(must(envelope(must(voices[0], 'hit voice')).connections[0], 'panner').pan.value, 0.45), 'Pan uses listener ground-plane right vector');
+  assert(near(peak(must(voices[0], 'impact voice'))[1], 0.25 / 1.45), 'Distance gain includes vertical distance and copies listener');
+  assert(near(must(envelope(must(voices[0], 'impact voice')).connections[0], 'panner').pan.value, 0.45), 'Pan uses listener ground-plane right vector');
+  before = sources(context).length;
+  audio.hitEnemy(); audio.headshot();
+  for (const voice of sources(context).slice(before)) assert(envelope(voice).connections[0] === master, 'Hit confirms are centred, not positional');
   before = sources(context).length;
   audio.sniperAim(new Vector3(-10, 0, 0));
   assert(must(envelope(must(sources(context)[before], 'left voice')).connections[0], 'panner').pan.value === -0.75, 'Pan left extent');

@@ -120,7 +120,7 @@ function rusher(m: EnemyManager, e: EnemyRecord, dt: number, dist: number, dy: n
         arcB.set(e.center.x + Math.sin(b) * 1.5, e.center.y + 0.5 - 0.18 * (i + 1), e.center.z + Math.cos(b) * 1.5);
         m.ctx.effects.tracer(arcA, arcB, 1, 0.025, 0.16);
       }
-      if (dist < 3 && Math.abs(dy) < 1.7) {
+      if (dist < 3 && Math.abs(dy) < 1.7 && e.hasLOS) {
         if (target.tryBlockMelee(e)) {
           e.state = 'stunned'; e.age = 0; e.stunDuration = 1.1;
           e.body.vel.set(-nx * 7, 3.5, -nz * 7); e.body.onGround = false;
@@ -261,7 +261,8 @@ function dodgeNades(m: EnemyManager, e: EnemyRecord, dt: number): boolean {
 /** Hit reaction: rifles break for cover, blades sidestep. Called by the manager. */
 export function onHit(m: EnemyManager, e: EnemyRecord): void {
   if (e.stats.boss || e.stats.flying || e.state !== 'hunt') return;
-  if (usesCover(e) && rand() < 0.5) e.wantCover = true;
+  // Low per-hit odds: an automatic lands 12 hits a second, so 0.5 sent every rifleman running on the first burst.
+  if (usesCover(e) && rand() < 0.15) e.wantCover = true;
   else if (e.stats.weapon === 'blade' && e.attackT <= 0 && e.body.onGround && rand() < 0.6) {
     side.set(Math.cos(e.yaw), 0, -Math.sin(e.yaw)).multiplyScalar(6 * (rand() < 0.5 ? -1 : 1));
     probe.copy(e.body.pos).addScaledVector(side, 0.2); probe.y += 0.5;

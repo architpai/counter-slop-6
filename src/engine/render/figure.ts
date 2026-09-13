@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { rand } from '../util';
-import { GUN_LOADOUT } from '../weapons/stats';
 import { TONE, TONE_HEX, WHITE_HEX } from './palette';
 import { charMat, unlitMat, makeLabelMaterial } from './materials';
 import { boxGeo, cylGeo, sphereGeo, coneGeo, torusGeo } from './prims';
@@ -357,8 +356,9 @@ function weaponProp(kind: WeaponPropKind, color: number): THREE.Group {
   return root;
 }
 
-export function makeWeaponProp(index: number): THREE.Group {
-  return weaponProp(GUN_LOADOUT[index] ?? GUN_LOADOUT[0], TONE_HEX[TONE.HOSTILE]);
+/** A hostile-toned prop for a remote figure. Callers resolve slot indices; render knows no loadout. */
+export function makeWeaponProp(kind: WeaponPropKind): THREE.Group {
+  return weaponProp(kind, TONE_HEX[TONE.HOSTILE]);
 }
 
 /** A part the branch above has just built. Throws only if a name is misspelled. */

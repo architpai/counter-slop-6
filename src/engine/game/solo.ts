@@ -56,7 +56,7 @@ export function createSolo(app: App): SoloApi {
     const enemies = ctx.enemies, player = ctx.player;
     // Set on every live path; the guard is there for the type.
     if (enemies === null || player === null) return;
-    gs.wave = n; gs.queue.length = 0; gs.spawnT = 2; gs.intermission = 0; gs.boss = null;
+    gs.wave = n; gs.queue.length = 0; gs.spawnT = 1; gs.intermission = 0; gs.boss = null;
     ctx.hud.setBoss(null);
     const bossWave = n % 5 === 0;
     const bossType: EnemyKind = BOSS_ORDER[(Math.floor(n / 5) - 1) % BOSS_ORDER.length] ?? 'boss';
@@ -67,7 +67,7 @@ export function createSolo(app: App): SoloApi {
     const damage = mod?.[2] ?? 1;
     enemies.mods.speed = speed; enemies.mods.damage = damage; ctx.hud.setModifier(name);
     const swarm = name.startsWith('SWARM');
-    gs.maxAlive = Math.min(3 + Math.floor(0.8 * n) + (swarm ? 3 : 0), swarm ? 20 : 16);
+    gs.maxAlive = Math.min(4 + Math.floor(0.8 * n) + (swarm ? 3 : 0), swarm ? 20 : 16);
     const count = bossWave ? Math.min(6 + n, 14) : Math.round(Math.min(4 + 1.7 * n, 28) * (swarm ? 1.35 : 1));
     if (bossWave) gs.queue.push(bossType);
     const pool = ROSTER.filter(([, from]) => n >= from).map(([type, from, weight]): [string, number] => [type, weight * Math.min(1, 0.3 + 0.25 * (n - from))]);
@@ -86,7 +86,7 @@ export function createSolo(app: App): SoloApi {
       `hold ${ctx.hud.key('block')} after a melee strike to block and return bullets`,
       'kills in the air are worth more · stay off the floor',
       `${ctx.hud.key('grenade')} lobs a grenade · pickups give you more`,
-      `press ${ctx.hud.key('jump')} again in the air for a double jump`,
+      `${ctx.hud.key('dash')} in the air dashes · ${ctx.hud.key('jump')} on a wall jumps off it`,
     ];
     if (n <= 5) {
       const tip = tips[n - 1];
@@ -126,14 +126,16 @@ export function createSolo(app: App): SoloApi {
     const enemies = ctx.enemies, player = ctx.player;
     if (enemies === null || player === null) return;
     if (gs.intermission > 0) {
-      gs.intermission -= dt; ctx.hud.setTimer(`next wave in ${Math.max(0, Math.ceil(gs.intermission))}`);
+      if (ctx.input.pressed('confirm')) gs.intermission = 0;
+      else gs.intermission -= dt;
+      ctx.hud.setTimer(`next wave in ${Math.max(0, Math.ceil(gs.intermission))}${ctx.input.usingGamepad ? '' : ' · Enter to skip'}`);
       if (gs.intermission <= 0) { ctx.hud.setTimer(''); startWave(gs.wave + 1); }
       return;
     }
     if (gs.queue.length && enemies.alive < gs.maxAlive) {
       gs.spawnT -= dt;
       if (gs.spawnT <= 0) {
-        gs.spawnT = Math.max(0.7, 2.9 - 0.13 * gs.wave);
+        gs.spawnT = Math.max(0.7, 2.2 - 0.13 * gs.wave);
         const type = gs.queue.shift();
         if (type === undefined) return;
         const e = enemies.spawn(type, spawnPosition(type));
@@ -152,7 +154,8 @@ export function createSolo(app: App): SoloApi {
     const player = ctx.player;
     if (player === null) return;
     gs.kills++; gs.combo++; gs.comboT = 3.5;
-    let points = e.stats.score, label = e.stats.name;
+    // Plain kills only move the score; the feed is for the special ones.
+    let points = e.stats.score, label: string | null = e.stats.boss ? e.stats.name : null;
     if (info.crit) { points += 60; label = 'HEADSHOT'; }
     if (info.source === 'melee') { points += 50; label = overkill ? 'SLICED' : 'CUT DOWN'; }
     if (info.source === 'focus') { points += 150; label = 'EXECUTED'; }
@@ -163,7 +166,7 @@ export function createSolo(app: App): SoloApi {
     } else if (info.source !== 'blast') gs.katanaStreak = 0;
     if (info.source === 'deflect') { points += 120; label = 'RETURN TO SENDER'; }
     if (info.source === 'fall') label = 'FELL OFF THE MAP';
-    else if (!player.body.onGround && info.source !== 'deflect') { points += 40; label += ' · AIRBORNE'; }
+    else if (!player.body.onGround && info.source !== 'deflect') { points += 40; label = label ? `${label} · AIRBORNE` : 'AIRBORNE'; }
     app.addScore(points, label); ctx.audio.kill(Boolean(info.crit || e.stats.boss));
     const r = rand();
     if (r < 0.62) app.pickups.spawn(r < 0.5 ? 'ammo' : 'health', e.body.pos);
@@ -216,9 +219,12 @@ export function createSolo(app: App): SoloApi {
     const previousChain = focus.chain;
     endDash(false);
     player.melee.startSlash(neutralState(player));
-    enemies.damage(target, 100000, { source: 'focus', part: 'head', crit: true, point: target.center.clone(), dir: delta.subVectors(target.center, player.eye).normalize().clone() });
+    // Bosses take a quarter of their max HP instead of an instant kill; three knife kills is not a boss ticket.
+    enemies.damage(target, target.stats.boss ? target.maxHp * 0.25 : 100000, { source: 'focus', part: 'head', crit: true, point: target.center.clone(), dir: delta.subVectors(target.center, player.eye).normalize().clone() });
     ctx.audio.focusSlash(); ctx.game.hitstop(0.1, 0.08); ctx.effects.shake += 0.35;
     ctx.input.rumble(0.9, 0.7, 140); player.kickFov(6); player.heal(6);
+    // A survivor (a boss) spends the focus outright; otherwise the held dash would re-execute every frame.
+    if (target.alive) { endFocus(); return; }
     if (previousChain === focus.chain) focus.remaining = Math.min(focus.remaining, 0.35);
     focus.target = null; ctx.hud.setFocusMark(null);
   }

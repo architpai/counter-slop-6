@@ -559,7 +559,7 @@ Update per projectile each frame:
    - Local player: ask it to **deflect** the projectile (section 18.4). If it answers:
      - "returned" → redirect (11.2) and keep the projectile;
      - "blocked, not returned" → the projectile is destroyed with a small red burst (5 strokes, speed 6, life 0.18, size 0.03).
-     If it did not deflect: re-test with the tight radius (0.9 blast / 0.5 else); on a hit, blast → burst at the projectile position; else the player takes the projectile's damage with "from" = the projectile's origin. Consumed either way.
+     If it did not deflect: re-test with the tight radius (0.9 blast / 0.42 else — 0.42 around centre, eye and feet approximates the 0.35 body capsule; the older 0.5 made the player 40 % fatter to bullets than to walls); on a hit, blast → burst at the projectile position; else the player takes the projectile's damage with "from" = the projectile's origin. Consumed either way.
    - Remote player: segment test with the tight radius; on a hit the projectile simply disappears on this machine (that player's own client handles their damage).
 6. **Deflected**: ray along the segment against enemy hit spheres (ignoring nothing). Hit: blast → burst at the point; else damage that enemy with the projectile's damage, source "deflect", the hit part, crit if the part is the head. Remove.
 
@@ -713,19 +713,19 @@ Allowed on wave n: boss waves and n < 4 → only index 0; n < 6 → indices 0–
 
 ### 15.3 Wave setup (wave n)
 
-- queue cleared; first spawn timer = 2 s; boss reference cleared; boss bar hidden.
+- queue cleared; first spawn timer = 1 s; boss reference cleared; boss bar hidden.
 - boss wave if n > 0 and n mod 5 == 0.
-- max alive = min(3 + floor(0.8 n) + (swarm ? 3 : 0), swarm ? 20 : 16).
+- max alive = min(4 + floor(0.8 n) + (swarm ? 3 : 0), swarm ? 20 : 16).
 - count = round(min(4 + 1.7 n, 28) × (swarm ? 1.35 : 1)).
 - Boss wave: count = min(6 + n, 14) and the boss type (list index (n/5 − 1) mod 3) is pushed **first** into the queue.
 - Then `count` weighted draws are appended.
-- Messages: boss wave "WAVE n / <BOSS NAME> IS COMING" (3 s) with a boss roar at the player's position; otherwise "WAVE n" with a subtitle (2.6 s): on wave 1 "they are pushing · hold the site", otherwise the modifier's name, or (no modifier) one of "tone harder", "keep sketch", "stay off the ground", "swing for it", "return their bullets" at random. Wave sound. A control tip (7 s) on waves 1–5 (grapple, block, airborne kills, grenade, double jump). The player gets +1 grenade (capped at the max, 5). 7 pickups are placed at random pickup spots: 5 ammo, 2 health. On every wave n ≥ 5 with n mod 5 == 0 that is beyond the saved checkpoint, the checkpoint is saved and the kill feed shows "CHECKPOINT · WAVE n".
+- Messages: boss wave "WAVE n / <BOSS NAME> IS COMING" (3 s) with a boss roar at the player's position; otherwise "WAVE n" with a subtitle (2.6 s): on wave 1 "they are pushing · hold the site", otherwise the modifier's name, or (no modifier) one of "tone harder", "keep sketch", "stay off the ground", "swing for it", "return their bullets" at random. Wave sound. A control tip (7 s) on waves 1–5 (grapple, block, airborne kills, grenade, air dash / wall jump). The player gets +1 grenade (capped at the max, 5). 7 pickups are placed at random pickup spots: 5 ammo, 2 health. On every wave n ≥ 5 with n mod 5 == 0 that is beyond the saved checkpoint, the checkpoint is saved and the kill feed shows "CHECKPOINT · WAVE n".
 - Jumping to a checkpoint wave and restarting both clear all enemies and projectiles and reset the two modifiers to 1 before starting the wave.
 
 ### 15.4 Spawn loop (every frame in play)
 
 - During an intermission: count it down, show "next wave in N"; at 0 start wave n + 1.
-- Else if the queue is non-empty and alive < max alive: spawn timer −= dt; at ≤ 0: spawn timer = max(0.7, 2.9 − 0.13 n); pop the next type and spawn it at a picked position (15.5).
+- Else if the queue is non-empty and alive < max alive: spawn timer −= dt; at ≤ 0: spawn timer = max(0.7, 2.2 − 0.13 n); pop the next type and spawn it at a picked position (15.5).
 - If the queue is empty and alive == 0: intermission = 8 s; "WAVE n CLEARED / catch your breath · +200n" (2.5 s); score +200 × n (combo multiplier applies, no label); wave-clear sound; the player heals 40 (capped at 120). Boss-summoned minions count as alive, so they must die too.
 - The director only runs in solo play; in the online (versus) mode no enemies are spawned, although the enemy manager still updates (there is nothing to update).
 - HUD "enemies left" = alive + queued.

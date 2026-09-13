@@ -416,23 +416,23 @@ The modifier index is a uniform random integer in [0, allowed) where allowed = 1
 
 ### Start wave n
 
-1. wave = n; queue emptied; spawn timer = 2; intermission = 0; boss cleared; boss bar hidden.
+1. wave = n; queue emptied; spawn timer = 1; intermission = 0; boss cleared; boss bar hidden.
 2. boss wave = (n > 0 and n mod 5 = 0).
 3. Pick and apply the modifier; show its name in the HUD modifier slot.
-4. maxAlive = min(3 + floor(0.8 n) + (swarm ? 3 : 0), swarm ? 20 : 16).
+4. maxAlive = min(4 + floor(0.8 n) + (swarm ? 3 : 0), swarm ? 20 : 16).
 5. count = round(min(4 + 1.7 n, 28) × (swarm ? 1.35 : 1)). On a boss wave: count = min(6 + n, 14) and the boss type is pushed to the front of the queue first.
 6. Pool = roster entries with n ≥ from, each with weight = base weight × min(1, 0.3 + 0.25 × (n − from)). Draw `count` types by weighted random (roulette over the pool; on numerical fall-through pick the first pool entry). Push each to the queue.
 7. Message: boss wave → main "WAVE n", sub "<BOSS DISPLAY NAME> IS COMING", 3 s, plus a boss roar sound at the player. Otherwise → main "WAVE n", sub = (n = 1 ? "they are pushing · hold the site" : modifier name if any, else a random pick from "tone harder", "keep sketch", "stay off the ground", "swing for it", "return their bullets"), 2.6 s.
 8. Play the wave sound.
-9. If n ≤ 5, show tip number n for 7 s. Tips (with the current device's key labels): 1 "hold <grapple> to reel in · tap it again to let go mid-swing"; 2 "block with <block> and some of their bullets go back at them"; 3 "kills in the air are worth more · stay off the floor"; 4 "<grenade> lobs a grenade · pickups give you more"; 5 "press <jump> again in the air for a double jump".
+9. If n ≤ 5, show tip number n for 7 s. Tips (with the current device's key labels): 1 "hold <grapple> to reel in · tap it again to let go mid-swing"; 2 "block with <block> and some of their bullets go back at them"; 3 "kills in the air are worth more · stay off the floor"; 4 "<grenade> lobs a grenade · pickups give you more"; 5 "<dash> in the air dashes · <jump> on a wall jumps off it" (the double jump is disabled, PI 6.10).
 10. Player grenades += 1, capped at max grenades (5).
 11. Spawn 7 pickups at random pickup spots: the first 5 are ammo, the last 2 are health.
 12. Checkpoint: if n ≥ 5, n mod 5 = 0, and n > stored checkpoint → store n and show kill feed "CHECKPOINT · WAVE n".
 
 ### Wave update (each frame with scaled dt, only in state `play`, solo)
 
-1. If intermission > 0: subtract dt; HUD timer text "next wave in " + ceil(intermission). When it reaches 0: clear the timer text and start wave (current + 1). Stop here.
-2. If the queue has entries and enemies alive < maxAlive: spawn timer −= dt. When ≤ 0: spawn timer = max(0.7, 2.9 − 0.13 × wave); pop the front type; spawn it at the position from section 13. If the spawned enemy is a boss: HP multiplier = 1 + 0.35 × floor((wave − 5) / 15); its hp and max hp = round(type hp × multiplier).
+1. If intermission > 0: if `confirm` was pressed this frame set intermission = 0, else subtract dt; HUD timer text "next wave in " + ceil(intermission), with " · Enter to skip" appended on keyboard (no pad skip: every pad button already has a gameplay meaning). When it reaches 0: clear the timer text and start wave (current + 1). Stop here.
+2. If the queue has entries and enemies alive < maxAlive: spawn timer −= dt. When ≤ 0: spawn timer = max(0.7, 2.2 − 0.13 × wave); pop the front type; spawn it at the position from section 13. If the spawned enemy is a boss: HP multiplier = 1 + 0.35 × floor((wave − 5) / 15); its hp and max hp = round(type hp × multiplier).
 3. If the queue is empty and no enemy is alive: intermission = 8; message main "WAVE w CLEARED", sub "catch your breath · +" + 200 × w, 2.5 s; add score 200 × w with no label (combo multiplier applies); wave-clear sound; `player.heal(40)`.
 4. HUD wave = wave, enemies left = alive + queue length.
 
@@ -456,7 +456,7 @@ The chosen position is copied (never the list entry itself).
 **On enemy kill** (called by the enemy manager with the enemy, the hit info, and an "overkill" flag):
 
 1. kills += 1; combo += 1; combo timer = 3.5.
-2. label = enemy display name; points = enemy score value.
+2. label = the enemy display name for a boss, otherwise **none**; points = enemy score value. A plain kill only moves the score; the feed is for the special cases below ("RECRUIT +100" six times a wave was noise). " · AIRBORNE" on a label-less kill becomes just "AIRBORNE".
 3. Apply in this order (later label assignments replace earlier ones; point bonuses add up):
    - critical (headshot): label "HEADSHOT", +60.
    - source katana: label "SLICED" if overkill else "CUT DOWN", +50.
@@ -507,7 +507,7 @@ Focus state fields: active, remaining time, chain count, current target, dash re
 
 **End dash (blocked flag)**: dash lock off, dash none, velocity zero. If blocked: start a katana slash, swing sound, tip "blocked · the dash did not reach" for 1.2 s.
 
-**Execute** on the target: dash lock off, dash none, velocity zero; start a katana slash; deal 100000 damage with source `focus`, part `head`, critical, at the target center, direction eye→center; focus-slash sound; hit-stop (0.1, 0.08); screen shake += 0.35; rumble (0.9, 0.7, 140 ms); FOV kick 6; `player.heal(6)`. If the chain count did not change during the kill (that is, the kill did not re-enter focus), remaining = min(remaining, 0.35). Clear the target and hide the mark.
+**Execute** on the target: dash lock off, dash none, velocity zero; start a katana slash; deal 100000 damage (a boss instead takes 25 % of its max HP; the enemy damage multiplier still applies) with source `focus`, part `head`, critical, at the target center, direction eye→center; focus-slash sound; hit-stop (0.1, 0.08); screen shake += 0.35; rumble (0.9, 0.7, 140 ms); FOV kick 6; `player.heal(6)`. If the target is still alive (a boss), end focus outright — the streak and chain reset — so a held dash cannot re-execute it every frame. Otherwise, if the chain count did not change during the kill (that is, the kill did not re-enter focus), remaining = min(remaining, 0.35). Clear the target and hide the mark.
 
 Because the kill increments the katana streak and enters focus again while chain < 2, a chain gives at most 2 executions; after the second one, focus fades in 0.35 s and the streak resets.
 
@@ -853,5 +853,5 @@ Sounds triggered by this subsystem: wave start, wave clear, boss roar, kill (str
 | Audio | init, resume, set listener, set tune, music on(flag), music playing, set intensity, reel loop(flag), and the one-shot sounds of section 33. |
 | Renderer | scene, camera, render(time, {hurt, flash, slow, lowHp}). |
 
-A debug handle on the window exposes the context, game state, player, enemies, nav, world, level, HUD, effects, input, network, remotes, lobby, scores, and the run-control functions. It has no gameplay effect.
+A debug handle on the window exposes the context, game state, player, enemies, nav, world, level, HUD, effects, input, network, remotes, lobby, scores, and the run-control functions, plus `jumpToWave(n)` — a debug-only restart of the solo run at wave n that no UI reaches (checkpoints and wave-skip buttons are gone; this is how late waves get tested). It has no gameplay effect.
 

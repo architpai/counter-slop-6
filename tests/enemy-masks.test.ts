@@ -3,6 +3,7 @@ import { Mesh } from 'three';
 import { makeModel } from '@/engine/enemies/model';
 import { TYPES } from '@/engine/enemies/types';
 import { makeFigure, makeWeaponProp } from '@/engine/render/figure';
+import { GUN_LOADOUT } from '@/engine/weapons/stats';
 
 test('every enemy has a distinct clown mask without changing its hit anchors', () => {
   const signatures = new Set<string>();
@@ -40,12 +41,14 @@ test('every enemy has a distinct clown mask without changing its hit anchors', (
   const remote = makeFigure({ kind: 'humanoid' });
   expect(remote.root.getObjectByName('mask-shell')).toBeUndefined();
   remote.dispose();
-  for (const [slot, kind] of ['r4c', 'rifle', 'shotgun', 'sniper', 'pistol'].entries()) {
-    const prop = makeWeaponProp(slot);
+  expect([...GUN_LOADOUT]).toEqual(['r4c', 'rifle', 'shotgun', 'sniper', 'pistol']);
+  for (const kind of GUN_LOADOUT) {
+    const prop = makeWeaponProp(kind);
     expect(prop.name).toBe(kind);
     prop.traverse(o => { if (o instanceof Mesh) o.geometry.dispose(); });
   }
-  const fallback = makeWeaponProp(99);
+  const slots: readonly string[] = GUN_LOADOUT;
+  const fallback = makeWeaponProp(slots[99] === undefined ? GUN_LOADOUT[0] : 'none');
   expect(fallback.name).toBe('r4c');
   fallback.traverse(o => { if (o instanceof Mesh) o.geometry.dispose(); });
 });

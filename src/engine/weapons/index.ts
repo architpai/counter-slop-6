@@ -18,6 +18,8 @@ export interface Weapon {
   /** Child of `ctx.renderer.rig`. */
   readonly root: THREE.Group;
   readonly adsFov: number;
+  /** Walk-speed multiplier while aiming; the knife never aims. */
+  readonly adsSpeed: number;
   aimAmt: number;
   mag: number;
   reserve: number;

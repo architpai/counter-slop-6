@@ -302,11 +302,11 @@ There is no armour.
 
 ### 3.5 Initial state (constructor)
 
-Body at level start position, standing height, zero velocity, not on ground. Yaw 0, pitch 0, roll 0. HP = max. Alive. Grapple stamina 1. Grenade charge 0. Hurt effect 0, flash effect 0. "Time since last damage" = 10. Weapon index 0 (rifle) equipped; previous-weapon index 0; quick-melee return timer 0. Bob phase 0, bob amount 0, step distance 0, eye height = standing. Not crouching, not sliding, slide time 0, coyote 0, jump buffer 0, wall-touch timer 9 (i.e. "long ago"), wall-jump cooldown 0, mantle cooldown 0, dash cooldown 0, air jumps 1, block cooldown 0, land-grace 0, sprint toggle off, was-on-ground true, air time 0. Grapple state idle. Death timer 0, gravity scale 1, dash-lock off. Grenades 3, no live grenades, grenade cooldown 0, firing false. Each gun's starting reserve is recorded so a reset can restore it.
+Body at level start position, standing height, zero velocity, not on ground. Yaw 0, pitch 0, roll 0. HP = max. Alive. Grapple stamina 1. Grenade charge 0. Hurt effect 0, flash effect 0. "Time since last damage" = 10. Weapon index 0 (rifle) equipped; previous-weapon index 0; quick-melee return timer 0. Bob phase 0, bob amount 0, step distance 0, eye height = standing. Not crouching, not sliding, slide time 0, coyote 0, jump buffer 0, wall-touch timer 9 (i.e. "long ago"), wall-jump cooldown 0, mantle cooldown 0, dash cooldown 0, air jumps AIR_JUMPS (0), block cooldown 0, land-grace 0, sprint toggle off, was-on-ground true, air time 0. Grapple state idle. Death timer 0, gravity scale 1, dash-lock off. Grenades 3, no live grenades, grenade cooldown 0, firing false. Each gun's starting reserve is recorded so a reset can restore it.
 
 ### 3.6 Reset (used on game start, retry and online respawn)
 
-Given a spawn position: grenade charge 0 and held flag off (arc preview hidden); stamina 1; block-held timer 0; body moved to position, velocity zero, off ground, standing height; HP = max; alive; yaw, pitch, roll 0; hurt/flash effects 0; not crouching/sliding; death timer 0; time since damage 10; dash cooldown 0; air jumps 1; gravity scale 1; dash-lock off; grapple detached (no boost); every gun: pending auto-reload callback cancelled, magazine full, reserve = starting reserve, not reloading, pump timer 0; switch to weapon 0 silently; view model visible; eye height standing; grenades 3; all live grenades removed.
+Given a spawn position: grenade charge 0 and held flag off (arc preview hidden); stamina 1; block-held timer 0; body moved to position, velocity zero, off ground, standing height; HP = max; alive; yaw, pitch, roll 0; hurt/flash effects 0; not crouching/sliding; death timer 0; time since damage 10; dash cooldown 0; air jumps AIR_JUMPS (0); gravity scale 1; dash-lock off; grapple detached (no boost); every gun: pending auto-reload callback cancelled, magazine full, reserve = starting reserve, not reloading, pump timer 0; switch to weapon 0 silently; view model visible; eye height standing; grenades 3; all live grenades removed.
 
 ## 4. Player: per-frame update order
 
@@ -351,7 +351,7 @@ Given scaled dt (section 1):
 
 - Gamepad active: `pressed(sprint)` toggles the sprint toggle; the toggle is cleared whenever forward input (move.y) < 0.1.
 - Keyboard: sprint toggle = `held(sprint)`.
-- Effective sprinting = toggle AND move.y > 0.1 AND not crouching AND not aiming.
+- Effective sprinting = toggle AND move.y > 0.1 AND not crouching AND not aiming AND fire not held. Holding fire drops out of the sprint (the lowered sprint pose never shoots); on a gamepad the toggle survives and sprint resumes when fire is released.
 
 ### 6.3 Aim-down-sights flag
 
@@ -375,9 +375,9 @@ Aiming = `held(aim)` AND the current weapon is a gun. (For the katana, `held(aim
 ### 6.6 Ground acceleration and friction
 
 When on ground (and not sliding):
-- Coyote timer = 0.13, air time = 0, air jumps = 1.
+- Coyote timer = 0.13, air time = 0, air jumps = AIR_JUMPS (0, see 6.10).
 - Friction factor `fr = 8`, or `8 × 0.25 = 2` during land-grace (6.14). Horizontal speed scales by `max(0, 1 − fr × dt)`.
-- If wishLen > 0: `cur = vel_xz · wish`; `add = min(maxSpeed × wishLen − cur, 140 × dt)`; if add > 0, `vel_xz += wish × add`. maxSpeed is 3.6 crouched, 10.6 sprinting, else 6.6.
+- If wishLen > 0: `cur = vel_xz · wish`; `add = min(maxSpeed × wishLen − cur, 140 × dt)`; if add > 0, `vel_xz += wish × add`. maxSpeed is 3.6 crouched, 10.6 sprinting, else 6.6 × the held weapon's `adsSpeed` while aiming (R4-C 0.7, MP5 1, shotgun 0.8, sniper 0.55, pistol 0.95; knife 1). The MP5 is the only gun that moves at full speed while aiming.
 
 ### 6.7 Air acceleration
 
@@ -399,6 +399,8 @@ When airborne: coyote −= dt; air time += dt. If wishLen > 0: `cur = vel_xz · 
 Conditions: wall-touch < 0.12 s, wall-jump cooldown ≤ 0, vel.y < 7. Effect: buffer = 0; cooldown = 0.35; with wall normal n and flat forward f: `vel.x = n.x × 7.5 + vel.x × 0.35 + f.x × 2.5`, `vel.z = n.z × 7.5 + vel.z × 0.35 + f.z × 2.5`, `vel.y = 9.2`. Wall-jump sound. Camera roll += −0.1 if n · right > 0 else +0.1. FOV kick 2; land-dip kick −1.5; air jumps = 1 (a wall jump restores the double jump).
 
 ### 6.10 Double jump
+
+**Disabled.** `AIR_JUMPS = 0` in `movement.ts`: the kit already has the air dash, wall jump, slide, mantle and grapple, and the double jump made the wall jump and grapple matter less. The rule below is kept for the constant's sake and applies verbatim when AIR_JUMPS > 0.
 
 Condition: air jumps > 0. Effect: buffer = 0; air jumps −= 1; `vel.y = 9.6 × 0.92 = 8.832`; if wishLen > 0: `cur = vel_xz · wish`; `add = max(0, 7.5 × wishLen − cur)`; `vel_xz += wish × add` (redirects toward steering, instantly, up to 7.5). Jump sound; FOV kick 1.6; land-dip kick −1.4; a burst of 9 blue stroke particles at 0.7 m below body centre (speed 4.5, life 0.28, size 0.028, gravity −2).
 
@@ -505,7 +507,7 @@ Online: incoming damage messages are ignored while spawn protection (2 s after r
 
 ### 8.3 Regeneration
 
-If time-since-damage > regen delay AND hp < max AND not sprinting AND grapple idle: `hp = min(max, hp + regenRate × dt)`.
+If time-since-damage > regen delay AND hp < max: `hp = min(max, hp + regenRate × dt)`. Sprinting and grappling no longer suspend regeneration; the gate was never communicated and read as broken regen while kiting.
 
 ### 8.4 Healing and resupply from the game shell
 
