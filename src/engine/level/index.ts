@@ -3,6 +3,7 @@ import type { World } from '../physics';
 import type { Level, LevelKey } from '../types';
 import { LevelBuilder } from './build';
 import { buildDowntown } from './downtown';
+import { buildMexico } from './mexico';
 import { buildHouse } from './house';
 
 /** One row of the map picker. */
@@ -16,10 +17,10 @@ export interface LevelOpts {
   arena?: boolean;
 }
 
-export const MEXICO_READY = false;
 export const LEVELS: LevelEntry[] = [
   { key: 'downtown', name: 'DOWNTOWN', blurb: 'streets, rooftops and fire escapes' },
   { key: 'house', name: 'THE HOUSE', blurb: 'a suburban home · basement to rooftop' },
+  { key: 'mexico', name: 'MEXICO', blurb: 'a sun-baked plaza · piñatas, tacos and mariachi' },
 ];
 
 export function validKey(key: unknown): LevelKey {
@@ -31,6 +32,7 @@ export function buildLevel(scene: THREE.Scene, world: World, key: unknown = 'dow
   opts: LevelOpts | null = {}): Level {
   const builder = new LevelBuilder(scene, world, validKey(key), opts?.arena === true);
   if (builder.level.key === 'house') buildHouse(builder);
+  else if (builder.level.key === 'mexico') buildMexico(builder);
   else buildDowntown(builder);
   return builder.finish();
 }

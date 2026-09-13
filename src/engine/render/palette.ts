@@ -11,6 +11,7 @@ export const SURF = Object.freeze({
   wood: 0xb4784a, metal: 0xa6aeb8, dark: 0x232b38, accent: 0xffc24b,
   foliage: 0x4ca96b, water: 0x4fb3d9, hot: 0xe5484d, boss: 0xc56bff, cloud: 0xfbfaf5,
   lawn: 0x8cb46a, siding: 0xf1ead9, shingle: 0x3f4756, plaster: 0xd9d4c8,
+  adobe: 0xe4b78c, sandstone: 0xc9865a, sand: 0xe6d3a8, paving: 0xd8c9ae,
 });
 export type SurfKey = keyof typeof SURF;
 

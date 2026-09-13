@@ -1026,7 +1026,6 @@ merge static geometry per material, return the `Level` record.
 
 ```ts
 export const LEVELS: { key: string; name: string; blurb: string }[];  // only "ready" maps
-export const MEXICO_READY: boolean;                                   // false for now
 export function validKey(key: unknown): string;                       // unknown -> 'downtown'
 
 export function buildLevel(scene: THREE.Scene, world: World, key?: string,
@@ -1053,7 +1052,7 @@ export interface BuildOpts { mat?: string; noCollide?: boolean; noNav?: boolean;
 
 **Implementer checklist**
 
-1. L §1.1 level list, display names, blurbs, the Mexico-ready flag, `validKey` fallback.
+1. L §1.1 level list, display names, blurbs, `validKey` fallback.
 2. L §1.2 build modes (arena on/off) and the rebuild contract.
 3. L §2 coordinate and box conventions.
 4. L §3.1–3.12 every primitive: box, slab, wall-with-gaps, stairs, rail (1.0-high `noNav`+`noShoot`

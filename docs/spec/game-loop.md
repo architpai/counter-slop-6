@@ -98,7 +98,7 @@ The map builder returns a level record. The fields used by this subsystem are:
 | animated | Objects that take the game time each frame to animate (for example, drones). |
 | meshes | Everything the builder added to the scene, for teardown. |
 
-Level list: the list of selectable levels is `downtown` ("DOWNTOWN", blurb "streets, rooftops and fire escapes"). The `mexico` level ("MEXICO", blurb "a sun-baked plaza · piñatas, tacos and mariachi") exists in code but is gated behind a "ready" flag that is currently false, so the map selector shows only one map and is hidden (the selector is only shown when 2 or more levels exist). The Mexico-specific behaviours in this document (breakables, taco pickups, the `mexico` tune, its bounds and spawns) apply once that flag is on.
+Level list: the selectable levels are `downtown` ("DOWNTOWN"), `house` ("THE HOUSE") and `mexico` ("MEXICO", blurb "a sun-baked plaza · piñatas, tacos and mariachi"). The Mexico-specific behaviours in this document (breakables, taco pickups, the `mexico` tune, its bounds and spawns) apply on that map.
 
 ### Level rebuild
 
