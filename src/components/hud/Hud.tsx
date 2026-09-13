@@ -287,16 +287,34 @@ export const GrappleReticle = memo(function GrappleReticle({ store }: { store: H
 export const Hitmarker = memo(function Hitmarker({ store }: { store: HudStore }) {
   rendered();
   const state = useHud(store, 'hitmarker');
-  const ref = useRef<HTMLDivElement>(null);
+  const ref = useRef<SVGSVGElement>(null), killRef = useRef<SVGSVGElement>(null);
   useEffect(() => {
     if (state.nonce === 0) return;
+    const scale = matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 1.15;
     const animation = ref.current?.animate([
-      { opacity: 1, transform: 'translate(-50%, -50%) scale(1.5)' },
+      { opacity: 1, transform: `translate(-50%, -50%) scale(${scale})` },
       { opacity: 0, transform: 'translate(-50%, -50%) scale(1)' },
-    ], { duration: 200, easing: 'ease-out' });
+    ], { duration: state.crit ? 220 : 150, easing: 'ease-out' });
     return () => animation?.cancel();
-  }, [state.nonce]);
-  return <div ref={ref} className={`hit-marker${state.kill ? ' kill' : ''}${state.crit ? ' crit' : ''}`} data-hud="hitmarker" aria-hidden="true"><i /><i /></div>;
+  }, [state.nonce, state.crit]);
+  useEffect(() => {
+    if (state.killNonce === 0) return;
+    const animation = killRef.current?.animate([
+      { opacity: 1 }, { opacity: 1, offset: 0.55 }, { opacity: 0 },
+    ], { duration: 350 });
+    return () => animation?.cancel();
+  }, [state.killNonce]);
+  return <>
+    <svg ref={ref} className={`hit-marker${state.crit ? ' crit' : ''}${state.blocked ? ' blocked' : ''}`} viewBox="-20 -20 40 40" data-hud="hitmarker" aria-hidden="true">
+      {state.blocked ? <path d="M-12-7v-5h5 M7-12h5v5 M12 7v5H7 M-7 12h-5V7" /> : <>
+        <path d="M-14-14l7 7 M14-14l-7 7 M14 14l-7-7 M-14 14l7-7" />
+        {state.crit && <path d="M-11-17l7 7 M17-11l-7 7 M11 17l-7-7 M-17 11l7-7" />}
+      </>}
+    </svg>
+    <svg ref={killRef} className="kill-marker" viewBox="0 0 24 26" data-hud="killmarker" aria-hidden="true">
+      <path fillRule="evenodd" d="M12 1C5 1 2 5 2 11v6l4 2v5h12v-5l4-2v-6C22 5 19 1 12 1ZM5 10v5h5v-4Zm14 0-5 1v4h5Zm-7 5-2 4h4Zm-3 6v3h2v-3Zm4 0v3h2v-3Z" />
+    </svg>
+  </>;
 });
 
 function DamageDirection({ mark }: { mark: DamageMark }) {

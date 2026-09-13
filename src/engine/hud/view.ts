@@ -44,7 +44,7 @@ export interface HudView {
   setFocusMark(x: number | null, y?: number): void;
   setBoss(name: string | null, frac?: number): void;
 
-  hitmarker(kill: boolean, crit: boolean): void;
+  hitmarker(kill: boolean, crit: boolean, blocked?: boolean): void;
   damageFrom(angle: number): void;
   setScore(score: number, combo: number): void;
   setWave(wave: number, left: number): void;

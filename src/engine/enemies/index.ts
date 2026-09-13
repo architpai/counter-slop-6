@@ -325,7 +325,7 @@ export class EnemyManager {
     const point = info.point ?? e.center, dir = info.dir ?? up;
     if (info.part === 'shield') {
       effects.sparks(point, scratch.copy(dir).negate(), TONE.ACCENT, 8, 8);
-      audio.shieldHit(point); hud.hitmarker(false, false);
+      audio.shieldHit(point); hud.hitmarker(false, false, true);
       if ((info.source === 'melee' || info.source === 'blast') && e.shieldHp > 0 && --e.shieldHp <= 0) this._breakShield(e);
       return;
     }

@@ -132,14 +132,18 @@ test('visible boots register hits, and empty space beside a model does not', () 
 });
 
 test('accepted gun headshots give a bounded screen wobble and a brief follow-up bonus', () => {
-  const { p, ctx, enemies } = setup();
+  const { p, ctx, enemies, hud } = setup();
   const head = { part: 'head', crit: true, source: 'rifle' };
   const enemy = enemies.spawn('shield', new Vector3(0, 0, -10));
   enemies.damage(enemy, 10, { ...head, part: 'shield' });
+  expect(hud.hitmarkerState).toMatchObject({ blocked: true, crit: false, killNonce: 0 });
   expect(p.headshotT).toBe(0);
   enemies.damage(enemy, 0, head);
   expect(p.headshotT).toBe(0);
+  enemies.damage(enemy, 10, { source: 'rifle', part: 'torso' });
+  expect(hud.hitmarkerState).toMatchObject({ blocked: false, crit: false, kill: false });
   enemies.damage(enemy, 10, head);
+  expect(hud.hitmarkerState).toMatchObject({ blocked: false, crit: true, kill: false });
   expect(p.headshotT).toBe(0.28);
   const kick = p.headshotRoll.vel;
   for (let i = 0; i < 10; i++) p.onHeadshot(head);

@@ -32,6 +32,15 @@ Legacy joint anchors remain for AI aiming and debug inspection. Multiplayer stil
 
 Added turning platforms at both highway stair exits. Opened the tower's north rails at the stair landings, corrected a duplicated north rail into the missing west rail, and opened the level-12 bridge entrances at the tower and buildings A/B. `tests/downtown-routes.test.ts` walks complete routes through stairs, landings and entrances in solo and arena layouts; it does not merely check the highest stair tread.
 
+## Hit and kill markers
+
+- Body damage: white, four separated diagonal ticks, **150 ms**.
+- Headshot damage: red, double diagonal ticks, **220 ms**.
+- Kill confirmation: a separate gold skull below the aiming point, **350 ms**. A headshot kill shows the red ticks and gold skull together. Later body or shield hits do not restart or cancel the skull.
+- Blocked shield/guard contact: blue corner brackets, **150 ms**, not a damage marker.
+
+All markers leave the exact aiming point clear and have dark outlines for contrast. Reduced-motion mode removes the hit-marker scale effect. Multiplayer kills show the skull on the victim's death notification, not on predicted damage; damage and scoring rules are unchanged.
+
 ## Headshot feedback
 
 An accepted gun headshot gives the shooter a brief camera-roll wobble and a **0.28-second** follow-up window. It does not move the aim direction or select a target.

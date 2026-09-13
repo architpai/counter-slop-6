@@ -62,7 +62,7 @@ export interface MessageState { main: string; sub: string; nonce: number }
 export interface TipState { html: string; nonce: number }
 export interface KillLine { id: number; text: string; points: number }
 export interface DamageMark { id: number; angle: number }
-export interface HitmarkerState { kill: boolean; crit: boolean; nonce: number }
+export interface HitmarkerState { kill: boolean; crit: boolean; blocked: boolean; nonce: number; killNonce: number }
 
 /** Snapshot type for each subscription key. */
 export interface HudState {
@@ -135,7 +135,7 @@ export class HudStore implements HudView {
   tipState: TipState = { html: '', nonce: 0 };
   killFeed: readonly KillLine[] = [];
   damage: readonly DamageMark[] = [];
-  hitmarkerState: HitmarkerState = { kill: false, crit: false, nonce: 0 };
+  hitmarkerState: HitmarkerState = { kill: false, crit: false, blocked: false, nonce: 0, killNonce: 0 };
   pvp: PvpModel | null = null;
   board: BoardModel | null = null;
   screen: ScreenView | null = null;
@@ -371,9 +371,13 @@ export class HudStore implements HudView {
 
   // ------------------------------------------------------------------ events
 
-  hitmarker(kill: boolean, crit: boolean): void {
-    // The nonce is what makes a second hit during the first animation restart it.
-    this.hitmarkerState = { kill: !!kill, crit: !!crit, nonce: this.hitmarkerState.nonce + 1 };
+  hitmarker(kill: boolean, crit: boolean, blocked = false): void {
+    // Separate event counters let the kill skull finish while later hits flash.
+    this.hitmarkerState = {
+      kill: !!kill && !blocked, crit: !!crit && !blocked, blocked: !!blocked,
+      nonce: this.hitmarkerState.nonce + 1,
+      killNonce: this.hitmarkerState.killNonce + (kill && !blocked ? 1 : 0),
+    };
     this.#emit('hitmarker');
   }
 

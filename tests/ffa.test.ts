@@ -68,7 +68,7 @@ function setup(isHost = false) {
     },
     hud: {
       setPvpScore: noop, setModifier: noop, setBoard: noop, setGameplayVisible: noop,
-      message: noop, tip: noop, kill: noop, hitmarker: noop, key: (action: string) => action,
+      message: noop, tip: noop, kill: noop, hitmarker: vi.fn(), key: (action: string) => action,
     },
     audio: { kill: noop, spawn: noop, enemyDie: noop, shieldHit: noop, hitEnemy: noop },
     effects: { strokeBurst: noop, blood: noop, tracer: noop },
@@ -202,6 +202,27 @@ test('melee excludes remote players behind a wall', () => {
     expect(arc()).toEqual([t.remote]);
     t.ctx.world.lineOfSight = () => false;
     expect(arc()).toEqual([]);
+  } finally { t.ffa.leave(); }
+});
+
+test('PvP feedback distinguishes guards, headshots and confirmed local kills', () => {
+  const t = setup(); setState(t.gs, 'play');
+  const marker = t.ctx.hud.hitmarker;
+  try {
+    const remote = t.remote as unknown as Parameters<typeof t.ffa.hitPlayer>[0];
+    t.ffa.hitPlayer(remote, 20, { source: 'rifle', part: 'blade' });
+    expect(marker).toHaveBeenLastCalledWith(false, false, true);
+    expect(t.sent.some(m => m.type === 'pdmg')).toBe(false);
+    t.ffa.hitPlayer(remote, 20, { source: 'rifle', part: 'head', crit: true });
+    expect(marker).toHaveBeenLastCalledWith(false, true);
+    marker.mockClear();
+    const death = { killer: 'client', dir: null, over: false, how: 'MP5', crit: true };
+    t.receive('pdead', death, 'stranger');
+    t.receive('pdead', { ...death, crit: 'invalid' });
+    t.receive('pdead', { ...death, killer: null });
+    expect(marker).not.toHaveBeenCalled();
+    t.receive('pdead', death);
+    expect(marker).toHaveBeenCalledExactlyOnceWith(true, true);
   } finally { t.ffa.leave(); }
 });
 

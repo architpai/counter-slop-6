@@ -365,7 +365,7 @@ export function createFFA(app: App): FfaApi {
     const point = info.point ?? t.center;
     if (info.part === 'blade') {
       ctx.effects.strokeBurst(point, TONE.ACCENT, 8, 6, { life: 0.22, size: 0.035 });
-      ctx.audio.shieldHit(t.center);
+      ctx.audio.shieldHit(t.center); hud.hitmarker(false, false, true);
       const ret = Math.random() < 0.4;
       if (ret) {
         ctx.effects.tracer(point, p.eye, TONE.HOSTILE, 0.03, 0.08);
@@ -380,7 +380,7 @@ export function createFFA(app: App): FfaApi {
     const frontHit = /^(head|torso|arm|fore)/.test(info.part ?? '');
     if (facing > 0.6 && frontHit && info.source === 'melee' && t.parryWindow) {
       ctx.effects.strokeBurst(point, TONE.ACCENT, 10, 6, { life: 0.25, size: 0.04 });
-      ctx.audio.shieldHit(t.center); ctx.game.hitstop(0.08, 0.15);
+      ctx.audio.shieldHit(t.center); hud.hitmarker(false, false, true); ctx.game.hitstop(0.08, 0.15);
       p.melee.cooldown = Math.max(p.melee.cooldown, 0.6);
       ctx.input.rumble(0.6, 0.3, 90); hud.tip('PARRIED', 0.9);
       return;
@@ -533,7 +533,7 @@ export function createFFA(app: App): FfaApi {
     const killerId = killer !== null && scores.has(killer) ? killer : null;
     if (r) { r.ragdoll(dir, over); ctx.audio.enemyDie(r.center); }
     const howText = how ? ` · ${how}${crit ? ' headshot' : ''}` : '';
-    if (killerId === net.id) { gs.kills++; app.addScore(100, `ELIMINATED ${victim}${howText}`); ctx.audio.kill(true); }
+    if (killerId === net.id) { gs.kills++; hud.hitmarker(true, crit); app.addScore(100, `ELIMINATED ${victim}${howText}`); ctx.audio.kill(true); }
     else {
       const killerName = killerId === null ? null : scores.get(killerId)?.name ?? null;
       hud.kill(killerName ? `${killerName} eliminated ${victim}${howText}` : `${victim} fell off the map`);
