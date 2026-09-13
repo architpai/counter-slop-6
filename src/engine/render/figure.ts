@@ -11,7 +11,7 @@ export type FigureKind = 'humanoid' | 'blob' | 'flyer';
 export type BlobKind = 'bomber' | 'hitbox' | 'lagspike';
 export type HatKind = 'none' | 'cap' | 'band' | 'helmet' | 'hood' | 'crown';
 export type WeaponPropKind = 'none' | 'r4c' | 'rifle' | 'pistol' | 'shotgun' | 'sniper' | 'blade' | 'knife' | 'hammer';
-export type ClownMask = 'grunt' | 'rusher' | 'heavy' | 'sniper' | 'shield' | 'bomber' | 'flyer' | 'boss' | 'hitbox' | 'lagspike';
+export type ClownMask = Exclude<TacticalKind, 'player'>;
 
 export interface FigureOpts {
   kind: FigureKind;
@@ -41,7 +41,7 @@ export interface FigureOpts {
  * - every kind: `hips`, `torso`, `head`, `face`, `eyes`, `deadEyes`, `tip`
  * - humanoid and blob: the arm, forearm, thigh and shin joints
  * - humanoid only: `hat`, `gunMount`, `weapon`, and `shield` when asked for
- * - flyer: `wingL`, `wingR`, `tail`; `hips` and `head` alias `torso`
+ * - flyer: `wingL`, `wingR`, `tail`; `hips` aliases `torso`, as does `head` except on the moderator
  * - blob: `cap`, `fuse`, `spark` (bomber), `lid` (hitbox), `spikes` (lagspike)
  */
 export interface FigureParts {
@@ -115,7 +115,12 @@ export function raycastFigure(root: THREE.Object3D, origin: THREE.Vector3, direc
   shotRay.set(origin, direction); shotRay.far = max;
   for (const hit of shotRay.intersectObject(root, true)) {
     const part = hit.object.userData.hitPart as FigureAnchorName | undefined;
-    if (part && hit.object.visible) return { part, dist: hit.distance, point: hit.point };
+    if (!part) continue;
+    let visible = true;
+    for (let node: THREE.Object3D | null = hit.object; node && node !== root; node = node.parent) {
+      if (!node.visible) { visible = false; break; }
+    }
+    if (visible) return { part, dist: hit.distance, point: hit.point };
   }
   return null;
 }
@@ -202,7 +207,10 @@ function clownFace(parent: THREE.Object3D, r: number, kind: ClownMask): FaceSets
   const ivory = 0xeee4d1, ink = 0x151b23, red = 0xb92e3c;
   const paint = { grunt: red, rusher: 0x242b48, heavy: 0x566270, sniper: 0x264b68,
     shield: 0x315850, bomber: 0xcb652d, flyer: 0x52758d, boss: 0xb08a40,
-    hitbox: 0x855382, lagspike: 0x596a80 }[kind];
+    hitbox: 0x855382, lagspike: 0x596a80, medic: 0x467960, breacher: 0xb77e30,
+    carrier: 0x52758d, turret: 0x63747b, packleader: 0xb08a40, smoker: 0x5a7957,
+    rubberbander: 0x855382, sapper: 0xcb652d, parry: 0x315850, aimbot: 0x264b68,
+    ragequit: 0xb92e3c, moderator: 0xb08a40 }[kind];
   const shell = oval(root, ivory, 0, -r * 0.02, r * 0.84, r * 1.02, r * 1.08, r * 0.32);
   shell.name = 'mask-shell';
   if (kind === 'shield') {
@@ -409,6 +417,10 @@ export function makeFigure(o: FigureOpts): Figure {
     faceMount.scale.setScalar(0.72);
     eyeSets = face(faceMount, 0.24, true, o.mask);
     parts.tip = group(body, 'tip', 0, 0, 0.7);
+    if (o.tactical === 'moderator') {
+      const head = joint('head', body, 0, 0.23, 0.43);
+      anchor('head', head, 0, 0.13, 0.05);
+    }
   } else if (o.kind === 'blob') {
     const hips = joint('hips', root, 0, 0.5, 0);
     const torso = joint('torso', hips, 0, 0, 0);
@@ -502,8 +514,10 @@ export function makeFigure(o: FigureOpts): Figure {
       for (const child of [...pivot.children]) if (isMesh(child)) release(child);
       const surface = tacticalPart(o.tactical, name, o.tactical === 'player' ? color : undefined);
       surface.traverse(object => {
-        if (isMesh(object)) object.userData.hitPart = o.kind === 'humanoid' ? HIT_REGIONS[name] ?? 'torso' : 'torso';
+        if (isMesh(object)) object.userData.hitPart = o.kind === 'humanoid' || name === 'head' ? HIT_REGIONS[name] ?? 'torso' : 'torso';
       });
+      // The authored cleaver follows the forearm, but remains a weapon, not armour.
+      surface.getObjectByName('heavy-melee')?.traverse(object => { delete object.userData.hitPart; });
       pivot.add(surface);
     }
     const head = built(parts.head, 'head');

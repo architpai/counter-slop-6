@@ -1,7 +1,7 @@
 import { clamp, randInt, store, SKEY } from './util';
 import { Renderer } from './render/index';
 import { World } from './physics';
-import { NavGrid } from './nav';
+import { NavGrid, BOSS_CLEARANCE, BOSS_HEADROOM } from './nav';
 import { Audio } from './audio';
 import { Net } from './net';
 import { Input } from './input';
@@ -147,6 +147,13 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
 
   let loadedKey: LevelKey | null = null, loadedArena = false;
 
+  // Dev only: `?wave=12` on localhost starts every solo run at that wave. Ignored on any other host.
+  const devWave = (() => {
+    if (!['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname)) return 1;
+    const n = Number(new URLSearchParams(window.location.search).get('wave'));
+    return Number.isInteger(n) && n >= 1 ? n : 1;
+  })();
+
   /**
    * Build a level and its nav grid without touching `ctx`.
    *
@@ -155,14 +162,16 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
    * purely so `loadLevel` had somewhere to write, which left six fields holding
    * null behind non-nullable types.
    */
-  function makeLevel(arena: boolean, resolved: LevelKey): { level: Level; nav: NavGrid } {
+  function makeLevel(arena: boolean, resolved: LevelKey): { level: Level; nav: NavGrid; bossNav: NavGrid } {
     const level = buildLevel(scene, world, resolved, { arena });
     renderer.setLevelShadow(level.shadow.center, level.shadow.radius);
     renderer.setMood(level.mood);
     const nav = new NavGrid(world, level.bounds, 1);
     nav.build();
+    const bossNav = new NavGrid(world, level.bounds, 1, BOSS_CLEARANCE, BOSS_HEADROOM);
+    bossNav.build();
     audio.setTune(resolved);
-    return { level, nav };
+    return { level, nav, bossNav };
   }
 
   loadedKey = settings.mapKey;
@@ -222,7 +231,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
   // ---- ctx 9: every service exists, only the actors are still null
   const ctx: Ctx = {
     scene, camera, renderer, world,
-    nav: first.nav, level: first.level,
+    nav: first.nav, bossNav: first.bossNav, level: first.level,
     input, hud, effects, audio, net,
     enemies: null, player: null, remotes: new Map(), game,
   };
@@ -233,7 +242,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     loadedKey = resolved; loadedArena = arena;
     disposeLevel(scene, ctx.level); world.clear();
     const rebuilt = makeLevel(arena, resolved);
-    ctx.level = rebuilt.level; ctx.nav = rebuilt.nav;
+    ctx.level = rebuilt.level; ctx.nav = rebuilt.nav; ctx.bossNav = rebuilt.bossNav;
     if (handle !== null) { handle.level = ctx.level; handle.nav = ctx.nav; }
   }
 
@@ -288,7 +297,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
   app.beginSolo = () => {
     const reset = gs.mode !== 'solo' || gs.state === 'start' || gs.state === 'dead';
     gs.mode = 'solo'; loadLevel(false, settings.mapKey); app.beginCommon();
-    if (reset) { app.resetRun(); app.solo.startWave(1); }
+    if (reset) { app.resetRun(); app.solo.startWave(devWave); }
     gs.state = 'play';
   };
   app.beginTraining = () => {

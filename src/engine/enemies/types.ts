@@ -31,6 +31,9 @@ export interface EnemyType {
   /** Holds its ground and aims up instead of closing (the sniper). */
   stationary?: boolean;
 
+  /** Optional live spawn limit (carrier and sentry share a separate limit). */
+  cap?: number;
+
   // Ranged block.
   range?: number;
   stop?: number;
@@ -75,6 +78,18 @@ const rows = {
   shield: { name: 'SHIELD MAIN', hp: 150, speed: 3.8, weapon: 'pistol', score: 200, scale: 1.05, range: 20, stop: 8, keep: 4, burst: 2, burstInterval: 0.2, cooldown: [1.8, 2.6], damage: 5, spread: 0.06, projectileSpeed: 34, thickness: 0.045, bodyWidth: 1.2, headSize: 0.9, limbR: 0.042, hat: 'helmet', shield: true },
   bomber: { name: 'LIVE NADE', hp: 26, speed: 6.5, weapon: 'bomb', score: 150, scale: 0.9, tone: 2, kind: 'blob', blob: 'bomber', fuseRange: 3.4, fuseTime: 1.05, blastRadius: 4.2, damage: 24 },
   flyer: { name: 'ATTACK DRONE', hp: 40, speed: 6.2, weapon: 'dive', score: 140, scale: 1.5, kind: 'flyer', flying: true, damage: 10, cooldown: [2.8, 4.2] },
+  medic: { name: 'MEDIC', hp: 80, speed: 5, weapon: 'rifle', score: 220, scale: 1, damage: 0, cap: 2, hat: 'helmet' },
+  breacher: { name: 'BREACHER', hp: 200, speed: 4.6, weapon: 'shotgun', score: 260, scale: 1.1, damage: 18, shield: true, cap: 2, cooldown: [2.4, 3.2], hat: 'helmet' },
+  carrier: { name: 'TURRET DROP', hp: 65, speed: 6, weapon: 'dive', score: 220, scale: 1.5, kind: 'flyer', flying: true, damage: 0 },
+  turret: { name: 'SENTRY', hp: 85, speed: 0, weapon: 'sniper', score: 160, scale: 0.9, damage: 16, stationary: true, range: 65, stop: 65, keep: 0, burst: 1, cooldown: [2.8, 3.4], spread: 0.01, projectileSpeed: 65, thickness: 0.06 },
+  packleader: { name: 'PACK LEADER', hp: 140, speed: 6.8, weapon: 'blade', score: 280, scale: 1.05, damage: 15, cooldown: [1.2, 1.8], cap: 1, hat: 'band' },
+  smoker: { name: 'SMOKER', hp: 90, speed: 4.8, weapon: 'pistol', score: 210, scale: 1, damage: 0, hat: 'hood' },
+  rubberbander: { name: 'THE RUBBERBANDER', hp: 120, speed: 5.4, weapon: 'rifle', score: 240, scale: 1, damage: 6, range: 28, stop: 14, keep: 6, burst: 3, burstInterval: 0.15, cooldown: [1.8, 2.8], spread: 0.055, projectileSpeed: 36, thickness: 0.045, hat: 'band' },
+  sapper: { name: 'SAPPER', hp: 110, speed: 5, weapon: 'pistol', score: 230, scale: 1, damage: 5, range: 20, stop: 10, keep: 5, burst: 2, burstInterval: 0.2, cooldown: [2, 3], spread: 0.06, projectileSpeed: 34, thickness: 0.045, cap: 1, hat: 'helmet' },
+  parry: { name: 'PARRY MAIN', hp: 110, speed: 6, weapon: 'blade', score: 230, scale: 1, damage: 15, cooldown: [1.4, 2], hat: 'hood' },
+  aimbot: { name: 'THE AIMBOT', hp: 3000, speed: 0, weapon: 'sniper', score: 4000, scale: 1.6, damage: 28, boss: true, stationary: true, cooldown: [3, 3], hat: 'hood', tone: 3 },
+  ragequit: { name: 'THE RAGEQUIT', hp: 4500, speed: 5.2, weapon: 'blade', score: 4400, scale: 2, damage: 28, boss: true, cooldown: [1.5, 2], hat: 'helmet', tone: 2 },
+  moderator: { name: 'THE MODERATOR', hp: 3600, speed: 5, weapon: 'boss', score: 4800, scale: 2.5, damage: 30, boss: true, flying: true, kind: 'flyer', cooldown: [4, 5], tone: 5 },
   boss: { name: 'THE ADMIN', hp: 2600, speed: 3.2, weapon: 'boss', score: 2500, scale: 2.7, tone: 2, boss: true, range: 32, stop: 6, keep: 0, cooldown: [2.6, 3.6], damage: 22, bodyWidth: 1.35, headSize: 1.15, limbR: 0.06, hat: 'crown' },
   hitbox: { name: 'THE HITBOX', hp: 3400, speed: 4.2, weapon: 'boss', score: 3200, scale: 2.6, tone: 5, kind: 'blob', blob: 'hitbox', boss: true, range: 30, stop: 8, keep: 0, cooldown: [2.2, 3.2], damage: 26 },
   lagspike: { name: 'THE LAG SPIKE', hp: 3000, speed: 3, weapon: 'boss', score: 3600, scale: 2.4, tone: 2, kind: 'blob', blob: 'lagspike', boss: true, range: 34, stop: 10, keep: 0, cooldown: [2.4, 3.4], damage: 20 },
@@ -86,7 +101,7 @@ export const TYPES = Object.fromEntries(
   (Object.entries(rows) as [EnemyKind, Row][]).map(([key, row]): [EnemyKind, EnemyType] =>
     [key, Object.freeze({ key, kind: 'humanoid', tone: 1, ...row })]),
 ) as Readonly<Record<EnemyKind, EnemyType>>;
-export const BOSS_ORDER: readonly EnemyKind[] = ['boss', 'hitbox', 'lagspike'];
+export const BOSS_ORDER: readonly EnemyKind[] = ['boss', 'hitbox', 'lagspike', 'aimbot', 'ragequit', 'moderator'];
 
 /** Roll the next attack delay. Only a type that never waits on one lacks a cooldown. */
 export const rollCooldown = (stats: EnemyType): number =>

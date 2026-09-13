@@ -13,6 +13,11 @@ export const TACTICAL_MODELS = {
   bomber: [...machineLegs, 'cap', 'fuse', 'spark'],
   flyer: ['torso', 'wingL', 'wingR', 'tail'],
   hitbox: [...machineLegs, 'lid'], lagspike: [...machineLegs, 'spikes'],
+  medic: TACTICAL_PARTS, breacher: [...TACTICAL_PARTS, 'shield'],
+  carrier: ['torso', 'wingL', 'wingR', 'tail'], turret: TACTICAL_PARTS,
+  packleader: TACTICAL_PARTS, smoker: TACTICAL_PARTS, rubberbander: TACTICAL_PARTS,
+  sapper: TACTICAL_PARTS, parry: TACTICAL_PARTS, aimbot: TACTICAL_PARTS, ragequit: TACTICAL_PARTS,
+  moderator: ['torso', 'head', 'wingL', 'wingR', 'tail'],
 } as const satisfies Record<TacticalKind, readonly FigurePartName[]>;
 
 let source: Group | null = null;

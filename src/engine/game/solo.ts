@@ -1,13 +1,13 @@
 import * as THREE from 'three';
-import { clamp, choose, rand } from '../util';
+import { clamp, choose, rand, wrapAngle } from '../util';
 import { TYPES, BOSS_ORDER } from '../enemies/index';
 import { TONE } from '../render/index';
 import type { EnemyKind, HitInfo, WeaponState } from '../types';
 import type { EnemyRecord } from '../enemies/index';
 import type { Player } from '../player/index';
 import type { App } from '../boot';
-
-const ROSTER: ReadonlyArray<readonly [string, number, number]> = [['grunt', 1, 10], ['rusher', 2, 6], ['bomber', 3, 3], ['sniper', 3, 4], ['flyer', 4, 4], ['heavy', 5, 4], ['shield', 6, 4]];
+import { ROSTER, MUTATIONS, mutationCount, nextSpawn } from '../enemies/progression';
+import { validBossPerch } from '../level/boss-perch';
 const MODS: ReadonlyArray<readonly [string, number, number]> = [
   ['', 1, 1], ['CAFFEINATED · they move fast', 1.35, 0.85],
   ['JUICED · they hit harder', 0.9, 1.4], ['SWARM · more of them, thinner', 1.15, 0.9],
@@ -51,6 +51,8 @@ export function createSolo(app: App): SoloApi {
   // `makeGameState` builds exactly this shape; the declared `FocusState` only
   // names `active`, so the downcast goes through `unknown`.
   const focus = gs.focus as unknown as SoloFocus;
+  /** Bearings (player -> spawn) of the last few spawns, so the next one comes from somewhere else. */
+  const recentBearings: number[] = [];
   function startWave(n: number): void {
     if (!Number.isSafeInteger(n) || n < 1) return;
     const enemies = ctx.enemies, player = ctx.player;
@@ -59,7 +61,10 @@ export function createSolo(app: App): SoloApi {
     gs.wave = n; gs.queue.length = 0; gs.spawnT = 1; gs.intermission = 0; gs.boss = null;
     ctx.hud.setBoss(null);
     const bossWave = n % 5 === 0;
-    const bossType: EnemyKind = BOSS_ORDER[(Math.floor(n / 5) - 1) % BOSS_ORDER.length] ?? 'boss';
+    let bossType: EnemyKind = BOSS_ORDER[(Math.floor(n / 5) - 1) % BOSS_ORDER.length] ?? 'boss';
+    if (bossType === 'aimbot' && !validBossPerch(ctx)) bossType = 'boss';
+    enemies.setMutations(n);
+    const mutation = n >= 31 && (n - 31) % 5 === 0 && n <= 46 ? MUTATIONS[mutationCount(n) - 1] : undefined;
     const allowed = bossWave || n < 4 ? 1 : n < 6 ? 3 : 4;
     const mod = MODS[Math.floor(rand(0, allowed))];
     const name = mod?.[0] ?? '';
@@ -70,15 +75,27 @@ export function createSolo(app: App): SoloApi {
     gs.maxAlive = Math.min(4 + Math.floor(0.8 * n) + (swarm ? 3 : 0), swarm ? 20 : 16);
     const count = bossWave ? Math.min(6 + n, 14) : Math.round(Math.min(4 + 1.7 * n, 28) * (swarm ? 1.35 : 1));
     if (bossWave) gs.queue.push(bossType);
-    const pool = ROSTER.filter(([, from]) => n >= from).map(([type, from, weight]): [string, number] => [type, weight * Math.min(1, 0.3 + 0.25 * (n - from))]);
+    const pool = ROSTER.filter(([type, from]) => n >= from
+      && (type !== 'sapper' || ctx.level.breakables.some(p => ['crate', 'barrel'].includes(p.kind)))).map(([type, from, weight]): [string, number] => [type, weight * Math.min(1, 0.3 + 0.25 * (n - from))]);
     const total = pool.reduce((sum, [, w]) => sum + w, 0);
+    const draw: string[] = [];
     for (let i = 0; i < count; i++) {
       let roll = rand(0, total);
       let selected: string = pool[0]?.[0] ?? 'grunt';
       for (const [type, weight] of pool) { roll -= weight; if (roll < 0) { selected = type; break; } }
-      gs.queue.push(selected);
+      draw.push(selected);
     }
-    const sub = bossWave ? `${TYPES[bossType]?.name ?? 'BOSS'} IS COMING` : n === 1 ? 'they are pushing · hold the site' : name || choose(['rush B', 'do not stop', 'stay off the ground', 'swing for it', 'trade them']);
+    // Beats, not a trickle: deal the draw out in same-type packs of 2-3 (a rusher pair, then grunts, then drones).
+    const left = new Map<string, number>();
+    for (const type of draw) left.set(type, (left.get(type) ?? 0) + 1);
+    while (left.size) {
+      for (const [type, remaining] of [...left]) {
+        const pack = Math.min(remaining, Math.round(rand(2, 3)));
+        for (let i = 0; i < pack; i++) gs.queue.push(type);
+        if (remaining - pack > 0) left.set(type, remaining - pack); else left.delete(type);
+      }
+    }
+    const sub = mutation?.label ?? (bossWave ? `${TYPES[bossType]?.name ?? 'BOSS'} IS COMING` : n === 1 ? 'they are pushing · hold the site' : name || choose(['rush B', 'do not stop', 'stay off the ground', 'swing for it', 'trade them']));
     ctx.hud.message(`WAVE ${n}`, sub, bossWave ? 3 : 2.6);
     ctx.audio.wave(); if (bossWave) ctx.audio.bossRoar(player.center);
     const tips = [
@@ -100,14 +117,21 @@ export function createSolo(app: App): SoloApi {
     const player = ctx.player;
     if (player === null) return ctx.level.playerStart.clone();
     const { level, world } = ctx, pp = player.body.pos;
+    if (type === 'aimbot') {
+      const perch = validBossPerch(ctx);
+      if (perch) return perch.clone();
+    }
     const spots = type === 'sniper' ? level.snipers : level.spawns;
-    if (type === 'flyer') {
-      const a = rand(0, Math.PI * 2), r = rand(22, 32);
+    if (TYPES[type as EnemyKind]?.flying) {
+      // The rear 120 degrees of the player's facing: a drone is a trap, not a thing you watch arrive.
+      const behind = Math.atan2(-player.forward.x, -player.forward.z) + rand(-1.05, 1.05);
+      const a = Math.PI / 2 - behind, r = rand(22, 32);
       return new THREE.Vector3(clamp(pp.x + Math.cos(a) * r, level.bounds.minX + 4, level.bounds.maxX - 4), pp.y + 12 + rand(0, 6), clamp(pp.z + Math.sin(a) * r, level.bounds.minZ + 4, level.bounds.maxZ - 4));
     }
     if (TYPES[type as EnemyKind]?.boss) {
       const fits = (p: THREE.Vector3): boolean => !world.overlapsAABB(min.set(p.x - 1.1, p.y + 0.1, p.z - 1.1), max.set(p.x + 1.1, p.y + 5.2, p.z + 1.1));
-      const clear = spots.filter(fits), far = clear.filter(p => p.distanceTo(pp) > 20);
+      // Only a spot the boss grid can walk from; the walker grid routed bosses into gaps they never fit.
+      const clear = spots.filter(p => fits(p) && ctx.bossNav.findPath(p, pp)?.complete), far = clear.filter(p => p.distanceTo(pp) > 20);
       if (far.length || clear.length) return choose(far.length ? far : clear).clone();
       for (let i = 0; i < 200; i++) {
         const a = rand(0, Math.PI * 2), r = rand(22, 40);
@@ -120,7 +144,16 @@ export function createSolo(app: App): SoloApi {
     let candidates = spots.filter(p => { const d = p.distanceTo(pp); return d > 14 && d < 48; });
     if (candidates.length < 2) candidates = spots.filter(p => p.distanceTo(pp) > 14);
     const hidden = candidates.filter(p => !world.lineOfSight(player.eye, delta.copy(p).addScaledVector(THREE.Object3D.DEFAULT_UP, 1.2)));
-    return (choose(hidden.length ? hidden : candidates.length ? candidates : spots) || level.playerStart).clone();
+    const from = hidden.length ? hidden : candidates.length ? candidates : spots;
+    // Of the usable spots, take the one whose bearing is furthest from the last three spawns, so the
+    // wave arrives from several streets instead of queuing down one. Random among near-equals.
+    const bearing = (p: THREE.Vector3) => Math.atan2(p.x - pp.x, p.z - pp.z);
+    const separation = (p: THREE.Vector3) => recentBearings.reduce((best, b) => Math.min(best, Math.abs(wrapAngle(bearing(p) - b))), Math.PI);
+    let pick: THREE.Vector3 | null = null, best = -Infinity;
+    for (const p of from) { const score = separation(p) + rand(0, 0.4); if (score > best) { best = score; pick = p; } }
+    const chosen = pick ?? level.playerStart;
+    recentBearings.push(bearing(chosen)); if (recentBearings.length > 3) recentBearings.shift();
+    return chosen.clone();
   }
   function update(dt: number): void {
     const enemies = ctx.enemies, player = ctx.player;
@@ -136,8 +169,9 @@ export function createSolo(app: App): SoloApi {
       gs.spawnT -= dt;
       if (gs.spawnT <= 0) {
         gs.spawnT = Math.max(0.7, 2.2 - 0.13 * gs.wave);
-        const type = gs.queue.shift();
+        let type = nextSpawn(gs.queue, type => enemies.canSpawn(type));
         if (type === undefined) return;
+        if (type === 'aimbot' && !validBossPerch(ctx)) type = 'boss';
         const e = enemies.spawn(type, spawnPosition(type));
         if (e === null) return;
         if (e.stats.boss) { e.hp = e.maxHp = Math.round(e.stats.hp * (1 + 0.35 * Math.floor((gs.wave - 5) / 15))); onBoss(e); }

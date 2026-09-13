@@ -6,6 +6,7 @@ import { buildDowntown } from './downtown';
 import { buildMexico } from './mexico';
 import { buildHouse } from './house';
 import { buildTraining } from './training';
+import { assignBossPerch } from './boss-perch';
 
 /** One row of the map picker. */
 export interface LevelEntry {
@@ -36,7 +37,9 @@ export function buildLevel(scene: THREE.Scene, world: World, key: unknown = 'dow
   else if (builder.level.key === 'house') buildHouse(builder);
   else if (builder.level.key === 'mexico') buildMexico(builder);
   else buildDowntown(builder);
-  return builder.finish();
+  const level = builder.finish();
+  assignBossPerch(level);
+  return level;
 }
 
 /** Duck-typed like the rest of three: meshes, lines and points all carry geometry. */

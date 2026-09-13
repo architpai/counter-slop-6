@@ -26,8 +26,13 @@ interface HeapItem {
   f: number;
 }
 
-/** Half-width of the node and link clearance tests. Must cover the widest common walker (heavy: halfW 0.41). */
-const CLEARANCE = 0.42;
+/** Default half-width of the node and link clearance tests. Covers the widest common walker (heavy: halfW 0.41). */
+export const NAV_CLEARANCE = 0.42;
+/** Boss grid: bosses are 0.86-0.89 wide and 4.8-5 m tall; the walker grid routed them through 3 m doorways. */
+export const BOSS_CLEARANCE = 0.95;
+export const BOSS_HEADROOM = 5.1;
+/** Headroom of the walker grid: 1.85 m nodes, 1.7 m links (a stair tread must not read as a ceiling). */
+const HEADROOM = 1.85;
 const directions: readonly (readonly [number, number])[] = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 const finiteVector = (v: Vector3 | null | undefined) => v && Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
 
@@ -65,6 +70,8 @@ export class NavGrid {
   #world: World;
   #bounds: Bounds;
   #cell: number;
+  #clearance: number;
+  #headroom: number;
   #nx: number;
   #nz: number;
   #cells: (number[] | undefined)[] = [];
@@ -79,10 +86,12 @@ export class NavGrid {
 
   readonly nodes: NavNode[];
 
-  constructor(world: World, bounds: Bounds, cell = 1) {
+  constructor(world: World, bounds: Bounds, cell = 1, clearance = NAV_CLEARANCE, headroom = HEADROOM) {
     this.#world = world;
     this.#bounds = { ...bounds };
     this.#cell = cell;
+    this.#clearance = clearance;
+    this.#headroom = headroom;
     this.#nx = Math.ceil((bounds.maxX - bounds.minX) / cell);
     this.#nz = Math.ceil((bounds.maxZ - bounds.minZ) / cell);
     this.nodes = [];
@@ -103,6 +112,7 @@ export class NavGrid {
     });
   }
   build() {
+    const c = this.#clearance, h = this.#headroom, hl = h - 0.15;
     this.nodes.length = 0;
     this.#cells = new Array(this.#nx * this.#nz);
     for (let iz = 0; iz < this.#nz; iz++) {
@@ -114,7 +124,7 @@ export class NavGrid {
         const heights = new Set<number>();
         for (const box of boxes) if (!box.data.noNav) heights.add(box.max.y);
         for (const y of [...heights].sort((a, b) => a - b)) {
-          if (y < -5 || y > 70 || this.#blocked(x - CLEARANCE, y + 0.5, z - CLEARANCE, x + CLEARANCE, y + 1.85, z + CLEARANCE)) continue;
+          if (y < -5 || y > 70 || this.#blocked(x - c, y + 0.5, z - c, x + c, y + h, z + c)) continue;
           const id = this.nodes.length;
           this.nodes.push({ id, x, y, z, ix, iz, links: [] });
           const index = iz * this.#nx + ix;
@@ -133,8 +143,8 @@ export class NavGrid {
           if (dy > 1.35 || dy < -8) continue;
           if (dx && dz && (!this.#cornerOpen(a.ix + dx, a.iz, a, b) || !this.#cornerOpen(a.ix, a.iz + dz, a, b))) continue;
           const base = Math.max(a.y, b.y);
-          if (this.#blocked(Math.min(a.x, b.x) - CLEARANCE, base + 0.5, Math.min(a.z, b.z) - CLEARANCE,
-            Math.max(a.x, b.x) + CLEARANCE, base + 1.7, Math.max(a.z, b.z) + CLEARANCE)) continue;
+          if (this.#blocked(Math.min(a.x, b.x) - c, base + 0.5, Math.min(a.z, b.z) - c,
+            Math.max(a.x, b.x) + c, base + hl, Math.max(a.z, b.z) + c)) continue;
           if (dy < -0.6 && this.#blocked(b.x - 0.2, b.y + 0.05, b.z - 0.2, b.x + 0.2, a.y + 0.05, b.z + 0.2)) continue;
           let cost = Math.sqrt(this.#cell ** 2 * (dx * dx + dz * dz) + dy * dy);
           if (dy > 0.6) cost *= 1 + 1.1 * dy;

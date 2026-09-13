@@ -22,7 +22,7 @@ test('every enemy has a distinct clown mask without changing its hit anchors', (
           'color' in o.material ? o.material.color.getHex() : null]);
       });
       signatures.add(JSON.stringify(meshes));
-      expect(hits.length).toBe(stats.kind === 'humanoid' ? (stats.shield ? 12 : 11) : 1);
+      expect(hits.length).toBe(stats.kind === 'humanoid' ? (stats.shield ? 12 : 11) : stats.key === 'moderator' ? 2 : 1);
       expect(hits.some(h => h.part === (stats.kind === 'humanoid' ? 'head' : 'torso'))).toBe(true);
       figure.setEyes(true);
       expect(figure.parts.eyes?.visible).toBe(false);

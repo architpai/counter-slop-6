@@ -22,7 +22,8 @@ try {
     for (let i = 0; i < 90; i++) g.player.update(1 / 60);
   });
   await page.screenshot({ path: `${output}/first-person.png` });
-  for (const kind of ['grunt', 'rusher', 'heavy', 'sniper', 'shield', 'bomber', 'flyer', 'boss', 'hitbox', 'lagspike']) {
+  for (const kind of ['grunt', 'rusher', 'heavy', 'sniper', 'shield', 'bomber', 'flyer', 'boss', 'hitbox', 'lagspike',
+    'medic', 'breacher', 'carrier', 'turret', 'packleader', 'smoker', 'rubberbander', 'sapper', 'parry', 'aimbot', 'ragequit', 'moderator']) {
     const result = await page.evaluate(kind => {
       const g = window.__game;
       g.enemies.clear(); g.effects.clear();
@@ -49,11 +50,11 @@ try {
         }
       });
       return { tactical: e.root.userData.tactical, radius: target.r, scale,
-        bodyKind: e.stats.kind, rayPart: ray?.part, meshes, triangles };
+        bodyKind: e.stats.kind, flying: e.stats.flying, hitPart: target.part, rayPart: ray?.part, meshes, triangles };
     }, kind);
     assert.equal(result.tactical, kind);
-    assert.equal(result.radius, (result.bodyKind === 'humanoid' ? .195 : kind === 'flyer' ? .48 : .5) * result.scale);
-    assert.equal(result.rayPart, kind === 'shield' ? 'shield' : result.bodyKind === 'humanoid' ? 'head' : 'torso');
+    assert.equal(result.radius, (result.hitPart === 'head' ? .195 : result.flying ? .48 : .5) * result.scale);
+    assert.equal(result.rayPart, ['shield', 'breacher'].includes(kind) ? 'shield' : result.hitPart === 'head' ? 'head' : 'torso');
     assert(result.meshes < 100 && result.triangles < 18000, `${kind} stays within the mesh budget`);
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     await page.screenshot({ path: `${output}/${kind}.png` });
@@ -127,5 +128,5 @@ try {
   await page.waitForFunction(() => !!window.__game);
   assert.equal(await page.evaluate(() => window.__game.live), 1);
   assert.deepEqual(errors, []);
-  console.log(`OK: all 10 enemies, hit areas, special actions, first-person arms, load failure and remount. Screenshots: ${output}`);
+  console.log(`OK: all 22 enemies, hit areas, special actions, first-person arms, load failure and remount. Screenshots: ${output}`);
 } finally { await browser.close(); }

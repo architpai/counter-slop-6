@@ -69,7 +69,7 @@ The boot sequence runs once when the page loads, in this order:
 
 1. Create the renderer on the map canvas and read its scene and camera. Create the physics world, audio service, and network service. Audio construction does not open an AudioContext; network construction does not open a peer or connection.
 2. Read the picked map key from storage (section 3). If the key is not in the selectable level list, use `downtown`. Because the Mexico level is not in that list while its "ready" flag is off, a stored `mexico` key resolves to `downtown`. The same validation is applied to every map key that arrives over the network (lobby and start messages).
-3. Build the level for that key with the arena flag **off**. Build the navigation grid from the world with cell size 1.
+3. Build the level for that key with the arena flag **off**. Build the navigation grid from the world with cell size 1, and the boss grid (clearance 0.95, headroom 5.1) beside it.
 4. Record the loaded key and the arena flag (off).
 5. Set the music tune: `mexico` if the map key is `mexico`, otherwise `downtown`.
 6. Create the input system on the canvas, the HUD on the HUD root element, and the effects system on the scene and world.
@@ -105,7 +105,7 @@ Level list: the selectable levels are `downtown` ("DOWNTOWN"), `house` ("THE HOU
 A helper rebuilds the level when the key or the arena flag must change. Rules:
 
 - If the requested key and arena flag equal the loaded ones, and no force flag is set, do nothing.
-- Otherwise: record the new key and arena flag as loaded; remove every level mesh from the scene and release its geometry (including the geometry of every descendant object); clear the animated list; clear the physics world (all colliders); build the new level with the new arena flag; rebuild the nav grid (cell size 1); replace the level and nav grid in the shared context and in the debug handle; set the music tune for the new key (`mexico` for Mexico, else `downtown`).
+- Otherwise: record the new key and arena flag as loaded; remove every level mesh from the scene and release its geometry (including the geometry of every descendant object); clear the animated list; clear the physics world (all colliders); build the new level with the new arena flag; rebuild the nav grid and the boss grid (cell size 1); replace the level and both grids in the shared context and in the debug handle; set the music tune for the new key (`mexico` for Mexico, else `downtown`).
 - A rebuild removes every pickup mesh only indirectly: pickups are not level meshes, so the caller (reset run, section 11) clears them itself. Enemies and effects are also the caller's job.
 - A forced rebuild is used to restore broken props (section 29).
 
@@ -420,7 +420,7 @@ The modifier index is a uniform random integer in [0, allowed) where allowed = 1
 2. boss wave = (n > 0 and n mod 5 = 0).
 3. Pick and apply the modifier; show its name in the HUD modifier slot.
 4. maxAlive = min(4 + floor(0.8 n) + (swarm ? 3 : 0), swarm ? 20 : 16).
-5. count = round(min(4 + 1.7 n, 28) × (swarm ? 1.35 : 1)). On a boss wave: count = min(6 + n, 14) and the boss type is pushed to the front of the queue first.
+5. count = round(min(4 + 1.7 n, 28) × (swarm ? 1.35 : 1)). On a boss wave: count = min(6 + n, 14) and the boss type is pushed to the front of the queue first. The drawn types are then dealt into the queue as **packs**: cycle through the types still owed and push min(remaining, round(uniform [2, 3])) of each per cycle, so the wave spawns as beats (a rusher pair, then grunts, then drones) rather than a random trickle.
 6. Pool = roster entries with n ≥ from, each with weight = base weight × min(1, 0.3 + 0.25 × (n − from)). Draw `count` types by weighted random (roulette over the pool; on numerical fall-through pick the first pool entry). Push each to the queue.
 7. Message: boss wave → main "WAVE n", sub "<BOSS DISPLAY NAME> IS COMING", 3 s, plus a boss roar sound at the player. Otherwise → main "WAVE n", sub = (n = 1 ? "they are pushing · hold the site" : modifier name if any, else a random pick from "tone harder", "keep sketch", "stay off the ground", "swing for it", "return their bullets"), 2.6 s.
 8. Play the wave sound.
@@ -441,9 +441,9 @@ The modifier index is a uniform random integer in [0, allowed) where allowed = 1
 Given an enemy type, the spawn position is chosen as follows. `pp` is the player's body position.
 
 - Spot list = sniper perches for type `sniper`, else the level spawn list.
-- **Flyer**: angle a uniform in [0, 2π), radius r uniform in [22, 32). Position x = clamp(pp.x + cos(a) r, minX + 4, maxX − 4), z = clamp(pp.z + sin(a) r, minZ + 4, maxZ − 4), y = pp.y + 12 + uniform [0, 6).
-- **Boss**: a spot "fits" when no world collider overlaps the box from (x − 1.1, y + 0.1, z − 1.1) to (x + 1.1, y + 5.2, z + 1.1). Take the spots that fit; prefer those farther than 20 from `pp` (random among them); else random among those that fit; else try up to 200 random candidates: angle uniform, r in [22, 40), x and z = pp ± offset clamped to ±44, y = ground height found by a downward ray from y = 30 with max drop 40; accept when y > −3 and it fits. Final fallback: the level's player start.
-- **All others**: candidates = spots with 14 < distance to pp < 48. If fewer than 2, candidates = spots with distance > 14. Hidden = candidates with no line of sight from the player's eye to the spot raised by 1.2. Pick random from hidden if any; else from candidates if any; else from all spots.
+- **Flyer**: bearing = the player's rear (atan2(−forward.x, −forward.z)) + uniform [−1.05, 1.05] rad — the rear 120° of the facing, so a drone is a trap, not a thing you watch arrive; radius r uniform in [22, 32). Position x = clamp(pp.x + cos(a) r, minX + 4, maxX − 4), z = clamp(pp.z + sin(a) r, minZ + 4, maxZ − 4), y = pp.y + 12 + uniform [0, 6).
+- **Boss**: a spot "fits" when no world collider overlaps the box from (x − 1.1, y + 0.1, z − 1.1) to (x + 1.1, y + 5.2, z + 1.1) **and** the boss grid has a complete path from the spot to `pp` (a boss that fits its spawn but not its route stood at a doorway for the whole wave). Take the spots that fit; prefer those farther than 20 from `pp` (random among them); else random among those that fit; else try up to 200 random candidates: angle uniform, r in [22, 40), x and z = pp ± offset clamped to ±44, y = ground height found by a downward ray from y = 30 with max drop 40; accept when y > −3 and it fits. Final fallback: the level's player start.
+- **All others**: candidates = spots with 14 < distance to pp < 48. If fewer than 2, candidates = spots with distance > 14. Hidden = candidates with no line of sight from the player's eye to the spot raised by 1.2. The pool is hidden if any, else candidates if any, else all spots. From the pool take the spot whose bearing from `pp` is furthest (minimum absolute wrapped angle) from the bearings of the last three spawns, plus uniform [0, 0.4) rad of jitter so near-equal spots vary; remember its bearing (keep three). Enemies therefore come from several streets instead of queuing down one.
 
 The chosen position is copied (never the list entry itself).
 
@@ -853,5 +853,5 @@ Sounds triggered by this subsystem: wave start, wave clear, boss roar, kill (str
 | Audio | init, resume, set listener, set tune, music on(flag), music playing, set intensity, reel loop(flag), and the one-shot sounds of section 33. |
 | Renderer | scene, camera, render(time, {hurt, flash, slow, lowHp}). |
 
-A debug handle on the window exposes the context, game state, player, enemies, nav, world, level, HUD, effects, input, network, remotes, lobby, scores, and the run-control functions, plus `jumpToWave(n)` — a debug-only restart of the solo run at wave n that no UI reaches (checkpoints and wave-skip buttons are gone; this is how late waves get tested). It has no gameplay effect.
+A debug handle on the window exposes the context, game state, player, enemies, nav, world, level, HUD, effects, input, network, remotes, lobby, scores, and the run-control functions, plus `jumpToWave(n)` — a debug-only restart of the solo run at wave n that no UI reaches. On `localhost` / `127.0.0.1` / `[::1]` only, the query string `?wave=n` makes every solo start (START SOLO, retry after death) begin at wave n instead of 1; any other host ignores it (checkpoints and wave-skip buttons are gone; this is how late waves get tested). It has no gameplay effect.
 

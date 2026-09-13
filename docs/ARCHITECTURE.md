@@ -387,6 +387,7 @@ interface Ctx {
   renderer:  Renderer;
   world:     World;
   nav:       NavGrid;          // replaced on level rebuild
+  bossNav:   NavGrid;          // same grid at boss clearance (0.95 wide, 5.1 m headroom); bosses path on it
   level:     Level;            // replaced on level rebuild
 
   // services
@@ -464,6 +465,8 @@ interface Target {
   forward: THREE.Vector3;
   right:   THREE.Vector3;
   readonly speed: number;             // |velocity|; remote players report 0
+  readonly aiming: boolean;           // down sights; enemies read aiming/firing as "busy" cues
+  readonly firing: boolean;
   readonly blockRadius: number;       // local: 0.95 while guarding and off cooldown, else 0; remote: 0
   takeDamage(amount: number, from?: THREE.Vector3 | null): void;
   knockback(dir: THREE.Vector3, amount: number): void;
@@ -987,7 +990,8 @@ export interface NavLink { to: number; cost: number; dy: number }
 export type NavPath = THREE.Vector3[] & { complete: boolean };
 
 export class NavGrid {
-  constructor(world: World, bounds: Bounds, cell?: number);   // cell default 1.0
+  constructor(world: World, bounds: Bounds, cell?: number, clearance?: number, headroom?: number);
+                                        // cell 1.0; clearance 0.42 / headroom 1.85 for walkers, 0.95 / 5.1 for the boss grid
   build(): void;                                              // call once after level.finalize()
   readonly nodes: NavNode[];
   nearest(pos: THREE.Vector3, radius?: number, maxDrop?: number): number;  // node id or -1

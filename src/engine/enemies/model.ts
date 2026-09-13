@@ -1,6 +1,6 @@
-import { Vector3 } from 'three';
+import { Vector3, Mesh, SphereGeometry } from 'three';
 import type { Group, Object3D } from 'three';
-import { makeFigure, TONE_HEX, setFlash } from '../render/index';
+import { makeFigure, TONE_HEX, setFlash, unlitMat } from '../render/index';
 import type { Figure, FigureAnchorName, FigureAnchors, FigureParts, WeaponPropKind } from '../render/figure';
 import { clamp, damp, rand, wrapAngle } from '../util';
 import type { EnemyType } from './types';
@@ -19,7 +19,7 @@ export type GroundJoints = FigureParts & Required<Pick<FigureParts,
 type FlyerJoints = FigureParts & Required<Pick<FigureParts, 'torso' | 'wingL' | 'wingR'>>;
 /** Every kind gets a torso and a muzzle tip from `makeFigure`. */
 export type CoreParts = FigureParts & Required<Pick<FigureParts, 'torso' | 'tip'>>;
-/** `head` exists on humanoids only; every kind gets a torso anchor. */
+/** Humanoids and the moderator have a separate head; every kind gets a torso anchor. */
 export type EyeAnchors = FigureAnchors & Required<Pick<FigureAnchors, 'torso'>>;
 
 /** One hit sphere: the anchor it rides, its world centre and its radius. */
@@ -39,11 +39,17 @@ export function makeModel(stats: EnemyType): { figure: Figure; root: Group; hits
   const weapon: WeaponPropKind = stats.weapon === 'boss' ? (stats.kind === 'humanoid' ? 'hammer' : 'none')
     : carriesProp(stats.weapon) ? stats.weapon : 'none';
   const figure = makeFigure({ ...stats, color: TONE_HEX[stats.tone], weapon, mask: stats.key, tactical: stats.key });
-  const radii: Partial<Record<FigureAnchorName, number>> = stats.kind === 'humanoid' ? RADII : { torso: stats.flying ? 0.48 : 0.5 };
+  const radii: Partial<Record<FigureAnchorName, number>> = stats.kind === 'humanoid' ? RADII
+    : stats.key === 'moderator' ? { torso: 0.48, head: RADII.head } : { torso: stats.flying ? 0.48 : 0.5 };
   const hits: HitSphere[] = [];
   for (const [part, r] of Object.entries(radii) as [FigureAnchorName, number][]) {
     const obj = figure.anchors[part];
     if (obj) hits.push({ part, r: r * stats.scale, obj, center: new Vector3() });
+  }
+  if (stats.key === 'aimbot') {
+    const core = new Mesh(new SphereGeometry(0.13, 12, 8), unlitMat(0xffb020));
+    core.name = 'aimbot cooling core'; core.position.set(0, 0.32, -0.42);
+    core.userData.hitPart = 'head'; core.visible = false; figure.parts.torso?.add(core);
   }
   figure.root.scale.setScalar(0.001);
   return { figure, root: figure.root, hits };
@@ -75,6 +81,20 @@ export function animate(e: EnemyRecord, dt: number): void {
   e.walkAmt = damp(e.walkAmt, clamp(speed / 4, 0, 1), 10, dt);
   e.phase += (speed * 2.2 + (speed > 0.4 ? 3 : 0)) * dt;
   const s = Math.sin(e.phase), c = Math.cos(e.phase), w = e.walkAmt;
+  if (e.type === 'carrier') {
+    const payload = e.root.getObjectByName('equipment-carrier');
+    if (payload) payload.visible = e.payload;
+  } else if (e.type === 'aimbot') {
+    const vent = e.root.getObjectByName('aimbot-vent');
+    if (vent) vent.rotation.x = e.weakT > 0 ? -0.65 : 0;
+    const core = e.root.getObjectByName('aimbot cooling core'); if (core) core.visible = e.weakT > 0;
+  } else if (e.type === 'moderator') {
+    const ring = e.root.getObjectByName('equipment-moderator');
+    if (ring) {
+      ring.rotation.z = e.age * 0.25;
+      ring.scale.setScalar(e.yankableT > 0 ? 1.12 : 1);
+    }
+  }
   if (e.stats.flying) {
     const p = e.figure.parts as FlyerJoints;
     p.torso.position.y = 0.6 + Math.sin(3 * e.age) * 0.1;
@@ -121,6 +141,11 @@ export function animate(e: EnemyRecord, dt: number): void {
     p.upperL.rotation.set(-0.5, 0, 0);
     p.foreL.rotation.x = -1.9;
     p.upperR.rotation.z = 0.12;
+  }
+  if (e.type === 'parry' && e.guardT > 0) {
+    p.upperR.rotation.set(-1.35, 0, -0.6);
+    p.foreR.rotation.x = -1.15;
+    p.upperL.rotation.x = -1.1;
   }
   if (e.type === 'boss' && e.bossAttack) {
     const { kind, t } = e.bossAttack;

@@ -88,8 +88,19 @@ Findings from the mechanics review, fixed together. Gun balance (R4-C dominance,
 - **Projectile hit radius** against the player is 0.42, not 0.5 (`enemies.md` §11.1): 0.42 around centre / eye / feet approximates the 0.35 body capsule.
 - **Early waves.** First spawn at 1 s (was 2), spawn interval `max(0.7, 2.2 − 0.13 n)` (was 2.9 − 0.13 n), `maxAlive` base 4 (was 3). Wave 1 used to be 17 s of waiting for six grunts. **Enter** skips the 8 s intermission on keyboard (`game-loop.md` §12).
 - **Kill feed.** Plain kills no longer post "RECRUIT +100"; only bosses, headshots, knife kills, executions, returns, falls and airborne kills reach the feed (`game-loop.md` §14).
-- **Debug wave jump.** `window.__game.jumpToWave(n)` restarts the solo run at wave n. No UI reaches it; it exists so waves 10+ can be tested without playing there (`game-loop.md` §34).
+- **Debug wave jump.** `window.__game.jumpToWave(n)` restarts the solo run at wave n, and on localhost `http://localhost:3000/?wave=n` makes START SOLO and every retry begin at wave n. No UI reaches either; they exist so waves 10+ can be tested without playing there (`game-loop.md` §34).
 - **Layering.** `render/figure.ts` no longer imports `weapons/stats`; `makeWeaponProp(kind)` takes the prop kind and `players.ts` resolves the slot.
+
+## PvE AI pass
+
+Playtest to wave 11: bosses got stuck and sat out the wave; rushers and recruits bunched into a pile that focused fire melted. Neither was the map. Probes: `/tmp/shooter-probes/probe-boss.mjs` (a boss from every spawn), `clump.mjs` (close ranged pairs per frame, spawn bearing spread, front/rear hits over 40 s at wave 9).
+
+- **Boss navigation.** Bosses are 0.86–0.89 wide and 4.8–5 m tall; the walker grid (0.42 clearance, 1.85 m headroom) routed them through 3 m doorways under 3.2 m lintels, where they hopped in place forever. A second `NavGrid` (`ctx.bossNav`, clearance 0.95, headroom 5.1) is built beside the walker grid; bosses path on it (`enemies.md` §6.6), boss spawns require a complete boss-grid route to the player (`game-loop.md` §13), and a boss stuck past the 0.9 s hop re-rolls its approach bearing. Downtown: THE ADMIN reached the player from 6 / 21 spawns before, from every route-checked spawn after (the rest are now never chosen).
+- **Spawn bearings.** The spawn director keeps the last three spawn bearings and picks the usable spot furthest from them (`game-loop.md` §13). Mean bearing gap between consecutive spawns at wave 9: ~50° → ~75°.
+- **Firing line.** A ranged enemy in range but within 3 m of another line-of-sight enemy keeps walking to its slot instead of stopping (`enemies.md` §7.4); ranged slot radius 4.5–9 → 7–13; ranged-pair separation 0.75 → 1.6 (§6.4).
+- **Rusher flank.** Blade slot bearings are rolled around the target's rear, 0–1.5 rad to the strafe side (§6.3). Hits landing from behind the player at wave 9: ~5 % → ~28 %.
+- **Drones on cue.** Flyers spawn in the rear 120° of the facing and dive when the target is aiming or firing, or after 2.5 s of waiting (§10). `Target` gains `aiming` / `firing`.
+- **Wave beats.** The spawn queue is dealt in same-type packs of 2–3 (`game-loop.md` §12 step 5).
 
 ## Training ground and optics
 

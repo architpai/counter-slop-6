@@ -1,8 +1,8 @@
-import { Vector3 } from 'three';
+import { Vector3, Mesh as ThreeMesh, TorusGeometry, RingGeometry, Group as ThreeGroup } from 'three';
 import type { Group, Mesh } from 'three';
 import { clamp, damp, rand, angleLerp, round2, choose, shuffle, TAU } from '../util';
 import { Body, seeThrough } from '../physics';
-import { TONE } from '../render/index';
+import { TONE, unlitMat } from '../render/index';
 import type { Figure, FigureAnchorName, FigurePartName } from '../render/figure';
 import { raycastFigure } from '../render/figure';
 import type { ToneId } from '../render/palette';
@@ -17,6 +17,11 @@ import { flyerThink } from './flyer';
 import { updateProjectiles, removeProjectile } from './projectiles';
 import type { ProjectileRecord } from './projectiles';
 import type { BossAttack } from './boss';
+import { EnemyHazards } from './hazards';
+import { specialThink } from './specials';
+import { expansionBossThink } from './expansion-boss';
+import { MUTATIONS, mutationCount } from './progression';
+import { spawnProjectile } from './projectiles';
 
 export { TYPES, BOSS_ORDER };
 
@@ -100,6 +105,19 @@ export interface EnemyRecord extends Enemy {
   cover: Vector3 | null;
   coverT: number;
   wantCover: boolean;
+  specialT: number;
+  specialCd: number;
+  actionPoint: Vector3 | null;
+  weakT: number;
+  yankableT: number;
+  rageT: number;
+  rageStacks: number;
+  guardT: number;
+  boostT: number;
+  retreatT: number;
+  homeYaw: number;
+  payload: boolean;
+  mutated: boolean;
   figure: Figure;
   root: Group;
   hits: HitSphere[];
@@ -131,6 +149,8 @@ export class EnemyManager {
   byId: Map<number, EnemyRecord>;
   projectiles: ProjectileRecord[];
   mods: { speed: number; damage: number };
+  hazards: EnemyHazards;
+  mutations = new Set<EnemyKind>();
   /** True on a client mirror: it interpolates instead of thinking (dormant). */
   mirror: boolean;
   onKill: ((e: EnemyRecord, info: HitInfo, overkill: boolean) => void) | null;
@@ -150,11 +170,35 @@ export class EnemyManager {
     this.ctx = ctx;
     this.list = []; this.byId = new Map(); this.projectiles = [];
     this.mods = { speed: 1, damage: 1 };
+    this.hazards = new EnemyHazards(this);
     this.mirror = false;
     this.onKill = this.onBoss = this.onSpawn = this.onClientHit = this.onFire = null;
     this.ids = 1; this.slots = 0; this.sepT = 0; this.alive = 0;
     this._steer = (e, goal, speed, accel, dt) => steer(this, e, goal, speed, accel, dt);
     this._follow = (e, target, speed, dt) => follow(this, e, target, speed, dt);
+  }
+
+  canSpawn(type: string): boolean {
+    if (!isKind(type)) return false;
+    if (type === 'carrier' || type === 'turret') return this.list.filter(e => e.alive
+      && (e.type === 'turret' || (e.type === 'carrier' && e.payload))).length < 2;
+    const cap = TYPES[type].cap;
+    return cap === undefined || this.list.filter(e => e.alive && e.type === type).length < cap;
+  }
+
+  setMutations(wave: number): void {
+    this.mutations = new Set(MUTATIONS.slice(0, mutationCount(wave)).map(m => m.type));
+    for (const e of this.list) if (e.alive) this.mutate(e);
+  }
+
+  private mutate(e: EnemyRecord): void {
+    if (e.mutated || !this.mutations.has(e.type)) return;
+    e.mutated = true;
+    if (e.type === 'grunt') e.stats = { ...e.stats, burst: 5, cooldown: [2.6, 3.6] };
+    const badge = new ThreeMesh(new TorusGeometry(0.25, 0.045, 6, 12), unlitMat(e.stats.flying ? 0xffb020 : 0xc56bff));
+    badge.name = 'mutation marker'; badge.position.set(0, 1.1, -0.38);
+    if (e.stats.flying) { badge.position.set(0, 0.3, 0.1); e.payload = true; }
+    e.root.add(badge);
   }
 
   spawn(type: EnemyKind, position: Vector3, id?: number): EnemyRecord;
@@ -175,13 +219,22 @@ export class EnemyManager {
       approachPoint: new Vector3(), keepMult: rand(0.75, 1.35), backoffT: 0, fuseT: -1, shieldHp: stats.shield ? 2 : 0,
       flightPhase: 'orbit', flightT: rand(0, 3), orbitDir: choose([-1, 1]), bossAttack: null, rootDetached: false,
       retargetT: 0, laser: null, chargeCount: 0, sprayCount: 0, hopT: 1, hopping: false, aimPoint: null, aimWarned: false,
-      diveHit: false, topple: null, snapOld: null, snapNew: null, target: null, cover: null, coverT: 0, wantCover: false, figure, root, hits,
+      diveHit: false, topple: null, snapOld: null, snapNew: null, target: null, cover: null, coverT: 0, wantCover: false,
+      specialT: 0, specialCd: type === 'aimbot' ? 12 : 3, actionPoint: null, weakT: 0, yankableT: 0,
+      rageT: 0, rageStacks: 0, guardT: 0, boostT: 0, retreatT: 0, homeYaw: 0,
+      payload: type === 'carrier', mutated: false, figure, root, hits,
     };
     this.ids = Math.max(this.ids, e.id + 1);
     root.position.copy(position); root.rotation.y = e.yaw;
     this.ctx.scene.add(root);
     syncModel(e);
     this.list.push(e); this.byId.set(e.id, e); this.alive++;
+    this.mutate(e);
+    if (type === 'turret') {
+      const arc = new ThreeGroup(); arc.name = 'sentry arc';
+      const mesh = new ThreeMesh(new RingGeometry(3.8, 4, 24, 1, -3 * Math.PI / 4, Math.PI / 2), unlitMat(0xffb020));
+      mesh.rotation.x = -Math.PI / 2; mesh.position.y = 0.04; arc.add(mesh); root.add(arc);
+    }
     if (!this.mirror) this.onSpawn?.(e);
     if (this.ctx.game.mode !== 'training') {
       scratch.copy(position); scratch.y += 1;
@@ -214,6 +267,8 @@ export class EnemyManager {
       if (!passive) this._pickTarget(e, dt);
       if (e.flashT > 0) { e.flashT -= dt; if (e.flashT <= 0) flash(e, false); }
       e.flinch = damp(e.flinch, 0, 9, dt);
+      e.weakT = Math.max(0, e.weakT - dt); e.yankableT = Math.max(0, e.yankableT - dt);
+      e.boostT = Math.max(0, e.boostT - dt);
       if (e.state === 'spawn') { spawnPose(e); continue; }
       if (this.mirror) { this._mirrorStep(e, dt); continue; }
       if (e.state === 'stunned' && e.laser) e.laser.visible = false;
@@ -225,19 +280,25 @@ export class EnemyManager {
         if (!e.stats.flying || e.state === 'stunned') e.body.vel.y -= 24 * dt;
         world.moveBody(e.body, dt);
         if (e.state === 'stunned' && e.age > e.stunDuration) e.state = 'hunt';
-      } else if (e.stats.flying) {
-        flyerThink(this, e, dt);
+      } else if (expansionBossThink(this, e, dt)) {
         world.moveBody(e.body, dt);
       } else {
-        if (e.state === 'stunned' && e.age > e.stunDuration) e.state = 'hunt';
-        if (e.state !== 'stunned') { if (e.target?.alive) groundThink(this, e, dt); else wander(e, dt); }
-        e.body.vel.y -= 24 * dt;
+        if (!e.stats.flying && e.state === 'stunned' && e.age > e.stunDuration) e.state = 'hunt';
+        const handled = e.target?.alive ? specialThink(this, e, dt) : false;
+        if (!handled) {
+          if (e.stats.flying) flyerThink(this, e, dt);
+          else if (e.state !== 'stunned') { if (e.target?.alive) groundThink(this, e, dt); else wander(e, dt); }
+        }
+        if (!e.stats.flying) e.body.vel.y -= 24 * dt;
         world.moveBody(e.body, dt);
       }
       if (e.body.pos.y < -6) { this.kill(e, { source: 'fall', dir: up.clone() }); continue; }
       e.yaw = angleLerp(e.yaw, e.yawTo, 1 - Math.exp(-10 * dt));
       e.root.position.copy(e.body.pos); e.root.rotation.y = e.yaw;
-      if (!e.stats.flying && e.target) {
+      if (e.type === 'turret') {
+        const arc = e.root.getObjectByName('sentry arc'); if (arc) arc.rotation.y = e.homeYaw - e.yaw;
+      }
+      if (!e.stats.flying && e.target && e.type !== 'aimbot' && e.type !== 'turret') {
         const r = 0.36 + e.body.halfW + 0.12, tp = e.target.body.pos;
         const dx = e.body.pos.x - tp.x, dz = e.body.pos.z - tp.z, d = Math.hypot(dx, dz);
         if (d < r && Math.abs(e.body.pos.y - tp.y) < 1.7) {
@@ -250,7 +311,7 @@ export class EnemyManager {
       }
       animate(e, dt); syncModel(e);
     }
-    if (!this.mirror && !passive) this._separate(dt);
+    if (!this.mirror && !passive) { this._separate(dt); this.hazards.update(dt); }
     updateProjectiles(this, dt);
     for (let i = this.list.length - 1; i >= 0; i--) {
       const e = this.list[i];
@@ -266,10 +327,12 @@ export class EnemyManager {
     this.sepT = 0.05;
     const l = this.list;
     for (let i = 0; i < l.length; i++) {
-      const a = l[i]; if (!a || !a.alive || a.stats.flying) continue;
+      const a = l[i]; if (!a || !a.alive || a.stats.flying || a.type === 'aimbot' || a.type === 'turret') continue;
       for (let j = i + 1; j < l.length; j++) {
-        const b = l[j]; if (!b || !b.alive || b.stats.flying) continue;
-        const rr = a.body.halfW + b.body.halfW + 0.75;
+        const b = l[j]; if (!b || !b.alive || b.stats.flying || b.type === 'aimbot' || b.type === 'turret') continue;
+        // Two rifles keep more room than a rusher pair: a firing line should spread, a charge can bunch.
+        const ranged = (x: EnemyRecord) => ['rifle', 'pistol', 'shotgun', 'sniper'].includes(x.stats.weapon);
+        const rr = a.body.halfW + b.body.halfW + (ranged(a) && ranged(b) ? 1.6 : 0.75);
         const dx = a.body.pos.x - b.body.pos.x, dz = a.body.pos.z - b.body.pos.z, d = Math.hypot(dx, dz);
         if (d >= rr || d <= 0.001 || Math.abs(a.body.pos.y - b.body.pos.y) > 1.5) continue;
         const push = (rr - d) * 9, nx = dx / d, nz = dz / d;
@@ -302,6 +365,7 @@ export class EnemyManager {
   }
 
   clear(): void {
+    this.hazards.clear(); this.mutations.clear();
     for (const e of this.list) this._destroy(e);
     this.list.length = 0; this.byId.clear(); this.alive = 0;
     while (this.projectiles.length) removeProjectile(this, 0);
@@ -323,6 +387,16 @@ export class EnemyManager {
     if (!e?.alive || !Number.isFinite(amount) || amount <= 0) return;
     const { effects, audio, hud, input, game } = this.ctx;
     const point = info.point ?? e.center, dir = info.dir ?? up;
+    if (e.type === 'parry' && e.guardT > 0 && e.state === 'hunt' && info.dir
+      && ['r4c', 'rifle', 'shotgun', 'sniper', 'revolver', 'pistol'].includes(info.source ?? '')
+      && info.dir.dot(scratch.set(Math.sin(e.yaw), 0, Math.cos(e.yaw))) < -0.5) {
+      effects.sparks(point, scratch.copy(dir).negate(), TONE.ACCENT, 6, 6); hud.hitmarker(false, false, true);
+      // One reflected projectile per 0.2 s, not one per shotgun pellet.
+      if (e.burstT <= 0 && !this.mirror) {
+        spawnProjectile(this, point, scratch.copy(dir).negate(), 30, 7, e, 3, 0.045, false); e.burstT = 0.2;
+      }
+      return;
+    }
     if (info.part === 'shield') {
       effects.sparks(point, scratch.copy(dir).negate(), TONE.ACCENT, 8, 8);
       audio.shieldHit(point); hud.hitmarker(false, false, true);
@@ -333,7 +407,11 @@ export class EnemyManager {
     effects.blood(point, dir, clamp(0.5 + amount / 70, 0.5, 2.2) * (e.stats.boss ? 1.6 : 1), { tone: this._bloodTone(e) });
     if (this.mirror) { hud.hitmarker(false, !!info.crit); this.onClientHit?.(e, amount, info); return; }
     amount *= this.mods.damage;
+    if (e.type === 'aimbot' && e.weakT > 0 && info.crit) amount *= 1.5;
+    if (e.type === 'moderator' && e.state === 'stunned' && info.crit) amount *= 1.5;
     e.hp -= amount;
+    e.rageT = 0;
+    if (e.type === 'medic') e.wantCover = true;
     if (amount > 0) this.ctx.player?.onHeadshot(info);
     if (info.crit) audio.headshot(); else audio.hitEnemy();
     hud.hitmarker(e.hp <= 0, !!info.crit);
@@ -357,6 +435,14 @@ export class EnemyManager {
     if (!e?.alive) return;
     const { effects, audio } = this.ctx;
     e.alive = false; e.state = 'dead'; e.deadT = 0; this.alive--;
+    if (e.type === 'packleader') for (const ally of this.list) {
+      if (ally.alive && ally.type === 'rusher' && ally.body.pos.distanceTo(e.body.pos) < 15) {
+        ally.boostT = 0; ally.retreatT = 2; ally.attackT = 0;
+      }
+    }
+    if (e.type === 'flyer' && e.mutated && e.payload) {
+      effects.explosion(e.center, 3, TONE.ACCENT); this.blastEnemies(e.center, 3, 60, e);
+    }
     e.body.vel.set(0, 0, 0);
     if (e.laser) { e.laser.removeFromParent(); e.laser = null; }
     e.figure.setEyes(true);
@@ -430,6 +516,7 @@ export class EnemyManager {
   }
 
   blastEnemies(center: Vector3, radius: number, base: number, except: EnemyRecord | null = null): void {
+    this.hazards.clearSmoke(center, radius);
     for (const e of this.list) {
       if (!e.alive || e === except) continue;
       const d = e.center.distanceTo(center);
@@ -438,18 +525,22 @@ export class EnemyManager {
     }
   }
 
-  yank(e: EnemyRecord, target: Vector3): void {
-    if (!e?.alive) return;
-    if (e.stats.boss) { e.flinch = 1; return; }
+  yank(e: EnemyRecord, target: Vector3): boolean {
+    if (!e?.alive) return false;
+    if (e.stats.boss && (e.type !== 'moderator' || e.yankableT <= 0)) { e.flinch = 1; return false; }
+    e.yankableT = 0; e.guardT = 0; e.specialT = 0;
+    if (e.type === 'moderator') e.weakT = 1.3;
     e.state = 'stunned'; e.age = 0; e.stunDuration = 1.3; e.path = null;
     if (e.stats.flying) e.flightPhase = 'stunned';
     scratch.subVectors(target, e.body.pos);
     const d = scratch.length();
     if (d > 1e-4) scratch.divideScalar(d);
     e.body.vel.copy(scratch).multiplyScalar(clamp(d * 1.6, 10, 26));
-    e.body.vel.y = clamp(d * 0.5, 4, 9);
+    e.body.vel.y = e.type === 'moderator'
+      ? -clamp((e.body.pos.y - target.y) * 3, 12, 35) : clamp(d * 0.5, 4, 9);
     e.body.onGround = false;
     this.ctx.effects.blood(e.center, scratch, 0.4, { tone: this._bloodTone(e) });
+    return true;
   }
 
   raycast(origin: Vector3, dir: Vector3, max: number, ignore: EnemyRecord | null = null): EnemyRayHit | null {
