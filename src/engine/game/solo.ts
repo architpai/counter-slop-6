@@ -151,7 +151,7 @@ export function createSolo(app: App): SoloApi {
     ctx.hud.setWave(gs.wave, enemies.alive + gs.queue.length);
   }
   function onKill(e: EnemyRecord, info: HitInfo = {}, overkill = false): void {
-    if (gs.mode !== 'solo') return;
+    if (gs.mode === 'ffa') return;
     const player = ctx.player;
     if (player === null) return;
     gs.kills++; gs.combo++; gs.comboT = 3.5;
@@ -188,7 +188,7 @@ export function createSolo(app: App): SoloApi {
     return selected;
   }
   function enterFocus(): void {
-    if (gs.mode !== 'solo' || focus.chain >= 2 || !candidate()) return;
+    if (gs.mode === 'ffa' || focus.chain >= 2 || !candidate()) return;
     const fresh = !focus.active;
     focus.active = true; focus.remaining = 2.6; focus.chain++; focus.arm = 0.18; focus.ready = false;
     if (fresh) { ctx.audio.focusIn(); ctx.hud.tip(`SLASH READY · hold ${ctx.hud.key('focus')} to dash`, 2.2); }

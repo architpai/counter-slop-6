@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from 'vitest';
-import { Group, Mesh, MeshToonMaterial, Vector3 } from 'three';
+import { Group, Mesh, MeshStandardMaterial, MeshToonMaterial, Vector3 } from 'three';
 import { Gun, Melee, GUN_STATS, makeLoadout } from '@/engine/weapons/index';
 import type { GunKind } from '@/engine/weapons/index';
 import type { Breakable, Ctx, Player, WeaponState } from '@/engine/types';
@@ -37,6 +37,7 @@ interface PlayerHitLike { player: Foe; part: string; dist: number; point: Vector
 // The slice of `Ctx` a weapon touches. A real one needs WebGL, a level and a net peer.
 const ctx = {
   renderer: { rig: new Group() },
+  camera: { position: new Vector3(2, 3, 4) },
   input: { rumble: record('rumble') },
   audio: Object.fromEntries(['shot', 'mp5Fire', 'pistolFire', 'shotgunFire', 'sniperFire', 'revolver', 'reload', 'shellCue', 'cylinder',
     'empty', 'pump', 'ricochet', 'katanaSwing', 'katanaHit'].map(name => [name, record(name)])),
@@ -90,7 +91,7 @@ test('loadout, view models and aim poses', () => {
   assert(loadout.map(w => w.kind).join(',') === 'rifle,shotgun,sniper,pistol', 'Loadout keeps four guns and independent melee');
   assert(melee instanceof Melee && melee.spreadPx === 4 && !melee.isGun, 'Melee exposes its independent state');
   const muzzleZ: Record<GunKind, number> = { rifle: -0.96, pistol: -0.42, shotgun: -1.09, sniper: -1.60, revolver: -0.40 };
-  const expected: Record<GunKind, number[]> = { rifle: [30, 150, 300, 22, 25, 0.075], pistol: [15, 90, 180, 34, 62, 0.18], shotgun: [6, 36, 72, 19, 68, 0.78],
+  const expected: Record<GunKind, number[]> = { rifle: [30, 150, 300, 22, 38, 0.075], pistol: [15, 90, 180, 34, 62, 0.18], shotgun: [6, 36, 72, 19, 68, 0.78],
     sniper: [5, 25, 50, 150, 20, 0.20], revolver: [6, 36, 72, 62, 52, 0.30] };
   for (const gun of [rifle, pistol, shotgun, sniper, revolver]) {
     const stats = GUN_STATS[gun.kind], actual = [gun.mag, gun.reserve, stats.maxReserve, stats.damage, gun.adsFov, stats.fireInterval];
@@ -117,15 +118,35 @@ test('loadout, view models and aim poses', () => {
   geometry.computeBoundingBox();
   assert(must(geometry.boundingBox, 'bounding box').getSize(new Vector3()).distanceTo(new Vector3(0.10, 0.13, 0.48)) < 1e-7, 'MP5 uses its compact receiver dimensions');
   assert(must(revolver.root.getObjectByName('cylinder'), 'cylinder').children.length === 7, 'Revolver has a drum and six chambers');
-  const fist = must(rifle.root.getObjectByName('right-hand-fist'), 'fist'), forearm = must(rifle.root.getObjectByName('right-hand-forearm'), 'forearm');
+  const rightHand = must(rifle.root.getObjectByName('right-hand'), 'right hand');
+  const fist = must(rightHand.getObjectByName('view-glove-palm'), 'glove'), forearm = must(rightHand.getObjectByName('view-sleeve'), 'sleeve');
   if (!(fist instanceof Mesh) || !(forearm instanceof Mesh)) throw new Error('hand parts are not meshes');
-  const fistColor = (fist.material as MeshToonMaterial).color.getHex(), sleeveColor = (forearm.material as MeshToonMaterial).color.getHex();
-  assert(fistColor !== sleeveColor, 'Fists use a distinct tone from the sleeve');
+  const fistColor = (fist.material as MeshStandardMaterial).color.getHex(), sleeveColor = (forearm.material as MeshStandardMaterial).color.getHex();
+  assert(fistColor !== sleeveColor, 'Blender gloves use a distinct material from the tactical sleeve');
   assert(rifle.root.getObjectByName('acog-tube') && !rifle.root.getObjectByName('sight-ring'), 'MP5 has an ACOG, not a holo sight');
+  assert(rifle.root.getObjectByName('acog-elevation-turret') && rifle.root.getObjectByName('acog-windage-turret'), 'ACOG has top and side adjustment caps');
+  const magnification = Math.tan(82 * Math.PI / 360) / Math.tan(rifle.adsFov * Math.PI / 360);
+  assert(Math.abs(magnification - 2.5) < 0.03, 'ACOG uses approximately 2.5× magnification, not 4×');
   assert(rifle.root.getObjectByName('magazine-lower'), 'MP5 magazine has a curved lower section');
   const blade = must(melee.root.getObjectByName('blade'), 'blade');
   if (!(blade instanceof Mesh)) throw new Error('blade is not a mesh');
   assert((blade.material as MeshToonMaterial).color.getHex() === 0xcbdbe3, 'Knife blade uses pale cool steel');
+});
+
+test('optic selection changes the MP5 sight and zoom without changing combat stats', () => {
+  const stats = { ...GUN_STATS.rifle };
+  rifle.setOptic('holo');
+  expect(rifle.scopeKind).toBe('holo');
+  expect(rifle.adsFov).toBe(82);
+  expect(rifle.root.getObjectByName('holo')?.visible).toBe(true);
+  expect(rifle.root.getObjectByName('acog')?.visible).toBe(false);
+  rifle.resetAmmo();
+  expect(rifle.scopeKind).toBe('holo');
+  expect(GUN_STATS.rifle).toEqual(stats);
+  rifle.setOptic('acog');
+  expect(rifle.adsFov).toBe(38);
+  expect(rifle.root.getObjectByName('acog')?.visible).toBe(true);
+  expect(rifle.root.getObjectByName('holo')?.visible).toBe(false);
 });
 
 test('rifle magazine reload and firing', () => {

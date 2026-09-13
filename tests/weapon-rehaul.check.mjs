@@ -39,6 +39,23 @@ try {
   await page.waitForFunction(() => document.querySelector('.scope.acog.is-visible'));
   assert.equal(await page.evaluate(() => window.__game.player.weapon.root.visible), false);
   await shot('acog');
+  assert.equal(await page.locator('.scope').evaluate(e => getComputedStyle(e).backgroundImage), 'none', 'ACOG leaves peripheral vision open');
+  assert.equal(await page.locator('.scope .scope-ring, .acog-label').count(), 0, 'No sniper ring or floating label in the ACOG');
+  for (const viewport of [{ width: 1280, height: 720 }, { width: 800, height: 600 }, { width: 640, height: 360 }]) {
+    await page.setViewportSize(viewport);
+    const optic = await page.locator('.acog-optic').evaluate(svg => {
+      const tip = new DOMPoint(500, 500).matrixTransform(svg.getScreenCTM());
+      const rect = svg.getBoundingClientRect();
+      const chevron = svg.querySelector('.acog-chevron').getBBox();
+      return { x: tip.x, y: tip.y, width: rect.width, height: rect.height, tipY: chevron.y };
+    });
+    assert(Math.abs(optic.x - viewport.width / 2) < 0.1 && Math.abs(optic.y - viewport.height / 2) < 0.1, 'Chevron tip stays on the aiming axis');
+    assert.equal(optic.tipY, 500);
+    assert.equal(optic.width, optic.height, 'Lens stays circular');
+    assert(optic.height <= Math.min(viewport.width, viewport.height), 'Housing fits the viewport');
+    if (viewport.width !== 1280) await shot(`acog-${viewport.width}`);
+  }
+  await page.setViewportSize({ width: 1280, height: 720 });
   assert.equal(await page.locator('.grapple-reticle').evaluate(e => getComputedStyle(e).opacity), '0');
   await page.keyboard.down('f');
   const melee = await page.evaluate(() => {

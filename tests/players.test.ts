@@ -82,6 +82,20 @@ test('a remote decodes its first state', () => {
   assert(must(figure.parts.upperR, 'upperR').rotation.x === -1.8, 'Knife guard raises the right arm.');
 });
 
+test('remote hit registration follows the visible head and boots', () => {
+  const target = new RemotePlayer(ctx, 'hit-test', 'target');
+  try {
+    target.push(state(0), 1); target.update(0, 1);
+    const direction = new Vector3(0, 0, 1);
+    const head = target.hits.find(h => h.part === 'head')!.obj.position;
+    expect(target.raycast(head.clone().add(new Vector3(0, 0, -5)), direction, 6)?.part).toBe('head');
+    expect(target.raycast(head.clone().add(new Vector3(.25, 0, -5)), direction, 6)).toBeNull();
+    expect(target.raycast(new Vector3(-.13, .04, -5), direction, 6)?.part).toBe('shinR');
+    target.alive = false;
+    expect(target.raycast(new Vector3(-.13, .04, -5), direction, 6)).toBeNull();
+  } finally { target.dispose(); }
+});
+
 test('invalid packets are rejected whole', () => {
   const seen = remote.lastSeen;
   const invalid: unknown[] = [null, {}, [], packet.slice(0, 10), [...packet, 2]];

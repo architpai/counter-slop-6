@@ -1,3 +1,5 @@
+import type { RifleOptic } from '../weapons/stats';
+
 /**
  * Screen models: the data half of the menus. The rendering half is React, in
  * `src/components/hud/Screens.tsx`; nothing here may import it, because the
@@ -11,7 +13,7 @@
 export const UI_ACTIONS = [
   'start', 'online', 'back', 'quickPlay', 'create', 'join', 'joinCode',
   'visibility', 'name', 'pickMap', 'checkpoint', 'mainMenu', 'startMatch',
-  'leave', 'leaveMatch', 'sens', 'invert', 'music',
+  'leave', 'leaveMatch', 'sens', 'acogSens', 'sniperSens', 'optic', 'training', 'invert', 'music',
 ] as const;
 
 export type UiAction = (typeof UI_ACTIONS)[number];
@@ -21,24 +23,25 @@ export type UiAction = (typeof UI_ACTIONS)[number];
 export interface MapChoice { key: string; name: string; blurb: string }
 export interface LobbyPlayer { id: string; name: string; host: boolean; self: boolean }
 
-export interface MainModel {
+export interface LookModel {
+  sens: number; acogSens: number; sniperSens: number; optic: RifleOptic;
+  invert: boolean; music: boolean; confirmKey: string;
+}
+export interface MainModel extends LookModel {
   best: number; checkpoint: number; mapKey: string;
   maps: MapChoice[];
-  sens: number; invert: boolean; music: boolean;
-  confirmKey: string;
 }
 export interface LobbyModel {
   code: string; isPublic: boolean; isHost: boolean; mapKey: string;
   maps: MapChoice[];
+  optic: RifleOptic;
   players: LobbyPlayer[];
   status: string;
 }
 export interface OnlineModel { name: string; isPublic: boolean; status: string; busy: boolean;
                                code: string }
-export interface PauseModel  { wave: number; score: number; sens: number; invert: boolean;
-                               music: boolean; confirmKey: string }
-export interface MenuModel   { code: string; rows: BoardRow[]; sens: number; invert: boolean;
-                               music: boolean; confirmKey: string }
+export interface PauseModel extends LookModel { wave: number; score: number; training: boolean }
+export interface MenuModel extends LookModel { code: string; rows: BoardRow[] }
 export interface DeadModel   { waves: number; kills: number; score: number; best: number;
                                newBest: boolean; checkpoint: number; confirmKey: string }
 export interface OverModel   { youWin: boolean; winnerName: string; rows: BoardRow[] }

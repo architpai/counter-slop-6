@@ -26,6 +26,7 @@
 import { key as keyLabel } from './labels';
 import type { HudView, SlotView } from './view';
 import type { BoardModel, PvpModel, ScreenView, UiAction } from './screens';
+import type { ScopeKind } from '../weapons/stats';
 
 const number = (value: unknown, fallback = 0): number =>
   Number.isFinite(Number(value)) ? Number(value) : fallback;
@@ -56,7 +57,7 @@ export interface WeaponState { name: string; hint: string }
 export interface BossState { name: string | null }
 export interface FocusState { show: boolean; ready: boolean; label: string }
 export interface CrosshairState { melee: boolean; ads: boolean }
-export interface ScopeState { shown: boolean; kind: 'sniper' | 'acog' }
+export interface ScopeState { shown: boolean; kind: ScopeKind }
 export interface MessageState { main: string; sub: string; nonce: number }
 export interface TipState { html: string; nonce: number }
 export interface KillLine { id: number; text: string; points: number }
@@ -328,7 +329,7 @@ export class HudStore implements HudView {
     this.#emit('crosshair');
   }
 
-  setScope(on: boolean, kind: 'sniper' | 'acog' = 'sniper'): void {
+  setScope(on: boolean, kind: ScopeKind = 'sniper'): void {
     if (this.scope.shown === !!on && this.scope.kind === kind) return;
     this.scope = { shown: !!on, kind };
     this.#emit('scope');

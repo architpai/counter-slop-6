@@ -70,7 +70,7 @@ export interface Ctx {
 // ------------------------------------------------------------------ 5.2 hooks
 
 export type GameStateName = 'start' | 'lobby' | 'play' | 'pause' | 'dying' | 'dead' | 'over';
-export type GameMode = 'solo' | 'ffa';
+export type GameMode = 'solo' | 'ffa' | 'training';
 
 export interface PlayerHit {
   player: RemotePlayer;
@@ -198,7 +198,7 @@ export type BoxFilter = (box: Box) => boolean;
 
 // ------------------------------------------------------------------ 5.6 level
 
-export type LevelKey = 'downtown' | 'mexico' | 'house';
+export type LevelKey = 'downtown' | 'mexico' | 'house' | 'training';
 
 /** Sky and light colours a level asks the renderer for. Missing fields keep the default. */
 export interface Mood {

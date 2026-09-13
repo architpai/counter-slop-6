@@ -133,4 +133,5 @@ export const store = {
 export const SKEY = {
   MAP: 'cs6_map', BEST: 'cs6_best', MUSIC: 'cs6_music', CHECKPOINT: 'cs6_checkpoint',
   NAME: 'cs6_name', SENS: 'cs6_sens', INVERT: 'cs6_invert',
+  ACOG_SENS: 'cs6_acog_sens', SNIPER_SENS: 'cs6_sniper_sens', OPTIC: 'cs6_optic',
 };

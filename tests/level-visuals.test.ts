@@ -4,10 +4,11 @@ import { buildLevel, disposeLevel } from '@/engine/level';
 import { World } from '@/engine/physics';
 import { NavGrid } from '@/engine/nav';
 
-// Captured from newmap2 before visual polish. Change these only for an intended
-// layout change: decorative trim must not change collision, navigation or spawns.
+// Decorative trim must not change collision, navigation or spawns.
+// Downtown includes the intended stair-landing and rail-opening fixes;
+// downtown-routes.test.ts verifies those routes with walking bodies.
 const baseline = {
-  downtown: 'ff40e3e64be1aded7c01ab7d81a86d82f2427560a883d3248e66c56b463960bb',
+  downtown: '1cf24dad1c58f85f937ffb033791a285963698d4b50f616c17214b38268b00fe',
   house: 'db9fb9825dc0dcd6e71b13bf1a6db5bbfde738232e4d5fd409712c691fa5219e',
   mexico: 'c778bdf88edacf2a16541629e06e232dd3bd8fc9c179b3abcb2591247e90e141',
 };

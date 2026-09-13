@@ -3,6 +3,7 @@ import { Group, Mesh, PerspectiveCamera, Scene, Vector3 } from 'three';
 import { Player } from '@/engine/player/index';
 import { updateCamera } from '@/engine/player/camera';
 import { EnemyManager } from '@/engine/enemies/index';
+import { syncModel } from '@/engine/enemies/model';
 import { Input } from '@/engine/input';
 import { Audio } from '@/engine/audio';
 import { HudStore } from '@/engine/hud/store';
@@ -101,6 +102,33 @@ test('melee can hit a prop through its own collider but not through a wall', () 
   expect(arc()).toEqual([prop]);
   ctx.world.addBox(new Vector3(-1, 0, -1.2), new Vector3(1, 2, -0.8));
   expect(arc()).toEqual([]);
+});
+
+test('zero-spread shots follow the visible reticle, including camera recoil and bob', () => {
+  const { p, ctx } = setup();
+  p.pitch = .1; p.yaw = .2; p.bobX = .025;
+  p.recoilPitch.set(.08); p.recoilYaw.set(-.04);
+  updateCamera(p, 0);
+  const shot = p.aimDir(0), visible = ctx.camera.getWorldDirection(new Vector3());
+  expect(shot.angleTo(visible)).toBeLessThan(1e-7);
+  const endpoint = vi.fn();
+  ctx.game.onShot = endpoint;
+  (p.weapon as Gun)._ray(shot);
+  const projected = (endpoint.mock.calls[0]![0] as Vector3).clone().project(ctx.camera);
+  expect(Math.abs(projected.x)).toBeLessThan(1e-7);
+  expect(Math.abs(projected.y)).toBeLessThan(1e-7);
+});
+
+test('visible boots register hits, and empty space beside a model does not', () => {
+  const { enemies } = setup();
+  const enemy = enemies.spawn('grunt', new Vector3(0, 0, -8));
+  enemy.state = 'hunt'; enemy.root.scale.setScalar(1); enemy.root.rotation.y = 0;
+  syncModel(enemy);
+  const direction = new Vector3(0, 0, -1);
+  const boot = enemies.raycast(new Vector3(.13, .04, 0), direction, 10);
+  expect(boot?.enemy).toBe(enemy);
+  expect(boot?.part).toBe('shinR');
+  expect(enemies.raycast(new Vector3(2, 1, 0), direction, 10)).toBeNull();
 });
 
 test('accepted gun headshots give a bounded screen wobble and a brief follow-up bonus', () => {

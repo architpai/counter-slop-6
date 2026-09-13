@@ -163,9 +163,9 @@ export const WaveBlock = memo(function WaveBlock({ store }: { store: HudStore })
   const state = useHud(store, 'wave');
   return (
     <>
-      <div className="wave-line">WAVE <strong data-hud="wave">{state.wave}</strong></div>
+      <div className="wave-line">{state.wave === 0 ? 'TRAINING GROUND' : <>WAVE <strong data-hud="wave">{state.wave}</strong></>}</div>
       <Modifier store={store} />
-      <div className="enemies-line"><strong data-hud="enemies">{state.left}</strong> enemies left</div>
+      <div className="enemies-line"><strong data-hud="enemies">{state.left}</strong> {state.wave === 0 ? 'targets ready' : 'enemies left'}</div>
       <Timer store={store} />
     </>
   );
@@ -223,15 +223,57 @@ export const Scope = memo(function Scope({ store }: { store: HudStore }) {
   const state = useHud(store, 'scope');
   return (
     <div className={`scope ${state.kind}${state.shown ? ' is-visible' : ''}`} data-hud="scope" data-kind={state.kind} aria-hidden={!state.shown}>
-      <div className="scope-ring" />
-      {state.kind === 'acog' ? <>
-        <svg className="acog-reticle" viewBox="0 0 200 200" aria-hidden="true">
-          <path className="acog-chevron" d="M90 110 L100 100 L110 110" />
-          <path d="M100 116 V156 M90 126 H110 M93 138 H107 M96 150 H104 M40 112 H70 M130 112 H160" />
-          <text x="116" y="129">4</text><text x="113" y="141">6</text>
+      {state.kind === 'acog' ? (
+        <svg className="acog-optic" viewBox="0 0 1000 1000" aria-hidden="true">
+          <defs>
+            <linearGradient id="acog-metal" x2="0.8" y2="1">
+              <stop stopColor="#706b60" /><stop offset=".3" stopColor="#353633" />
+              <stop offset=".65" stopColor="#171b1c" /><stop offset="1" stopColor="#514e45" />
+            </linearGradient>
+            <radialGradient id="acog-bevel">
+              <stop offset=".67" stopColor="#080b0c" /><stop offset=".74" stopColor="#272826" />
+              <stop offset=".84" stopColor="#111516" /><stop offset=".96" stopColor="#30322e" />
+              <stop offset="1" stopColor="#615e54" />
+            </radialGradient>
+          </defs>
+          <g fill="url(#acog-metal)" stroke="#191d1d" strokeWidth="5">
+            <path d="M365 930 L382 838 H618 L635 930 L690 1000 V1500 H310 V1000 Z" />
+            <path d="M385 110 V44 Q500 22 615 44 V110 Z" />
+            <path d="M405 48 V96 M430 44 V94 M455 41 V93 M480 39 V91 M505 39 V91 M530 40 V92 M555 42 V94 M580 45 V96" stroke="#222624" strokeWidth="9" />
+            <path d="M129 345 L83 303 L137 210 L191 158 L300 129 L700 129 L809 158 L863 210 L917 303 L871 345 V655 L917 697 L863 790 L809 842 L700 871 H300 L191 842 L137 790 L83 697 L129 655 Z M780 500 A280 280 0 1 0 220 500 A280 280 0 1 0 780 500" fillRule="evenodd" />
+            <circle cx="500" cy="500" r="347" fill="none" stroke="#111515" strokeWidth="140" />
+          </g>
+          <path d="M914 500 A414 414 0 1 0 86 500 A414 414 0 1 0 914 500 M780 500 A280 280 0 1 0 220 500 A280 280 0 1 0 780 500" fill="url(#acog-bevel)" fillRule="evenodd" />
+          <circle cx="500" cy="500" r="294" fill="none" stroke="#050809" strokeWidth="28" />
+          <g fill="#0c1011" stroke="#625f55" strokeWidth="7">
+            <circle cx="175" cy="175" r="48" /><circle cx="825" cy="175" r="48" />
+            <circle cx="175" cy="825" r="48" /><circle cx="825" cy="825" r="48" />
+            <path d="M28 424 H113 V576 H28 Z M887 424 H972 V576 H887 Z" fill="url(#acog-metal)" />
+          </g>
+          <path d="M46 443 H99 M46 461 H99 M46 479 H99 M46 497 H99 M46 515 H99 M46 533 H99 M46 551 H99 M901 443 H954 M901 461 H954 M901 479 H954 M901 497 H954 M901 515 H954 M901 533 H954 M901 551 H954" stroke="#121718" strokeWidth="10" />
+          <g className="acog-reticle">
+            {/* The outer chevron tip is the camera's exact aiming point. */}
+            <path className="acog-chevron" d="M500 500 L486 520 L491 520 L500 508 L509 520 L514 520 Z" />
+            <path d="M500 566 V724 M491 590 H509 M493 618 H507 M494 648 H506 M495 724 H505" />
+            <path className="acog-illuminated" d="M500 520 V574 M488 537 H512 M490 560 H510" />
+            <text x="517" y="541">4</text><text x="515" y="564">6</text>
+          </g>
         </svg>
-        <div className="acog-label">ACOG · 4×</div>
-      </> : <><div className="scope-cross horizontal" /><div className="scope-cross vertical" /><div className="scope-dot" /></>}
+      ) : state.kind === 'holo' ? (
+        <svg className="holo-optic" viewBox="0 0 1000 1000" aria-hidden="true">
+          <path d="M340 775 H660 L705 930 V1500 H295 V930 Z" fill="#1c2428" stroke="#090e10" strokeWidth="14" />
+          <path d="M230 200 H770 Q820 200 820 250 V745 Q820 800 765 800 H235 Q180 800 180 745 V250 Q180 200 230 200 Z M285 275 Q255 275 255 305 V685 Q255 720 290 720 H710 Q745 720 745 685 V305 Q745 275 715 275 Z"
+            fill="#343d41" stroke="#0c1316" strokeWidth="12" fillRule="evenodd" />
+          <rect x="258" y="278" width="484" height="439" rx="28" fill="#90bdba" fillOpacity=".045" stroke="#687773" strokeWidth="5" />
+          <path d="M250 818 H750 V892 H250 Z" fill="#222c31" stroke="#0c1316" strokeWidth="9" />
+          <g fill="#111a20" stroke="#75807f" strokeWidth="4"><circle cx="215" cy="760" r="13" /><circle cx="785" cy="760" r="13" /></g>
+          <g className="holo-reticle" stroke="#ef3035" strokeWidth="2" fill="none">
+            <circle cx="500" cy="500" r="22" />
+            <path d="M500 472 V482 M500 518 V528 M472 500 H482 M518 500 H528" />
+            <circle cx="500" cy="500" r="2" fill="#ef3035" stroke="none" />
+          </g>
+        </svg>
+      ) : <><div className="scope-ring" /><div className="scope-cross horizontal" /><div className="scope-cross vertical" /><div className="scope-dot" /></>}
     </div>
   );
 });

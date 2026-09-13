@@ -1,4 +1,6 @@
 export type GunKind = 'rifle' | 'pistol' | 'shotgun' | 'sniper' | 'revolver';
+export type RifleOptic = 'acog' | 'holo';
+export type ScopeKind = RifleOptic | 'sniper';
 
 /** How the magazine is refilled, and which pose plays while it is. */
 export type ReloadType = 'magazine' | 'shells' | 'cylinder';
@@ -59,7 +61,7 @@ export const GUN_STATS: Record<GunKind, GunStats> = {
     kind: 'rifle', name: 'MP5', hint: 'auto · compact ACOG carbine', scope: true,
     magSize: 30, startingReserve: 150, maxReserve: 300, fireInterval: 0.075, automatic: true,
     damage: 22, headMult: 2.6, pellets: 1, hipSpread: 0.016, adsSpread: 0.0025,
-    spreadKick: 0.005, spreadMax: 0.05, moveSpread: 0.0008, adsFov: 25,
+    spreadKick: 0.005, spreadMax: 0.05, moveSpread: 0.0008, adsFov: 38,
     camKick: [0.007, 0.0025], modelKick: [0.15, 0.2, 1.7, -2.2, 0.5, 0.7], fovKick: 0.7,
     reloadDuration: 1.65, reloadType: 'magazine', falloff: [18, 55, 0.4],
     tracerThickness: 0.02, flashScale: 1, fireCue: 'mp5Fire', casing: [0.02, 3], cycleDuration: 0,

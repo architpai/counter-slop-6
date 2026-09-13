@@ -2,6 +2,7 @@ import { Mesh, Object3D, Vector3 } from 'three';
 import { alignSegment, clamp, damp, rand, round1, round2, wrapAngle } from './util';
 import { makeFigure, makeNameTag, cylGeo, sphereGeo, surfMat, setFlash, TONE, TONE_HEX } from './render/index';
 import type { Figure, FigureAnchorName, FigureAnchors, FigureParts, WeaponPropKind } from './render/figure';
+import { raycastFigure } from './render/figure';
 import type { Ctx, Enemy, Snap, StatePacket, Target } from './types';
 import type { Player } from './player/index';
 
@@ -38,7 +39,7 @@ const anchorsOf = (figure: Figure): RemoteAnchors => figure.anchors as RemoteAnc
 type ValidState = readonly [number, number, number, number, number, number, number, number, ...number[]];
 
 const WEAPONS: readonly WeaponPropKind[] = ['rifle', 'shotgun', 'sniper', 'pistol'];
-const HIT_RADII: Record<HitJoint, number> = { head: 0.30, torso: 0.33, hips: 0.20, armL: 0.11, armR: 0.11,
+const HIT_RADII: Record<HitJoint, number> = { head: 0.195, torso: 0.33, hips: 0.20, armL: 0.11, armR: 0.11,
   foreL: 0.10, foreR: 0.10, legL: 0.13, legR: 0.13, shinL: 0.11, shinR: 0.11 };
 const LIMBS: readonly (keyof RemoteJoints)[] = ['upperL', 'upperR', 'foreL', 'foreR', 'thighL', 'thighR', 'shinL', 'shinR'];
 const target = new Vector3();
@@ -180,7 +181,7 @@ export class RemotePlayer implements Target {
   get blockRadius(): 0 { return 0; }
 
   _buildFigure(): Figure {
-    const figure = makeFigure({ kind: 'humanoid', color: TONE_HEX[this._tone], scale: 1,
+    const figure = makeFigure({ kind: 'humanoid', tactical: 'player', color: TONE_HEX[this._tone], scale: 1,
       bodyWidth: 1, headSize: 1, limbR: 0.033, hat: 'cap', smile: false, shield: false, weapon: 'rifle' });
     this._figure = figure;
     const { root } = figure;
@@ -344,6 +345,10 @@ export class RemotePlayer implements Target {
     }
     p.torso.rotation.set(-0.2 * w + (this.sliding ? 0.5 : 0) + (this.crouching ? 0.25 : 0), -0.3 * aim, 0);
     p.head.rotation.x = clamp(-this._pitch, -0.7, 0.7) * 0.7;
+  }
+
+  raycast(origin: Vector3, direction: Vector3, max: number) {
+    return this.alive && this._figure ? raycastFigure(this._figure.root, origin, direction, max) : null;
   }
 
   _placeHits(): void {

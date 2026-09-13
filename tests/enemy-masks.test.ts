@@ -15,7 +15,9 @@ test('every enemy has a distinct clown mask without changing its hit anchors', (
       expect(mask?.getObjectByName('clown-nose')).toBeDefined();
       const meshes: unknown[] = [];
       mask?.traverse(o => {
-        if (o instanceof Mesh) meshes.push([o.geometry.type, o.position.toArray(), o.scale.toArray(),
+        // The GLB batches paint into meshes; compare baked vertices, not only
+        // the transforms (which may all be identity after Blender's join).
+        if (o instanceof Mesh) meshes.push([Array.from(o.geometry.attributes.position.array), o.position.toArray(), o.scale.toArray(),
           'color' in o.material ? o.material.color.getHex() : null]);
       });
       signatures.add(JSON.stringify(meshes));
