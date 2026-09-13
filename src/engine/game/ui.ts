@@ -19,7 +19,12 @@ export function createUI(app: App): UiApi {
   const { hud, net } = ctx;
   let joinCode = '';
   const look = () => ({ sens: settings.sens, acogSens: settings.acogSens, sniperSens: settings.sniperSens,
-    optic: settings.optic, invert: settings.invert, music: settings.music, confirmKey: hud.key('confirm') });
+    invert: settings.invert, music: settings.music, confirmKey: hud.key('confirm') });
+  const weapons = () => ({ optic: settings.optic, r4cOptic: settings.r4cOptic });
+  function setOptic(field: 'optic' | 'r4cOptic', value: string | null): void {
+    if (value !== 'acog' && value !== 'holo') return;
+    settings[field] = value; app.applyOptic(); redraw();
+  }
   function sensitivity(field: 'sens' | 'acogSens' | 'sniperSens', value: string | null, fallback: number): void {
     const number = Number(value);
     settings[field] = clamp(Math.round((Number.isFinite(number) ? number : fallback) / 5) * 5, 25, 250);
@@ -27,19 +32,19 @@ export function createUI(app: App): UiApi {
   }
 
   const models = {
-    main: () => ({ best: settings.best, checkpoint: settings.checkpoint, mapKey: settings.mapKey, maps: LEVELS, ...look() }),
+    main: () => ({ best: settings.best, mapKey: settings.mapKey, maps: LEVELS, ...look(), ...weapons() }),
     online: () => ({ name: settings.name, isPublic: lobby.isPublic, status: lobby.status, busy: app.busy, code: joinCode }),
     lobby: () => ({
-      code: net.code ?? lobby.code ?? '', isPublic: lobby.isPublic, isHost: net.isHost, mapKey: lobby.map ?? settings.mapKey, maps: LEVELS, optic: settings.optic,
+      code: net.code ?? lobby.code ?? '', isPublic: lobby.isPublic, isHost: net.isHost, mapKey: lobby.map ?? settings.mapKey, maps: LEVELS, ...weapons(),
       players: [...lobby.players].map(([id, name]) => ({ id, name, host: id === lobby.hostId, self: id === net.id })), status: lobby.status,
     }),
-    pause: () => ({ wave: gs.wave, score: gs.score, training: gs.mode === 'training', ...look() }),
-    menu: () => ({ code: net.code ?? lobby.code ?? '', rows: app.ffa.boardRows(), ...look() }),
+    pause: () => ({ wave: gs.wave, score: gs.score, training: gs.mode === 'training', ...look(), ...weapons() }),
+    menu: () => ({ code: net.code ?? lobby.code ?? '', rows: app.ffa.boardRows(), ...look(), ...weapons() }),
     matchOn: () => ({ confirmKey: hud.key('confirm') }),
     dead: () => {
       const newBest = gs.score > settings.best;
       if (newBest) { settings.best = gs.score; store.set(SKEY.BEST, gs.score); }
-      return { waves: gs.wave, kills: gs.kills, score: gs.score, best: settings.best, newBest, checkpoint: settings.checkpoint, confirmKey: hud.key('confirm') };
+      return { waves: gs.wave, kills: gs.kills, score: gs.score, best: settings.best, newBest, confirmKey: hud.key('confirm') };
     },
     over: () => ({ youWin: gs.over?.id === net.id, winnerName: gs.over?.name ?? '', rows: app.ffa.boardRows() }),
   };
@@ -84,7 +89,6 @@ export function createUI(app: App): UiApi {
       if (gs.state === 'lobby') { if (net.isHost) { lobby.map = key; app.ffa.broadcastLobby(); } return; }
       settings.mapKey = key; store.set(SKEY.MAP, key); redraw();
     },
-    checkpoint: value => app.beginAtWave(Number(value)),
     mainMenu: () => app.mainMenu(),
     startMatch: () => {
       if (net.isHost) app.ffa.hostStart();
@@ -95,10 +99,8 @@ export function createUI(app: App): UiApi {
     sens: value => sensitivity('sens', value, 100),
     acogSens: value => sensitivity('acogSens', value, 120),
     sniperSens: value => sensitivity('sniperSens', value, 150),
-    optic: value => {
-      if (value !== 'acog' && value !== 'holo') return;
-      settings.optic = value; app.applyOptic(); redraw();
-    },
+    optic: value => setOptic('optic', value),
+    r4cOptic: value => setOptic('r4cOptic', value),
     invert: value => { settings.invert = value === '1'; app.applyLook(); },
     music: value => { app.setMusic(value === '1'); },
   };

@@ -15,6 +15,7 @@ import type {
 import type { DamageMark, HudStore, KillLine as KillLineState } from '@/engine/hud/store';
 import { Bold, BoardPanel, PvpPanel, Screen, SCREEN_TITLE_ID } from './Screens';
 import { useHud } from './useHud';
+import { OPTIC_COLOR } from '@/engine/render/palette';
 
 declare global {
   interface Window {
@@ -227,13 +228,13 @@ export const Scope = memo(function Scope({ store }: { store: HudStore }) {
         <svg className="acog-optic" viewBox="0 0 1000 1000" aria-hidden="true">
           <defs>
             <linearGradient id="acog-metal" x2="0.8" y2="1">
-              <stop stopColor="#706b60" /><stop offset=".3" stopColor="#353633" />
+              <stop stopColor="#706b60" /><stop offset=".3" stopColor={OPTIC_COLOR.acogBody} />
               <stop offset=".65" stopColor="#171b1c" /><stop offset="1" stopColor="#514e45" />
             </linearGradient>
             <radialGradient id="acog-bevel">
               <stop offset=".67" stopColor="#080b0c" /><stop offset=".74" stopColor="#272826" />
               <stop offset=".84" stopColor="#111516" /><stop offset=".96" stopColor="#30322e" />
-              <stop offset="1" stopColor="#615e54" />
+              <stop offset="1" stopColor={OPTIC_COLOR.acogRim} />
             </radialGradient>
           </defs>
           <g fill="url(#acog-metal)" stroke="#191d1d" strokeWidth="5">
@@ -245,13 +246,13 @@ export const Scope = memo(function Scope({ store }: { store: HudStore }) {
           </g>
           <path d="M914 500 A414 414 0 1 0 86 500 A414 414 0 1 0 914 500 M780 500 A280 280 0 1 0 220 500 A280 280 0 1 0 780 500" fill="url(#acog-bevel)" fillRule="evenodd" />
           <circle cx="500" cy="500" r="294" fill="none" stroke="#050809" strokeWidth="28" />
-          <g fill="#0c1011" stroke="#625f55" strokeWidth="7">
+          <g fill="#0c1011" stroke={OPTIC_COLOR.acogRim} strokeWidth="7">
             <circle cx="175" cy="175" r="48" /><circle cx="825" cy="175" r="48" />
             <circle cx="175" cy="825" r="48" /><circle cx="825" cy="825" r="48" />
             <path d="M28 424 H113 V576 H28 Z M887 424 H972 V576 H887 Z" fill="url(#acog-metal)" />
           </g>
           <path d="M46 443 H99 M46 461 H99 M46 479 H99 M46 497 H99 M46 515 H99 M46 533 H99 M46 551 H99 M901 443 H954 M901 461 H954 M901 479 H954 M901 497 H954 M901 515 H954 M901 533 H954 M901 551 H954" stroke="#121718" strokeWidth="10" />
-          <g className="acog-reticle">
+          <g className="acog-reticle" color={OPTIC_COLOR.reticle}>
             {/* The outer chevron tip is the camera's exact aiming point. */}
             <path className="acog-chevron" d="M500 500 L486 520 L491 520 L500 508 L509 520 L514 520 Z" />
             <path d="M500 566 V724 M491 590 H509 M493 618 H507 M494 648 H506 M495 724 H505" />
@@ -261,16 +262,16 @@ export const Scope = memo(function Scope({ store }: { store: HudStore }) {
         </svg>
       ) : state.kind === 'holo' ? (
         <svg className="holo-optic" viewBox="0 0 1000 1000" aria-hidden="true">
-          <path d="M340 775 H660 L705 930 V1500 H295 V930 Z" fill="#1c2428" stroke="#090e10" strokeWidth="14" />
+          <path d="M340 775 H660 L705 930 V1500 H295 V930 Z" fill={OPTIC_COLOR.holoBase} stroke="#090e10" strokeWidth="14" />
           <path d="M230 200 H770 Q820 200 820 250 V745 Q820 800 765 800 H235 Q180 800 180 745 V250 Q180 200 230 200 Z M285 275 Q255 275 255 305 V685 Q255 720 290 720 H710 Q745 720 745 685 V305 Q745 275 715 275 Z"
-            fill="#343d41" stroke="#0c1316" strokeWidth="12" fillRule="evenodd" />
+            fill={OPTIC_COLOR.holoBody} stroke="#0c1316" strokeWidth="12" fillRule="evenodd" />
           <rect x="258" y="278" width="484" height="439" rx="28" fill="#90bdba" fillOpacity=".045" stroke="#687773" strokeWidth="5" />
           <path d="M250 818 H750 V892 H250 Z" fill="#222c31" stroke="#0c1316" strokeWidth="9" />
           <g fill="#111a20" stroke="#75807f" strokeWidth="4"><circle cx="215" cy="760" r="13" /><circle cx="785" cy="760" r="13" /></g>
-          <g className="holo-reticle" stroke="#ef3035" strokeWidth="2" fill="none">
+          <g className="holo-reticle" color={OPTIC_COLOR.reticle} stroke="currentColor" strokeWidth="2" fill="none">
             <circle cx="500" cy="500" r="22" />
             <path d="M500 472 V482 M500 518 V528 M472 500 H482 M518 500 H528" />
-            <circle cx="500" cy="500" r="2" fill="#ef3035" stroke="none" />
+            <circle cx="500" cy="500" r="2" fill="currentColor" stroke="none" />
           </g>
         </svg>
       ) : <><div className="scope-ring" /><div className="scope-cross horizontal" /><div className="scope-cross vertical" /><div className="scope-dot" /></>}
@@ -416,11 +417,11 @@ export const ScreenOverlay = memo(function ScreenOverlay({ store }: { store: Hud
 
   const key = (event: ReactKeyboardEvent<HTMLDivElement>): void => {
     const target = event.target instanceof HTMLElement ? event.target : null;
-    if (target?.closest('[data-ui-input-block],input,select,textarea,button')) event.stopPropagation();
+    if (target?.closest('[data-ui-input-block],input,select,textarea,button,summary')) event.stopPropagation();
     if (event.type !== 'keydown' || event.key !== 'Tab') return;
     const panel = panelRef.current;
     if (!panel) return;
-    const focusable = [...panel.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[tabindex="0"]')].filter(el => !el.hidden);
+    const focusable = [...panel.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),summary,[tabindex="0"]')].filter(el => el.getClientRects().length > 0);
     const first = focusable[0];
     const last = focusable.at(-1);
     const active = panel.ownerDocument.activeElement;
@@ -439,7 +440,7 @@ export const ScreenOverlay = memo(function ScreenOverlay({ store }: { store: Hud
     panel.focus({ preventScroll: true });
   }, [kind]);
 
-  // Fit legacy screens and unusually long checkpoint lists without scrolling.
+  // Fit menu content to the viewport without scrolling.
   // Observe content too: menu pages and device controls can change independently
   // of the engine's screen model.
   useLayoutEffect(() => {

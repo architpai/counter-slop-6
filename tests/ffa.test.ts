@@ -68,7 +68,7 @@ function setup(isHost = false) {
     },
     hud: {
       setPvpScore: noop, setModifier: noop, setBoard: noop, setGameplayVisible: noop,
-      message: noop, tip: noop, kill: noop, hitmarker: vi.fn(), key: (action: string) => action,
+      message: noop, tip: noop, kill: vi.fn(), hitmarker: vi.fn(), key: (action: string) => action,
     },
     audio: { kill: noop, spawn: noop, enemyDie: noop, shieldHit: noop, hitEnemy: noop },
     effects: { strokeBurst: noop, blood: noop, tracer: noop },
@@ -99,13 +99,15 @@ function setup(isHost = false) {
     receive: (type: string, data: unknown, from = other) => handlers.get(type)?.(data, from) };
 }
 
-test('a winning local death', () => {
+test.each([['rifle', 'MP5'], ['r4c', 'R4-C']])('a winning local death labels %s', (source, label) => {
   const t = setup(true), { gs, scores, ctx } = t;
   setState(gs, 'play'); must(scores.get('client'), 'client score').kills = 19;
   ctx.player.lastHitBy = 'client';
-  ctx.player.lastHit = { from: new Vector3(3, 1, 0), amount: 100, crit: true, src: 'rifle' };
+  ctx.player.lastHit = { from: new Vector3(3, 1, 0), amount: 100, crit: true, src: source };
   try {
     t.ffa.localDeath();
+    expect(t.sent.find(m => m.type === 'pdead')?.data).toMatchObject({ how: label, crit: true });
+    expect(ctx.hud.kill).toHaveBeenCalledWith(`eliminated by Client · ${label} headshot`);
     assert(must(scores.get('client'), 'client score').kills === 20 && must(scores.get('host'), 'host score').deaths === 3,
       'host death credits the killer and the victim once');
     assert(gs.state === 'over' && gs.over?.id === 'client',
@@ -226,12 +228,12 @@ test('PvP feedback distinguishes guards, headshots and confirmed local kills', (
   } finally { t.ffa.leave(); }
 });
 
-test('headshot follow-up waits for a valid victim acknowledgement', () => {
+test.each(['pistol', 'r4c'])('%s headshot follow-up waits for a valid victim acknowledgement', source => {
   const t = setup();
   setState(t.gs, 'play');
   try {
     const remote = t.remote as unknown as Parameters<typeof t.ffa.hitPlayer>[0];
-    t.ffa.hitPlayer(remote, 34, { source: 'pistol', part: 'head', crit: true });
+    t.ffa.hitPlayer(remote, source === 'r4c' ? 46.8 : 64, { source, part: 'head', crit: true });
     const packet = must(t.sent.find(m => m.type === 'pdmg'), 'damage packet').data as { hitId: number };
     expect(t.ctx.player.headshots).toBe(0);
     t.receive('headshot', { hitId: packet.hitId }, 'stranger');
@@ -253,7 +255,7 @@ test('headshot follow-up waits for a valid victim acknowledgement', () => {
     finally { clock.mockRestore(); }
     expect(t.ctx.player.headshots).toBe(1);
 
-    const hit = { amount: 20, from: [3, 1, 0], by: 'host', crit: true, src: 'rifle', hitId: 42 };
+    const hit = { amount: 20, from: [3, 1, 0], by: 'host', crit: true, src: source, hitId: 42 };
     t.ctx.player.shieldT = 1;
     t.receive('pdmg', hit);
     expect(t.sent.some(m => m.type === 'headshot')).toBe(false);

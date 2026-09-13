@@ -14,7 +14,7 @@ const KEYS: Record<string, Action> = {
   Space: 'jump', ShiftLeft: 'sprint', ShiftRight: 'sprint',
   ControlLeft: 'crouch', KeyC: 'crouch', KeyR: 'reload',
   KeyQ: 'grapple', KeyE: 'grapple', KeyF: 'melee', KeyV: 'melee',
-  Digit1: 'slot1', Digit2: 'slot2', Digit3: 'slot3', Digit4: 'slot4', Digit5: 'melee',
+  Digit1: 'slot1', Digit2: 'slot2', Digit3: 'slot3', Digit4: 'slot4', Digit5: 'slot5', Digit6: 'melee',
   Escape: 'pause', KeyP: 'pause', Enter: 'confirm', KeyG: 'grenade',
   KeyX: 'dash', AltLeft: 'dash', KeyM: 'music', KeyT: 'talk', Tab: 'score',
 };

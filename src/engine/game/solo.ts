@@ -94,9 +94,6 @@ export function createSolo(app: App): SoloApi {
     }
     player.grenades = Math.min(player.maxGrenades, player.grenades + 1);
     if (ctx.level.pickups.length) for (let i = 0; i < 7; i++) app.pickups.spawn(i < 5 ? 'ammo' : 'health', choose(ctx.level.pickups));
-    if (bossWave && n > app.settings.checkpoint) {
-      app.saveCheckpoint(n); ctx.hud.kill(`CHECKPOINT · WAVE ${n}`);
-    }
     ctx.hud.setWave(n, enemies.alive + gs.queue.length);
   }
   function spawnPosition(type: string): THREE.Vector3 {

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { rand } from '../util';
+import { GUN_LOADOUT } from '../weapons/stats';
 import { TONE, TONE_HEX, WHITE_HEX } from './palette';
 import { charMat, unlitMat, makeLabelMaterial } from './materials';
 import { boxGeo, cylGeo, sphereGeo, coneGeo, torusGeo } from './prims';
@@ -10,7 +11,7 @@ const DARK = TONE_HEX[TONE.DARK], ACCENT = TONE_HEX[TONE.ACCENT];
 export type FigureKind = 'humanoid' | 'blob' | 'flyer';
 export type BlobKind = 'bomber' | 'hitbox' | 'lagspike';
 export type HatKind = 'none' | 'cap' | 'band' | 'helmet' | 'hood' | 'crown';
-export type WeaponPropKind = 'none' | 'rifle' | 'pistol' | 'shotgun' | 'sniper' | 'blade' | 'knife' | 'hammer';
+export type WeaponPropKind = 'none' | 'r4c' | 'rifle' | 'pistol' | 'shotgun' | 'sniper' | 'blade' | 'knife' | 'hammer';
 export type ClownMask = 'grunt' | 'rusher' | 'heavy' | 'sniper' | 'shield' | 'bomber' | 'flyer' | 'boss' | 'hitbox' | 'lagspike';
 
 export interface FigureOpts {
@@ -331,6 +332,17 @@ function weaponProp(kind: WeaponPropKind, color: number): THREE.Group {
     barrel(0.025, 0.95, 0, 0.05, 0.72);
     addBox(0.06, 0.07, 0.22, 0, 0.13, 0.06, DARK);
     addBox(0.04, 0.13, 0.11, 0, -0.08, 0.02, DARK);
+  } else if (kind === 'r4c') {
+    addBox(0.10, 0.14, 0.44, 0, 0.025, 0.12, DARK);
+    addBox(0.10, 0.11, 0.32, 0, 0.03, 0.44, DARK);
+    for (let i = 0; i < 6; i++) addBox(0.11, 0.025, 0.025, 0, 0.10, 0.31 + i * 0.05);
+    barrel(0.025, 0.24, 0, 0.05, 0.65);
+    barrel(0.034, 0.07, 0, 0.05, 0.75);
+    addBox(0.07, 0.24, 0.13, 0, -0.13, 0.12, DARK).rotation.x = -0.12;
+    addBox(0.08, 0.13, 0.24, 0, 0, -0.20, DARK);
+    addBox(0.09, 0.18, 0.035, 0, -0.02, -0.32, DARK);
+    addBox(0.06, 0.15, 0.075, 0, -0.10, -0.025, DARK).rotation.x = -0.3;
+    barrel(0.045, 0.25, 0, 0.16, 0.12);
   } else if (kind !== 'none') {
     addBox(0.085, 0.12, 0.40, 0, 0.02, 0.15, DARK);
     barrel(0.027, 0.25, 0, 0.05, 0.46);
@@ -346,7 +358,7 @@ function weaponProp(kind: WeaponPropKind, color: number): THREE.Group {
 }
 
 export function makeWeaponProp(index: number): THREE.Group {
-  return weaponProp((['rifle', 'shotgun', 'sniper', 'pistol'] as const)[index] ?? 'rifle', TONE_HEX[TONE.HOSTILE]);
+  return weaponProp(GUN_LOADOUT[index] ?? GUN_LOADOUT[0], TONE_HEX[TONE.HOSTILE]);
 }
 
 /** A part the branch above has just built. Throws only if a name is misspelled. */

@@ -125,7 +125,7 @@ export class HudStore implements HudView {
   wave: WaveState = { wave: 1, left: 0 };
   modifier = '';
   timer = '';
-  weapon: WeaponState = { name: 'MP5', hint: '' };
+  weapon: WeaponState = { name: 'R4-C', hint: '' };
   boss: BossState = { name: null };
   focus: FocusState = { show: false, ready: false, label: 'MELEE' };
   crosshair: CrosshairState = { melee: false, ads: false };

@@ -3,13 +3,14 @@ import { choose, shuffle, round1, round2, clamp } from '../util';
 import { RemotePlayer, encodeState } from '../players';
 import { validKey } from '../level/index';
 import { TONE } from '../render/index';
+import { GUN_STATS } from '../weapons/stats';
 import type { BoardRow } from '../hud/screens';
 import type { HitInfo, PlayerHit, ScoreRow, Target } from '../types';
 import type { PeerMeta } from '../net';
 import type { App } from '../boot';
 
 const KILL_TARGET = 20, TIME_LIMIT = 480, RESPAWN = 3.5, SILENT_MS = 9000;
-const HOW: Record<string, string> = { rifle: 'MP5', pistol: 'pistol', shotgun: 'shotgun', sniper: 'sniper', melee: 'knife', grenade: 'grenade', deflect: 'their own bullet' };
+const HOW: Record<string, string> = { r4c: 'R4-C', rifle: 'MP5', pistol: 'pistol', shotgun: 'shotgun', sniper: 'sniper', melee: 'knife', grenade: 'grenade', deflect: 'their own bullet' };
 
 const obj = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
 const arr = (v: unknown): v is unknown[] => Array.isArray(v);
@@ -389,7 +390,7 @@ export function createFFA(app: App): FfaApi {
     hud.hitmarker(false, !!info.crit); ctx.audio.hitEnemy(t.center); t.flash();
     const source = info.source ?? 'rifle';
     const shotId = ++hitId;
-    if (info.crit && info.part === 'head' && ['rifle', 'shotgun', 'sniper', 'pistol', 'revolver'].includes(source)) {
+    if (info.crit && info.part === 'head' && Object.hasOwn(GUN_STATS, source)) {
       if (pendingHeadshots.size >= 64) pendingHeadshots.clear();
       pendingHeadshots.set(shotId, { target: t.id, source, until: now() + 1 });
     }

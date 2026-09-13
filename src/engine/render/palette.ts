@@ -15,6 +15,12 @@ export const SURF = Object.freeze({
 });
 export type SurfKey = keyof typeof SURF;
 
+/** Shared finishes for the weapon-mounted sights and their aiming overlays. */
+export const OPTIC_COLOR = Object.freeze({
+  acogBody: '#353633', acogRim: '#615e54',
+  holoBody: '#343d41', holoBase: '#1c2428', reticle: '#ed2428',
+});
+
 export const WHITE_HEX = 0xffffff;
 export const SMOKE_HEX = 0xdde4ec;
 

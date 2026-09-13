@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from 'vitest';
-import { Mesh, Object3D, PerspectiveCamera, Scene, Vector3 } from 'three';
+import { Box3, Mesh, Object3D, PerspectiveCamera, Scene, Vector3 } from 'three';
 import { encodeState, RemotePlayer } from '@/engine/players';
 import type { Ctx, Enemy, Player } from '@/engine/types';
 
@@ -134,16 +134,40 @@ test('optional triples, weapon fallback and the name tag', () => {
   remote.update(0.05, 3.08);
   assert(!remote.grappling && remote.hook.equals(hook) && remote.body.vel.lengthSq() === 0,
     'Missing optional triples zero velocity and retain the unused hook.');
-  assert(remote._wi === 0 && remote.body.height === 1.75, 'Unknown weapon uses a rifle and standing height returns.');
-  remote.push(state(0, 0, 80, 3), 3.01);
-  assert(remote._figure?.parts.weapon?.name === 'pistol', 'Slot 4 renders the pistol, not a blade.');
-  remote.push(state(0, 0, 80 | 512, 3), 3.02);
-  assert(remote._figure?.parts.weapon?.name === 'knife' && remote._wi === 3, 'Melee renders independently of the pistol slot.');
-  remote.push(state(0, 0, 80, 3), 3.03);
+  assert(remote._wi === 0 && remote.body.height === 1.75 && remote._figure?.parts.weapon?.name === 'r4c', 'Unknown weapon uses R4-C and standing height returns.');
+  remote.push(state(0, 0, 80, 4), 3.01);
+  assert(remote._figure?.parts.weapon?.name === 'pistol', 'Slot 5 renders the pistol, not a blade.');
+  remote.push(state(0, 0, 80 | 512, 4), 3.02);
+  assert(remote._figure?.parts.weapon?.name === 'knife' && remote._wi === 4, 'Melee renders independently of the pistol slot.');
+  remote.push(state(0, 0, 80, 4), 3.03);
   assert(remote._figure?.parts.weapon?.name === 'pistol', 'Ending melee restores the selected gun.');
   remote.name = '<script>name';
   remote.update(0.01, 3.09);
   assert(remote._tagName === '<script>name', 'A bounded name change rebuilds the canvas label.');
+});
+
+test('remote slots render five guns with a distinct R4-C prop and independent melee', () => {
+  const target = new RemotePlayer(ctx, 'loadout', 'loadout');
+  const sizes: Vector3[] = [];
+  try {
+    for (const [slot, kind] of ['r4c', 'rifle', 'shotgun', 'sniper', 'pistol'].entries()) {
+      target.push(state(0, 0, 80, slot), 1 + slot);
+      expect(target._wi).toBe(slot);
+      const prop = must(target._figure?.parts.weapon, 'remote weapon');
+      expect(prop.name).toBe(kind);
+      sizes.push(new Box3().setFromObject(prop).getSize(new Vector3()));
+      target.push(state(0, 0, 80 | 512, slot), 1.1 + slot);
+      expect(target._wi).toBe(slot);
+      expect(target._figure?.parts.weapon?.name).toBe('knife');
+      target.push(state(0, 0, 80, slot), 1.2 + slot);
+      expect(target._figure?.parts.weapon?.name).toBe(kind);
+    }
+    expect(sizes[0]!.distanceTo(sizes[1]!)).toBeGreaterThan(0.01);
+    target.shots('r4c', [1, 2, 3]);
+    expect(calls.sounds.at(-1)).toBe('r4c');
+  } finally {
+    target.dispose(); calls.tracers.length = 0; calls.sounds.length = 0;
+  }
 });
 
 test('shot batches, the muzzle flash and damage', () => {
@@ -199,7 +223,7 @@ test('death, ragdoll and respawn', () => {
   remote.push(state(8, 0, 80, 2), 5);
   remote.update(0, 5);
   assert(remote.alive && remote.visible && remote.body.pos.x === 8 && remote._a === null && remote._wi === -1,
-    'Respawn clears the old interpolation and uses the default rifle for one packet.');
+    'Respawn clears the old interpolation and uses the default gun for one packet.');
   remote.push(state(8, 0, 80, 2), 5.05);
   assert(remote._wi === 2, 'The packet after respawn applies the selected weapon.');
 });

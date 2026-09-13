@@ -2,7 +2,7 @@ import type * as THREE from 'three';
 import type { Ctx, Player, WeaponState } from '../types';
 import { Gun } from './gun';
 import { Melee } from './melee';
-import type { GunKind } from './stats';
+import { GUN_LOADOUT, type GunKind } from './stats';
 
 export { GUN_STATS } from './stats';
 export type { GunKind, GunStats } from './stats';
@@ -36,7 +36,7 @@ export interface Weapon {
   kickRot(x: number, y: number, z: number): void;
 }
 
-/** Four gun slots; the player owns a separate, always-available melee weapon. */
+/** Five gun slots; the player owns a separate, always-available melee weapon. */
 export function makeLoadout(ctx: Ctx, player: Player): Weapon[] {
-  return [new Gun(ctx, player, 'rifle'), new Gun(ctx, player, 'shotgun'), new Gun(ctx, player, 'sniper'), new Gun(ctx, player, 'pistol')];
+  return GUN_LOADOUT.map(kind => new Gun(ctx, player, kind));
 }

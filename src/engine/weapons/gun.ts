@@ -194,12 +194,12 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
   }
 
   get spreadPx() { return 5 + this._spread * 900; }
-  get scopeKind(): ScopeKind { return this.kind === 'rifle' ? this.optic : 'sniper'; }
-  get adsFov(): number { return this.kind === 'rifle' && this.optic === 'holo' ? 82 : this._stats.adsFov; }
-  get hint(): string { return this.kind === 'rifle' && this.optic === 'holo' ? 'auto · holographic sight' : this._stats.hint; }
+  get scopeKind(): ScopeKind { return this.kind === 'rifle' || this.kind === 'r4c' ? this.optic : 'sniper'; }
+  get adsFov(): number { return this.scopeKind === 'holo' ? 82 : this._stats.adsFov; }
+  get hint(): string { return this.scopeKind === 'holo' ? `${this._stats.hint} · holo` : this._stats.hint; }
 
   setOptic(optic: RifleOptic): void {
-    if (this.kind !== 'rifle') return;
+    if ((this.kind !== 'rifle' && this.kind !== 'r4c') || (optic !== 'acog' && optic !== 'holo')) return;
     this.optic = optic;
     if (this._model.parts.acog) this._model.parts.acog.visible = optic === 'acog';
     if (this._model.parts.holo) this._model.parts.holo.visible = optic === 'holo';

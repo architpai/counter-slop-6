@@ -15,8 +15,8 @@ import type { GrappleState } from './grapple';
 import { initGrenades, updateGrenades, throwGrenade, clearNades } from './grenades';
 import type { GrenadeState, NadeThrow } from './grenades';
 
-/** Four gun slots. Melee never changes the selected slot. */
-const SLOT_ACTIONS = ['slot1', 'slot2', 'slot3', 'slot4'] as const;
+/** Five gun slots. Melee never changes the selected slot. */
+const SLOT_ACTIONS = ['slot1', 'slot2', 'slot3', 'slot4', 'slot5'] as const;
 const isGun = (w: Weapon): w is Gun => w.isGun;
 
 const direction = new Vector3();
@@ -368,7 +368,7 @@ export class Player implements Target {
 
   onHeadshot(info: HitInfo): void {
     if (!this.alive || !info.crit || info.part !== 'head'
-      || !['rifle', 'shotgun', 'sniper', 'pistol', 'revolver'].includes(info.source ?? '')) return;
+      || !Object.hasOwn(GUN_STATS, info.source ?? '')) return;
     // One bounded kick per shot, not one per shotgun pellet. No aim correction.
     if (this.headshotT < 0.22) {
       this.headshotSide *= -1;
