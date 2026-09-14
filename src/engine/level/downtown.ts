@@ -116,20 +116,35 @@ function buildArena(b: LevelBuilder) {
 function buildStreets(b: LevelBuilder, p: number) {
   const edge = p - 3;
   b.box(0, 0, -30, 2 * edge, 0.04, 10, road);
+  const paint: BuildOpts = { mat: 'paving', noCollide: true };
   for (const x of [-16, 16]) {
     b.box(x, 0, -2, 6, 0.04, 2 * edge, road);
-    for (let z = -edge + 2; z < edge; z += 4) b.box(x, 0.04, z, 0.2, 0.02, 2, dark);
+    for (const side of [-1, 1]) b.box(x + side * 2.8, 0.04, -2, 0.12, 0.01, 2 * edge, paint);
+    for (let z = -edge + 2; z < edge; z += 4) b.box(x, 0.04, z, 0.16, 0.02, 2, paint);
   }
   for (let x = -edge + 2; x < edge; x += 4) {
     if (Math.abs(x + 16) < 4 || Math.abs(x - 16) < 4) continue;
-    b.box(x, 0.04, -30, 2, 0.02, 0.2, dark);
+    b.box(x, 0.04, -30, 2, 0.02, 0.16, paint);
   }
+  // Broad paving joints give the courtyard scale without adding collision or props.
+  b.box(0, 0, 30, 24, 0.012, 40, { mat: 'block', noCollide: true });
+  const joints: BuildOpts = { mat: 'ground', noCollide: true };
+  for (let z = 10; z <= 50; z += 4) b.box(0, 0.012, z, 24, 0.005, 0.025, joints);
+  for (let x = -12; x <= 12; x += 4) b.box(x, 0.012, 30, 0.025, 0.005, 40, joints);
+  for (const x of [-16, 16]) for (let z = 30; z <= 34; z += 0.8) b.box(x, 0.045, z, 5.4, 0.01, 0.35, paint);
 }
 
 function buildTower(b: LevelBuilder) {
-  for (const top of [4, 8, 12, 16]) b.slab(-7, -7, 7, 7, top, 0.4, concrete);
+  for (const top of [4, 8, 12, 16]) {
+    b.slab(-7, -7, 7, 7, top, 0.4, concrete);
+    b.box(0, top - 0.18, 7.015, 14, 0.12, 0.03, { mat: 'metal', noCollide: true });
+  }
   for (const [x, z] of [[-6.6, -6.6], [6.6, -6.6], [-6.6, 6.6], [6.6, 6.6],
     [0, -6.6], [0, 6.6], [-6.6, 0], [6.6, 0]] as const) b.box(x, 0, z, 0.8, 16, 0.8, deep);
+  for (const x of [-6.6, 0, 6.6]) {
+    b.box(x, 0.35, 7.01, 0.65, 1.3, 0.025, { mat: 'accent', noCollide: true });
+    b.box(x, 0.8, 7.025, 0.65, 0.18, 0.025, dark);
+  }
   for (const y of [4, 8, 12]) rails(b, y, [
     [-7, 7, -1.5, 7], [1.5, 7, 7, 7], [-7, -7, 7, -7],
     [-7, -7, -6.5, -7], [3.5, -7, 7, -7], [7, -7, 7, 7],
@@ -185,6 +200,7 @@ function buildA(b: LevelBuilder) {
   }
   b.rail(-25, 7.2, end, 7.2, 12, { mat: 'accent' });
   if (b.level.arena) b.rail(-25, 4.8, end, 4.8, 12, { mat: 'accent' });
+  for (const y of [3.8, 7.8, 11.8]) b.box(-34, y, 20.22, 18, 0.16, 0.04, { mat: 'metal', noCollide: true });
   markers(b, 'spawns', [[-34, 12, 12], [-40, 0, 18]]);
   markers(b, 'snipers', [[-27, 12, 6]]);
   markers(b, 'pickups', [[-34, 4, 12], [-30, 12, 16], [-40, 8, 8]]);
@@ -220,6 +236,7 @@ function buildB(b: LevelBuilder) {
     [36.4, 20, 44, 20], [44, 4, 44, 20], [24, 4, 24, 9], [24, 15, 24, 20]]);
   b.box(15.5, 11.6, 6, 17.4, 0.4, 2.2, metal);
   b.rail(7, 4.9, 24, 4.9, 12);
+  for (const y of [3.8, 11.8]) b.box(34, y, 20.22, 20, 0.16, 0.04, { mat: 'block', noCollide: true });
   markers(b, 'spawns', [[34, 12, 18], [40, 0, 8]]);
   markers(b, 'snipers', [[26, 12, 18]]);
   markers(b, 'pickups', [[34, 2.4, 12], [34, 6, 19], [42, 12, 6]]);

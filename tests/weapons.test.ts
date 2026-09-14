@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from 'vitest';
-import { Group, Mesh, Vector3 } from 'three';
+import { Group, Mesh, MeshToonMaterial, Vector3 } from 'three';
 import { Gun, Katana, GUN_STATS, makeLoadout } from '@/engine/weapons/index';
 import type { GunKind } from '@/engine/weapons/index';
 import type { Breakable, Ctx, Player, WeaponState } from '@/engine/types';
@@ -118,6 +118,13 @@ test('loadout, view models and aim poses', () => {
   geometry.computeBoundingBox();
   assert(must(geometry.boundingBox, 'bounding box').getSize(new Vector3()).distanceTo(new Vector3(0.09, 0.12, 0.5)) < 1e-7, 'Rifle receiver retains its model dimensions');
   assert(must(revolver.root.getObjectByName('cylinder'), 'cylinder').children.length === 7, 'Revolver has a drum and six chambers');
+  const fist = must(rifle.root.getObjectByName('right-hand-fist'), 'fist'), forearm = must(rifle.root.getObjectByName('right-hand-forearm'), 'forearm');
+  if (!(fist instanceof Mesh) || !(forearm instanceof Mesh)) throw new Error('hand parts are not meshes');
+  const fistColor = (fist.material as MeshToonMaterial).color.getHex(), sleeveColor = (forearm.material as MeshToonMaterial).color.getHex();
+  assert(fistColor !== sleeveColor, 'Fists use a distinct tone from the sleeve');
+  const blade = must(katana.root.getObjectByName('blade'), 'blade');
+  if (!(blade instanceof Mesh)) throw new Error('blade is not a mesh');
+  assert((blade.material as MeshToonMaterial).color.getHex() === 0xcbdbe3, 'Katana blade uses pale cool steel');
 });
 
 test('rifle magazine reload and firing', () => {

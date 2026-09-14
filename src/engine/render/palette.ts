@@ -6,12 +6,12 @@ export type ByTone<T> = { readonly [K in ToneId]: T };
 export const TONE_HEX: ByTone<number> & readonly number[] =
   Object.freeze([0x4c7dff, 0xff4757, 0x2a3140, 0xffb020, 0x37d67a, 0xc56bff] as const);
 export const SURF = Object.freeze({
-  sky: 0x9fd2e8, fog: 0xc7e3ef, ground: 0xcfc7b4, road: 0x9e9a90,
-  block: 0xefe9dc, blockAlt: 0x7c8aa0, blockDeep: 0x48566b, roof: 0xe0714a,
-  wood: 0xb4784a, metal: 0xa6aeb8, dark: 0x232b38, accent: 0xffc24b,
-  foliage: 0x4ca96b, water: 0x4fb3d9, hot: 0xe5484d, boss: 0xc56bff, cloud: 0xfbfaf5,
-  lawn: 0x8cb46a, siding: 0xf1ead9, shingle: 0x3f4756, plaster: 0xd9d4c8,
-  adobe: 0xe4b78c, sandstone: 0xc9865a, sand: 0xe6d3a8, paving: 0xd8c9ae,
+  sky: 0xa8d2e2, fog: 0xcbdde2, ground: 0xb5b7ad, road: 0x52606a,
+  block: 0xe5e4d9, blockAlt: 0x96a9b4, blockDeep: 0x405562, roof: 0xc87651,
+  wood: 0x9f7858, metal: 0xb8c6cc, dark: 0x263640, accent: 0xe7b34f,
+  foliage: 0x4f8766, water: 0x40b7b7, hot: 0xc96557, boss: 0xa887b7, cloud: 0xfbfaf5,
+  lawn: 0x829b65, siding: 0xf0e6d2, shingle: 0x3e5262, plaster: 0xd9dcd5,
+  adobe: 0xe5bd92, sandstone: 0xbe845d, sand: 0xdbc59c, paving: 0xe1d8c3,
 });
 export type SurfKey = keyof typeof SURF;
 
@@ -19,5 +19,5 @@ export const WHITE_HEX = 0xffffff;
 export const SMOKE_HEX = 0xdde4ec;
 
 // Private lighting colours and gradient levels.
-export const LIGHT = Object.freeze({ sun: 0xfff6e5, sky: 0xbbd9ec, ground: 0x8a8474, zenith: 0x5ea6dc });
+export const LIGHT = Object.freeze({ sun: 0xffefd6, sky: 0xafcbe1, ground: 0x626772, zenith: 0x5294b7 });
 export const TOON_STEPS = Object.freeze([64, 160, 255]);

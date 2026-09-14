@@ -85,17 +85,19 @@ function Prompt({ confirmKey, end, start = 'CLICK ANYWHERE' }: { confirmKey: str
  * `ScreenOverlay` subscribes and passes it down.
  */
 export function Controls({ pad }: { pad: boolean }) {
+  const [selected, setSelected] = useState<boolean | null>(null);
+  const active = selected ?? pad;
   return (
-    <div className="screen-controls">
-      {([
-        ['keyboard', 'MOUSE + KEYBOARD', KEYBOARD_ROWS, !pad],
-        ['gamepad', 'CONTROLLER', PAD_ROWS, pad],
-      ] as const).map(([device, title, rows, active]) => (
-        <section className={`control-column${active ? ' current-device' : ''}`} data-device={device} key={device}>
-          <h3>{title}</h3>
-          <ol>{rows.map((row, index) => <li className="control-row" key={index}><Bold text={row} /></li>)}</ol>
+    <div className="controls-panel" data-ui-block="">
+      <div className="control-switch" role="group" aria-label="Control device">
+        <button type="button" aria-pressed={!active} onClick={() => setSelected(false)}>Mouse + keyboard</button>
+        <button type="button" aria-pressed={active} onClick={() => setSelected(true)}>Controller</button>
+      </div>
+      <div className="screen-controls">
+        <section className="control-column current-device" data-device={active ? 'gamepad' : 'keyboard'} aria-label={active ? 'Controller controls' : 'Keyboard controls'}>
+          <ol>{(active ? PAD_ROWS : KEYBOARD_ROWS).map((row, index) => <li className="control-row" key={index}><Bold text={row} /></li>)}</ol>
         </section>
-      ))}
+      </div>
     </div>
   );
 }
@@ -133,19 +135,20 @@ function Checkpoints({ wave, onAction }: { wave: number; onAction: Act }) {
   );
 }
 
-function Maps({ model, onAction, disabled = false }: { model: MapsModel; onAction: Act; disabled?: boolean }) {
+function Maps({ model, onAction, disabled = false, previews = false }: { model: MapsModel; onAction: Act; disabled?: boolean; previews?: boolean }) {
   const choices = list(model.maps);
   if (choices.length < 2) return null;
   return (
-    <div className="map-picker" data-ui-block="">
-      <h3>map</h3>
+    <div className={`map-picker${previews ? ' map-previews' : ''}`} data-ui-block="">
+      <h3>Choose your map</h3>
       {choices.map(map => {
         const selected = map.key === model.mapKey;
         return (
           <button type="button" className={`screen-button map-choice${selected ? ' selected' : ''}`} data-act="pickMap"
             aria-pressed={selected} disabled={disabled} key={map.key}
             onClick={event => onAction('pickMap', map.key, event.nativeEvent)}>
-            <span>{map.name}</span><small>{map.blurb}</small>
+            {previews ? <img src={`/maps/${map.key}.webp`} alt="" width={480} height={270} /> : null}
+            <span className="map-name">{map.name}</span><small>{map.blurb}</small>
           </button>
         );
       })}
@@ -169,19 +172,34 @@ function ScoreRows({ rows, full = false }: { rows: BoardRow[]; full?: boolean })
 // ------------------------------------------------------------------ screens
 
 function MainScreen({ model, pad, onAction }: { model: MainModel; pad: boolean; onAction: Act }) {
+  const [page, setPage] = useState<'play' | 'controls' | 'settings' | null>(null);
+  // Controller-only players can read their controls before the confirm button
+  // starts play; explicit mouse/keyboard navigation keeps the chosen page.
+  const currentPage = page ?? (pad ? 'controls' : 'play');
   return (
-    <>
+    <div className="main-menu">
+      <p className="menu-eyebrow">SURVIVE. RELOAD. REPEAT.</p>
       <Title text="COUNTER SLOP 6" sub="a tactical survival shooter, allegedly" />
-      <div className="screen-actions" data-ui-block="">
-        <Button act="start" text="START" primary sub="solo · survive the waves" onAction={onAction} />
-        <Button act="online" text="PLAY ONLINE" sub="free for all · up to 8 players" onAction={onAction} />
+      <nav className="menu-nav" aria-label="Main menu pages" data-ui-block="">
+        {(['play', 'controls', 'settings'] as const).map(item => (
+          <button type="button" key={item} aria-pressed={currentPage === item} aria-controls="main-menu-content" onClick={() => setPage(item)}>{item}</button>
+        ))}
+      </nav>
+      <div id="main-menu-content" className="menu-page">
+        {currentPage === 'play' ? <>
+          <Maps model={model} onAction={onAction} previews />
+          <div className="screen-actions launch-actions" data-ui-block="">
+            <Button act="start" text="START SOLO" primary sub="survive the waves" onAction={onAction} />
+            <Button act="online" text="PLAY ONLINE" sub="free for all · up to 8 players" onAction={onAction} />
+          </div>
+          <Checkpoints wave={model.checkpoint} onAction={onAction} />
+          <p className="screen-footer">{count(model.best) > 0 ? `Personal best · ${count(model.best)}` : 'One more wave. One more try.'}</p>
+        </> : currentPage === 'controls' ? <>
+          <Controls pad={pad} />
+          {pad ? <p className="screen-footer">Press {model.confirmKey} to start solo</p> : null}
+        </> : <Settings model={model} onAction={onAction} />}
       </div>
-      <Maps model={model} onAction={onAction} />
-      <Controls pad={pad} />
-      <Settings model={model} onAction={onAction} />
-      <Checkpoints wave={model.checkpoint} onAction={onAction} />
-      {count(model.best) > 0 ? <p className="screen-footer">best score: {count(model.best)}</p> : null}
-    </>
+    </div>
   );
 }
 
