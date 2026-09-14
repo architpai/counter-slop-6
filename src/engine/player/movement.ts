@@ -230,6 +230,11 @@ export function integrateMovement(p: Player, dt: number): void {
     p.stepOffset = clamp(p.stepOffset - stepped, -b.stepHeight, b.stepHeight);
   }
   if (b.pos.y < -12 || Math.abs(b.pos.x) > 95 || Math.abs(b.pos.z) > 95) {
+    if (p.ctx.game.isOnline() && p.team > 0) {
+      p.lastHitBy = p.lastHit = null;
+      p.die();
+      return;
+    }
     p.detachGrapple(false);
     b.pos.copy(level.playerStart);
     b.vel.set(0, 0, 0);

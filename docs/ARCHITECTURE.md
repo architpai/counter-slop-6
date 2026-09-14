@@ -1,5 +1,7 @@
 # ARCHITECTURE — browser FPS
 
+> Current online extension: [Online team modes](spec/online-team-modes.md) defines the team-rule, HUD, and wire additions to this original rebuild contract. The current implementation uses TypeScript/React/Next static export; the original delivery instructions below are historical.
+
 This file is the integration contract for the rebuild. It is written so that fifteen people can
 implement fifteen modules in parallel, from this file plus their own spec document, and have the
 result link together on the first try.

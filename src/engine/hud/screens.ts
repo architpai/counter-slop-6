@@ -1,4 +1,5 @@
 import type { RifleOptic } from '../weapons/stats';
+import type { OnlineMode, Team } from '../game/team-rules';
 
 /**
  * Screen models: the data half of the menus. The rendering half is React, in
@@ -12,7 +13,7 @@ import type { RifleOptic } from '../weapons/stats';
  */
 export const UI_ACTIONS = [
   'start', 'online', 'back', 'quickPlay', 'create', 'join', 'joinCode',
-  'visibility', 'name', 'pickMap', 'mainMenu', 'startMatch',
+  'visibility', 'name', 'pickMap', 'onlineMode', 'mainMenu', 'startMatch',
   'leave', 'leaveMatch', 'sens', 'acogSens', 'sniperSens', 'optic', 'r4cOptic', 'training', 'invert', 'music',
 ] as const;
 
@@ -21,7 +22,13 @@ export type UiAction = (typeof UI_ACTIONS)[number];
 // ------------------------------------------------------------- screen models
 
 export interface MapChoice { key: string; name: string; blurb: string }
-export interface LobbyPlayer { id: string; name: string; host: boolean; self: boolean }
+export interface LobbyPlayer { id: string; name: string; host: boolean; self: boolean; team?: Team }
+export interface OnlineInfo {
+  mode?: OnlineMode;
+  teamScores?: [number, number];
+  selfTeam?: Team;
+  status?: string;
+}
 
 export interface WeaponSettingsModel { optic: RifleOptic; r4cOptic: RifleOptic }
 export interface LookModel {
@@ -33,24 +40,25 @@ export interface MainModel extends LookModel, WeaponSettingsModel {
   maps: MapChoice[];
 }
 export interface LobbyModel extends WeaponSettingsModel {
+  mode?: OnlineMode;
   code: string; isPublic: boolean; isHost: boolean; mapKey: string;
   maps: MapChoice[];
   players: LobbyPlayer[];
   status: string;
 }
 export interface OnlineModel { name: string; isPublic: boolean; status: string; busy: boolean;
-                               code: string }
+                               code: string; mode?: OnlineMode }
 export interface PauseModel extends LookModel, WeaponSettingsModel { wave: number; score: number; training: boolean }
-export interface MenuModel extends LookModel, WeaponSettingsModel { code: string; rows: BoardRow[] }
+export interface MenuModel extends LookModel, WeaponSettingsModel, OnlineInfo { code: string; rows: BoardRow[] }
 export interface DeadModel   { waves: number; kills: number; score: number; best: number;
                                newBest: boolean; confirmKey: string }
-export interface OverModel   { youWin: boolean; winnerName: string; rows: BoardRow[] }
-export interface BoardModel  { rows: BoardRow[]; code: string }
-/** Top 3 + self if ranked 4th or lower. */
-export interface PvpModel    { rows: BoardRow[]; selfId: string }
-export interface BoardRow    { id: string; name: string; kills: number; deaths: number; self: boolean }
+export interface OverModel extends OnlineInfo { youWin: boolean; winnerName: string; rows: BoardRow[] }
+export interface BoardModel extends OnlineInfo { rows: BoardRow[]; code: string }
+/** Solo: top 3 + self. Teams: team scores, objective status and self K/D. */
+export interface PvpModel extends OnlineInfo { rows: BoardRow[]; selfId: string }
+export interface BoardRow { id: string; name: string; kills: number; deaths: number; self: boolean; team?: Team }
 
-export interface MatchOnModel { confirmKey: string }
+export interface MatchOnModel extends OnlineInfo { confirmKey: string }
 
 /**
  * What `hud.showScreen` carries: which screen, and the data it draws itself

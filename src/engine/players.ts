@@ -127,6 +127,7 @@ export class RemotePlayer implements Target {
   _tag: Object3D | null;
   /** The name the current tag was drawn with. Set with every tag. */
   _tagName = '';
+  _teamLabel = '';
   _rope: Mesh;
   _hookMesh: Mesh;
 
@@ -180,6 +181,18 @@ export class RemotePlayer implements Target {
   get speed(): 0 { return 0; }
   get blockRadius(): 0 { return 0; }
 
+  setTeam(team: number): void {
+    if (![0, 1, 2].includes(team)) return;
+    const label = team === 1 ? 'RED' : team === 2 ? 'BLUE' : '';
+    const tone = team === 2 ? TONE.PRIMARY : TONE.HOSTILE;
+    if (this.team === team && this._teamLabel === label && this._tone === tone) return;
+    const visible = this.visible;
+    this.team = team; this._teamLabel = label; this._tone = tone;
+    this._removeTag(); this._figure?.dispose(); this._figure = null;
+    if (this.alive) { const figure = this._buildFigure(); figure.root.visible = visible; }
+    this._placeHits();
+  }
+
   _buildFigure(): Figure {
     const figure = makeFigure({ kind: 'humanoid', tactical: 'player', color: TONE_HEX[this._tone], scale: 1,
       bodyWidth: 1, headSize: 1, limbR: 0.033, hat: 'cap', smile: false, shield: false, weapon: GUN_LOADOUT[0] });
@@ -208,7 +221,7 @@ export class RemotePlayer implements Target {
 
   _makeTag(): void {
     this._removeTag();
-    const tag = makeNameTag(this.name);
+    const tag = makeNameTag(this._teamLabel ? `${this._teamLabel} ${this.name}` : this.name);
     this._tag = tag;
     this._tagName = this.name;
     tag.position.y = 2.25;

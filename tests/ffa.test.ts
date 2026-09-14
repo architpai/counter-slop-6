@@ -1,9 +1,12 @@
 import { expect, test, vi } from 'vitest';
-import { Scene, Vector3 } from 'three';
+import { Scene, Vector3, PerspectiveCamera, Group } from 'three';
 import { createFFA } from '@/engine/game/ffa';
 import { makeGameState } from '@/engine/game/state';
 import type { App } from '@/engine/boot';
 import type { GameState, GameStateName } from '@/engine/types';
+import { createTeamMatch, assignTeams } from '@/engine/game/team-rules';
+import type { OnlineMode, TeamMatch } from '@/engine/game/team-rules';
+import { teamLayout } from '@/engine/game/team-world';
 
 const assert = (cond: unknown, message: string): void => { expect(cond, message).toBeTruthy(); };
 const must = <T>(value: T | undefined | null, what: string): T => {
@@ -21,7 +24,7 @@ type Handler = (data: unknown, from: string) => void;
 
 // Only the members `createFFA` reaches for. A real `App` needs WebGL, a peer
 // connection and a built level.
-function setup(isHost = false) {
+function setup(isHost = false, mode: OnlineMode = 'ffa') {
   const handlers = new Map<string, Handler>();
   const sent: Sent[] = [], screens: string[] = [], damage: Damage[] = [], resets: Vector3[] = [];
   const id = isHost ? 'host' : 'client', other = isHost ? 'client' : 'host';
@@ -37,7 +40,7 @@ function setup(isHost = false) {
     onPeerJoin: noop as unknown, onPeerLeave: noop as unknown, onDisconnect: noop as unknown,
   };
   const player = {
-    name: id, alive: true, hp: 100, maxHp: 100, shieldT: 0,
+    name: id, alive: true, hp: 100, maxHp: 100, shieldT: 0, team: 0, dashLock: false,
     body: { pos: new Vector3(), vel: new Vector3(), onGround: true },
     center: new Vector3(0, 1, 0), eye: new Vector3(0, 1.6, 0),
     forward: new Vector3(0, 0, -1), right: new Vector3(1, 0, 0),
@@ -47,35 +50,40 @@ function setup(isHost = false) {
     lastHitBy: null as string | null, lastHit: null as { from: Vector3 | null; amount: number; crit: boolean; src: string } | null,
     reset(pos: Vector3) { resets.push(pos.clone()); this.body.pos.copy(pos); this.alive = true; this.hp = 100; },
     takeDamage(amount: number, from: Vector3 | null = null) { damage.push({ amount, from }); this.hp -= amount; },
-    detachGrapple: noop, throwGrenade: noop,
+    detachGrapple: vi.fn(), throwGrenade: vi.fn(), clearNades: noop,
   };
   const remote = {
-    id: other, name: other, alive: true, visible: true, lastSeen: 0,
+    id: other, name: other, alive: true, visible: true, lastSeen: 0, team: 0,
+    setTeam(team: number) { this.team = team; },
     body: { pos: new Vector3(20, 0, 0) }, center: new Vector3(20, 1, 0),
     forward: new Vector3(0, 0, -1), right: new Vector3(1, 0, 0), hits: [], blocking: false, parryWindow: false,
     raycast: (_o: Vector3, _d: Vector3, _max: number): { part: 'torso'; dist: number; point: Vector3 } | null => null,
-    updates: 0, pushes: 0, disposed: false,
-    update() { this.updates++; }, push() { this.pushes++; }, shots: noop,
+    updates: 0, pushes: 0, disposed: false, _b: null as { p: Vector3 } | null,
+    update() { this.updates++; }, push(data?: number[]) {
+      this.pushes++;
+      if (data?.length) { this.body.pos.fromArray(data); this._b = { p: this.body.pos.clone() }; this.alive = !!((data[6] ?? 0) & 64); }
+    }, shots: noop,
     dispose() { this.disposed = true; },
     ragdoll() { this.alive = false; }, flash: noop,
   };
   const ctx = {
-    net, player, scene: new Scene(), remotes: new Map([[other, remote]]),
+    net, player, scene: new Scene(), camera: new PerspectiveCamera(), renderer: { rig: new Group() }, remotes: new Map([[other, remote]]),
     level: {
-      key: 'downtown', playerStart: new Vector3(0, 0, 42),
+      key: 'downtown', playerStart: new Vector3(0, 0, 42), bounds: { minX: -68, maxX: 68, minZ: -68, maxZ: 68 },
       arenaSpawns: [new Vector3(-10, 0, 3), new Vector3(10, 2, 8)],
-      spawns: [new Vector3()], breakables: [],
+      spawns: [new Vector3()], teamSpawns: [], breakables: [],
     },
     hud: {
-      setPvpScore: noop, setModifier: noop, setBoard: noop, setGameplayVisible: noop,
-      message: noop, tip: noop, kill: vi.fn(), hitmarker: vi.fn(), key: (action: string) => action,
+      setPvpScore: noop, setModifier: noop, setBoard: noop, setGameplayVisible: noop, hideScreen: vi.fn(),
+      message: vi.fn(), tip: noop, kill: vi.fn(), hitmarker: vi.fn(), key: (action: string) => action,
     },
     audio: { kill: noop, spawn: noop, enemyDie: noop, shieldHit: noop, hitEnemy: noop },
-    effects: { strokeBurst: noop, blood: noop, tracer: noop },
+    effects: { strokeBurst: noop, blood: noop, tracer: noop, clear: noop },
     input: { locked: true, usingGamepad: true, exitLock: noop, requestLock: noop, rumble: noop },
-    world: { lineOfSight: () => true }, game: { hitstop: noop },
+    world: { lineOfSight: () => true, groundBelow: () => 0, raycast: () => null }, game: { hitstop: noop },
   };
   const lobby = {
+    mode, teams: mode === 'ffa' ? {} : assignTeams(['host', 'client']),
     players: new Map([['host', 'Host'], ['client', 'Client']]),
     hostId: 'host', code: 'ABCDE', isPublic: false, status: '', map: 'downtown',
   };
@@ -85,7 +93,7 @@ function setup(isHost = false) {
   ]);
   const app = {
     ctx, gs, lobby, scores, settings: { name: id, mapKey: 'downtown' }, busy: false,
-    pickups: { spawn: noop, remove: () => false }, breakables: { breakProp: noop },
+    pickups: { spawn: noop, remove: () => false, clear: noop }, breakables: { breakProp: noop },
     loadLevel(arena: boolean, key = 'downtown') { ctx.level.key = key; },
     resetRun() {
       player.reset(ctx.level.playerStart);
@@ -262,5 +270,175 @@ test.each(['pistol', 'r4c'])('%s headshot follow-up waits for a valid victim ack
     t.ctx.player.shieldT = 0;
     t.receive('pdmg', hit);
     expect(t.sent.find(m => m.type === 'headshot')?.data).toEqual({ hitId: 42 });
+  } finally { t.ffa.leave(); }
+});
+
+test.each(['tdm', 'flag'] as const)('%s blocks friendly damage and rope cuts at both ends', mode => {
+  const t = setup(true, mode);
+  try {
+    t.ffa.hostStart();
+    t.lobby.teams.client = t.lobby.teams.host ?? 0;
+    const target = t.remote as unknown as Parameters<typeof t.ffa.hitPlayer>[0];
+    expect(t.ffa.canHurt(target)).toBe(false);
+    t.ffa.hitPlayer(target, 80, { source: 'grenade' });
+    t.receive('pdmg', { amount: 80, from: [0, 1, 0], by: 'client', crit: false, src: 'grenade', round: 1 });
+    t.ctx.player.grapple.mode = 'on';
+    t.receive('cut', { round: 1 });
+    expect(t.sent.filter(m => m.type === 'pdmg')).toHaveLength(0);
+    expect(t.damage).toHaveLength(0);
+    expect(t.ctx.player.detachGrapple).not.toHaveBeenCalled();
+    t.lobby.teams.client = t.lobby.teams.host === 0 ? 1 : 0;
+    t.receive('pdmg', { amount: 12, from: [0, 1, 0], by: 'client', crit: false, src: 'rifle', round: 1 });
+    expect(t.damage).toHaveLength(1);
+  } finally { t.ffa.leave(); }
+});
+
+test('team host grants a wave, rejects duplicate deaths and keeps cumulative scores after leave', () => {
+  const t = setup(true, 'tdm');
+  try {
+    t.ffa.hostStart();
+    const state = must(t.gs.teamMatch, 'team state'), team = t.lobby.teams.host ?? 0;
+    const death = { killer: 'host', dir: null, over: false, how: 'MP5', crit: false, round: state.round };
+    t.receive('pdead', death); t.receive('pdead', death);
+    expect(state.scores[team]).toBe(1);
+    expect(t.scores.get('client')?.deaths).toBe(1);
+    expect(state.dead.client).toBe(8);
+    const clock = performance.now() / 1000;
+    t.ffa.update(0.05, clock + 8);
+    expect(state.dead.client).toBeUndefined();
+    t.receive('pdead', death); // No live body packet since the wave: still an old death.
+    expect(state.scores[team]).toBe(1);
+    const leave = t.ctx.net.onPeerLeave as (id: string) => void;
+    leave('client');
+    expect(state.scores[team]).toBe(1);
+  } finally { t.ffa.leave(); }
+});
+
+test('host wipe waits for the shared wave instead of individual delay', () => {
+  const t = setup(true, 'flag');
+  try {
+    t.ffa.hostStart();
+    const clock = performance.now() / 1000;
+    t.ffa.update(0.05, clock + 2);
+    t.gs.menu = true;
+    t.ctx.player.alive = false; t.ffa.localDeath();
+    expect(t.gs.state).toBe('dying');
+    expect(t.gs.menu).toBe(false);
+    expect(t.ctx.hud.hideScreen).toHaveBeenCalled();
+    t.ffa.updateDying(10);
+    expect(t.gs.state).toBe('dying');
+    t.ffa.update(0.05, clock + 8.01);
+    expect(t.gs.state).toBe('play');
+    expect(t.ctx.player.alive).toBe(true);
+    expect(t.ctx.player.shieldT).toBe(2);
+  } finally { t.ffa.leave(); }
+});
+
+test('late flag join receives clocks and scores; only host snapshots grant respawn and reset rounds', () => {
+  const t = setup(false, 'flag');
+  try {
+    const state = createTeamMatch('flag', [0, 0, 0]);
+    state.elapsed = 90; state.scores = [2, 1]; state.flag.placed = 0; state.flag.holdLeft = 12;
+    t.receive('start', { late: true, mode: 'flag', teams: t.lobby.teams, teamState: structuredClone(state), map: 'downtown' });
+    expect(t.gs.teamMatch).toEqual(state);
+    expect(t.gs.matchT).toBe(90);
+    t.ctx.player.alive = false; t.ffa.localDeath();
+    const dead = structuredClone(state); dead.dead.client = 96; dead.elapsed = 92;
+    t.receive('teamstate', dead, 'stranger');
+    expect(t.gs.teamMatch?.elapsed).toBe(90);
+    t.receive('teamstate', dead);
+    t.ffa.updateDying(20);
+    expect(t.gs.state).toBe('dying');
+    const revived = structuredClone(dead); revived.elapsed = 96; revived.dead = {};
+    t.receive('teamstate', revived);
+    expect(t.gs.state).toBe('play');
+    const before = t.resets.length;
+    const next = structuredClone(revived); next.round = 2; next.elapsed = 100; next.flag.placed = null;
+    t.receive('teamstate', next);
+    expect(t.resets).toHaveLength(before + 1);
+    t.receive('teamstate', dead); // Stale state cannot kill/reset a new round.
+    expect(t.gs.teamMatch?.round).toBe(2);
+    t.receive('end', { id: 'team:1', name: 'BLUE TEAM' });
+    expect(t.gs.over?.id).toBe('team:1');
+    expect(t.ffa.onlineInfo().status).toBe('BLUE TEAM WINS');
+  } finally { t.ffa.leave(); }
+});
+
+test('flag host handles pickup, place, steal, carrier departure and round-tagged snapshots', () => {
+  const t = setup(true, 'flag');
+  try {
+    t.ffa.hostStart();
+    const s = must(t.gs.teamMatch, 'team state');
+    const layout = teamLayout(t.ctx.level as unknown as Parameters<typeof teamLayout>[0]);
+    const own = t.lobby.teams.host ?? 0;
+    let clock = performance.now() / 1000;
+    const step = () => { clock += 0.05; t.ffa.update(0.05, clock); };
+    t.ctx.player.body.pos.fromArray(layout.neutral); step();
+    expect(s.flag.carrier).toBe('host');
+    t.ctx.player.body.pos.fromArray(layout.bases[own]); step();
+    expect(s.flag.placed).toBe(own);
+    s.flag.holdLeft = 1;
+    t.receive('ps', { round: s.round - 1, state: [...layout.bases[own], 0, 0, 0, 80, 100] });
+    expect(t.remote.pushes).toBe(0);
+    t.receive('ps', { round: s.round, state: [...layout.bases[own], 0, 0, 0, 80, 100] }); step();
+    expect(s.flag).toMatchObject({ carrier: 'client', placed: null, holdLeft: 30 });
+    (t.ctx.net.onPeerLeave as (id: string) => void)('client');
+    expect(s.flag.carrier).toBeNull();
+    expect(s.flag.returnLeft).toBe(15);
+    expect(s.scores).toEqual([0, 0]);
+  } finally { t.ffa.leave(); }
+});
+
+test('new rounds ignore old combat packets and interpolated objective positions', () => {
+  const t = setup(true, 'flag');
+  try {
+    t.ffa.hostStart();
+    const s = must(t.gs.teamMatch, 'team state');
+    let clock = performance.now() / 1000;
+    const step = () => { clock += 0.05; t.ffa.update(0.05, clock); };
+    t.receive('ps', { round: 1, state: [0, 0, 0, 0, 0, 0, 80, 100] });
+    step();
+    expect(s.flag.carrier).toBe('client');
+    s.elapsed = 479.99;
+    step();
+    expect(s.overtime).toBe(true);
+    expect(s.round).toBe(2);
+    expect(s.flag.carrier).toBeNull();
+    const hit = { amount: 90, from: [0, 1, 0], by: 'client', crit: true, src: 'rifle', hitId: 23 };
+    t.ctx.player.grapple.mode = 'on';
+    for (const round of [undefined, 1]) {
+      t.receive('pdmg', { ...hit, round });
+      t.receive('cut', { round });
+    }
+    expect(t.damage).toHaveLength(0);
+    expect(t.ctx.player.detachGrapple).not.toHaveBeenCalled();
+    t.receive('ps', { round: 2, state: [57, 0, -8, 0, 0, 0, 80, 100] });
+    t.remote.body.pos.set(0, 0, 0); // Rendering can still show the previous round during interpolation.
+    step();
+    expect(s.flag.carrier).toBeNull();
+    t.receive('pdmg', { ...hit, round: 2 });
+    expect(t.damage).toHaveLength(1);
+    expect(t.sent.find(m => m.type === 'headshot')?.data).toEqual({ hitId: 23, round: 2 });
+    t.receive('cut', { round: 2 });
+    expect(t.ctx.player.detachGrapple).toHaveBeenCalledOnce();
+    t.ffa.hitPlayer(t.remote as unknown as Parameters<typeof t.ffa.hitPlayer>[0], 10);
+    expect(t.sent.find(m => m.type === 'pdmg')?.data).toMatchObject({ round: 2 });
+  } finally { t.ffa.leave(); }
+});
+
+test('a new placement does not inherit elapsed time from a delayed host frame', () => {
+  const t = setup(true, 'flag');
+  try {
+    t.ffa.hostStart();
+    const s = must(t.gs.teamMatch, 'team state');
+    let clock = performance.now() / 1000;
+    t.ctx.player.body.pos.set(0, 0, 0);
+    t.ffa.update(0.05, clock += 0.05);
+    expect(s.flag.carrier).toBe('host');
+    t.ctx.player.body.pos.set(-48, 0, 0);
+    t.ffa.update(0.05, clock += 40);
+    expect(s.flag.placed).toBe(0);
+    expect(s.flag.holdLeft).toBe(30);
+    expect(s.scores).toEqual([0, 0]);
   } finally { t.ffa.leave(); }
 });

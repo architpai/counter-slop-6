@@ -202,7 +202,7 @@ function explode(p: Player, n: Nade): void {
     ctx.game.blastBreakables(center, BLAST * 0.9);
   }
   const distance = p.center.distanceTo(center);
-  if (p.alive && distance < HURT_RADIUS) {
+  if (n.mine && p.alive && distance < HURT_RADIUS) {
     p.takeDamage(10 + 34 * (1 - distance / HURT_RADIUS), center);
     p.knockback(p._grenade.dir.subVectors(p.center, center).normalize(), 9);
   }

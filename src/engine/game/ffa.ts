@@ -4,7 +4,10 @@ import { RemotePlayer, encodeState } from '../players';
 import { validKey } from '../level/index';
 import { TONE } from '../render/index';
 import { GUN_STATS } from '../weapons/stats';
-import type { BoardRow } from '../hud/screens';
+import type { BoardRow, OnlineInfo } from '../hud/screens';
+import { advanceTeamMatch, assignTeams, createTeamMatch, dropFlag, interactFlag, isOnlineMode, isTeam, markDead, ONLINE_MODES, scoreTeam, TEAM_NAMES, TEAM_RULES, validTeamMatch, validTeams } from './team-rules';
+import type { OnlineMode, Point, Team, TeamMatch } from './team-rules';
+import { createTeamWorld, teamLayout } from './team-world';
 import type { HitInfo, PlayerHit, ScoreRow, Target } from '../types';
 import type { PeerMeta } from '../net';
 import type { App } from '../boot';
@@ -23,6 +26,9 @@ const vec = (a: number[]): THREE.Vector3 => new THREE.Vector3().fromArray(a);
 const cleanName = (v: unknown): string => (typeof v === 'string' ? v.trim().slice(0, 14) : '') || 'recruit';
 
 export interface FfaApi {
+  selectMode(mode: OnlineMode): void;
+  onlineInfo(): OnlineInfo;
+  dispose(): void;
   create(isPublic: boolean): Promise<void>;
   join(code: string): Promise<void>;
   quickPlay(): Promise<void>;
@@ -55,6 +61,10 @@ export function createFFA(app: App): FfaApi {
   let boardShown = false;
   let timer: number | undefined = undefined;
   let hitId = 0;
+  let teamWorld: ReturnType<typeof createTeamWorld> | null = null;
+  let lastClock = 0, syncT = 0;
+  let seenDead = false, deathMessage = '';
+  const ready = new Set<string>();
   const pendingHeadshots = new Map<number, { target: string; source: string; until: number }>();
 
   const isOnline = (): boolean => gs.mode === 'ffa';
@@ -64,7 +74,54 @@ export function createFFA(app: App): FfaApi {
   const spots = (): THREE.Vector3[] => ctx.level.arenaSpawns.length ? ctx.level.arenaSpawns : ctx.level.spawns;
   const rows = (): ScoreRow[] => [...scores].map(([rid, r]) => ({ id: rid, name: r.name, kills: r.kills, deaths: r.deaths }));
   const sorted = (): ScoreRow[] => rows().sort((a, b) => b.kills - a.kills || a.deaths - b.deaths);
-  const boardRows = (): BoardRow[] => rows().map(r => ({ ...r, self: r.id === net.id }));
+  const boardRows = (): BoardRow[] => rows().map(r => ({ ...r, self: r.id === net.id, team: lobby.teams?.[r.id] }));
+  const mode = (): OnlineMode => lobby.mode ?? 'ffa';
+  const teamOf = (rid: string | null): Team | undefined => rid === null ? undefined : lobby.teams?.[rid];
+  const opponents = (a: string | null, b: string | null): boolean => mode() === 'ffa' ||
+    (isTeam(teamOf(a)) && isTeam(teamOf(b)) && teamOf(a) !== teamOf(b));
+  const activeCombat = (): boolean => playing() && !gs.over && !(gs.teamMatch && gs.teamMatch.breakLeft > 0);
+  const roundTag = () => gs.teamMatch ? { round: gs.teamMatch.round } : {};
+  const currentRound = (d: Record<string, unknown>): boolean => !gs.teamMatch || d.round === gs.teamMatch.round;
+  // Objective checks use the latest packet, not the delayed render interpolation.
+  const positionOf = (rid: string): THREE.Vector3 | undefined => rid === net.id ? ctx.player?.body.pos
+    : ctx.remotes.get(rid)?._b?.p ?? ctx.remotes.get(rid)?.body.pos;
+  const clockText = (seconds: number): string => {
+    const s = Math.max(0, Math.ceil(seconds));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  };
+  function onlineInfo(): OnlineInfo {
+    const state = gs.teamMatch;
+    if (!state) return { mode: mode() };
+    const match = state.overtime ? 'OVERTIME' : `MATCH ${clockText(TEAM_RULES.MATCH - state.elapsed)}`;
+    let status = `${match} · next wave ${Math.max(1, Math.ceil(TEAM_RULES.WAVE - state.elapsed % TEAM_RULES.WAVE))}s`;
+    if (state.mode === 'flag') {
+      const f = state.flag;
+      const objective = state.breakLeft > 0 ? `NEXT ROUND ${Math.ceil(state.breakLeft)}s`
+        : f.carrier ? `${nameOf(f.carrier) ?? 'PLAYER'} CARRIES THE FLAG`
+        : f.placed !== null ? `${TEAM_NAMES[f.placed]} HOLD ${Math.ceil(f.holdLeft)}s`
+        : f.returnLeft > 0 ? `FLAG DROPPED · returns in ${Math.ceil(f.returnLeft)}s` : 'TAKE THE NEUTRAL FLAG';
+      status = `${match} · ROUND ${state.round} ${clockText(state.roundLeft)} · ${objective}`;
+      if (state.overtime) status += ` · ${state.streakTeam === null ? 'WIN 2 IN A ROW' : `${TEAM_NAMES[state.streakTeam]} STREAK ${state.streak}/2`}`;
+    }
+    if (gs.over) status = `${gs.over.name} WINS${state.overtime ? ' · OVERTIME' : ''}`;
+    return { mode: state.mode, teamScores: [...state.scores], selfTeam: teamOf(net.id), status };
+  }
+  function applyTeams(): void {
+    const team = teamOf(net.id);
+    if (ctx.player) ctx.player.team = isTeam(team) && mode() !== 'ffa' ? team + 1 : 0;
+    for (const [rid, r] of ctx.remotes) {
+      const team = teamOf(rid);
+      r.setTeam(isTeam(team) && mode() !== 'ffa' ? team + 1 : 0);
+    }
+  }
+  function selectMode(value: OnlineMode): void {
+    if (!isOnlineMode(value) || app.busy || (gs.state !== 'start' && gs.state !== 'lobby')) return;
+    if (gs.state === 'lobby' && (!net.isHost || lobby.isPublic)) return;
+    lobby.mode = value;
+    lobby.teams = value === 'ffa' ? {} : assignTeams([...lobby.players.keys()]);
+    applyTeams();
+    if (gs.state === 'lobby') broadcastLobby();
+  }
   const nameOf = (rid: string): string | undefined => scores.get(rid)?.name ?? lobby.players.get(rid) ?? ctx.remotes.get(rid)?.name;
 
   // ---- remotes
@@ -72,15 +129,21 @@ export function createFFA(app: App): FfaApi {
     let r = ctx.remotes.get(rid);
     if (r) { r.name = name; return r; }
     r = new RemotePlayer(ctx, rid, name, 0, TONE.HOSTILE);
+    const team = teamOf(rid);
+    r.setTeam(isTeam(team) && mode() !== 'ffa' ? team + 1 : 0);
     r.onDamage = (amount, from) => {
       if (!canHurt(r) || !r.alive) return;
       hud.hitmarker(false, false);
-      net.sendTo(rid, 'pdmg', { amount: Math.round(amount), from: from ? from.toArray().map(round1) : null, by: net.id, src: 'grenade' });
+      net.sendTo(rid, 'pdmg', { amount: Math.round(amount), from: from ? from.toArray().map(round1) : null, by: net.id, src: 'grenade', crit: false, ...roundTag() });
     };
     ctx.remotes.set(rid, r);
     return r;
   }
   function removeRemote(rid: string): void {
+    if (net.isHost) releaseFlag(rid);
+    if (gs.teamMatch) delete gs.teamMatch.dead[rid];
+    if (lobby.teams) delete lobby.teams[rid];
+    ready.delete(rid);
     ctx.remotes.get(rid)?.dispose();
     ctx.remotes.delete(rid); lobby.players.delete(rid); scores.delete(rid);
   }
@@ -88,14 +151,14 @@ export function createFFA(app: App): FfaApi {
   // ---- scores
   function refreshScoreHud(): void {
     if (!isOnline()) return;
-    hud.setPvpScore({ rows: boardRows(), selfId: net.id ?? '' });
+    hud.setPvpScore({ rows: boardRows(), selfId: net.id ?? '', ...onlineInfo() });
     hud.setModifier('');
-    if (boardShown) hud.setBoard({ rows: boardRows(), code: net.code ?? lobby.code ?? '' });
+    if (boardShown) hud.setBoard({ rows: boardRows(), code: net.code ?? lobby.code ?? '', ...onlineInfo() });
   }
   function showBoard(on: boolean): void {
     if (on === boardShown) return;
     boardShown = on;
-    hud.setBoard(on ? { rows: boardRows(), code: net.code ?? lobby.code ?? '' } : null);
+    hud.setBoard(on ? { rows: boardRows(), code: net.code ?? lobby.code ?? '', ...onlineInfo() } : null);
   }
   function applyScores(list: unknown[]): void {
     scores.clear();
@@ -107,20 +170,33 @@ export function createFFA(app: App): FfaApi {
   }
   function sendScores(): void { const list = rows(); net.send('score', list); applyScores(list); }
   function tally(victim: string, killer: string | null): void {
-    if (!net.isHost) return;
+    if (!net.isHost || !activeCombat()) return;
+    const state = gs.teamMatch;
+    if (state && !markDead(state, victim)) return;
+    if (state) releaseFlag(victim);
     const v = scores.get(victim); if (v) v.deaths++;
-    const k = killer && killer !== victim ? scores.get(killer) : null; if (k) k.kills++;
+    const k = killer && killer !== victim && opponents(killer, victim) ? scores.get(killer) : null;
+    if (k) {
+      k.kills++;
+      const team = teamOf(k.id);
+      if (state?.mode === 'tdm' && isTeam(team)) scoreTeam(state, team);
+    }
+    if (state) sendTeamState();
     sendScores(); checkWin();
   }
   function checkWin(): void {
     if (!net.isHost || !isOnline() || gs.over) return;
     let winner: { id: string; name: string } | null = null;
-    for (const [rid, r] of scores) if (r.kills >= KILL_TARGET) winner = { id: rid, name: r.name };
+    if (gs.teamMatch) {
+      const team = gs.teamMatch.winner;
+      if (team !== null) winner = { id: `team:${team}`, name: `${TEAM_NAMES[team]} TEAM` };
+    } else for (const [rid, r] of scores) if (r.kills >= KILL_TARGET) winner = { id: rid, name: r.name };
     if (!winner) return;
     net.send('end', winner); endMatch(winner);
   }
   function endMatch(winner: { id: string; name: string }): void {
     gs.over = winner; gs.overT = 0; gs.state = 'over';
+    teamWorld?.dispose(); teamWorld = null;
     app.endFocus(); ctx.input.exitLock(); showBoard(false);
     hud.setGameplayVisible(false); app.showScreen('over');
   }
@@ -142,6 +218,7 @@ export function createFFA(app: App): FfaApi {
   const online = (status: string): void => { lobby.status = status; if (gs.state === 'start') app.showScreen('online'); };
   function enterLobby(isPublic: boolean): void {
     lobby.isPublic = isPublic; lobby.code = net.code; lobby.status = '';
+    if (inMatch()) return;
     gs.state = 'lobby'; app.showScreen('lobby');
   }
   async function attempt(fn: () => Promise<void>): Promise<void> {
@@ -152,12 +229,13 @@ export function createFFA(app: App): FfaApi {
   }
   const create = (isPublic: boolean): Promise<void> => attempt(async () => {
     online('opening a lobby…');
-    await net.host({ isPublic });
+    await net.host({ isPublic, mode: mode() });
     // Set on every live path; the guard is there for the type.
     const self = net.id;
     if (self === null) { online('something went wrong'); return; }
     lobby.map = app.settings.mapKey; lobby.players.clear(); lobby.players.set(self, app.settings.name); lobby.hostId = self;
-    enterLobby(isPublic);
+    lobby.teams = mode() === 'ffa' ? {} : assignTeams([self]);
+    applyTeams(); enterLobby(isPublic);
   });
   const join = (code: string): Promise<void> => attempt(async () => {
     if (!code) { online('type the code your friend gave you'); return; }
@@ -167,50 +245,69 @@ export function createFFA(app: App): FfaApi {
   });
   const quickPlay = (): Promise<void> => attempt(async () => {
     try {
-      await net.quickJoin({ name: app.settings.name }, online);
+      await net.quickJoin({ name: app.settings.name }, online, mode());
       enterLobby(true);
     } catch (e: unknown) {
       if (!(errMessage(e) ?? '').includes('no open public')) throw e;
       online('no open lobbies · opening a public one for you…');
-      await net.host({ isPublic: true });
+      await net.host({ isPublic: true, mode: mode() });
       const self = net.id;
       if (self === null) { online('something went wrong'); return; }
       lobby.map = app.settings.mapKey; lobby.players.clear(); lobby.players.set(self, app.settings.name); lobby.hostId = self;
-      enterLobby(true);
+      lobby.teams = mode() === 'ffa' ? {} : assignTeams([self]);
+      applyTeams(); enterLobby(true);
     }
   });
   function broadcastLobby(): void {
-    net.send('lobby', { players: [...lobby.players].map(([pid, name]) => ({ id: pid, name })), hostId: net.id, isPublic: lobby.isPublic, map: lobby.map ?? app.settings.mapKey });
+    net.send('lobby', { players: [...lobby.players].map(([pid, name]) => ({ id: pid, name })), hostId: net.id, isPublic: lobby.isPublic,
+      map: lobby.map ?? app.settings.mapKey, mode: mode(), teams: lobby.teams ?? {} });
     if (gs.state === 'lobby') app.showScreen('lobby');
   }
   function peerJoined(pid: string, meta: PeerMeta): void {
     const name = cleanName(meta?.name);
-    lobby.players.set(pid, name); addRemote(pid, name); broadcastLobby();
+    lobby.players.set(pid, name);
+    if (mode() !== 'ffa') lobby.teams = assignTeams([...lobby.players.keys()], lobby.teams);
+    addRemote(pid, name); applyTeams(); broadcastLobby();
     if (!inMatch()) return;
     if (!scores.has(pid)) scores.set(pid, { id: pid, name, kills: 0, deaths: 0 });
-    net.sendTo(pid, 'start', { late: true, spawn: farthestIndex(), map: lobby.map ?? app.settings.mapKey, broken: ctx.level.breakables.filter(b => !b.alive).map(b => b.id) });
-    sendScores(); hud.kill(`${name} joined`);
+    net.sendTo(pid, 'start', { late: true, spawn: farthestIndex(), map: lobby.map ?? app.settings.mapKey,
+      mode: mode(), teams: lobby.teams ?? {}, ...(gs.teamMatch ? { teamState: gs.teamMatch } : {}),
+      broken: ctx.level.breakables.filter(b => !b.alive).map(b => b.id) });
+    sendScores();
+    if (gs.over) net.sendTo(pid, 'end', gs.over);
+    hud.kill(`${name} joined`);
   }
   function peerLeft(pid: string): void {
     const name = nameOf(pid) ?? 'someone';
-    removeRemote(pid); broadcastLobby();
-    if (inMatch()) { hud.kill(`${name} left`); sendScores(); }
+    removeRemote(pid);
+    if (!inMatch() && mode() !== 'ffa') { lobby.teams = assignTeams([...lobby.players.keys()]); applyTeams(); }
+    broadcastLobby();
+    if (inMatch()) { hud.kill(`${name} left`); sendScores(); sendTeamState(); }
+  }
+  function dispose(): void {
+    window.clearTimeout(timer);
+    pendingHeadshots.clear(); ready.clear(); shotQueue = [];
+    teamWorld?.dispose(); teamWorld = null;
   }
   function leave(reason = ''): void {
-    window.clearTimeout(timer);
-    pendingHeadshots.clear();
+    dispose();
     net.leave();
     for (const rid of [...ctx.remotes.keys()]) removeRemote(rid);
-    lobby.players.clear(); scores.clear(); showBoard(false);
+    lobby.players.clear(); lobby.teams = {}; scores.clear(); showBoard(false);
+    gs.teamMatch = null;
     if (gs.state !== 'start') {
       gs.state = 'start'; gs.mode = 'solo'; app.loadLevel(false); app.resetRun(); hud.setGameplayVisible(false);
     }
     gs.menu = false; lobby.status = reason; app.showScreen('online');
   }
   function lobbyScreen(): void {
+    dispose(); gs.teamMatch = null;
+    if (net.isHost && mode() !== 'ffa') lobby.teams = assignTeams([...lobby.players.keys()]);
+    applyTeams();
     app.loadLevel(true, lobby.map ?? app.settings.mapKey); app.resetRun();
     gs.state = 'lobby'; gs.over = null; gs.menu = false;
     hud.setGameplayVisible(false); showBoard(false); app.showScreen('lobby');
+    if (net.isHost) broadcastLobby();
   }
 
   // ---- match
@@ -233,7 +330,13 @@ export function createFFA(app: App): FfaApi {
     return best;
   }
   function hostStart(): void {
-    if (!net.isHost) return;
+    if (!net.isHost || gs.state !== 'lobby') return;
+    if (mode() !== 'ffa' && lobby.players.size < 2) {
+      lobby.status = 'team modes need at least two players'; app.showScreen('lobby'); return;
+    }
+    dispose();
+    lobby.teams = mode() === 'ffa' ? {} : assignTeams([...lobby.players.keys()], lobby.teams);
+    applyTeams(); broadcastLobby();
     scores.clear();
     for (const [pid, name] of lobby.players) scores.set(pid, { id: pid, name, kills: 0, deaths: 0 });
     const map = lobby.map ?? app.settings.mapKey;
@@ -242,25 +345,119 @@ export function createFFA(app: App): FfaApi {
     const spawns: Record<string, number> = {};
     let i = 0;
     for (const pid of lobby.players.keys()) spawns[pid] = order.length ? order[i++ % order.length] ?? 0 : 0;
-    net.send('start', { spawns, map });
+    const selected = mode();
+    const state = selected === 'ffa' ? null : createTeamMatch(selected, teamLayout(ctx.level).neutral);
+    net.send('start', { spawns, map, mode: selected, teams: lobby.teams, ...(state ? { teamState: state } : {}) });
     const self = net.id;
-    startMatch(false, self === null ? null : spawns[self] ?? null); sendScores();
+    startMatch(false, self === null ? null : spawns[self] ?? null, state); sendScores();
   }
-  function startMatch(late: boolean, index: number | null): void {
+  function startMatch(late: boolean, index: number | null, teamState: TeamMatch | null = null): void {
+    dispose();
     gs.mode = 'ffa'; app.loadLevel(true, lobby.map ?? app.settings.mapKey); app.resetRun();
+    gs.teamMatch = teamState; gs.matchT = teamState?.elapsed ?? 0;
+    lastClock = now(); syncT = 0; seenDead = false; deathMessage = '';
+    applyTeams();
+    if (net.id) ready.add(net.id);
+    if (teamState) teamWorld = createTeamWorld(ctx);
     if (!scores.size) for (const [pid, name] of lobby.players) scores.set(pid, { id: pid, name, kills: 0, deaths: 0 });
     const player = ctx.player;
     if (player === null) return;
     const spot = typeof index === 'number' && Number.isInteger(index) ? spots()[index] ?? null : null;
-    player.reset(spot ? spot.clone() : arenaSpawn());
+    player.reset(teamState ? teamSpawn(net.id) : spot ? spot.clone() : arenaSpawn());
+    faceCenter();
+    player.shieldT = late ? 2 : 0;
     app.beginCommon(); gs.state = 'play';
     refreshScoreHud();
-    hud.message('FREE FOR ALL', late ? 'you joined a match in progress' : 'first to 20 · everyone is fair game', 3);
+    const choice = ONLINE_MODES.find(m => m.key === mode()) ?? ONLINE_MODES[0];
+    hud.message(choice.name.toUpperCase(), late ? 'you joined a match in progress' : choice.blurb, 3);
+    if (teamState) sendPlayerState();
     hud.tip(`hold ${hud.key('score')} for the scoreboard`, 5);
     window.clearTimeout(timer);
     timer = window.setTimeout(() => {
       if (gs.state === 'play' && !ctx.input.locked && !ctx.input.usingGamepad) { gs.menu = true; app.showScreen('matchOn'); }
     }, 250);
+  }
+  function teamSpawn(rid: string | null): THREE.Vector3 {
+    const team = teamOf(rid);
+    if (!isTeam(team)) return arenaSpawn();
+    const list = teamLayout(ctx.level).spawns[team];
+    const members = [...lobby.players.keys()].filter(id => teamOf(id) === team);
+    const index = Math.max(0, members.indexOf(rid ?? ''));
+    const enemies = [...ctx.remotes.values()].filter(r => r.alive && opponents(rid, r.id));
+    const ranked = list.map(p => ({ p, distance: enemies.reduce((d, r) => Math.min(d, vec(p).distanceTo(r.body.pos)), 999) }))
+      .sort((a, b) => b.distance - a.distance);
+    return vec(ranked[index % ranked.length]?.p ?? teamLayout(ctx.level).bases[team]);
+  }
+  function faceCenter(): void {
+    const p = ctx.player;
+    if (!p || !gs.teamMatch) return;
+    const center = teamLayout(ctx.level).neutral;
+    p.yaw = Math.atan2(p.body.pos.x - center[0], p.body.pos.z - center[2]);
+  }
+  function sendPlayerState(): void {
+    const p = ctx.player;
+    if (!p) return;
+    const state = encodeState(p);
+    net.broadcast('ps', gs.teamMatch ? { round: gs.teamMatch.round, state } : state);
+  }
+  function releaseFlag(rid: string): void {
+    const state = gs.teamMatch;
+    if (!state || state.flag.carrier !== rid) return;
+    const pos = positionOf(rid), b = ctx.level.bounds;
+    const valid = pos && pos.y >= -10 && pos.y < 150 && pos.x >= b.minX && pos.x <= b.maxX && pos.z >= b.minZ && pos.z <= b.maxZ;
+    const drop: Point = valid ? [pos.x, ctx.world.groundBelow(pos.x, pos.y + 0.5, pos.z), pos.z] : teamLayout(ctx.level).neutral;
+    const safe = valid && drop[1] >= -10;
+    dropFlag(state, rid, safe ? drop : teamLayout(ctx.level).neutral);
+    if (!safe) state.flag.returnLeft = 0;
+  }
+  function reconcileTeamState(previousRound: number, wasDead: boolean, previousBreak: number): void {
+    const state = gs.teamMatch, self = net.id, p = ctx.player;
+    if (!state || !self || !p || !playing()) return;
+    gs.matchT = state.elapsed;
+    if (state.breakLeft > 0 && previousBreak === 0) {
+      p.clearNades(); pendingHeadshots.clear(); shotQueue = [];
+      hud.message('ROUND OVER', `${TEAM_NAMES[0]} ${state.scores[0]} · ${state.scores[1]} ${TEAM_NAMES[1]}`, 2);
+    }
+    if (state.round !== previousRound) {
+      ready.clear(); ready.add(self); pendingHeadshots.clear(); shotQueue = [];
+      seenDead = false; p.clearNades(); ctx.effects.clear(); app.pickups.clear();
+      respawn(false);
+      hud.message(state.overtime ? 'OVERTIME' : `ROUND ${state.round}`, state.overtime ? 'win two rounds in a row' : 'take the neutral flag', 2);
+    } else if (Object.hasOwn(state.dead, self)) seenDead = true;
+    else if ((wasDead || seenDead) && gs.state === 'dying' && state.breakLeft === 0) {
+      seenDead = false; respawn();
+    }
+    p.dashLock = state.breakLeft > 0;
+    for (const [rid, r] of ctx.remotes) if (Object.hasOwn(state.dead, rid)) r.alive = false;
+  }
+  function sendTeamState(): void {
+    if (!net.isHost || !gs.teamMatch) return;
+    if (net.id && Object.hasOwn(gs.teamMatch.dead, net.id)) seenDead = true;
+    net.send('teamstate', structuredClone(gs.teamMatch));
+    refreshScoreHud();
+  }
+  function updateTeam(dt: number): void {
+    const state = gs.teamMatch;
+    if (!state || !playing() || gs.over) return;
+    if (net.isHost) {
+      const round = state.round, wasDead = net.id !== null && Object.hasOwn(state.dead, net.id), pause = state.breakLeft;
+      const layout = teamLayout(ctx.level), flagBefore = `${state.flag.carrier}/${state.flag.placed}`, deadBefore = Object.keys(state.dead).join();
+      advanceTeamMatch(state, dt, layout);
+      reconcileTeamState(round, wasDead, pause);
+      const players = [...lobby.players.keys()].flatMap(rid => {
+        const p = rid === net.id ? ctx.player : ctx.remotes.get(rid), team = teamOf(rid), pos = positionOf(rid);
+        return p && pos && isTeam(team) && ready.has(rid) ? [{ id: rid, team, pos: pos.toArray() as Point, alive: p.alive }] : [];
+      });
+      interactFlag(state, players, layout, (a, b) => ctx.world.lineOfSight(vec(a).add(new THREE.Vector3(0, 0.8, 0)), vec(b).add(new THREE.Vector3(0, 0.8, 0))));
+      syncT += dt;
+      if (syncT >= 0.2 || round !== state.round || (pause > 0) !== (state.breakLeft > 0) ||
+          flagBefore !== `${state.flag.carrier}/${state.flag.placed}` || deadBefore !== Object.keys(state.dead).join() || state.winner !== null) {
+        syncT = 0; sendTeamState();
+      }
+      checkWin();
+    }
+    if (net.id && state.flag.carrier === net.id && ctx.player) ctx.player.shieldT = 0;
+    if (!gs.over && net.id) teamWorld?.update(state, lobby.teams, net.id);
   }
   function localDeath(): void {
     const p = ctx.player;
@@ -269,25 +466,50 @@ export function createFFA(app: App): FfaApi {
     const dir = h?.from == null ? null : d1.subVectors(p.center, h.from).normalize().toArray().map(round2);
     const src = h?.src;
     const how = killer && src !== undefined ? HOW[src] ?? null : null;
-    net.broadcast('pdead', { killer, dir, over: !!h && (h.crit || h.amount >= 90 || h.src === 'melee'), how, crit: !!h?.crit });
-    gs.respawnT = RESPAWN; gs.state = 'dying'; gs.deathT = 0;
+    if (gs.teamMatch && (gs.teamMatch.breakLeft > 0 || gs.over)) return;
+    net.broadcast('pdead', { killer, dir, over: !!h && (h.crit || h.amount >= 90 || h.src === 'melee'), how, crit: !!h?.crit,
+      ...(gs.teamMatch ? { round: gs.teamMatch.round } : {}) });
+    gs.respawnT = gs.teamMatch ? TEAM_RULES.WAVE - gs.teamMatch.elapsed % TEAM_RULES.WAVE : RESPAWN;
+    gs.state = 'dying'; gs.deathT = 0;
+    gs.menu = false; hud.hideScreen();
     if (net.isHost && net.id !== null) tally(net.id, killer);
     const row = killer ? scores.get(killer) : null;
     hud.kill(row ? `eliminated by ${row.name}${how ? ` · ${how}${h?.crit ? ' headshot' : ''}` : ''}` : 'eliminated');
   }
   function updateDying(dt: number): void {
+    if (gs.teamMatch) {
+      const state = gs.teamMatch;
+      const until = net.id ? state.dead[net.id] : undefined;
+      gs.respawnT = until === undefined ? Math.max(0, gs.respawnT - dt) : Math.max(0, until - state.elapsed);
+      const team = teamOf(net.id);
+      const mate = [...ctx.remotes.values()].find(r => r.alive && teamOf(r.id) === team);
+      if (ctx.camera && ctx.renderer && isTeam(team)) {
+        const target = mate?.center ?? vec(teamLayout(ctx.level).bases[team]).add(new THREE.Vector3(0, 1.5, 0));
+        d1.set(0, 2.5, 4).normalize();
+        const wall = ctx.world.raycast(target, d1, 4.72);
+        ctx.camera.position.copy(target).addScaledVector(d1, wall ? Math.max(0.1, wall.dist - 0.2) : 4.72);
+        ctx.camera.lookAt(target); ctx.camera.fov = 82; ctx.camera.updateProjectionMatrix(); ctx.camera.updateMatrixWorld();
+        ctx.renderer.rig.visible = false;
+      }
+      const main = gs.respawnT > 0 ? String(Math.ceil(gs.respawnT)) : 'WAIT';
+      const sub = `${mate ? `spectating ${mate.name}` : 'team wiped'} · next respawn wave`;
+      if (deathMessage !== main + sub) { hud.message(main, sub, 1.1); deathMessage = main + sub; }
+      return;
+    }
     const before = Math.ceil(gs.respawnT);
     gs.respawnT -= dt;
     const left = Math.ceil(gs.respawnT);
     if (left !== before || gs.deathT <= dt) hud.message(left > 0 ? String(left) : 'GO', left > 0 ? 'respawning in' : '', 1.1);
     if (gs.respawnT <= 0) respawn();
   }
-  function respawn(): void {
+  function respawn(protect = true): void {
     const p = ctx.player;
     if (p === null) return;
-    p.reset(arenaSpawn()); p.name = app.settings.name; p.lastHitBy = p.lastHit = null;
-    gs.state = 'play'; p.shieldT = 2;
-    hud.tip('spawn protection · 2s', 1.6);
+    p.reset(gs.teamMatch ? teamSpawn(net.id) : arenaSpawn()); p.name = app.settings.name; p.lastHitBy = p.lastHit = null;
+    faceCenter();
+    gs.state = 'play'; p.shieldT = protect ? 2 : 0; deathMessage = '';
+    if (gs.teamMatch) sendPlayerState();
+    if (protect) hud.tip('spawn protection · 2s', 1.6);
     ctx.effects.strokeBurst(p.center, TONE.PRIMARY, 24, 6, { life: 0.5, size: 0.03 });
     ctx.audio.spawn(p.center);
   }
@@ -311,15 +533,15 @@ export function createFFA(app: App): FfaApi {
         if (net.isHost) { net.close(rid); net.send('leave', { id: rid }); broadcastLobby(); sendScores(); }
       }
     }
-    if (tick % 3 === 0 && inMatch()) {
-      const player = ctx.player;
-      if (player !== null) net.broadcast('ps', encodeState(player));
-    }
+    if (tick % 3 === 0 && inMatch()) sendPlayerState();
     if (shotQueue.length) {
       const player = ctx.player;
       if (player !== null) { net.broadcast('shots', { k: player.weapon.kind, e: shotQueue }); shotQueue = []; }
     }
-    if (net.isHost && inMatch() && !gs.over) {
+    if (gs.teamMatch) {
+      const elapsed = Math.max(0, t - lastClock); lastClock = t;
+      updateTeam(elapsed);
+    } else if (net.isHost && inMatch() && !gs.over) {
       gs.matchT += dt;
       if (gs.matchT > TIME_LIMIT) {
         const top = sorted()[0], winner = top ? { id: top.id, name: top.name } : { id: net.id ?? 'host', name: ctx.player?.name ?? 'host' };
@@ -333,7 +555,8 @@ export function createFFA(app: App): FfaApi {
     const player = ctx.player;
     return player === null ? [] : [player, ...ctx.remotes.values()];
   };
-  const canHurt = (t: Target): boolean => isOnline() && t !== ctx.player;
+  const canHurt = (t: Target): boolean => isOnline() && t !== ctx.player &&
+    (mode() === 'ffa' || (activeCombat() && 'id' in t && typeof t.id === 'string' && opponents(net.id, t.id)));
   const guardRay = new THREE.Ray(), guardSphere = new THREE.Sphere(undefined, 0.42), guardHit = new THREE.Vector3();
   function raycastPlayers(o: THREE.Vector3, d: THREE.Vector3, max: number): PlayerHit | null {
     let best: PlayerHit | null = null;
@@ -374,7 +597,7 @@ export function createFFA(app: App): FfaApi {
         p.lastHitBy = t.id; p.lastHit = { from: t.center.clone(), crit: false, amount: 0.6 * damage, src: 'deflect' };
         p.takeDamage(0.6 * damage, t.center);
       } else hud.tip('DEFLECTED', 0.7);
-      net.sendTo(t.id, 'parry', { ret, by: net.id });
+      net.sendTo(t.id, 'parry', { ret, by: net.id, ...roundTag() });
       return;
     }
     const facing = t.blocking ? d1.subVectors(p.center, t.center).normalize().dot(t.forward) : -1;
@@ -395,12 +618,12 @@ export function createFFA(app: App): FfaApi {
       pendingHeadshots.set(shotId, { target: t.id, source, until: now() + 1 });
     }
     net.sendTo(t.id, 'pdmg', { amount: Math.round(damage), from: p.center.toArray().map(round1), by: net.id,
-      crit: !!info.crit, src: source, hitId: shotId });
+      crit: !!info.crit, src: source, hitId: shotId, ...roundTag() });
   }
   function cutRopes(eye: THREE.Vector3, dir: THREE.Vector3, range: number): boolean {
     let any = false;
     for (const r of ctx.remotes.values()) {
-      if (!r.alive || !r.grappling) continue;
+      if (!r.alive || !r.grappling || !canHurt(r)) continue;
       d2.copy(r.body.pos).addScaledVector(r.right, 0.35); d2.y += 1.25;
       for (let i = 0; i < 15; i++) {
         d3.lerpVectors(d2, r.hook, i / 14).sub(eye);
@@ -408,13 +631,14 @@ export function createFFA(app: App): FfaApi {
         if (t < 0.3 || t > range || Math.sqrt(Math.max(0, d3.lengthSq() - t * t)) > 0.9) continue;
         d3.add(eye);
         ctx.effects.strokeBurst(d3, TONE.ACCENT, 10, 5, { life: 0.25, size: 0.035 });
-        net.sendTo(r.id, 'cut', {}); hud.tip('ROPE CUT', 0.9); any = true;
+        net.sendTo(r.id, 'cut', roundTag()); hud.tip('ROPE CUT', 0.9); any = true;
         break;
       }
     }
     return any;
   }
   function onShot(end: THREE.Vector3): void {
+    if (gs.teamMatch && ctx.player) ctx.player.shieldT = 0;
     if (net.active && inMatch()) shotQueue.push(round1(end.x), round1(end.y), round1(end.z));
   }
 
@@ -432,6 +656,10 @@ export function createFFA(app: App): FfaApi {
       ids.push(p.id);
     }
     if (new Set(ids).size !== players.length) return;
+    const selected = d.mode ?? 'ffa';
+    if (!isOnlineMode(selected) || (selected !== 'ffa' && (!validTeams(d.teams) || ids.some(pid => typeof pid !== 'string' || !Object.hasOwn(d.teams as object, pid))))) return;
+    if (inMatch() && selected !== mode()) return;
+    lobby.mode = selected; lobby.teams = validTeams(d.teams) ? d.teams : {};
     lobby.hostId = hostId; lobby.isPublic = isPublic; lobby.code = net.code;
     if (str(d.map, 64)) lobby.map = validKey(d.map);
     lobby.players.clear();
@@ -441,6 +669,7 @@ export function createFFA(app: App): FfaApi {
       lobby.players.set(p.id, nm); if (p.id !== net.id) addRemote(p.id, nm);
     }
     for (const rid of [...ctx.remotes.keys()]) if (!lobby.players.has(rid)) removeRemote(rid);
+    applyTeams();
     if (inMatch()) {
       for (const [pid, name] of lobby.players) if (!scores.has(pid)) scores.set(pid, { id: pid, name, kills: 0, deaths: 0 });
       refreshScoreHud();
@@ -458,7 +687,13 @@ export function createFFA(app: App): FfaApi {
   });
   net.on('startreq', (d, from) => { if (net.isHost && lobby.players.has(from) && gs.state === 'lobby') hostStart(); });
   net.on('start', (d, from) => {
-    if (!fromHost(from) || !obj(d)) return;
+    if (!fromHost(from) || !obj(d) || (gs.state !== 'lobby' && gs.state !== 'start' && !d.late)) return;
+    const selected = d.mode ?? 'ffa';
+    if (!isOnlineMode(selected)) return;
+    if (selected !== 'ffa') {
+      if (!validTeams(d.teams) || !validTeamMatch(d.teamState) || d.teamState.mode !== selected ||
+          [...lobby.players.keys()].some(rid => !Object.hasOwn(d.teams as object, rid)) || !validStateRoster(d.teamState)) return;
+    }
     if (str(d.map, 64)) lobby.map = validKey(d.map);
     let index: unknown = null;
     if (obj(d.spawns)) {
@@ -468,7 +703,8 @@ export function createFFA(app: App): FfaApi {
     if (index !== null && index !== undefined && !int(index)) return;
     const broken = d.broken;
     if (arr(broken) && (broken.length > 4096 || !broken.every(int))) return;
-    startMatch(d.late === true, int(index) ? index : null);
+    lobby.mode = selected; lobby.teams = validTeams(d.teams) ? d.teams : {};
+    startMatch(d.late === true, int(index) ? index : null, validTeamMatch(d.teamState) ? d.teamState : null);
     // ponytail: the original `for (const bid of d.broken ?? [])` threw on a
     // non-array `broken`; net.ts already rejects those, and §9.10 says drop, never throw.
     if (arr(broken)) {
@@ -481,10 +717,23 @@ export function createFFA(app: App): FfaApi {
   net.on('end', (d, from) => {
     if (!fromHost(from) || !obj(d)) return;
     const { id: winnerId, name } = d;
-    if (!id(winnerId) || !str(name, 14) || !scores.has(winnerId)) return;
+    if (!id(winnerId) || !str(name, 14) || !inMatch()) return;
+    if (gs.teamMatch ? winnerId !== 'team:0' && winnerId !== 'team:1' : !scores.has(winnerId)) return;
     endMatch({ id: winnerId, name });
   });
   net.on('backtolobby', (d, from) => { if (fromHost(from)) lobbyScreen(); });
+  function validStateRoster(state: TeamMatch): boolean {
+    return Object.keys(state.dead).every(rid => lobby.players.has(rid)) &&
+      (state.flag.carrier === null || lobby.players.has(state.flag.carrier));
+  }
+  net.on('teamstate', (d, from) => {
+    const previous = gs.teamMatch;
+    if (!fromHost(from) || !previous || !playing() || !validTeamMatch(d) || !validStateRoster(d) ||
+        d.mode !== mode() || d.elapsed < previous.elapsed || d.round < previous.round) return;
+    gs.teamMatch = d;
+    reconcileTeamState(previous.round, net.id !== null && Object.hasOwn(previous.dead, net.id), previous.breakLeft);
+    refreshScoreHud();
+  });
   net.on('score', (d, from) => {
     if (!fromHost(from) || !arr(d) || d.length > 8) return;
     if (!d.every(r => obj(r) && id(r.id) && str(r.name, 14) && int(r.kills) && int(r.deaths))) return;
@@ -505,11 +754,17 @@ export function createFFA(app: App): FfaApi {
   });
   net.on('ps', (d, from) => {
     const r = ctx.remotes.get(from);
-    if (r !== undefined && from !== net.id) r.push(d, now());
+    if (!r || !roster(from) || !inMatch()) return;
+    if (gs.teamMatch) {
+      if (!obj(d) || d.round !== gs.teamMatch.round || !arr(d.state)) return;
+      r.push(d.state, now());
+      ready.add(from);
+      if (Object.hasOwn(gs.teamMatch.dead, from)) r.alive = false;
+    } else r.push(d, now());
   });
   net.on('pdmg', (d, from) => {
     const p = ctx.player;
-    if (p === null || !p.alive || gs.state !== 'play' || p.shieldT > 0 || !roster(from) || !obj(d) || d.by !== from) return;
+    if (p === null || !p.alive || gs.state !== 'play' || !activeCombat() || p.shieldT > 0 || !roster(from) || !opponents(net.id, from) || !obj(d) || !currentRound(d) || d.by !== from) return;
     const { amount, from: fromPos, src, crit } = d;
     if (typeof amount !== 'number' || !(amount > 0 && amount <= 100000)) return;
     if (!(fromPos === null || triple(fromPos))) return;
@@ -517,10 +772,10 @@ export function createFFA(app: App): FfaApi {
     const pos = fromPos === null ? null : vec(fromPos);
     p.lastHitBy = from; p.lastHit = { from: pos, crit, amount, src };
     p.takeDamage(amount, pos);
-    if (crit && int(d.hitId)) net.sendTo(from, 'headshot', { hitId: d.hitId });
+    if (crit && int(d.hitId)) net.sendTo(from, 'headshot', { hitId: d.hitId, ...roundTag() });
   });
   net.on('headshot', (d, from) => {
-    if (!roster(from) || !obj(d) || !int(d.hitId) || gs.state !== 'play') return;
+    if (!roster(from) || !opponents(net.id, from) || !obj(d) || !currentRound(d) || !int(d.hitId) || gs.state !== 'play') return;
     const hit = pendingHeadshots.get(d.hitId);
     if (!hit || hit.target !== from || hit.until < now()) return;
     pendingHeadshots.delete(d.hitId);
@@ -528,10 +783,12 @@ export function createFFA(app: App): FfaApi {
   });
   net.on('pdead', (d, from) => {
     if (!roster(from) || !obj(d)) return;
+    if (gs.teamMatch && (!activeCombat() || d.round !== gs.teamMatch.round || Object.hasOwn(gs.teamMatch.dead, from))) return;
     const { killer, dir, over, how, crit } = d;
     if (!(killer === null || id(killer)) || !(dir === null || triple(dir, 1)) || typeof over !== 'boolean' || typeof crit !== 'boolean' || !(how === null || str(how, 64))) return;
     const r = ctx.remotes.get(from), victim = r?.name ?? 'someone';
-    const killerId = killer !== null && scores.has(killer) ? killer : null;
+    const killerId = killer !== null && scores.has(killer) && opponents(killer, from) ? killer : null;
+    if (gs.teamMatch && net.isHost && !r?.alive) return;
     if (r) { r.ragdoll(dir, over); ctx.audio.enemyDie(r.center); }
     const howText = how ? ` · ${how}${crit ? ' headshot' : ''}` : '';
     if (killerId === net.id) { gs.kills++; hud.hitmarker(true, crit); app.addScore(100, `ELIMINATED ${victim}${howText}`); ctx.audio.kill(true); }
@@ -542,7 +799,7 @@ export function createFFA(app: App): FfaApi {
     if (net.isHost) tally(from, killerId);
   });
   net.on('nade', (d, from) => {
-    if (!roster(from) || !obj(d)) return;
+    if (!roster(from) || !obj(d) || !activeCombat()) return;
     const { pos, vel } = d;
     if (!triple(pos) || !triple(vel)) return;
     const p = ctx.player;
@@ -554,7 +811,7 @@ export function createFFA(app: App): FfaApi {
     app.breakables.breakProp(ctx.level.breakables[d.id], null, false, false);
   });
   net.on('parry', (d, from) => {
-    if (!roster(from) || !obj(d)) return;
+    if (!roster(from) || !opponents(net.id, from) || !activeCombat() || !obj(d) || !currentRound(d)) return;
     const { by, ret } = d;
     if (by !== from || typeof ret !== 'boolean') return;
     const p = ctx.player;
@@ -569,7 +826,7 @@ export function createFFA(app: App): FfaApi {
   });
   net.on('cut', (d, from) => {
     const p = ctx.player;
-    if (p === null || !roster(from) || p.grapple.mode === 'idle') return;
+    if (p === null || !roster(from) || !opponents(net.id, from) || !activeCombat() || !obj(d) || !currentRound(d) || p.grapple.mode === 'idle') return;
     p.detachGrapple(false);
     ctx.effects.strokeBurst(p.center, TONE.ACCENT, 8, 4, { life: 0.25, size: 0.03 });
     hud.tip('your rope got cut', 1.3); ctx.input.rumble(0.5, 0.3, 80);
@@ -579,6 +836,7 @@ export function createFFA(app: App): FfaApi {
   net.onDisconnect = () => leave('the host left the lobby');
 
   return {
+    selectMode, onlineInfo, dispose,
     create, join, quickPlay, hostStart, leave, lobbyScreen, broadcastLobby,
     localDeath, updateDying, updateOver, update, refreshScoreHud, showBoard, boardRows,
     targets, canHurt, raycastPlayers, playersInArc, hitPlayer, cutRopes, onShot,

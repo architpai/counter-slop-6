@@ -1,5 +1,6 @@
 import { clamp, store, SKEY } from '../util';
 import { LEVELS, validKey } from '../level/index';
+import { isOnlineMode } from './team-rules';
 import type { ScreenView, UiAction } from '../hud/screens';
 import type { App } from '../boot';
 
@@ -15,7 +16,7 @@ export interface UiApi {
 }
 
 export function createUI(app: App): UiApi {
-  const { ctx, gs, lobby, scores, settings } = app;
+  const { ctx, gs, lobby, settings } = app;
   const { hud, net } = ctx;
   let joinCode = '';
   const look = () => ({ sens: settings.sens, acogSens: settings.acogSens, sniperSens: settings.sniperSens,
@@ -33,20 +34,23 @@ export function createUI(app: App): UiApi {
 
   const models = {
     main: () => ({ best: settings.best, mapKey: settings.mapKey, maps: LEVELS, ...look(), ...weapons() }),
-    online: () => ({ name: settings.name, isPublic: lobby.isPublic, status: lobby.status, busy: app.busy, code: joinCode }),
+    online: () => ({ name: settings.name, mode: lobby.mode, isPublic: lobby.isPublic, status: lobby.status, busy: app.busy, code: joinCode }),
     lobby: () => ({
-      code: net.code ?? lobby.code ?? '', isPublic: lobby.isPublic, isHost: net.isHost, mapKey: lobby.map ?? settings.mapKey, maps: LEVELS, ...weapons(),
-      players: [...lobby.players].map(([id, name]) => ({ id, name, host: id === lobby.hostId, self: id === net.id })), status: lobby.status,
+      code: net.code ?? lobby.code ?? '', mode: lobby.mode, isPublic: lobby.isPublic, isHost: net.isHost, mapKey: lobby.map ?? settings.mapKey, maps: LEVELS, ...weapons(),
+      players: [...lobby.players].map(([id, name]) => ({ id, name, team: lobby.teams[id], host: id === lobby.hostId, self: id === net.id })), status: lobby.status,
     }),
     pause: () => ({ wave: gs.wave, score: gs.score, training: gs.mode === 'training', ...look(), ...weapons() }),
-    menu: () => ({ code: net.code ?? lobby.code ?? '', rows: app.ffa.boardRows(), ...look(), ...weapons() }),
-    matchOn: () => ({ confirmKey: hud.key('confirm') }),
+    menu: () => ({ code: net.code ?? lobby.code ?? '', rows: app.ffa.boardRows(), ...app.ffa.onlineInfo(), ...look(), ...weapons() }),
+    matchOn: () => ({ confirmKey: hud.key('confirm'), ...app.ffa.onlineInfo() }),
     dead: () => {
       const newBest = gs.score > settings.best;
       if (newBest) { settings.best = gs.score; store.set(SKEY.BEST, gs.score); }
       return { waves: gs.wave, kills: gs.kills, score: gs.score, best: settings.best, newBest, confirmKey: hud.key('confirm') };
     },
-    over: () => ({ youWin: gs.over?.id === net.id, winnerName: gs.over?.name ?? '', rows: app.ffa.boardRows() }),
+    over: () => ({
+      youWin: gs.over?.id === (lobby.mode === 'tdm' || lobby.mode === 'flag' ? `team:${lobby.teams[net.id ?? '']}` : net.id),
+      winnerName: gs.over?.name ?? '', rows: app.ffa.boardRows(), ...app.ffa.onlineInfo(),
+    }),
   };
 
   function showScreen(kind: ScreenName): void {
@@ -89,6 +93,7 @@ export function createUI(app: App): UiApi {
       if (gs.state === 'lobby') { if (net.isHost) { lobby.map = key; app.ffa.broadcastLobby(); } return; }
       settings.mapKey = key; store.set(SKEY.MAP, key); redraw();
     },
+    onlineMode: value => { if (isOnlineMode(value)) { app.ffa.selectMode(value); redraw(); } },
     mainMenu: () => app.mainMenu(),
     startMatch: () => {
       if (net.isHost) app.ffa.hostStart();
