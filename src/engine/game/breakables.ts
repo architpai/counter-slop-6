@@ -48,7 +48,8 @@ export function createBreakables(ctx: Ctx, pickups: PickupsApi): BreakablesApi {
     return ctx.level.breakables.filter(p => {
       if (!p.alive) return false;
       delta.subVectors(p.pos, pos); const dist = delta.length();
-      return dist < range + 0.5 && (dist < 0.4 || delta.dot(dir) / dist > cosHalf);
+      return dist < range + 0.5 && (dist < 0.4 || delta.dot(dir) / dist > cosHalf)
+        && ctx.world.lineOfSight(pos, p.pos, box => box === p.box);
     });
   }
   function blast(pos: THREE.Vector3, radius: number): void {

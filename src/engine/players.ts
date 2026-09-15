@@ -37,7 +37,7 @@ const anchorsOf = (figure: Figure): RemoteAnchors => figure.anchors as RemoteAnc
  */
 type ValidState = readonly [number, number, number, number, number, number, number, number, ...number[]];
 
-const WEAPONS: readonly WeaponPropKind[] = ['rifle', 'shotgun', 'sniper', 'blade'];
+const WEAPONS: readonly WeaponPropKind[] = ['rifle', 'shotgun', 'sniper', 'pistol'];
 const HIT_RADII: Record<HitJoint, number> = { head: 0.30, torso: 0.33, hips: 0.20, armL: 0.11, armR: 0.11,
   foreL: 0.10, foreR: 0.10, legL: 0.13, legR: 0.13, shinL: 0.11, shinR: 0.11 };
 const LIMBS: readonly (keyof RemoteJoints)[] = ['upperL', 'upperR', 'foreL', 'foreR', 'thighL', 'thighR', 'shinL', 'shinR'];
@@ -65,7 +65,7 @@ function triple(arr: readonly unknown[], start = 0, limit = 10000) {
 function validState(arr: unknown): arr is ValidState {
   return isArray(arr) && [8, 11, 14].includes(arr.length) && triple(arr) &&
     finite(arr[3]) && bounded(arr[4], 1.6) && integer(arr[5]) &&
-    integer(arr[6]) && arr[6] >= 0 && arr[6] <= 511 &&
+    integer(arr[6]) && arr[6] >= 0 && arr[6] <= 1023 &&
     finite(arr[7]) && arr[7] >= 0 && arr[7] <= 120 &&
     (arr.length < 11 || triple(arr, 8)) && (arr.length < 14 || triple(arr, 11));
 }
@@ -78,7 +78,7 @@ export function encodeState(p: Player): StatePacket {
   const grapple = p.grapple.mode !== 'idle';
   const flags = (p.crouching ? 1 : 0) | (p.sliding ? 2 : 0) | (p.blocking ? 4 : 0) |
     (p.aiming ? 8 : 0) | (p.body.onGround ? 16 : 0) | (p.firing ? 32 : 0) |
-    (p.alive ? 64 : 0) | (grapple ? 128 : 0) | (p.parryWindow ? 256 : 0);
+    (p.alive ? 64 : 0) | (grapple ? 128 : 0) | (p.parryWindow ? 256 : 0) | (p.melee.active ? 512 : 0);
   const { pos, vel } = p.body;
   const state = [round2(pos.x), round2(pos.y), round2(pos.z), round2(p.yaw), round2(p.pitch),
     p.wi, flags, Math.round(p.hp), round1(vel.x), round1(vel.y), round1(vel.z)];
@@ -103,6 +103,7 @@ export class RemotePlayer implements Target {
   crouching: boolean;
   sliding: boolean;
   blocking: boolean;
+  melee = false;
   aiming: boolean;
   firing: boolean;
   grappling: boolean;
@@ -220,10 +221,12 @@ export class RemotePlayer implements Target {
     this._a = this._b || { p: p.clone(), yaw, pitch: arr[4], t: now - 0.07 };
     this._b = { p, yaw, pitch: arr[4], t: now };
     const wi = arr[5] >= 0 && arr[5] <= 3 ? arr[5] : 0;
-    if (this._figure && (wi !== this._wi || !this._figure.parts.weapon?.parent)) {
-      this._figure.setWeapon(WEAPONS[wi] ?? 'rifle');
+    const melee = !!(arr[6] & 512);
+    if (this._figure && (wi !== this._wi || melee !== this.melee || !this._figure.parts.weapon?.parent)) {
+      this._figure.setWeapon(melee ? 'knife' : WEAPONS[wi] ?? 'rifle');
       this._wi = wi;
     }
+    this.melee = melee;
     const flags = arr[6];
     this.crouching = !!(flags & 1);
     this.sliding = !!(flags & 2);
@@ -324,7 +327,7 @@ export class RemotePlayer implements Target {
     p.thighR.rotation.x = this.body.onGround ? -s * 0.9 * w : 0.6;
     p.shinL.rotation.x = this.body.onGround ? Math.max(0, c) * 1.1 * w : 1.0;
     p.shinR.rotation.x = this.body.onGround ? Math.max(0, -c) * 1.1 * w : 0.5;
-    const blade = this._wi === 3;
+    const blade = this.melee;
     const aim = blade ? 0 : this.aiming ? 1 : sp > 6.5 ? 0.8 : 0.95;
     const look = clamp(this._pitch, -1.1, 1.1);
     if (blade) {
@@ -364,7 +367,7 @@ export class RemotePlayer implements Target {
       this._ctx.effects.tracer(muzzle, endpoint, TONE.PRIMARY, thick, 0.06);
     }
     this.flash();
-    this._ctx.audio.remoteShot(kind === 'shotgun' || kind === 'sniper' ? kind : 'rifle', muzzle);
+    this._ctx.audio.remoteShot(kind === 'shotgun' || kind === 'sniper' || kind === 'pistol' ? kind : 'rifle', muzzle);
   }
 
   flash(): void {

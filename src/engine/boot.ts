@@ -404,7 +404,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     audio.setListener(player.eye, player.right);
 
     const w = player.weapon;
-    if (w.isGun) hud.setAmmo(w.mag, w.reserve, w.magSize, w.reloading); else hud.setKatanaAmmo();
+    hud.setAmmo(w.mag, w.reserve, w.magSize, w.reloading);
     hud.setSlots(player.weapons.map((s, i) => ({ name: s.name, active: i === player.wi, ammo: s.isGun ? `${s.mag}/${s.reserve}` : '∞', empty: s.isGun && s.mag === 0 && s.reserve === 0 })));
     hud.setGrenades(player.grenades);
     hud.setBreath(player.breath);
@@ -413,8 +413,8 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     hud.update(dt);
     if (game.isOnline()) hud.setFocusMeter(game.playing(), player.breath, false, 'GRAPPLE');
     else {
-      const show = game.playing() && (player.wi === 3 || gs.katanaStreak > 0 || gs.focus.active);
-      hud.setFocusMeter(show, gs.focus.active ? 1 : clamp(gs.katanaStreak / 3, 0, 1), gs.focus.active, 'KATANA');
+      const show = game.playing() && (player.melee.active || gs.katanaStreak > 0 || gs.focus.active);
+      hud.setFocusMeter(show, gs.focus.active ? 1 : clamp(gs.katanaStreak / 3, 0, 1), gs.focus.active, 'MELEE');
     }
     if (gs.boss) {
       if (gs.boss.alive) hud.setBoss(gs.boss.stats.name, gs.boss.hp / gs.boss.maxHp);
@@ -446,6 +446,8 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     teardown.length = 0;
     if (net.active) net.leave();
     input.dispose();
+    player.melee.dispose();
+    for (const weapon of player.weapons) weapon.dispose();
     audio.dispose();
     enemies.clear();
     effects.clear();

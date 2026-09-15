@@ -68,7 +68,7 @@ test('the button table maps every face and shoulder input', () => {
   const expected: [number, Action][] = [
     [0, 'jump'], [1, 'crouch'], [2, 'reload'], [3, 'nextWeapon'], [4, 'grapple'],
     [5, 'melee'], [6, 'aim'], [7, 'fire'], [8, 'score'], [9, 'pause'],
-    [10, 'sprint'], [11, 'grenade'], [12, 'grenade'], [14, 'prevWeapon'], [17, 'confirm'],
+    [10, 'sprint'], [11, 'grenade'], [12, 'grenade'], [13, 'melee'], [14, 'prevWeapon'], [17, 'confirm'],
   ];
   for (const [index, action] of expected) {
     for (const button of pad.buttons) { button.pressed = false; button.value = 0; }

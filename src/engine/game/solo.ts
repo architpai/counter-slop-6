@@ -1,11 +1,9 @@
 import * as THREE from 'three';
 import { clamp, choose, rand } from '../util';
-import { KATANA_SLOT } from '../types';
 import { TYPES, BOSS_ORDER } from '../enemies/index';
 import { TONE } from '../render/index';
-import type { EnemyKind, HitInfo, Weapon, WeaponState } from '../types';
+import type { EnemyKind, HitInfo, WeaponState } from '../types';
 import type { EnemyRecord } from '../enemies/index';
-import type { Katana } from '../weapons/index';
 import type { Player } from '../player/index';
 import type { App } from '../boot';
 
@@ -14,8 +12,6 @@ const MODS: ReadonlyArray<readonly [string, number, number]> = [
   ['', 1, 1], ['CAFFEINATED · they move fast', 1.35, 0.85],
   ['JUICED · they hit harder', 0.9, 1.4], ['SWARM · more of them, thinner', 1.15, 0.9],
 ];
-
-const isKatana = (w: Weapon): w is Katana => w.kind === 'katana';
 
 /** The live shape of `gs.focus` while solo runs. `makeGameState` builds exactly this. */
 interface FocusDash {
@@ -87,7 +83,7 @@ export function createSolo(app: App): SoloApi {
     ctx.audio.wave(); if (bossWave) ctx.audio.bossRoar(player.center);
     const tips = [
       `hold ${ctx.hud.key('grapple')} to reel in · tap it again to let go mid-swing`,
-      `block with ${ctx.hud.key('block')} and some of their bullets go back at them`,
+      `hold ${ctx.hud.key('block')} after a melee strike to block and return bullets`,
       'kills in the air are worth more · stay off the floor',
       `${ctx.hud.key('grenade')} lobs a grenade · pickups give you more`,
       `press ${ctx.hud.key('jump')} again in the air for a double jump`,
@@ -161,12 +157,11 @@ export function createSolo(app: App): SoloApi {
     gs.kills++; gs.combo++; gs.comboT = 3.5;
     let points = e.stats.score, label = e.stats.name;
     if (info.crit) { points += 60; label = 'HEADSHOT'; }
-    if (info.source === 'katana') { points += 50; label = overkill ? 'SLICED' : 'CUT DOWN'; }
+    if (info.source === 'melee') { points += 50; label = overkill ? 'SLICED' : 'CUT DOWN'; }
     if (info.source === 'focus') { points += 150; label = 'EXECUTED'; }
-    if (info.source === 'katana' || info.source === 'focus') {
+    if (info.source === 'melee' || info.source === 'focus') {
       gs.katanaStreak++;
-      const blade = player.weapons[KATANA_SLOT];
-      if (blade !== undefined && isKatana(blade)) blade.addBlood(0.42);
+      player.melee.addBlood(0.42);
       if (gs.katanaStreak >= 3) enterFocus();
     } else if (info.source !== 'blast') gs.katanaStreak = 0;
     if (info.source === 'deflect') { points += 120; label = 'RETURN TO SENDER'; }
@@ -214,8 +209,7 @@ export function createSolo(app: App): SoloApi {
     if (player === null) return;
     player.dashLock = false; focus.dash = null; player.body.vel.set(0, 0, 0);
     if (blocked) {
-      const blade = player.weapons[KATANA_SLOT];
-      if (blade !== undefined && isKatana(blade)) blade.startSlash(neutralState(player));
+      player.melee.startSlash(neutralState(player));
       ctx.hud.tip('blocked · the dash did not reach', 1.2);
     }
   }
@@ -224,8 +218,7 @@ export function createSolo(app: App): SoloApi {
     if (player === null || enemies === null) return;
     const previousChain = focus.chain;
     endDash(false);
-    const blade = player.weapons[KATANA_SLOT];
-    if (blade !== undefined && isKatana(blade)) blade.startSlash(neutralState(player));
+    player.melee.startSlash(neutralState(player));
     enemies.damage(target, 100000, { source: 'focus', part: 'head', crit: true, point: target.center.clone(), dir: delta.subVectors(target.center, player.eye).normalize().clone() });
     ctx.audio.focusSlash(); ctx.game.hitstop(0.1, 0.08); ctx.effects.shake += 0.35;
     ctx.input.rumble(0.9, 0.7, 140); player.kickFov(6); player.heal(6);

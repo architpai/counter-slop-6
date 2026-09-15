@@ -2,10 +2,10 @@ import { Vector3 } from 'three';
 import { Body } from '../physics';
 import { clamp, damp, rand } from '../util';
 import { TONE } from '../render/index';
-import { makeLoadout, GUN_STATS } from '../weapons/index';
-import type { Gun, Katana, Weapon } from '../weapons/index';
-import { KATANA_SLOT, MAX_GRENADES } from '../types';
-import type { Ctx, Enemy, LastHit, Projectile, Target, WeaponState } from '../types';
+import { makeLoadout, GUN_STATS, Melee } from '../weapons/index';
+import type { Gun, Weapon } from '../weapons/index';
+import { MAX_GRENADES } from '../types';
+import type { Ctx, Enemy, HitInfo, LastHit, Projectile, Target, WeaponState } from '../types';
 import { initCamera, updateBob, updateCamera, idleCamera } from './camera';
 import type { CameraState } from './camera';
 import { initMovement, updateMovement, integrateMovement } from './movement';
@@ -15,12 +15,9 @@ import type { GrappleState } from './grapple';
 import { initGrenades, updateGrenades, throwGrenade, clearNades } from './grenades';
 import type { GrenadeState, NadeThrow } from './grenades';
 
-/** The five weapon-slot actions, in slot order. */
-const SLOT_ACTIONS = ['slot1', 'slot2', 'slot3', 'slot4', 'slot5'] as const;
-
-/** `isGun` is set only by `Gun`, `kind` only by the two concrete weapons. */
+/** Four gun slots. Melee never changes the selected slot. */
+const SLOT_ACTIONS = ['slot1', 'slot2', 'slot3', 'slot4'] as const;
 const isGun = (w: Weapon): w is Gun => w.isGun;
-const isKatana = (w: Weapon): w is Katana => w.kind === 'katana';
 
 const direction = new Vector3();
 const point = new Vector3();
@@ -75,11 +72,8 @@ export class Player implements Target {
   weapons: Weapon[];
   /** Active slot. */
   wi: number;
-  /** The gun to return to after a quick melee. */
-  previousWeapon: number;
-  quickReturnT: number;
-  /** True on the frame a quick melee started, so melee is not read twice. */
-  _quickFrame: boolean;
+  /** Available with every gun, including during a reload or with no ammo. */
+  melee: Melee;
 
   constructor(ctx: Ctx) {
     this.ctx = ctx;
@@ -104,14 +98,15 @@ export class Player implements Target {
     this.gravityScale = 1;
     this.dashLock = this.firing = false;
     this.lastHitBy = this.lastHit = this.onThrow = null;
-    this.wi = this.previousWeapon = 0;
-    this.quickReturnT = 0;
-    this._quickFrame = false;
+    this.wi = 0;
     initMovement(this);
     initCamera(this);
     initGrapple(this);
     initGrenades(this);
     this.weapons = makeLoadout(ctx, this);
+    this.melee = new Melee(ctx, this);
+    this.melee.equip();
+    this.melee.root.visible = false;
     this.switchTo(0, true);
   }
 
@@ -147,10 +142,7 @@ export class Player implements Target {
     if (!this._idle) this._right.set(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
     return this._right;
   }
-  get blocking(): boolean {
-    const katana = this.weapon;
-    return isKatana(katana) && katana.blocking;
-  }
+  get blocking(): boolean { return this.alive && this.melee.blocking; }
   get blockRadius(): number { return this.blocking && this.blockCd <= 0 ? 0.95 : 0; }
   get parryWindow(): boolean { return this.blocking && this.blockHeld < 0.55; }
 
@@ -167,7 +159,11 @@ export class Player implements Target {
     this.alive = true;
     this.yaw = this.pitch = this.roll = 0;
     this.breath = 1;
-    this.blockHeld = 0;
+    this.blockHeld = this.blockCd = 0;
+    this.headshotT = 0;
+    this.headshotRoll.set(0);
+    this.recoilPitch.set(0);
+    this.recoilYaw.set(0);
     this.hurtFx = this.flashFx = this.deathTime = 0;
     this.crouching = this.sliding = this.dashLock = false;
     this.sinceDamage = 10;
@@ -178,6 +174,10 @@ export class Player implements Target {
     this.stepOffset = 0;
     this.grenades = 3;
     for (const weapon of this.weapons) weapon.resetAmmo();
+    this.melee.resetAmmo();
+    this.aiming = this.firing = false;
+    this.ctx.hud.setAds(false);
+    this.ctx.hud.setScope(false);
     this.switchTo(0, true);
     this.ctx.renderer.rig.visible = true;
   }
@@ -228,31 +228,25 @@ export class Player implements Target {
 
   _updateWeapons(dt: number): void {
     const { input, hud } = this.ctx;
-    this._quickFrame = false;
     if (this.alive && !this.dashLock) {
-      for (const [slot, action] of SLOT_ACTIONS.entries()) if (input.pressed(action)) this.switchTo(Math.min(slot, KATANA_SLOT));
+      for (const [slot, action] of SLOT_ACTIONS.entries()) if (input.pressed(action)) this.switchTo(slot);
       if (input.pressed('nextWeapon')) this.switchTo((this.wi + 1) % this.weapons.length);
       if (input.pressed('prevWeapon')) this.switchTo((this.wi + this.weapons.length - 1) % this.weapons.length);
-      if (input.pressed('melee') && this.weapon.isGun) {
-        this.switchTo(KATANA_SLOT);
-        this.quickReturnT = 0.85;
-        this._quickFrame = true;
-        const katana = this.weapon;
-        if (isKatana(katana)) katana.startSlash(this.weaponState());
-      }
-      if (this.quickReturnT > 0) {
-        const st = this.weaponState();
-        if (this.wi === KATANA_SLOT && (st.firePressed || st.aim || st.meleePressed)) this.quickReturnT = 0;
-        else {
-          this.quickReturnT -= dt;
-          if (this.quickReturnT <= 0) this.switchTo(this.previousWeapon);
-        }
-      }
     }
-    this.weapon.animate(this.weaponState(), dt);
-    this.firing = this.alive && input.down('fire') && this.weapon.isGun;
-    hud.setAds(this.weapon.isGun && this.weapon.aimAmt > 0.55);
-    hud.setScope(this.weapon.scope && this.weapon.aimAmt > 0.62);
+    const st = this.weaponState();
+    this.melee.animate({ ...st, fire: false, firePressed: false,
+      aim: this.alive && !this.dashLock && input.down('melee'),
+      meleePressed: this.alive && !this.dashLock && input.pressed('melee'),
+    }, dt);
+    const melee = this.melee.active;
+    this.weapon.animate(melee ? { ...st, fire: false, firePressed: false, aim: false, blockFire: true } : st, dt);
+    if (melee) this.weapon.root.visible = false;
+    this.aiming = !melee && st.aim;
+    this.firing = this.alive && !melee && !this.weapon.reloading && input.down('fire');
+    hud.setCrosshairMode(melee ? 'melee' : '');
+    hud.setAds(!melee && this.weapon.aimAmt > 0.55);
+    hud.setScope(!melee && this.weapon.scope && this.weapon.aimAmt >= 0.8,
+      this.weapon.kind === 'rifle' ? 'acog' : 'sniper');
   }
 
   weaponState(): WeaponState {
@@ -262,7 +256,7 @@ export class Player implements Target {
       firePressed: !neutral && input.pressed('fire'),
       aim: !neutral && input.down('aim'),
       reloadPressed: !neutral && input.pressed('reload'),
-      meleePressed: !neutral && !this._quickFrame && this.wi === KATANA_SLOT && input.pressed('melee'),
+      meleePressed: !neutral && input.pressed('melee'),
       sprinting: !neutral && this.sprinting,
       grounded: this.body.onGround,
       speed: neutral ? 0 : Math.hypot(this.body.vel.x, this.body.vel.z),
@@ -273,19 +267,21 @@ export class Player implements Target {
       bobAmt: this.bobAmt,
       landDip: clamp(-this.landDip.value * 0.08, -0.5, 0.5),
       slideTilt: this.sliding ? 1 : 0,
-      blockFire: !this.alive,
+      blockFire: neutral,
     };
   }
 
   switchTo(index: number, silent = false): void {
     if (!Number.isInteger(index) || index < 0 || index >= this.weapons.length || (index === this.wi && !silent)) return;
-    if (this.weapon.kind !== 'katana') this.previousWeapon = this.wi;
     this.weapon.unequip();
     this.wi = index;
     this.weapon.equip();
     if (!silent) this.ctx.audio.switchWeapon();
     this.ctx.hud.setWeapon(this.weapon.name, this.weapon.hint);
-    this.ctx.hud.setCrosshairMode(this.weapon.kind === 'katana' ? 'katana' : '');
+    this.aiming = false;
+    this.ctx.hud.setAds(false);
+    this.ctx.hud.setScope(false);
+    this.ctx.hud.setCrosshairMode(this.melee.active ? 'melee' : '');
   }
 
   takeDamage(amount: number, from: Vector3 | null = null): void {
@@ -320,6 +316,12 @@ export class Player implements Target {
   die(): void {
     if (!this.alive) return;
     this.alive = false;
+    this.melee.resetAmmo();
+    this.aiming = this.firing = false;
+    this.headshotT = 0;
+    this.headshotRoll.set(0);
+    this.ctx.hud.setAds(false);
+    this.ctx.hud.setScope(false);
     this.deathTime = 0;
     this.ctx.audio.death();
     this.detachGrapple(false);
@@ -327,15 +329,14 @@ export class Player implements Target {
   }
 
   tryDeflect(projectile: Projectile): false | { perfect: boolean; returned: boolean } {
-    // `this.blocking` already implies a katana; `isKatana` only restates it for the type.
-    const katana = this.weapon;
-    if (!this.alive || !isKatana(katana) || !this.blocking || this.blockCd > 0 || !projectile || !validVector(projectile.vel) || !validVector(projectile.pos)) return false;
+    const melee = this.melee;
+    if (!this.alive || !this.blocking || this.blockCd > 0 || !projectile || !validVector(projectile.vel) || !validVector(projectile.pos)) return false;
     direction.copy(projectile.vel).negate().normalize();
     if (direction.dot(this.forward) < 0.55) return false;
-    const perfect = katana.blockT < 0.26;
+    const perfect = melee.blockT < 0.26;
     const returned = perfect || rand() < 0.35;
     this.blockCd = 0.19;
-    katana.onDeflect(perfect);
+    melee.onDeflect(perfect);
     if (perfect) this.ctx.audio.perfectParry();
     else this.ctx.audio.parry();
     this.ctx.effects.sparks(projectile.pos, direction, TONE.ACCENT, perfect ? 14 : 8, 10);
@@ -349,12 +350,10 @@ export class Player implements Target {
   }
 
   tryBlockMelee(enemy: Enemy): boolean {
-    // `this.parryWindow` already implies a katana; `isKatana` only restates it for the type.
-    const katana = this.weapon;
-    if (!this.alive || !isKatana(katana) || !this.parryWindow || this.blockCd > 0 || !enemy || !validVector(enemy.center)) return false;
+    if (!this.alive || !this.parryWindow || this.blockCd > 0 || !enemy || !validVector(enemy.center)) return false;
     direction.copy(enemy.center).sub(this.eye).normalize();
     if (direction.dot(this.forward) < 0.35) return false;
-    katana.onDeflect(true);
+    this.melee.onDeflect(true);
     this.ctx.audio.parry();
     this.ctx.game.hitstop(0.06, 0.15);
     point.copy(this.eye).addScaledVector(this.forward, 0.8);
@@ -363,6 +362,17 @@ export class Player implements Target {
     this.ctx.game.addScore(40, 'BLOCKED');
     this.ctx.input.rumble(0.6, 0.6, 100);
     return true;
+  }
+
+  onHeadshot(info: HitInfo): void {
+    if (!this.alive || !info.crit || info.part !== 'head'
+      || !['rifle', 'shotgun', 'sniper', 'pistol', 'revolver'].includes(info.source ?? '')) return;
+    // One bounded kick per shot, not one per shotgun pellet. No aim correction.
+    if (this.headshotT < 0.22) {
+      this.headshotSide *= -1;
+      this.headshotRoll.vel = this.headshotSide * 0.18;
+    }
+    this.headshotT = 0.28;
   }
 
   recoil(pitch: number, yaw: number): void {

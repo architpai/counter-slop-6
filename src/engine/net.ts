@@ -22,7 +22,7 @@ interface Attempt { conn: DataConnection; id: string; code: string; failed: bool
 
 const HOST = new Set(['lobby', 'leave', 'start', 'end', 'backtolobby', 'score', 'pickup', 'taken', 'refused']);
 const REQUEST = new Set(['startreq', 'take']);
-const ADDRESSED = new Set(['pdmg', 'parry', 'cut']);
+const ADDRESSED = new Set(['pdmg', 'headshot', 'parry', 'cut']);
 const BROADCAST = new Set(['ps', 'shots', 'pdead', 'nade', 'brk']);
 const TYPES = new Set(['welcome', ...HOST, ...REQUEST, ...ADDRESSED, ...BROADCAST]);
 const encoder = new TextEncoder();
@@ -71,14 +71,15 @@ function validPayload(type: string, d: unknown) {
     case 'score': return rows(d, true);
     case 'ps': return array(d) && [8, 11, 14].includes(d.length) &&
       d.slice(0, 3).every(n => bounded(n)) && finite(d[3]) && bounded(d[4], 1.6) &&
-      Number.isSafeInteger(d[5]) && integer(d[6]) && d[6] <= 511 && integer(d[7]) && d[7] <= 120 &&
+      Number.isSafeInteger(d[5]) && integer(d[6]) && d[6] <= 1023 && integer(d[7]) && d[7] <= 120 &&
       d.slice(8).every(n => bounded(n));
     case 'shots': return fields(d, ['k', 'e']) && text(d.k, 32) && array(d.e) &&
       d.e.length > 0 && d.e.length <= 90 && d.e.length % 3 === 0 && d.e.every(n => bounded(n));
-    case 'pdmg': return fields(d, ['amount', 'from', 'by', 'src'], ['crit']) &&
+    case 'headshot': return fields(d, ['hitId']) && integer(d.hitId);
+    case 'pdmg': return fields(d, ['amount', 'from', 'by', 'src'], ['crit', 'hitId']) &&
       finite(d.amount) && d.amount > 0 && d.amount <= 100000 &&
       (d.from === null || vector(d.from)) && peerId(d.by) && text(d.src, 32) &&
-      optional(d, 'crit', b => typeof b === 'boolean');
+      optional(d, 'crit', b => typeof b === 'boolean') && optional(d, 'hitId', integer);
     case 'pdead': return fields(d, ['killer', 'dir', 'over', 'how', 'crit']) &&
       (d.killer === null || peerId(d.killer)) && (d.dir === null || vector(d.dir, 1)) &&
       typeof d.over === 'boolean' && typeof d.crit === 'boolean' && (d.how === null || text(d.how, 64));

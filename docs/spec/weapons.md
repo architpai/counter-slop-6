@@ -1,5 +1,7 @@
 # Weapons Subsystem Specification
 
+> Current combat changes: [Combat rehaul](combat-rehaul.md). It replaces the old loadout, katana, rifle stats/sight and scope rules below.
+
 This document describes the behaviour of the first-person weapons: three guns in the player's loadout (rifle, shotgun, sniper), one gun that is defined but not issued (revolver), and the katana. It covers stats, timing, state machines, view-model geometry and animation, hit detection, spawned effects, audio cues, and the contracts with the other subsystems.
 
 All distances are in world units (1 unit ≈ 1 metre). All angles are in radians unless stated. All times are in seconds. "Frame time" is the simulation step for the current frame.

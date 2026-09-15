@@ -1,10 +1,10 @@
-export type GunKind = 'rifle' | 'shotgun' | 'sniper' | 'revolver';
+export type GunKind = 'rifle' | 'pistol' | 'shotgun' | 'sniper' | 'revolver';
 
 /** How the magazine is refilled, and which pose plays while it is. */
 export type ReloadType = 'magazine' | 'shells' | 'cylinder';
 
 /** The `Audio` cue played on every shot. */
-export type FireCue = 'shot' | 'shotgunFire' | 'sniperFire' | 'revolver';
+export type FireCue = 'shot' | 'mp5Fire' | 'pistolFire' | 'shotgunFire' | 'sniperFire' | 'revolver';
 
 /** `[x, y, z]` offsets and positions, straight into `Vector3`. */
 export type Triple = [number, number, number];
@@ -56,14 +56,24 @@ export interface GunStats {
 
 export const GUN_STATS: Record<GunKind, GunStats> = {
   rifle: {
-    kind: 'rifle', name: 'RIFLE', hint: 'auto · put the red dot on them', scope: false,
-    magSize: 35, startingReserve: 175, maxReserve: 350, fireInterval: 1 / 11, automatic: true,
-    damage: 24, headMult: 2.6, pellets: 1, hipSpread: 0.018, adsSpread: 0.004,
-    spreadKick: 0.011, spreadMax: 0.09, moveSpread: 0.0012, adsFov: 58,
-    camKick: [0.011, 0.004], modelKick: [0.25, 0.3, 2.4, -3.2, 0.9, 1.2], fovKick: 1.2,
-    reloadDuration: 1.45, reloadType: 'magazine', falloff: null,
-    tracerThickness: 0.02, flashScale: 1, fireCue: 'shot', casing: [0.02, 3], cycleDuration: 0,
-    pvp: [19, 1.8, null], restPos: [0.20, -0.17, -0.36], sight: [0, 0.12, -0.05], eyeDistance: 0.30,
+    kind: 'rifle', name: 'MP5', hint: 'auto · compact ACOG carbine', scope: true,
+    magSize: 30, startingReserve: 150, maxReserve: 300, fireInterval: 0.075, automatic: true,
+    damage: 22, headMult: 2.6, pellets: 1, hipSpread: 0.016, adsSpread: 0.0025,
+    spreadKick: 0.005, spreadMax: 0.05, moveSpread: 0.0008, adsFov: 25,
+    camKick: [0.007, 0.0025], modelKick: [0.15, 0.2, 1.7, -2.2, 0.5, 0.7], fovKick: 0.7,
+    reloadDuration: 1.65, reloadType: 'magazine', falloff: [18, 55, 0.4],
+    tracerThickness: 0.02, flashScale: 1, fireCue: 'mp5Fire', casing: [0.02, 3], cycleDuration: 0,
+    pvp: [18, 1.8, [15, 45, 0.4]], restPos: [0.20, -0.17, -0.36], sight: [0, 0.145, -0.10], eyeDistance: 0.34,
+  },
+  pistol: {
+    kind: 'pistol', name: 'PISTOL', hint: 'semi-auto · reliable sidearm', scope: false,
+    magSize: 15, startingReserve: 90, maxReserve: 180, fireInterval: 0.18, automatic: false,
+    damage: 34, headMult: 2.4, pellets: 1, hipSpread: 0.012, adsSpread: 0.003,
+    spreadKick: 0.012, spreadMax: 0.055, moveSpread: 0.001, adsFov: 62,
+    camKick: [0.023, 0.004], modelKick: [0.2, 0.45, 2.5, -6, 0.5, 1], fovKick: 1.4,
+    reloadDuration: 1.25, reloadType: 'magazine', falloff: [16, 45, 0.5],
+    tracerThickness: 0.018, flashScale: 0.9, fireCue: 'pistolFire', casing: [0.018, 3], cycleDuration: 0,
+    pvp: [28, 2, [14, 40, 0.5]], restPos: [0.22, -0.19, -0.34], sight: [0, 0.11, -0.10], eyeDistance: 0.30,
   },
   shotgun: {
     kind: 'shotgun', name: 'SHOTGUN', hint: 'pump · devastating up close', scope: false,

@@ -9,7 +9,8 @@ const DARK = TONE_HEX[TONE.DARK], ACCENT = TONE_HEX[TONE.ACCENT];
 export type FigureKind = 'humanoid' | 'blob' | 'flyer';
 export type BlobKind = 'bomber' | 'hitbox' | 'lagspike';
 export type HatKind = 'none' | 'cap' | 'band' | 'helmet' | 'hood' | 'crown';
-export type WeaponPropKind = 'none' | 'rifle' | 'shotgun' | 'sniper' | 'blade' | 'hammer';
+export type WeaponPropKind = 'none' | 'rifle' | 'pistol' | 'shotgun' | 'sniper' | 'blade' | 'knife' | 'hammer';
+export type ClownMask = 'grunt' | 'rusher' | 'heavy' | 'sniper' | 'shield' | 'bomber' | 'flyer' | 'boss' | 'hitbox' | 'lagspike';
 
 export interface FigureOpts {
   kind: FigureKind;
@@ -26,6 +27,8 @@ export interface FigureOpts {
   smile?: boolean;
   shield?: boolean;
   weapon?: WeaponPropKind;
+  /** Enemy-only; remote players keep their unmasked faces. */
+  mask?: ClownMask;
 }
 
 /**
@@ -146,7 +149,8 @@ function release(root: THREE.Object3D): void {
   root.removeFromParent();
 }
 
-function face(parent: THREE.Object3D, radius: number, smile?: boolean): FaceSets {
+function face(parent: THREE.Object3D, radius: number, smile?: boolean, mask?: ClownMask): FaceSets {
+  if (mask) return clownFace(parent, radius, mask);
   const root = group(parent, 'face');
   const eyes = group(root, 'eyes'), dead = group(root, 'deadEyes');
   for (const sign of [-1, 1]) {
@@ -164,6 +168,74 @@ function face(parent: THREE.Object3D, radius: number, smile?: boolean): FaceSets
     mouth.rotation.z = Math.PI;
   } else {
     mesh(root, boxGeo(radius * 0.3, radius * 0.045, radius * 0.045), DARK, 0, -radius * 0.29, radius * 0.92);
+  }
+  dead.visible = false;
+  return { root, eyes, dead };
+}
+
+function clownFace(parent: THREE.Object3D, r: number, kind: ClownMask): FaceSets {
+  const root = group(parent, `clown-mask-${kind}`);
+  const eyes = group(root, 'eyes'), dead = group(root, 'deadEyes');
+  const ivory = 0xeee4d1, ink = 0x151b23, red = 0xb92e3c;
+  const paint = { grunt: red, rusher: 0x242b48, heavy: 0x566270, sniper: 0x264b68,
+    shield: 0x315850, bomber: 0xcb652d, flyer: 0x52758d, boss: 0xb08a40,
+    hitbox: 0x855382, lagspike: 0x596a80 }[kind];
+  const shell = oval(root, ivory, 0, -r * 0.02, r * 0.84, r * 1.02, r * 1.08, r * 0.32);
+  shell.name = 'mask-shell';
+  if (kind === 'shield') {
+    const half = mesh(root, boxGeo(r * 0.72, r * 1.6, r * 0.08), paint, r * 0.4, 0, r * 1.06);
+    half.name = 'split-face';
+  }
+  for (const sign of [-1, 1]) {
+    const x = sign * r * 0.39;
+    oval(eyes, ink, x, r * 0.16, r * 1.1, r * 0.23, r * 0.20, r * 0.07);
+    const brow = mesh(root, boxGeo(r * 0.44, r * 0.08, r * 0.06), paint, x, r * 0.43, r * 1.08);
+    brow.rotation.z = sign * (kind === 'sniper' ? 0.35 : -0.25);
+    for (const turn of [-1, 1]) {
+      const mark = mesh(dead, boxGeo(r * 0.35, r * 0.07, r * 0.05), red, x, r * 0.16, r * 1.17);
+      mark.rotation.z = turn * Math.PI / 4;
+    }
+    if (kind === 'rusher' || kind === 'boss' || kind === 'flyer') {
+      const diamond = mesh(root, boxGeo(r * 0.22, r * 0.22, r * 0.04), paint, x, -r * 0.16, r * 1.12);
+      diamond.rotation.z = Math.PI / 4;
+      diamond.scale.y = kind === 'rusher' ? 1.7 : 1;
+    } else if (kind === 'sniper') {
+      const tear = mesh(root, coneGeo(r * 0.09, r * 0.4, 3), paint, x, -r * 0.22, r * 1.1);
+      tear.rotation.z = Math.PI;
+    } else {
+      oval(root, paint, sign * r * 0.68, -r * 0.22, r * 1.04, r * 0.19, r * 0.12, r * 0.045);
+    }
+  }
+  const nose = oval(root, kind === 'boss' ? paint : red, 0, -r * 0.04, r * 1.23, r * 0.19, r * 0.17, r * 0.19);
+  nose.name = 'clown-nose';
+  const armored = kind === 'heavy' || kind === 'hitbox';
+  if (armored) {
+    const jaw = mesh(root, boxGeo(r * 1.5, r * 0.5, r * 0.15), paint, 0, -r * 0.6, r * 0.98);
+    jaw.name = kind === 'heavy' ? 'armored-grin' : 'block-grin';
+    for (let i = -2; i <= 2; i++) mesh(root, boxGeo(r * 0.12, r * 0.25, r * 0.06), ivory, i * r * 0.24, -r * 0.59, r * 1.08);
+  } else {
+    const mouth = mesh(root, new THREE.TorusGeometry(r * 0.46, r * 0.075, 4, 10, Math.PI),
+      red, 0, -r * 0.29, r * 1.08);
+    mouth.name = 'painted-grin';
+    mouth.rotation.z = kind === 'sniper' ? 0 : Math.PI;
+    if (kind === 'bomber') {
+      oval(root, ink, 0, -r * 0.52, r * 1.11, r * 0.32, r * 0.23, r * 0.04);
+      mesh(root, boxGeo(r * 0.42, r * 0.10, r * 0.05), ivory, 0, -r * 0.37, r * 1.17);
+    }
+  }
+  if (kind === 'grunt' || kind === 'bomber') {
+    for (const sign of [-1, 1]) {
+      const puff = oval(root, paint, sign * r * 1.05, r * 0.42, r * 0.4, r * 0.3, r * 0.38, r * 0.25);
+      puff.name = 'clown-hair';
+    }
+  } else if (kind === 'lagspike') {
+    for (const sign of [-1, 1]) for (let i = 0; i < 3; i++) {
+      const spike = mesh(root, coneGeo(r * 0.13, r * 0.48, 3), paint, sign * r * (0.8 + i * 0.09), r * (0.65 - i * 0.5), r * 0.7);
+      spike.rotation.z = -sign * (0.6 + i * 0.5);
+      spike.name = 'jagged-mask-edge';
+    }
+  } else if (kind === 'boss') {
+    mesh(root, boxGeo(r * 0.13, r * 0.38, r * 0.04), paint, 0, r * 0.7, r * 0.99).rotation.z = Math.PI / 4;
   }
   dead.visible = false;
   return { root, eyes, dead };
@@ -208,7 +280,16 @@ function weaponProp(kind: WeaponPropKind, color: number): THREE.Group {
     mesh(root, boxGeo(w, h, d), c, x, y, z);
   const barrel = (r: number, length: number, x: number, y: number, z: number) =>
     mesh(root, cylGeo(r, length), DARK, x, y, z);
-  if (kind === 'blade') {
+  if (kind === 'knife') {
+    addBox(0.018, 0.055, 0.30, 0, 0.04, 0.16, 0xcbdbe3);
+    addBox(0.09, 0.07, 0.025, 0, 0.04, -0.01, DARK);
+    addBox(0.04, 0.045, 0.15, 0, 0.04, -0.10, DARK);
+  } else if (kind === 'pistol') {
+    addBox(0.075, 0.09, 0.28, 0, 0.08, 0.10, DARK);
+    barrel(0.018, 0.18, 0, 0.07, 0.20);
+    addBox(0.06, 0.16, 0.09, 0, -0.04, 0.01, DARK).rotation.x = -0.2;
+    addBox(0.07, 0.025, 0.12, 0, -0.01, 0.13, color);
+  } else if (kind === 'blade') {
     addBox(0.02, 0.05, 0.95, 0, 0.04, 0.42);
     addBox(0.11, 0.11, 0.03, 0, 0.04, -0.06, ACCENT);
     addBox(0.035, 0.045, 0.24, 0, 0.04, -0.19, DARK);
@@ -228,17 +309,21 @@ function weaponProp(kind: WeaponPropKind, color: number): THREE.Group {
     addBox(0.06, 0.07, 0.22, 0, 0.13, 0.06, DARK);
     addBox(0.04, 0.13, 0.11, 0, -0.08, 0.02, DARK);
   } else if (kind !== 'none') {
-    addBox(0.085, 0.12, 0.5, 0, 0.02, 0.2);
-    barrel(0.027, 0.34, 0, 0.05, 0.61);
-    const mag = addBox(0.06, 0.18, 0.1, 0, -0.105, 0.13, DARK);
-    mag.rotation.x = -0.12;
-    addBox(0.055, 0.12, 0.18, 0, -0.005, -0.13, DARK);
+    addBox(0.085, 0.12, 0.40, 0, 0.02, 0.15, DARK);
+    barrel(0.027, 0.25, 0, 0.05, 0.46);
+    const mag = addBox(0.06, 0.19, 0.09, 0, -0.105, 0.13, DARK);
+    mag.rotation.x = -0.15;
+    const lowerMag = addBox(0.06, 0.10, 0.09, 0, -0.24, 0.17, DARK);
+    lowerMag.rotation.x = -0.35;
+    for (const sign of [-1, 1]) addBox(0.015, 0.02, 0.26, sign * 0.04, 0.02, -0.15, DARK);
+    addBox(0.07, 0.14, 0.035, 0, -0.02, -0.28, DARK);
+    barrel(0.04, 0.24, 0, 0.14, 0.13);
   }
   return root;
 }
 
 export function makeWeaponProp(index: number): THREE.Group {
-  return weaponProp((['rifle', 'shotgun', 'sniper', 'blade'] as const)[index] ?? 'rifle', TONE_HEX[TONE.HOSTILE]);
+  return weaponProp((['rifle', 'shotgun', 'sniper', 'pistol'] as const)[index] ?? 'rifle', TONE_HEX[TONE.HOSTILE]);
 }
 
 /** A part the branch above has just built. Throws only if a name is misspelled. */
@@ -287,7 +372,7 @@ export function makeFigure(o: FigureOpts): Figure {
     parts.tail = tail;
     const faceMount = joint('face', body, 0, -0.06, 0.3);
     faceMount.scale.setScalar(0.72);
-    eyeSets = face(faceMount, 0.24, true);
+    eyeSets = face(faceMount, 0.24, true, o.mask);
     parts.tip = group(body, 'tip', 0, 0, 0.7);
   } else if (o.kind === 'blob') {
     const hips = joint('hips', root, 0, 0.5, 0);
@@ -298,7 +383,7 @@ export function makeFigure(o: FigureOpts): Figure {
     anchors.head = anchors.torso;
     oval(torso, color, 0, 0.32, 0, 0.44, 0.44, 0.44);
     const faceMount = joint('face', torso, 0, 0.32, 0.17);
-    eyeSets = face(faceMount, 0.28, o.smile);
+    eyeSets = face(faceMount, 0.28, o.smile, o.mask);
     for (const [side, sign] of [['L', -1], ['R', 1]] as const) {
       const arm = joint(`upper${side}`, torso, sign * 0.42, 0.42, 0);
       parts[`shoulder${side}`] = arm;
@@ -340,7 +425,7 @@ export function makeFigure(o: FigureOpts): Figure {
     oval(head, color, 0, 0.26, 0, 0.275 * size * rand(0.95, 1.06), 0.3 * size, 0.25 * size);
     const faceMount = joint('face', head, 0, 0.26, 0.015 * size);
     faceMount.scale.setScalar(size);
-    eyeSets = face(faceMount, 0.25, o.smile);
+    eyeSets = face(faceMount, 0.25, o.smile, o.mask);
     parts.hat = hat(head, o.hat ?? 'none', color, size);
     for (const [side, sign] of [['L', -1], ['R', 1]] as const) {
       const shoulder = joint(`shoulder${side}`, torso, sign * 0.26 * width, 0.46, 0);
@@ -378,7 +463,7 @@ export function makeFigure(o: FigureOpts): Figure {
       weapon.rotation.x = Math.PI / 2;
       mount.add(weapon);
       parts.weapon = weapon;
-      parts.tip = group(weapon, 'tip', 0, 0.05, kind === 'blade' ? 0.92 : kind === 'hammer' ? 0.6 : 0.78);
+      parts.tip = group(weapon, 'tip', 0, 0.05, kind === 'blade' ? 0.92 : kind === 'knife' || kind === 'pistol' ? 0.31 : kind === 'rifle' ? 0.59 : kind === 'hammer' ? 0.6 : 0.78);
     },
     dropShield() {
       const shield = parts.shield;

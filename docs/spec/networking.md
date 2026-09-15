@@ -1,5 +1,7 @@
 # Networking Subsystem Specification
 
+> Current combat changes: [Combat rehaul](combat-rehaul.md). It replaces slot 3, extends flags to 1023 and adds addressed headshot confirmation.
+
 This document describes the multiplayer networking of the game: peer-to-peer transport, lobby discovery, the message protocol, state replication, hit validation, score authority, and the representation of remote players. It is written so that an implementer can build identical gameplay from it alone.
 
 All distances are in world metres, all times in seconds unless a millisecond value is stated explicitly. "Host" means the browser that opened the lobby. "Client" means every other browser in the lobby. "Peer" means either. "Me"/"local" means the browser running the code being described.

@@ -1,5 +1,7 @@
 # Enemy System Specification
 
+> Current combat changes: [Combat rehaul](combat-rehaul.md). It adds clown masks, gun-headshot feedback and the `melee` damage source.
+
 Behavioural specification of the enemy subsystem: enemy and boss types, AI, attacks, the wave/spawn director, hit reactions, death, drops and the network replication format. Written so that an implementer can build identical gameplay from it alone.
 
 Units: world distance units are metres (the player body is 1.75 tall, 0.35 half-width). Time is in seconds. Angles are in radians. Yaw convention: yaw 0 faces +Z; yaw = atan2(dx, dz) where (dx, dz) is the horizontal direction the enemy wants to face. "Horizontal distance" means the distance in the XZ plane only.

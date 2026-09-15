@@ -1,5 +1,7 @@
 # HUD, Menus and Audio — Specification
 
+> Current combat changes: [Combat rehaul](combat-rehaul.md). It replaces weapon/guard labels, adds MP5/pistol cues and an ACOG overlay, and separates melee from gun ammo.
+
 This document describes the heads-up display, every menu screen, the controls help, and every sound in the game. It describes behaviour only. An implementer who has not seen the design must be able to rebuild identical gameplay from this document.
 
 Units: screen distances are CSS pixels unless a percentage or a viewport unit is given. Times are seconds. Audio gains are linear multipliers (0..1). Frequencies are Hz. MIDI note numbers use 69 = A4 = 440 Hz.

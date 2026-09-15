@@ -145,7 +145,7 @@ export type HitPart =
   | 'legL' | 'legR' | 'shinL' | 'shinR' | 'shield' | 'blade';
 
 export type DamageSource =
-  | 'rifle' | 'shotgun' | 'sniper' | 'revolver' | 'katana' | 'focus'
+  | 'rifle' | 'shotgun' | 'sniper' | 'revolver' | 'pistol' | 'melee' | 'focus'
   | 'deflect' | 'blast' | 'fall' | 'grenade';
 
 /** One record for every damage event, from any source, to any victim. */
@@ -159,7 +159,7 @@ export interface HitInfo {
   crit?: boolean;
   /** Ray entry distance, for gun falloff. */
   dist?: number;
-  /** Katana swing side, +1 or -1. */
+  /** Melee swing side, +1 or -1. */
   slashDir?: number;
 }
 
@@ -379,6 +379,7 @@ export const PS_FLAG = {
   ALIVE: 64,
   GRAPPLING: 128,
   PARRY_WINDOW: 256,
+  MELEE: 512,
 } as const;
 
 /** A remote snapshot pair used for interpolation. `t` is local arrival time. */
@@ -414,10 +415,10 @@ export interface Lobby {
 export interface WeaponState {
   fire: boolean;
   firePressed: boolean;
-  /** Gun: aim held with a gun. Katana: aim held, which means guard. */
+  /** Gun ADS; the separate melee action maps its guard to this field. */
   aim: boolean;
   reloadPressed: boolean;
-  /** Only when the katana is equipped. */
+  /** A dedicated melee press, independent of the selected gun. */
   meleePressed: boolean;
   sprinting: boolean;
   grounded: boolean;
@@ -480,7 +481,6 @@ export const FFA = {
 } as const;
 
 export const MAX_GRENADES = 5;
-export const KATANA_SLOT = 3;
 
 // --------------------------------------------------------------- 5.12 storage
 

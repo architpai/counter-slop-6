@@ -40,19 +40,26 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .crosshair .left { left: calc(-1 * var(--spread) - 12px); }
 .crosshair .right { left: var(--spread); }
 .crosshair .dot { left: -1.5px; top: -1.5px; width: 3px; height: 3px; border-radius: 50%; }
-.crosshair.katana { color: var(--cool); }
-.crosshair.katana .top, .crosshair.katana .bottom { height: 16px; }
-.crosshair.katana .top { top: calc(-1 * var(--spread) - 16px); }
-.crosshair.katana .left, .crosshair.katana .right { display: none; }
+.crosshair.melee { color: var(--cool); }
+.crosshair.melee .top, .crosshair.melee .bottom { height: 16px; }
+.crosshair.melee .top { top: calc(-1 * var(--spread) - 16px); }
+.crosshair.melee .left, .crosshair.melee .right { display: none; }
 .crosshair.ads { opacity: 0; }
 
 .scope { position: absolute; inset: 0; opacity: 0; transition: opacity .1s; background: radial-gradient(circle at center, transparent 30vh, var(--panel) 30.6vh); }
 .scope.is-visible { opacity: 1; }
+.scope.is-visible ~ .grapple-reticle { opacity: 0; }
 .scope-ring { position: absolute; left: 50%; top: 50%; width: 60.5vh; height: 60.5vh; transform: translate(-50%, -50%); border: 3.5px solid var(--cool); border-radius: 50%; box-shadow: inset 0 0 0 7px rgba(76, 125, 255, .12); }
 .scope-cross { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
 .scope-cross.horizontal { width: 60vh; height: 2.5px; background: repeating-linear-gradient(to right, var(--cool) 0 14px, transparent 14px 17px); }
 .scope-cross.vertical { width: 2.5px; height: 60vh; background: repeating-linear-gradient(to bottom, var(--cool) 0 14px, transparent 14px 17px); }
 .scope-dot { position: absolute; left: 50%; top: 50%; width: 5px; height: 5px; transform: translate(-50%, -50%); border-radius: 50%; background: var(--hot); }
+.scope.acog { --lens: min(36vh, 43vw); background: radial-gradient(circle at center, transparent calc(var(--lens) - 1px), #13191d var(--lens)); }
+.scope.acog .scope-ring { width: calc(var(--lens) * 2); height: calc(var(--lens) * 2); border: 10px solid #252c30; box-shadow: 0 0 0 2px #737a79, inset 0 0 0 3px #080b0d, inset 0 0 18px #111c25; }
+.acog-reticle { position: absolute; left: 50%; top: 50%; width: min(42vh, 52vw); height: min(42vh, 52vw); transform: translate(-50%, -50%); fill: none; stroke: #202a29; stroke-width: 1; }
+.acog-reticle .acog-chevron { stroke: #ef3d3c; stroke-width: 2.5; stroke-linejoin: miter; }
+.acog-reticle text { fill: #202a29; stroke: none; font: 7px monospace; }
+.acog-label { position: absolute; left: 50%; top: calc(50% + min(36vh, 43vw) + 15px); transform: translateX(-50%); color: #9aa6a8; font: 11px monospace; letter-spacing: 2px; }
 .grapple-reticle { position: absolute; left: 50%; top: 50%; width: 30px; height: 30px; border: 2.5px dashed var(--cool); border-radius: 50%; opacity: 0; transform: translate(-50%, -50%) scale(1.6); transition: opacity .1s, transform .12s; }
 .grapple-reticle[data-state="1"] { opacity: .9; transform: translate(-50%, -50%) scale(1) rotate(20deg); }
 .grapple-reticle[data-state="2"] { opacity: .9; border-style: solid; transform: translate(-50%, -50%) scale(.65); }
@@ -117,8 +124,11 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .slot-badge { min-width: 19px; padding: 1px 4px; text-align: center; border: 1px solid var(--line); border-radius: 2px; font-size: 11px; }
 .weapon-slot.active .slot-badge { background: var(--cool); border-color: var(--cool); }
 .slot-ammo { min-width: 44px; font-size: 12px; }
+.melee-hint { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--line); color: #b4c2cc; font-size: 11px; }
+.melee-hint b { color: var(--fg); }
+.melee-hint span { min-width: 44px; }
 .weapon-name, .weapon-hint { display: none; }
-.tip-line { position: absolute; left: 50%; bottom: max(160px, 18%); transform: translateX(-50%); width: max-content; max-width: 60%; padding: 8px 14px; border-radius: 3px; background: rgba(14, 24, 32, .88); text-align: center; font-size: 16px; line-height: 1.45; color: var(--fg); opacity: 0; transition: opacity .4s; }
+.tip-line { position: absolute; left: 50%; bottom: max(210px, 24%); transform: translateX(-50%); width: max-content; max-width: 60%; padding: 8px 14px; border-radius: 3px; background: rgba(14, 24, 32, .88); text-align: center; font-size: 16px; line-height: 1.45; color: var(--fg); opacity: 0; transition: opacity .4s; }
 .tip-line.is-visible { opacity: .9; }
 .tip-line:empty { display: none; }
 .tip-line b { color: var(--hot); }

@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { Scene, Vector3 } from 'three';
 import { createFFA } from '@/engine/game/ffa';
 import { makeGameState } from '@/engine/game/state';
@@ -42,7 +42,8 @@ function setup(isHost = false) {
     center: new Vector3(0, 1, 0), eye: new Vector3(0, 1.6, 0),
     forward: new Vector3(0, 0, -1), right: new Vector3(1, 0, 0),
     yaw: 0, pitch: 0, wi: 0, weapon: { kind: 'rifle' }, weapons: [],
-    grapple: { mode: 'idle', hook: new Vector3() },
+    grapple: { mode: 'idle', hook: new Vector3() }, melee: { active: false, cooldown: 0 },
+    headshots: 0, onHeadshot() { this.headshots++; },
     lastHitBy: null as string | null, lastHit: null as { from: Vector3 | null; amount: number; crit: boolean; src: string } | null,
     reset(pos: Vector3) { resets.push(pos.clone()); this.body.pos.copy(pos); this.alive = true; this.hp = 100; },
     takeDamage(amount: number, from: Vector3 | null = null) { damage.push({ amount, from }); this.hp -= amount; },
@@ -51,7 +52,7 @@ function setup(isHost = false) {
   const remote = {
     id: other, name: other, alive: true, visible: true, lastSeen: 0,
     body: { pos: new Vector3(20, 0, 0) }, center: new Vector3(20, 1, 0),
-    forward: new Vector3(0, 0, -1), right: new Vector3(1, 0, 0), hits: [],
+    forward: new Vector3(0, 0, -1), right: new Vector3(1, 0, 0), hits: [], blocking: false, parryWindow: false,
     updates: 0, pushes: 0, disposed: false,
     update() { this.updates++; }, push() { this.pushes++; }, shots: noop,
     dispose() { this.disposed = true; },
@@ -173,5 +174,53 @@ test('untrusted senders and network damage', async () => {
     setState(gs, 'over');
     t.receive('pdmg', hit, 'host');
     assert(t.damage.length === 1, 'network damage is ignored after the match ends');
+  } finally { t.ffa.leave(); }
+});
+
+test('melee excludes remote players behind a wall', () => {
+  const t = setup(); setState(t.gs, 'play');
+  try {
+    const eye = t.remote.center.clone().add(new Vector3(0, 0, 2));
+    const arc = () => t.ffa.playersInArc(eye, new Vector3(0, 0, -1), 2.1, Math.cos(0.8));
+    expect(arc()).toEqual([t.remote]);
+    t.ctx.world.lineOfSight = () => false;
+    expect(arc()).toEqual([]);
+  } finally { t.ffa.leave(); }
+});
+
+test('headshot follow-up waits for a valid victim acknowledgement', () => {
+  const t = setup();
+  setState(t.gs, 'play');
+  try {
+    const remote = t.remote as unknown as Parameters<typeof t.ffa.hitPlayer>[0];
+    t.ffa.hitPlayer(remote, 34, { source: 'pistol', part: 'head', crit: true });
+    const packet = must(t.sent.find(m => m.type === 'pdmg'), 'damage packet').data as { hitId: number };
+    expect(t.ctx.player.headshots).toBe(0);
+    t.receive('headshot', { hitId: packet.hitId }, 'stranger');
+    t.receive('headshot', { hitId: packet.hitId + 100 }, 'host');
+    expect(t.ctx.player.headshots).toBe(0);
+    t.receive('headshot', { hitId: packet.hitId }, 'host');
+    expect(t.ctx.player.headshots).toBe(1);
+    t.receive('headshot', { hitId: packet.hitId }, 'host');
+    expect(t.ctx.player.headshots).toBe(1);
+    t.ffa.hitPlayer(remote, 20, { source: 'rifle', part: 'torso' });
+    const body = t.sent.filter(m => m.type === 'pdmg').at(-1)?.data as { hitId: number };
+    t.receive('headshot', { hitId: body.hitId }, 'host');
+    expect(t.ctx.player.headshots).toBe(1);
+
+    t.ffa.hitPlayer(remote, 20, { source: 'rifle', part: 'head', crit: true });
+    const expired = t.sent.filter(m => m.type === 'pdmg').at(-1)?.data as { hitId: number };
+    const clock = vi.spyOn(performance, 'now').mockReturnValue(performance.now() + 1100);
+    try { t.receive('headshot', { hitId: expired.hitId }, 'host'); }
+    finally { clock.mockRestore(); }
+    expect(t.ctx.player.headshots).toBe(1);
+
+    const hit = { amount: 20, from: [3, 1, 0], by: 'host', crit: true, src: 'rifle', hitId: 42 };
+    t.ctx.player.shieldT = 1;
+    t.receive('pdmg', hit);
+    expect(t.sent.some(m => m.type === 'headshot')).toBe(false);
+    t.ctx.player.shieldT = 0;
+    t.receive('pdmg', hit);
+    expect(t.sent.find(m => m.type === 'headshot')?.data).toEqual({ hitId: 42 });
   } finally { t.ffa.leave(); }
 });
