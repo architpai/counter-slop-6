@@ -132,6 +132,6 @@ export const store = {
 };
 export const SKEY = {
   MAP: 'cs6_map', BEST: 'cs6_best', MUSIC: 'cs6_music',
-  NAME: 'cs6_name', SENS: 'cs6_sens', INVERT: 'cs6_invert',
+  NAME: 'cs6_name', SENS: 'cs6_sens', TOUCH_SENS: 'cs6_touch_sens', INVERT: 'cs6_invert',
   ACOG_SENS: 'cs6_acog_sens', SNIPER_SENS: 'cs6_sniper_sens', OPTIC: 'cs6_optic', R4C_OPTIC: 'cs6_r4c_optic',
 };

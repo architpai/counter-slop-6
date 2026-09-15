@@ -233,7 +233,7 @@ When the page becomes hidden, or the window loses focus, ALL raw keyboard flags 
 
 ### 2.12 Touch
 
-There is no touch input. Touch devices are not supported.
+The current game implementation has no touch input. The approved, not-yet-implemented first pass is defined in [Mobile controls](mobile-controls.md), with an [interactive layout reference](../prototypes/mobile-controls.html). It adds normal movement/shooting and grapple; grenade and melee/guard touch controls are deferred.
 
 ### 2.13 Game-level input handling (menus, pause, scoreboard)
 

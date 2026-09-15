@@ -1,3 +1,7 @@
+import { TouchInput } from './touch';
+
+export type InputDevice = 'keyboard' | 'gamepad' | 'touch';
+
 /**
  * Every named action the game can ask about. `ARCHITECTURE.md` §6.2 is the
  * source of truth for this list; the binding tables below may only use these.
@@ -36,7 +40,7 @@ interface MaybeEditable {
 }
 const nodeLike = (el: unknown): el is MaybeEditable => typeof el === 'object' && el !== null;
 const editing = (el: EventTarget | null | undefined) =>
-  !!(nodeLike(el) && (el.isContentEditable || el.closest?.('input, textarea, select')));
+  !!(nodeLike(el) && (el.isContentEditable || el.closest?.('input, textarea, select, .control-editor')));
 
 /** `requestPointerLock` / `exitPointerLock` return a promise only in newer browsers. */
 const thenable = (v: unknown): v is PromiseLike<unknown> =>
@@ -59,7 +63,10 @@ export class Input {
   #padIndex: number | null = null;
   #pad: Gamepad | null = null;
   #padHold = 0;
-  #usingGamepad = false;
+  #device: InputDevice = 'keyboard';
+  #lastTouch = -Infinity;
+  readonly touch = new TouchInput();
+  touchSens = 0.004;
   #lockWanted = false;
   #lockPending = false;
   #lockUsesPromise = false;
@@ -80,7 +87,7 @@ export class Input {
   invertY: boolean;
   anyInput: boolean;
   onLockChange: ((locked: boolean) => void) | null;
-  onDeviceChange: ((device: 'keyboard' | 'gamepad') => void) | null;
+  onDeviceChange: ((device: InputDevice) => void) | null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.#canvas = canvas;
@@ -98,15 +105,27 @@ export class Input {
     this.anyInput = false;
     this.onLockChange = null;
     this.onDeviceChange = null;
+    if (win.navigator.maxTouchPoints > 0 && win.matchMedia('(pointer: coarse)').matches) this.#device = 'touch';
+    this.#listen(this.#win, 'pointerdown', e => {
+      if (e.pointerType !== 'touch') return;
+      this.#lastTouch = performance.now();
+      this.anyInput = true;
+      this.#setDevice('touch');
+    }, { capture: true });
 
+    const noteTouch = (e: PointerEvent) => {
+      if (e.pointerType === 'touch') this.#lastTouch = performance.now();
+    };
+    this.#listen(this.#win, 'pointerup', noteTouch, { capture: true });
+    this.#listen(this.#win, 'pointercancel', noteTouch, { capture: true });
     this.#listen(this.#win, 'keydown', e => {
       if (e.repeat) return;
       this.anyInput = true;
-      this.#setDevice(false);
       if (editing(e.target) || editing(this.#doc.activeElement)) {
         this.#clearRaw();
         return;
       }
+      this.#setDevice('keyboard');
       const action = KEYS[e.code];
       if (action) this.#keys.add(action);
       // An event without Shift must never leave sprint held, including Shift itself.
@@ -119,14 +138,16 @@ export class Input {
       if (!e.shiftKey) this.#keys.delete('sprint');
     });
     this.#listen(this.#win, 'mousedown', e => {
+      if (this.#compatibilityMouse(e)) return;
       this.anyInput = true;
-      this.#setDevice(false);
-      if (editing(e.target) || editing(this.#doc.activeElement)) return;
+      this.#setDevice('keyboard');
+      if (editing(e.target) || editing(this.#doc.activeElement) || this.#menuTarget(e.target)) return;
       const action = MOUSE[e.button];
       if (action) this.#mouse.add(action);
       if (e.button === 1 || e.button === 3 || e.button === 4) e.preventDefault();
     });
     this.#listen(this.#win, 'mouseup', e => {
+      if (this.#compatibilityMouse(e)) return;
       const action = MOUSE[e.button];
       if (action) this.#mouse.delete(action);
     });
@@ -134,12 +155,13 @@ export class Input {
       if (!this.locked || editing(this.#doc.activeElement)) return;
       this.#dx += Math.abs(e.movementX) <= 400 ? e.movementX : 0;
       this.#dy += Math.abs(e.movementY) <= 400 ? e.movementY : 0;
-      this.#usingGamepad = false; // Mouse movement changes the device without a callback.
+      if (this.#device === 'touch') this.#setDevice('keyboard');
+      else this.#device = 'keyboard'; // Preserve the silent mouse/gamepad switch.
       this.anyInput = true;
     });
     this.#listen(this.#win, 'wheel', e => {
       this.anyInput = true;
-      if (!editing(e.target) && !editing(this.#doc.activeElement)) {
+      if (!editing(e.target) && !editing(this.#doc.activeElement) && !this.#menuTarget(e.target)) {
         this.#wheel += Math.sign(e.deltaY);
       }
     }, { passive: true });
@@ -171,7 +193,9 @@ export class Input {
     });
   }
 
-  get usingGamepad(): boolean { return this.#usingGamepad; }
+  get usingGamepad(): boolean { return this.#device === 'gamepad'; }
+  get usingTouch(): boolean { return this.#device === 'touch'; }
+  get device(): InputDevice { return this.#device; }
   get locked(): boolean { return this.#doc.pointerLockElement === this.#canvas; }
 
   #listen<K extends keyof WindowEventMap>(
@@ -185,13 +209,32 @@ export class Input {
     this.#listeners.push(() => target.removeEventListener(type, fn, options));
   }
 
-  #setDevice(pad: boolean) {
-    if (this.#usingGamepad === pad) return;
-    this.#usingGamepad = pad;
-    this.onDeviceChange?.(pad ? 'gamepad' : 'keyboard');
+  #menuTarget(target: EventTarget | null): boolean {
+    return !!(nodeLike(target) && target.closest?.('[data-ui-block], .screen-overlay, .control-editor'));
+  }
+
+  #compatibilityMouse(event: MouseEvent): boolean {
+    return !!(event as MouseEvent & { sourceCapabilities?: { firesTouchEvents: boolean } }).sourceCapabilities?.firesTouchEvents
+      || performance.now() - this.#lastTouch < 800;
+  }
+
+  #setDevice(device: InputDevice) {
+    if (this.#device === device) return;
+    this.clearTouch();
+    this.#device = device;
+    if (device === 'touch') { this.#clearRaw(); this.exitLock(); }
+    else this.touch.enabled = false;
+    this.onDeviceChange?.(device);
+  }
+
+  clearTouch(): void {
+    for (const action of this.touch.frame) this.#current.delete(action);
+    this.touch.reset();
+    this.move.x = this.move.y = this.look.x = this.look.y = 0;
   }
 
   #clearRaw() {
+    this.clearTouch();
     this.#keys.clear();
     this.#mouse.clear();
     this.#dx = this.#dy = this.#wheel = this.#padHold = 0;
@@ -216,6 +259,14 @@ export class Input {
     this.#dx = this.#dy = 0;
 
     this.#pollPad(blocked ? 0 : dt, blocked);
+    this.touch.sample();
+    if (this.usingTouch && !blocked) {
+      for (const action of this.touch.frame) this.#current.add(action);
+      this.move.x = this.touch.move.x; this.move.y = this.touch.move.y;
+      this.look.x -= this.touch.look.x * this.touchSens;
+      this.look.y -= this.touch.look.y * this.touchSens;
+    }
+    this.touch.look.x = this.touch.look.y = 0;
     const length = Math.hypot(this.move.x, this.move.y);
     if (length > 1) {
       this.move.x /= length;
@@ -237,41 +288,38 @@ export class Input {
       return;
     }
     this.#padIndex = this.#pad.index;
-    let active = false;
+    const axes = this.#pad.axes;
+    const lx = deadzone(axes[0] || 0), ly = deadzone(axes[1] || 0);
+    const rx = deadzone(axes[2] || 0), ry = deadzone(axes[3] || 0);
+    const active = !!(lx || ly || rx || ry || this.#pad.buttons.some(b => b && (b.pressed || b.value > .35)));
+    if (active) {
+      this.anyInput = true;
+      this.#setDevice('gamepad');
+    }
     for (let i = 0; i < this.#pad.buttons.length; i++) {
       const b = this.#pad.buttons[i];
       if (!b || (!b.pressed && !(b.value > 0.35))) continue;
-      active = true;
       const action = PAD[i];
       if (action) {
         this.#padCurrent.add(action);
         this.#current.add(action);
       }
     }
-    const axes = this.#pad.axes;
-    const lx = deadzone(axes[0] || 0), ly = deadzone(axes[1] || 0);
-    const rx = deadzone(axes[2] || 0), ry = deadzone(axes[3] || 0);
     if (lx || ly) {
       this.move.x = lx;
       this.move.y = -ly;
-      active = true;
     }
     this.#padHold = Math.hypot(rx, ry) > 0.94 ? this.#padHold + dt : 0;
     if (rx || ry) {
       const acceleration = 1 + clamp((this.#padHold - 0.25) / 0.6, 0, 1) * 0.9;
       this.look.x -= curve(rx) * this.padSensX * acceleration * dt;
       this.look.y -= curve(ry) * this.padSensY * acceleration * dt;
-      active = true;
-    }
-    if (active) {
-      this.anyInput = true;
-      this.#setDevice(true);
     }
   }
 
   down(action: Action): boolean { return this.#current.has(action); }
   pressed(action: Action): boolean {
-    return this.down(action) && (!this.#previous.has(action)
+    return this.down(action) && (this.touch.edges.has(action) || !this.#previous.has(action)
       || (this.#padCurrent.has(action) && !this.#padPrevious.has(action)));
   }
   released(action: Action): boolean { return !this.down(action) && this.#previous.has(action); }
@@ -282,7 +330,7 @@ export class Input {
   }
 
   requestLock() {
-    if (this.#disposed) return;
+    if (this.#disposed || this.usingTouch) return;
     this.#lockWanted = true;
     if (this.locked || this.#lockPending) return;
     this.#cancelRetry();
@@ -348,6 +396,7 @@ export class Input {
   dispose() {
     if (this.#disposed) return;
     this.#disposed = true;
+    this.touch.enabled = false;
     if (this.locked) this.exitLock();
     this.#lockWanted = false;
     this.#cancelRetry();

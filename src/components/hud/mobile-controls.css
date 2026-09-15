@@ -1,0 +1,95 @@
+/* Approved mobile study: clear centre, fixed left stick, right action cluster. */
+.mobile-controls { position: absolute; inset: 0; pointer-events: none; }
+.touch-look { position: absolute; inset: 0; z-index: 25; pointer-events: auto; touch-action: none; }
+.touch-safe { position: absolute; inset: max(12px, env(safe-area-inset-top)) max(28px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(28px, env(safe-area-inset-left)); }
+.touch-control, .touch-pause {
+  position: absolute; z-index: 30; pointer-events: auto; touch-action: none;
+  min-width: 44px; min-height: 44px; padding: 0; color: var(--fg); cursor: pointer;
+  border: 1px solid #e0eff580; background: #10202bb3;
+  font-family: var(--font-display), system-ui, sans-serif;
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+}
+.touch-control {
+  transform: translate(-50%, -50%); border-radius: 50%; display: flex;
+  flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+}
+.touch-control > * { pointer-events: none; }
+.touch-control svg { width: 25px; height: 25px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.touch-control span { font-size: 9px; font-weight: 700; line-height: 1.2; letter-spacing: .4px; }
+.touch-control.held, .touch-control[aria-pressed="true"] { background: #467db3cc; border-color: #c8e0ff; }
+.touch-control:focus-visible, .touch-pause:focus-visible { outline: 3px solid var(--warn); outline-offset: 3px; }
+.touch-move { border-color: #d7e7ef66; background: #12263560; }
+.touch-move::before { content: ''; position: absolute; inset: 17%; border: 1px solid #e0eff533; border-radius: 50%; }
+.touch-knob { width: 40%; height: 40%; border: 1px solid #ecf5fa88; border-radius: 50%; background: #e4edf333; }
+.touch-move .touch-move-label { position: absolute; top: calc(100% + 6px); white-space: nowrap; font-size: 9px; }
+.touch-move.sprinting { border-color: var(--good); }
+.touch-fire { border-width: 2px; background: #22313ccc; }
+.touch-fire svg { width: 32px; height: 32px; }
+.touch-fire span { font-size: 10px; }
+.touch-grapple { color: #c7e0ff; border-color: #89b8ff; background: #284e71ba; }
+.touch-weapon { border-radius: 4px; padding: 3px 8px; align-items: stretch; text-align: left; }
+.touch-weapon > span { display: flex; align-items: baseline; justify-content: space-between; gap: 4px; }
+.touch-weapon strong { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.touch-weapon b { font-size: 19px; white-space: nowrap; }
+.touch-weapon small { font-size: 9px; color: #c3d4e2; }
+.touch-pause { right: 0; top: 0; width: 44px; height: 44px; border-radius: 4px; font-size: 20px; }
+.touch-interruption {
+  position: fixed; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none;
+  margin: 0; padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+  border: 0; background: #0c1721; color: var(--fg); overflow: auto; pointer-events: auto;
+  font: 400 16px/1.5 var(--font-body), system-ui, sans-serif; text-align: center; touch-action: auto;
+}
+.touch-interruption[open] { display: grid; place-items: center; }
+.touch-interruption::backdrop { background: #0c1721; }
+.touch-interruption > div { max-width: 440px; }
+.touch-interruption h1 { font: 700 28px/1.2 var(--font-display), system-ui, sans-serif; }
+.touch-interruption p { color: #becbd6; }
+.touch-interruption button { min-height: 44px; margin: 6px; }
+
+/* Health and match state remain readable without occupying the thumb areas. */
+.touch-mode .bottom-left { left: max(28px, env(safe-area-inset-left)); top: max(14px, env(safe-area-inset-top)); bottom: auto; padding: 4px 8px; }
+.touch-mode .health-row { font-size: 12px; }
+.touch-mode .health-row strong { font-size: 23px; }
+.touch-mode .health-track { width: 74px; }
+.touch-mode :is(.bottom-right, .ammo-row, .ammo-tally, .focus-meter) { display: none; }
+.touch-mode .top-left { left: max(36px, env(safe-area-inset-left)); top: max(52px, calc(env(safe-area-inset-top) + 38px)); font-size: 11px; }
+.touch-mode .combo { min-height: 0; font-size: 11px; }
+.touch-mode .top-right { right: max(88px, calc(env(safe-area-inset-right) + 60px)); top: max(14px, env(safe-area-inset-top)); max-width: 44%; font-size: 15px; }
+.touch-mode .enemies-line, .touch-mode .modifier, .touch-mode .timer { margin-top: 2px; font-size: 11px; }
+.touch-mode .pvp-score .score-rows { font-size: 11px; }
+.touch-mode .pvp-score .score-rows > div { padding: 0; }
+.touch-mode .pvp-score .screen-footer { font-size: 10px; margin: 2px 0 0; }
+.touch-mode .team-hud { width: min(280px, 44vw); padding: 4px 6px; }
+.touch-mode .team-hud h2 { font-size: 10px; margin: 0; }
+.touch-mode .team-hud .team-scores { gap: 6px; font-size: 11px; flex-wrap: nowrap; }
+.touch-mode .team-hud .team-scores b { font-size: 16px; }
+.touch-mode .team-hud .your-team { margin: 2px 0; font-size: 10px; }
+.touch-mode .team-hud .match-status { margin: 0; font-size: 10px; line-height: 1.2; }
+.touch-mode .team-hud > .screen-footer { display: none; }
+.touch-mode .boss-bar { top: max(12px, env(safe-area-inset-top)); width: 26%; }
+.touch-mode .boss-name { font-size: 12px; margin-bottom: 3px; }
+.touch-mode .boss-track { height: 6px; border-width: 1px; }
+.touch-mode .tip-line { bottom: 22%; max-width: 42%; padding: 4px 8px; font-size: 11px; }
+.touch-mode .kill-feed, .touch-mode:has(.team-hud) .kill-feed { top: 29%; right: 32%; max-width: 30%; font-size: 11px; }
+.touch-mode .center-message { top: 25%; max-width: 48%; }
+.touch-mode .message-main { font-size: 28px; }
+.touch-mode .message-sub { font-size: 12px; }
+
+/* Unlike desktop's scale-to-fit, phone menus use native scrolling. */
+.install-prompt { margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--line); font: 400 13px/1.5 var(--font-body), system-ui, sans-serif; color: var(--fg-dim); }
+.install-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.install-actions .screen-button { font-size: 14px; }
+.touch-mode:has(.mobile-controls[data-layout="claw"]) .top-right { right: 32%; max-width: 35%; }
+.touch-mode:has(.mobile-controls[data-layout="claw"]) .boss-bar { left: 30%; width: 20%; }
+
+.touch-mode .screen-overlay { padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); touch-action: auto; }
+.touch-mode .screen-panel { width: min(940px, 100%); max-width: 100%; max-height: 100%; overflow: auto; overscroll-behavior: contain; padding: 20px; cursor: auto; }
+.touch-mode .screen-panel :is(button, input:not([type="checkbox"]):not([type="radio"]), select, summary), .touch-mode .settings-row, .touch-mode .visibility-options label { min-height: 44px; }
+.touch-mode .screen-panel :is(button, select) { min-width: 44px; }
+.touch-mode .screen-prompt { font-size: 18px; animation: none; }
+.touch-mode .screen-footer { font-size: 13px; }
+.touch-mode .screen-controls { font-size: 14px; }
+.touch-mode .control-switch { gap: 14px; flex-wrap: wrap; }
+@media (max-height: 370px) and (orientation: landscape) {
+  .touch-safe { top: max(8px, env(safe-area-inset-top)); bottom: max(10px, env(safe-area-inset-bottom)); }
+}

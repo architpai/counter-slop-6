@@ -24,7 +24,7 @@
  * `style.setProperty` calls and no React work at all.
  */
 import { key as keyLabel } from './labels';
-import type { HudView, SlotView } from './view';
+import type { HudView, SlotView, MobileState } from './view';
 import type { BoardModel, PvpModel, ScreenView, UiAction } from './screens';
 import type { ScopeKind } from '../weapons/stats';
 
@@ -38,7 +38,7 @@ export type HudKey =
   | 'ammo' | 'slots' | 'grenades' | 'health' | 'score' | 'wave' | 'modifier'
   | 'timer' | 'weapon' | 'boss' | 'focus' | 'crosshair' | 'scope' | 'grapple'
   | 'message' | 'tip' | 'killFeed' | 'damage' | 'hitmarker' | 'pvp' | 'board'
-  | 'screen' | 'device' | 'gameplay' | 'breath' | 'focusMark';
+  | 'screen' | 'device' | 'mobile' | 'gameplay' | 'breath' | 'focusMark';
 
 export interface AmmoState {
   magazine: string;
@@ -89,6 +89,7 @@ export interface HudState {
   board: BoardModel | null;
   screen: ScreenView | null;
   device: boolean;
+  mobile: MobileState;
   gameplay: boolean;
   breath: BreathState;
   focusMark: boolean;
@@ -140,6 +141,7 @@ export class HudStore implements HudView {
   board: BoardModel | null = null;
   screen: ScreenView | null = null;
   device = false;
+  mobile: MobileState = { active: false, enabled: false, portrait: false, interrupted: false, online: false, attached: false, aiming: false, airborne: false };
   gameplay = false;
 
   // ---------------------------------------------------------------- plumbing
@@ -245,7 +247,13 @@ export class HudStore implements HudView {
     this.#emit('device');
   }
 
-  key(action: string): string { return keyLabel(action, this.device); }
+  setMobile(state: MobileState): void {
+    if ((Object.keys(state) as (keyof MobileState)[]).every(key => state[key] === this.mobile[key])) return;
+    this.mobile = state;
+    this.#emit('mobile');
+  }
+
+  key(action: string): string { return this.mobile.active ? 'Tap' : keyLabel(action, this.device); }
 
   setAmmo(mag: number, reserve: number, magSize: number, reloading: boolean): void {
     const rounds = count(mag);

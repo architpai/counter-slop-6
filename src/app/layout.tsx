@@ -8,6 +8,8 @@ const inter = Inter({ subsets: ['latin'], weight: ['400', '600', '700'], variabl
 export const metadata: Metadata = {
   title: 'Counter Slop 6',
   description: 'A first-person arena shooter. Tactical, allegedly.',
+  appleWebApp: { capable: true, title: 'Counter Slop 6', statusBarStyle: 'black-translucent' },
+  icons: { icon: '/icons/icon-192.png', apple: '/icons/apple-touch-icon.png' },
 };
 
 export const viewport: Viewport = {

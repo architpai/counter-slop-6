@@ -14,7 +14,7 @@ import type { OnlineMode, Team } from '../game/team-rules';
 export const UI_ACTIONS = [
   'start', 'online', 'back', 'quickPlay', 'create', 'join', 'joinCode',
   'visibility', 'name', 'pickMap', 'onlineMode', 'mainMenu', 'startMatch',
-  'leave', 'leaveMatch', 'sens', 'acogSens', 'sniperSens', 'optic', 'r4cOptic', 'training', 'invert', 'music',
+  'leave', 'leaveMatch', 'sens', 'touchSens', 'resume', 'acogSens', 'sniperSens', 'optic', 'r4cOptic', 'training', 'invert', 'music',
 ] as const;
 
 export type UiAction = (typeof UI_ACTIONS)[number];
@@ -32,7 +32,7 @@ export interface OnlineInfo {
 
 export interface WeaponSettingsModel { optic: RifleOptic; r4cOptic: RifleOptic }
 export interface LookModel {
-  sens: number; acogSens: number; sniperSens: number;
+  sens: number; acogSens: number; sniperSens: number; touchSens?: number; touch?: boolean;
   invert: boolean; music: boolean; confirmKey: string;
 }
 export interface MainModel extends LookModel, WeaponSettingsModel {

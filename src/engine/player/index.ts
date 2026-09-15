@@ -148,6 +148,7 @@ export class Player implements Target {
 
   reset(pos: Vector3): void {
     if (!validVector(pos)) return;
+    this.ctx.input.clearTouch();
     this._idle = false;
     this.detachGrapple(false);
     this.clearNades();
@@ -318,6 +319,7 @@ export class Player implements Target {
   die(): void {
     if (!this.alive) return;
     this.alive = false;
+    this.ctx.input.clearTouch();
     this.melee.resetAmmo();
     this.aiming = this.firing = false;
     this.headshotT = 0;

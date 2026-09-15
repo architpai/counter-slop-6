@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Hud } from '@/components/hud/Hud';
+import { MobileControls } from '@/components/hud/MobileControls';
 import { HudStore } from '@/engine/hud/store';
 import type { GameHandle } from '@/engine/boot';
 
@@ -24,6 +25,7 @@ export default function GameMount() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [store] = useState(() => new HudStore());
   const [error, setError] = useState<string | null>(null);
+  const [game, setGame] = useState<GameHandle | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -42,6 +44,7 @@ export default function GameMount() {
         if (cancelled) return;
         handle = boot(canvas, store);
         window.__game = handle;
+        setGame(handle);
       })
       .catch((cause: unknown) => {
         if (cancelled) return;
@@ -60,6 +63,7 @@ export default function GameMount() {
     <>
       <canvas ref={canvasRef} id="game" aria-label="First-person game view" />
       <Hud store={store}>
+        {game && <MobileControls store={store} game={game} />}
         {error !== null && <BootError message={error} />}
       </Hud>
     </>

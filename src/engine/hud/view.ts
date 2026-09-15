@@ -20,6 +20,17 @@ export interface SlotView {
   empty: boolean;
 }
 
+export interface MobileState {
+  active: boolean;
+  enabled: boolean;
+  portrait: boolean;
+  interrupted: boolean;
+  online: boolean;
+  attached: boolean;
+  aiming: boolean;
+  airborne: boolean;
+}
+
 export interface HudView {
   onScreenClick: (() => void) | null;
   onUiAction: ((act: UiAction, value: string | null, ev: Event) => void) | null;
@@ -28,6 +39,7 @@ export interface HudView {
   update(dt: number): void;
   setGameplayVisible(on: boolean): void;
   setDevice(pad: boolean): void;
+  setMobile(state: MobileState): void;
   key(action: string): string;
 
   setAmmo(mag: number, reserve: number, magSize: number, reloading: boolean): void;
