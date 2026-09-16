@@ -18,16 +18,22 @@ export function createUI(app: App): UiApi {
   const { ctx, gs, lobby, scores, settings } = app;
   const { hud, net } = ctx;
   let joinCode = '';
-  const look = (): { sens: number; invert: boolean; music: boolean; confirmKey: string } => ({ sens: settings.sens, invert: settings.invert, music: settings.music, confirmKey: hud.key('confirm') });
+  const look = () => ({ sens: settings.sens, acogSens: settings.acogSens, sniperSens: settings.sniperSens,
+    optic: settings.optic, invert: settings.invert, music: settings.music, confirmKey: hud.key('confirm') });
+  function sensitivity(field: 'sens' | 'acogSens' | 'sniperSens', value: string | null, fallback: number): void {
+    const number = Number(value);
+    settings[field] = clamp(Math.round((Number.isFinite(number) ? number : fallback) / 5) * 5, 25, 250);
+    app.applyLook();
+  }
 
   const models = {
     main: () => ({ best: settings.best, checkpoint: settings.checkpoint, mapKey: settings.mapKey, maps: LEVELS, ...look() }),
     online: () => ({ name: settings.name, isPublic: lobby.isPublic, status: lobby.status, busy: app.busy, code: joinCode }),
     lobby: () => ({
-      code: net.code ?? lobby.code ?? '', isPublic: lobby.isPublic, isHost: net.isHost, mapKey: lobby.map ?? settings.mapKey, maps: LEVELS,
+      code: net.code ?? lobby.code ?? '', isPublic: lobby.isPublic, isHost: net.isHost, mapKey: lobby.map ?? settings.mapKey, maps: LEVELS, optic: settings.optic,
       players: [...lobby.players].map(([id, name]) => ({ id, name, host: id === lobby.hostId, self: id === net.id })), status: lobby.status,
     }),
-    pause: () => ({ wave: gs.wave, score: gs.score, ...look() }),
+    pause: () => ({ wave: gs.wave, score: gs.score, training: gs.mode === 'training', ...look() }),
     menu: () => ({ code: net.code ?? lobby.code ?? '', rows: app.ffa.boardRows(), ...look() }),
     matchOn: () => ({ confirmKey: hud.key('confirm') }),
     dead: () => {
@@ -61,6 +67,7 @@ export function createUI(app: App): UiApi {
 
   const actions: Record<UiAction, (value: string | null, ev: Event) => void> = {
     start: () => app.beginSolo(),
+    training: () => app.beginTraining(),
     online: () => { lobby.status = ''; showScreen('online'); },
     back: () => { lobby.status = ''; showScreen('main'); },
     quickPlay: () => app.ffa.quickPlay(),
@@ -85,7 +92,13 @@ export function createUI(app: App): UiApi {
     },
     leave: () => app.ffa.leave(''),
     leaveMatch: () => app.ffa.leave(''),
-    sens: value => { settings.sens = clamp(Math.round(Number(value) / 5) * 5 || 100, 25, 250); app.applyLook(); },
+    sens: value => sensitivity('sens', value, 100),
+    acogSens: value => sensitivity('acogSens', value, 120),
+    sniperSens: value => sensitivity('sniperSens', value, 150),
+    optic: value => {
+      if (value !== 'acog' && value !== 'holo') return;
+      settings.optic = value; app.applyOptic(); redraw();
+    },
     invert: value => { settings.invert = value === '1'; app.applyLook(); },
     music: value => { app.setMusic(value === '1'); },
   };

@@ -72,6 +72,9 @@ export class Input {
   readonly move: { x: number; y: number };
   readonly look: { x: number; y: number };
   mouseSens: number;
+  /** Scoped settings divided by general look sensitivity, so the controls are independent. */
+  acogScale = 1.2;
+  sniperScale = 1.5;
   padSensX: number;
   padSensY: number;
   invertY: boolean;

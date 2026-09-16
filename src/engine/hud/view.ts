@@ -11,6 +11,7 @@
  * vanilla original -- so the surface is setter-only in practice.
  */
 import type { BoardModel, PvpModel, ScreenView, UiAction } from './screens';
+import type { ScopeKind } from '../weapons/stats';
 
 export interface SlotView {
   name: string;
@@ -37,7 +38,7 @@ export interface HudView {
   setSpread(px: number): void;
   setCrosshairMode(mode: '' | 'melee'): void;
   setAds(on: boolean): void;
-  setScope(on: boolean, kind?: 'sniper' | 'acog'): void;
+  setScope(on: boolean, kind?: ScopeKind): void;
   setGrappleTarget(state: 0 | 1 | 2): void;
   setFocusMeter(show: boolean, frac: number, ready: boolean, label: string): void;
   setFocusMark(x: number | null, y?: number): void;

@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import { KEYBOARD_ROWS, PAD_ROWS } from '@/engine/hud/labels';
 import type {
   BoardModel, BoardRow, DeadModel, LobbyModel, MainModel, MatchOnModel, MenuModel,
-  OnlineModel, OverModel, PauseModel, PvpModel, ScreenView, UiAction,
+  OnlineModel, OverModel, PauseModel, PvpModel, ScreenView, UiAction, LookModel,
 } from '@/engine/hud/screens';
 
 /**
@@ -25,7 +25,7 @@ const list = <T,>(value: T[] | undefined): T[] => Array.isArray(value) ? value.f
 const sorted = (rows: BoardRow[]): BoardRow[] => list(rows).slice().sort((a, b) => count(b.kills) - count(a.kills) || count(a.deaths) - count(b.deaths));
 
 /** The subset of any model that `Settings` renders. */
-type SettingsModel = Pick<PauseModel, 'sens' | 'invert' | 'music'>;
+type SettingsModel = LookModel;
 /** The subset of any model that `Maps` renders. */
 type MapsModel = Pick<MainModel, 'maps' | 'mapKey'>;
 
@@ -102,13 +102,37 @@ export function Controls({ pad }: { pad: boolean }) {
   );
 }
 
+function Optics({ optic, onAction }: { optic: LookModel['optic']; onAction: Act }) {
+  return <div className="optic-picker" data-ui-block="" role="group" aria-label="MP5 optic">
+    <span>MP5 OPTIC</span>
+    {(['acog', 'holo'] as const).map(kind => <button type="button" className="screen-button" key={kind}
+      data-act="optic" data-value={kind} aria-pressed={optic === kind}
+      onClick={event => onAction('optic', kind, event.nativeEvent)}>
+      {kind === 'acog' ? 'ACOG · 2.5×' : 'HOLO · 1×'}
+    </button>)}
+    <small>Saved for your next session</small>
+  </div>;
+}
+
+function Sensitivity({ act, label, value, onAction }: {
+  act: 'sens' | 'acogSens' | 'sniperSens'; label: string; value: number; onAction: Act;
+}) {
+  const [readout, setReadout] = useState(value);
+  return <label className="settings-row">{label}<input type="range" data-act={act} min={25} max={250} step={5}
+    defaultValue={value} onChange={event => { setReadout(Number(event.target.value)); onAction(act, event.target.value, event.nativeEvent); }} />
+    <output>{readout}%</output></label>;
+}
+
 function Settings({ model, onAction }: { model: SettingsModel; onAction: Act }) {
-  const sens = Number.isFinite(model.sens) ? Math.min(250, Math.max(25, Math.round(model.sens / 5) * 5)) : 100;
-  // The readout is the slider's own business; nothing else ever reads it.
-  const [readout, setReadout] = useState(sens);
   return (
     <div className="settings" data-ui-block="" data-ui-input-block="">
-      <label className="settings-row">look sensitivity <input type="range" data-act="sens" min={25} max={250} step={5} defaultValue={sens} onChange={event => { setReadout(Number(event.target.value)); onAction('sens', event.target.value, event.nativeEvent); }} /><output>{readout}%</output></label>
+      <div className="sensitivity-settings">
+        <Sensitivity act="sens" label="Look / Holo sensitivity" value={model.sens} key={`sens-${model.sens}`} onAction={onAction} />
+        <Sensitivity act="acogSens" label="ACOG sensitivity" value={model.acogSens} key={`acog-${model.acogSens}`} onAction={onAction} />
+        <Sensitivity act="sniperSens" label="Sniper sensitivity" value={model.sniperSens} key={`sniper-${model.sniperSens}`} onAction={onAction} />
+        <p>Scoped settings are independent of look. 100% is the standard scoped speed.</p>
+      </div>
+      <Optics optic={model.optic} onAction={onAction} />
       {/*
         Uncontrolled on purpose: toggling one does not make the engine redraw,
         so a controlled box would freeze at its old value. The key remounts it
@@ -188,9 +212,11 @@ function MainScreen({ model, pad, onAction }: { model: MainModel; pad: boolean; 
       <div id="main-menu-content" className="menu-page">
         {currentPage === 'play' ? <>
           <Maps model={model} onAction={onAction} previews />
+          <Optics optic={model.optic} onAction={onAction} />
           <div className="screen-actions launch-actions" data-ui-block="">
             <Button act="start" text="START SOLO" primary sub="survive the waves" onAction={onAction} />
             <Button act="online" text="PLAY ONLINE" sub="free for all · up to 8 players" onAction={onAction} />
+            <Button act="training" text="TRAINING GROUND" sub="inspect models · passive targets" onAction={onAction} />
           </div>
           <Checkpoints wave={model.checkpoint} onAction={onAction} />
           <p className="screen-footer">{count(model.best) > 0 ? `Personal best · ${count(model.best)}` : 'One more wave. One more try.'}</p>
@@ -244,6 +270,7 @@ function LobbyScreen({ model, onAction }: { model: LobbyModel; onAction: Act }) 
       <Title text="LOBBY" sub={`free for all · first to 20 · ${players.length}/8 players`} />
       <p>code <strong className="lobby-code">{model.code}</strong></p>
       <Maps model={model} onAction={onAction} disabled={!model.isHost} />
+      <Optics optic={model.optic} onAction={onAction} />
       <p className="screen-footer">{model.isPublic
         ? 'this lobby is public: anyone can quick play in, or type the code'
         : 'private lobby: friends type this code under PLAY ONLINE → JOIN'}</p>
@@ -268,7 +295,8 @@ function LobbyScreen({ model, onAction }: { model: LobbyModel; onAction: Act }) 
 function PauseScreen({ model, pad, onAction }: { model: PauseModel; pad: boolean; onAction: Act }) {
   return (
     <>
-      <Title text="PAUSED" sub={`wave ${count(model.wave)} · score ${count(model.score)}`} />
+      <Title text="PAUSED" sub={model.training ? 'training ground · no return fire' : `wave ${count(model.wave)} · score ${count(model.score)}`} />
+      {model.training ? <div className="screen-actions" data-ui-block=""><Button act="training" text="RESET RANGE" sub="restore targets, ammo and starting position" onAction={onAction} /></div> : null}
       <Controls pad={pad} />
       <Settings model={model} onAction={onAction} />
       <MainMenu onAction={onAction} />

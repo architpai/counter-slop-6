@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { TONE, TONE_HEX, toneMat, unlitMat, charMat, boxGeo, cylGeo, sphereGeo, torusGeo, starGeo } from '../render/index';
 import type { GunKind, Triple } from './stats';
+import { tacticalPart } from '../render/tactical';
 
 const PRIMARY = TONE.PRIMARY, DARK = TONE.DARK, SIGHT = TONE.HOSTILE;
 
@@ -28,6 +29,8 @@ export interface ModelParts {
   foreEnd?: THREE.Object3D;
   bolt?: THREE.Object3D;
   slide?: THREE.Object3D;
+  acog?: THREE.Object3D;
+  holo?: THREE.Object3D;
 }
 
 /** What a `ViewModel` needs from any view model. */
@@ -80,19 +83,10 @@ function remember<T extends THREE.Object3D>(node: T): T {
 
 function hand(parent: THREE.Object3D, name: string, pos: Triple, direction: Triple) {
   const node = group(parent, name, pos);
-  sphere(node, `${name}-fist`, 0.062, [0, 0, 0], DARK);
-  const length = 0.42, dir = new THREE.Vector3(...direction).normalize();
-  const geo = cylGeo(0.05, length, 7, 'y');
-  const points = geo.getAttribute('position');
-  for (let i = 0; i < points.count; i++) {
-    const taper = (0.045 + 0.01 * points.getY(i) / length) / 0.05;
-    points.setX(i, points.getX(i) * taper);
-    points.setZ(i, points.getZ(i) * taper);
-  }
-  geo.computeVertexNormals();
-  const arm = mesh(node, `${name}-forearm`, geo, toneMat(PRIMARY));
-  arm.position.copy(dir).multiplyScalar(length / 2);
-  arm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+  const side = name.includes('left') ? 'L' : 'R';
+  const sleeve = tacticalPart('player', `viewhand${side}`);
+  sleeve.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(...direction).normalize());
+  node.add(sleeve);
   return remember(node);
 }
 
@@ -156,15 +150,23 @@ export function makeGunModel(kind: GunKind): GunModel {
     box(root, 'stock-end', [0.085, 0.17, 0.035], [0, -0.025, 0.51], DARK);
     box(root, 'grip', [0.052, 0.15, 0.065], [0, -0.14, 0.13], DARK, [0.3, 0, 0]);
     box(root, 'charging-handle', [0.018, 0.025, 0.11], [-0.06, 0.075, -0.08], PRIMARY, [0, 0.2, 0]);
-    cylinder(root, 'acog-tube', 0.045, 0.34, [0, 0.145, -0.10], DARK);
-    cylinder(root, 'acog-objective', 0.062, 0.055, [0, 0.145, -0.29], PRIMARY);
-    cylinder(root, 'acog-ocular', 0.052, 0.05, [0, 0.145, 0.09], PRIMARY);
-    box(root, 'acog-mount-front', [0.035, 0.085, 0.035], [0, 0.087, -0.20], DARK);
-    box(root, 'acog-mount-rear', [0.035, 0.085, 0.035], [0, 0.087, 0.04], DARK);
-    const reticle = group(root, 'acog-red-chevron', [0, 0.145, -0.325]);
-    box(reticle, 'chevron-left', [0.006, 0.026, 0.004], [-0.012, 0.008, 0], SIGHT, [0, 0, -0.65]);
-    box(reticle, 'chevron-right', [0.006, 0.026, 0.004], [0.012, 0.008, 0], SIGHT, [0, 0, 0.65]);
-    box(reticle, 'chevron-point', [0.006, 0.018, 0.004], [0, -0.006, 0], SIGHT);
+    const acog = parts.acog = group(root, 'acog');
+    cylinder(acog, 'acog-tube', 0.045, 0.34, [0, 0.145, -0.10], DARK);
+    cylinder(acog, 'acog-objective', 0.062, 0.055, [0, 0.145, -0.29], PRIMARY);
+    cylinder(acog, 'acog-ocular', 0.066, 0.065, [0, 0.145, 0.09], DARK, 16);
+    mesh(acog, 'acog-ocular-rim', torusGeo(0.057, 0.009, 6, 24), toneMat(PRIMARY), [0, 0.145, 0.125]);
+    box(acog, 'acog-prism-body', [0.11, 0.07, 0.19], [0, 0.125, -0.04], DARK);
+    mesh(acog, 'acog-elevation-turret', cylGeo(0.035, 0.035, 12, 'y'), toneMat(DARK), [0, 0.204, -0.045]);
+    mesh(acog, 'acog-windage-turret', cylGeo(0.03, 0.035, 12, 'y'), toneMat(DARK), [0.063, 0.15, -0.045], [0, 0, Math.PI / 2]);
+    box(acog, 'acog-mount-front', [0.035, 0.085, 0.035], [0, 0.087, -0.20], DARK);
+    box(acog, 'acog-mount-rear', [0.035, 0.085, 0.035], [0, 0.087, 0.04], DARK);
+    const holo = parts.holo = group(root, 'holo');
+    holo.visible = false;
+    box(holo, 'holo-base', [0.15, 0.035, 0.22], [0, 0.088, -0.10], DARK);
+    box(holo, 'holo-battery', [0.12, 0.055, 0.10], [0, 0.12, -0.22], DARK);
+    for (const side of [-1, 1]) box(holo, `holo-frame-${side}`, [0.02, 0.12, 0.06], [side * 0.065, 0.16, -0.08], PRIMARY);
+    box(holo, 'holo-frame-top', [0.15, 0.02, 0.06], [0, 0.22, -0.08], PRIMARY);
+    mesh(holo, 'holo-dot', sphereGeo(0.003, 6), unlitMat(0xed2428), [0, 0.145, -0.08]);
     hand(root, 'right-hand', [0.02, -0.15, 0.14], [0.5, -0.6, 1]);
     leftHand = hand(root, 'left-hand', [-0.05, -0.08, -0.38], [-0.35, -0.9, 0.9]);
     muzzlePos = [0, 0.015, -0.96]; ejectPos = [0.06, 0.02, 0.02];

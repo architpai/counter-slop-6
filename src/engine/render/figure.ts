@@ -3,6 +3,7 @@ import { rand } from '../util';
 import { TONE, TONE_HEX, WHITE_HEX } from './palette';
 import { charMat, unlitMat, makeLabelMaterial } from './materials';
 import { boxGeo, cylGeo, sphereGeo, coneGeo, torusGeo } from './prims';
+import { tacticalPart, TACTICAL_MODELS, type TacticalKind } from './tactical';
 
 const DARK = TONE_HEX[TONE.DARK], ACCENT = TONE_HEX[TONE.ACCENT];
 
@@ -14,6 +15,8 @@ export type ClownMask = 'grunt' | 'rusher' | 'heavy' | 'sniper' | 'shield' | 'bo
 
 export interface FigureOpts {
   kind: FigureKind;
+  /** Blender-authored actor. Omit for the legacy decorative figures. */
+  tactical?: TacticalKind;
   /** Blob accessory set; default bomber. */
   blob?: BlobKind;
   /** Tone hex. Defaults to HOSTILE. */
@@ -96,6 +99,26 @@ export interface FigureAnchors {
   shield?: THREE.Object3D;
 }
 export type FigureAnchorName = keyof FigureAnchors;
+
+const HIT_REGIONS: Partial<Record<FigurePartName, FigureAnchorName>> = {
+  head: 'head', torso: 'torso', hips: 'hips', shield: 'shield',
+  upperL: 'armL', upperR: 'armR', foreL: 'foreL', foreR: 'foreR',
+  thighL: 'legL', thighR: 'legR', shinL: 'shinL', shinR: 'shinR',
+};
+const shotRay = new THREE.Raycaster();
+
+/** Native mesh tests follow clothing, armour and animation without gaps between joints.
+ * Weapons and labels are not damage surfaces. Detached shields leave the root automatically. */
+export function raycastFigure(root: THREE.Object3D, origin: THREE.Vector3, direction: THREE.Vector3, max: number) {
+  if (!root.visible) return null;
+  root.updateWorldMatrix(true, true);
+  shotRay.set(origin, direction); shotRay.far = max;
+  for (const hit of shotRay.intersectObject(root, true)) {
+    const part = hit.object.userData.hitPart as FigureAnchorName | undefined;
+    if (part && hit.object.visible) return { part, dist: hit.distance, point: hit.point };
+  }
+  return null;
+}
 
 export interface Figure {
   root: THREE.Group;
@@ -290,14 +313,14 @@ function weaponProp(kind: WeaponPropKind, color: number): THREE.Group {
     addBox(0.06, 0.16, 0.09, 0, -0.04, 0.01, DARK).rotation.x = -0.2;
     addBox(0.07, 0.025, 0.12, 0, -0.01, 0.13, color);
   } else if (kind === 'blade') {
-    addBox(0.02, 0.05, 0.95, 0, 0.04, 0.42);
-    addBox(0.11, 0.11, 0.03, 0, 0.04, -0.06, ACCENT);
+    addBox(0.02, 0.05, 0.95, 0, 0.04, 0.42, 0xcbdbe3);
+    addBox(0.11, 0.11, 0.03, 0, 0.04, -0.06, DARK);
     addBox(0.035, 0.045, 0.24, 0, 0.04, -0.19, DARK);
   } else if (kind === 'hammer') {
-    // Ban hammer: a long handle and a fat two-tone head.
+    // Commander's breaching hammer: steel head with a narrow brass band.
     barrel(0.045, 0.7, 0, 0.05, 0.2);
-    addBox(0.42, 0.2, 0.2, 0, 0.05, 0.58, ACCENT);
-    addBox(0.06, 0.22, 0.22, 0, 0.05, 0.58, DARK);
+    addBox(0.42, 0.2, 0.2, 0, 0.05, 0.58, 0x66737a);
+    addBox(0.05, 0.21, 0.215, 0, 0.05, 0.58, 0x92754c);
   } else if (kind === 'shotgun') {
     addBox(0.1, 0.13, 0.66, 0, 0.02, 0.2);
     barrel(0.035, 0.5, 0, 0.08, 0.5);
@@ -448,6 +471,39 @@ export function makeFigure(o: FigureOpts): Figure {
     }
   }
 
+  if (o.tactical) {
+    // Keep the gameplay rig. Convert mesh-only accessories to pivots before
+    // clearing their parent surfaces; aliases (machine head/torso) are not cloned twice.
+    if (parts.face) release(parts.face);
+    if (parts.hat) release(parts.hat);
+    delete parts.hat;
+    const names = TACTICAL_MODELS[o.tactical];
+    for (const name of names) {
+      const pivot = built(parts[name], name);
+      if (!isMesh(pivot)) continue;
+      if (!pivot.parent) throw new Error(`figure: detached tactical part ${name}`);
+      joint(name, pivot.parent, pivot.position.x, pivot.position.y, pivot.position.z);
+      release(pivot);
+    }
+    for (const name of names) {
+      const pivot = built(parts[name], name);
+      for (const child of [...pivot.children]) if (isMesh(child)) release(child);
+      const surface = tacticalPart(o.tactical, name, o.tactical === 'player' ? color : undefined);
+      surface.traverse(object => {
+        if (isMesh(object)) object.userData.hitPart = o.kind === 'humanoid' ? HIT_REGIONS[name] ?? 'torso' : 'torso';
+      });
+      pivot.add(surface);
+    }
+    const head = built(parts.head, 'head');
+    parts.face = head.getObjectByName(`clown-mask-${o.tactical}`) ?? head;
+    // Tactical masks remain rigid after death; no cartoon X-eye replacement.
+    const eyes = group(parts.face, 'eyes'), dead = group(parts.face, 'deadEyes');
+    dead.visible = false;
+    eyeSets = { root: eyes, eyes, dead };
+    if (o.kind === 'humanoid' && anchors.head) anchors.head.position.y = 0.13;
+    root.userData.tactical = o.tactical;
+  }
+
   parts.eyes = eyeSets.eyes;
   parts.deadEyes = eyeSets.dead;
   let disposed = false;
@@ -458,7 +514,7 @@ export function makeFigure(o: FigureOpts): Figure {
       const mount = parts.gunMount;
       if (!mount) return;
       if (weapon) release(weapon);
-      weapon = weaponProp(kind, color);
+      weapon = weaponProp(kind, o.tactical ? 0x333d44 : color);
       // Props point down +z; the forearm hangs down -y. Lay the prop along the forearm so a raised arm aims it forward.
       weapon.rotation.x = Math.PI / 2;
       mount.add(weapon);

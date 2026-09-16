@@ -202,7 +202,9 @@ export class Player implements Target {
     }
     this.ctx.renderer.rig.visible = true;
     const { input } = this.ctx;
-    const sensitivity = this.aiming ? (this.weapon.scope ? 0.38 : 0.62) : 1;
+    const optic = isGun(this.weapon) && this.weapon.scope ? this.weapon.scopeKind : null;
+    const sensitivity = !this.aiming ? 1 : optic === 'acog' ? 0.38 * input.acogScale
+      : optic === 'sniper' ? 0.38 * input.sniperScale : 0.62;
     this.yaw += input.look.x * sensitivity;
     this.pitch = clamp(this.pitch + input.look.y * sensitivity, -1.5, 1.5);
     if (this.dashLock) {
@@ -246,7 +248,7 @@ export class Player implements Target {
     hud.setCrosshairMode(melee ? 'melee' : '');
     hud.setAds(!melee && this.weapon.aimAmt > 0.55);
     hud.setScope(!melee && this.weapon.scope && this.weapon.aimAmt >= 0.8,
-      this.weapon.kind === 'rifle' ? 'acog' : 'sniper');
+      isGun(this.weapon) ? this.weapon.scopeKind : undefined);
   }
 
   weaponState(): WeaponState {
@@ -285,7 +287,7 @@ export class Player implements Target {
   }
 
   takeDamage(amount: number, from: Vector3 | null = null): void {
-    if (!this.alive || !Number.isFinite(amount) || amount <= 0) return;
+    if (!this.alive || this.ctx.game.mode === 'training' || !Number.isFinite(amount) || amount <= 0) return;
     this.hp = Math.max(0, this.hp - amount);
     this.sinceDamage = 0;
     this.hurtFx = Math.min(1, this.hurtFx + amount / 40);
@@ -399,9 +401,8 @@ export class Player implements Target {
   }
 
   aimDir(spread: number, out = new Vector3()): Vector3 {
-    out.copy(this.forward).addScaledVector(this.right, rand(-spread, spread));
-    out.y += rand(-spread, spread);
-    return out.normalize();
+    // Use the rendered camera basis, including recoil, roll and shake.
+    return out.set(rand(-spread, spread), rand(-spread, spread), -1).transformDirection(this.ctx.camera.matrixWorld);
   }
 
   addAmmoAll(fraction = 0.5): void {

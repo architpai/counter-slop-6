@@ -4,7 +4,7 @@ import { Spring3, clamp, damp, easeOut, rand, TAU } from '../util';
 import { TONE } from '../render/index';
 import { seeThrough } from '../physics';
 import { GUN_STATS } from './stats';
-import type { Falloff, GunKind, GunStats, Triple } from './stats';
+import type { Falloff, GunKind, GunStats, RifleOptic, ScopeKind, Triple } from './stats';
 import { makeGunModel, restPose } from './models';
 import type { GunModel, WeaponModel } from './models';
 import type { Ctx, Enemy, HitInfo, Player, WeaponState } from '../types';
@@ -162,10 +162,9 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
   _stats: GunStats;
   readonly kind: GunKind;
   readonly name: string;
-  readonly hint: string;
   readonly isGun: true;
   readonly scope: boolean;
-  readonly adsFov: number;
+  optic: RifleOptic = 'acog';
   readonly magSize: number;
   /** `Window.setTimeout` handle, a number. Never `NodeJS.Timeout`. */
   _autoReload: number | null;
@@ -181,10 +180,8 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
     this._stats = stats;
     this.kind = kind;
     this.name = stats.name;
-    this.hint = stats.hint;
     this.isGun = true;
     this.scope = stats.scope;
-    this.adsFov = stats.adsFov;
     this.magSize = stats.magSize;
     this._aimPos.fromArray(stats.sight).multiplyScalar(-0.46);
     this._aimPos.z -= stats.eyeDistance;
@@ -197,6 +194,16 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
   }
 
   get spreadPx() { return 5 + this._spread * 900; }
+  get scopeKind(): ScopeKind { return this.kind === 'rifle' ? this.optic : 'sniper'; }
+  get adsFov(): number { return this.kind === 'rifle' && this.optic === 'holo' ? 82 : this._stats.adsFov; }
+  get hint(): string { return this.kind === 'rifle' && this.optic === 'holo' ? 'auto · holographic sight' : this._stats.hint; }
+
+  setOptic(optic: RifleOptic): void {
+    if (this.kind !== 'rifle') return;
+    this.optic = optic;
+    if (this._model.parts.acog) this._model.parts.acog.visible = optic === 'acog';
+    if (this._model.parts.holo) this._model.parts.holo.visible = optic === 'holo';
+  }
 
   addAmmo(n: number) {
     if (Number.isFinite(n) && n > 0) this.reserve = Math.min(this.reserve + n, this._stats.maxReserve);
@@ -317,7 +324,7 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
   _ray(dir: Vector3) {
     const { world, game, effects, audio } = this._ctx, s = this._stats;
     const enemies = this._ctx.enemies;
-    const eye = this._player.eye;
+    const eye = this._ctx.camera.position;
     const enemy = enemies?.raycast(eye, dir, 300) ?? null;
     const wall = world.raycast(eye, dir, 300, seeThrough);
     const remote = game.raycastPlayers(eye, dir, 300);

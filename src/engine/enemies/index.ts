@@ -4,6 +4,7 @@ import { clamp, damp, rand, angleLerp, round2, choose, shuffle, TAU } from '../u
 import { Body, seeThrough } from '../physics';
 import { TONE } from '../render/index';
 import type { Figure, FigureAnchorName, FigurePartName } from '../render/figure';
+import { raycastFigure } from '../render/figure';
 import type { ToneId } from '../render/palette';
 import type { NavPath } from '../nav';
 import type { Ctx, Enemy, EnemyKind, EnemyState, HitInfo, Target } from '../types';
@@ -182,10 +183,12 @@ export class EnemyManager {
     syncModel(e);
     this.list.push(e); this.byId.set(e.id, e); this.alive++;
     if (!this.mirror) this.onSpawn?.(e);
-    scratch.copy(position); scratch.y += 1;
-    this.ctx.effects.strokeBurst(scratch, stats.tone ?? TONE.HOSTILE, stats.boss ? 60 : 26, stats.boss ? 10 : 6, { life: 0.5, size: 0.03 });
-    this.ctx.audio.spawn(position);
-    if (stats.boss) { this.ctx.audio.bossRoar(position); this.onBoss?.(e); }
+    if (this.ctx.game.mode !== 'training') {
+      scratch.copy(position); scratch.y += 1;
+      this.ctx.effects.strokeBurst(scratch, stats.tone ?? TONE.HOSTILE, stats.boss ? 60 : 26, stats.boss ? 10 : 6, { life: 0.5, size: 0.03 });
+      this.ctx.audio.spawn(position);
+      if (stats.boss) { this.ctx.audio.bossRoar(position); this.onBoss?.(e); }
+    }
     return e;
   }
 
@@ -204,16 +207,25 @@ export class EnemyManager {
 
   update(dt: number): void {
     const { world } = this.ctx;
+    const passive = this.ctx.game.mode === 'training';
     for (const e of this.list) {
       e.age += dt;
       if (!e.alive) { corpse(e, dt); continue; }
-      this._pickTarget(e, dt);
+      if (!passive) this._pickTarget(e, dt);
       if (e.flashT > 0) { e.flashT -= dt; if (e.flashT <= 0) flash(e, false); }
       e.flinch = damp(e.flinch, 0, 9, dt);
       if (e.state === 'spawn') { spawnPose(e); continue; }
       if (this.mirror) { this._mirrorStep(e, dt); continue; }
       if (e.state === 'stunned' && e.laser) e.laser.visible = false;
-      if (e.stats.flying) {
+      if (passive) {
+        // No AI or contact attacks. Keep physics for grapple pulls and animation for hit feedback.
+        e.target = null;
+        e.body.vel.x = damp(e.body.vel.x, 0, 5, dt);
+        e.body.vel.z = damp(e.body.vel.z, 0, 5, dt);
+        if (!e.stats.flying || e.state === 'stunned') e.body.vel.y -= 24 * dt;
+        world.moveBody(e.body, dt);
+        if (e.state === 'stunned' && e.age > e.stunDuration) e.state = 'hunt';
+      } else if (e.stats.flying) {
         flyerThink(this, e, dt);
         world.moveBody(e.body, dt);
       } else {
@@ -238,13 +250,13 @@ export class EnemyManager {
       }
       animate(e, dt); syncModel(e);
     }
-    if (!this.mirror) this._separate(dt);
+    if (!this.mirror && !passive) this._separate(dt);
     updateProjectiles(this, dt);
     for (let i = this.list.length - 1; i >= 0; i--) {
       const e = this.list[i];
       if (!e || e.alive || e.deadT <= 9) continue;
       this._destroy(e); this.list.splice(i, 1);
-      if (this.mirror) this.byId.delete(e.id);
+      this.byId.delete(e.id);
     }
   }
 
@@ -327,7 +339,7 @@ export class EnemyManager {
     hud.hitmarker(e.hp <= 0, !!info.crit);
     if (info.source !== 'deflect') input.rumble(0.1, 0.3, 30);
     if (e.state === 'spawn') { e.state = 'hunt'; e.root.scale.setScalar(e.stats.scale); }
-    else onHit(this, e);
+    else if (game.mode !== 'training') onHit(this, e);
     if (e.stats.boss) this.onBoss?.(e);
     if (e.hp <= 0) { game.hitstop(info.crit ? 0.05 : 0.025, 0.25); this.kill(e, info); }
   }
@@ -444,16 +456,8 @@ export class EnemyManager {
     let best: EnemyRayHit | null = null;
     for (const e of this.list) {
       if (!e.alive || e === ignore) continue;
-      for (const h of e.hits) {
-        scratch.subVectors(h.center, origin);
-        const t = scratch.dot(dir);
-        if (t < 0 || t > max) continue;
-        const l2 = scratch.lengthSq() - t * t, r2 = h.r * h.r;
-        if (l2 > r2) continue;
-        const entry = t - Math.sqrt(r2 - l2);
-        if (entry < 0 || (best && entry >= best.dist)) continue;
-        best = { enemy: e, part: h.part, dist: entry, point: new Vector3().copy(origin).addScaledVector(dir, entry) };
-      }
+      const hit = raycastFigure(e.root, origin, dir, best ? best.dist : max);
+      if (hit && (!best || hit.dist < best.dist)) best = { enemy: e, ...hit };
     }
     return best;
   }

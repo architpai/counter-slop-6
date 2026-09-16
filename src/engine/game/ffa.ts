@@ -10,7 +10,6 @@ import type { App } from '../boot';
 
 const KILL_TARGET = 20, TIME_LIMIT = 480, RESPAWN = 3.5, SILENT_MS = 9000;
 const HOW: Record<string, string> = { rifle: 'MP5', pistol: 'pistol', shotgun: 'shotgun', sniper: 'sniper', melee: 'knife', grenade: 'grenade', deflect: 'their own bullet' };
-const HIT_R = { head: 0.3, torso: 0.33, hips: 0.2, armL: 0.11, armR: 0.11, foreL: 0.1, foreR: 0.1, legL: 0.13, legR: 0.13, shinL: 0.11, shinR: 0.11 };
 
 const obj = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
 const arr = (v: unknown): v is unknown[] => Array.isArray(v);
@@ -334,27 +333,20 @@ export function createFFA(app: App): FfaApi {
     return player === null ? [] : [player, ...ctx.remotes.values()];
   };
   const canHurt = (t: Target): boolean => isOnline() && t !== ctx.player;
-  function raySphere(o: THREE.Vector3, d: THREE.Vector3, c: THREE.Vector3, r: number, max: number, strict: boolean): number {
-    d1.subVectors(c, o);
-    const tca = d1.dot(d);
-    if (tca < 0 || (strict && tca === 0) || tca > max) return -1;
-    const miss = d1.lengthSq() - tca * tca;
-    if (miss > r * r) return -1;
-    const t = tca - Math.sqrt(r * r - miss);
-    return t < 0 ? -1 : t;
-  }
+  const guardRay = new THREE.Ray(), guardSphere = new THREE.Sphere(undefined, 0.42), guardHit = new THREE.Vector3();
   function raycastPlayers(o: THREE.Vector3, d: THREE.Vector3, max: number): PlayerHit | null {
     let best: PlayerHit | null = null;
     for (const r of ctx.remotes.values()) {
       if (!r.alive || !canHurt(r)) continue;
-      for (const h of r.hits) {
-        const t = raySphere(o, d, h.obj.position, HIT_R[h.part] ?? h.r, max, false);
-        if (t >= 0 && (!best || t < best.dist)) best = { player: r, part: h.part, dist: t, point: o.clone().addScaledVector(d, t) };
-      }
+      const hit = r.raycast(o, d, best ? best.dist : max);
+      if (hit && (!best || hit.dist < best.dist)) best = { player: r, ...hit };
       if (r.blocking) {
-        d2.copy(r.center).addScaledVector(r.forward, 0.5); d2.y += 0.3;
-        const t = raySphere(o, d, d2, 0.42, max, true);
-        if (t >= 0 && (!best || best.player !== r || t < best.dist)) best = { player: r, part: 'blade', dist: t, point: o.clone().addScaledVector(d, t) };
+        guardSphere.center.copy(r.center).addScaledVector(r.forward, 0.5); guardSphere.center.y += 0.3;
+        guardRay.set(o, d);
+        if (guardRay.intersectSphere(guardSphere, guardHit)) {
+          const dist = guardHit.distanceTo(o);
+          if (dist <= max && (!best || dist < best.dist)) best = { player: r, part: 'blade', dist, point: guardHit.clone() };
+        }
       }
     }
     return best;

@@ -31,14 +31,14 @@ export interface HitSphere {
 }
 
 const delta = new Vector3();
-const RADII = { head: 0.3, torso: 0.33, hips: 0.2, armL: 0.11, armR: 0.11, foreL: 0.1, foreR: 0.1, legL: 0.13, legR: 0.13, shinL: 0.11, shinR: 0.11, shield: 0.66 } satisfies Partial<Record<FigureAnchorName, number>>;
+const RADII = { head: 0.195, torso: 0.33, hips: 0.2, armL: 0.11, armR: 0.11, foreL: 0.1, foreR: 0.1, legL: 0.13, legR: 0.13, shinL: 0.11, shinR: 0.11, shield: 0.66 } satisfies Partial<Record<FigureAnchorName, number>>;
 const PROPS: readonly string[] = ['rifle', 'pistol', 'shotgun', 'sniper', 'blade'];
 const carriesProp = (weapon: string): weapon is 'rifle' | 'pistol' | 'shotgun' | 'sniper' | 'blade' => PROPS.includes(weapon);
 
 export function makeModel(stats: EnemyType): { figure: Figure; root: Group; hits: HitSphere[] } {
   const weapon: WeaponPropKind = stats.weapon === 'boss' ? (stats.kind === 'humanoid' ? 'hammer' : 'none')
     : carriesProp(stats.weapon) ? stats.weapon : 'none';
-  const figure = makeFigure({ ...stats, color: TONE_HEX[stats.tone], weapon, mask: stats.key });
+  const figure = makeFigure({ ...stats, color: TONE_HEX[stats.tone], weapon, mask: stats.key, tactical: stats.key });
   const radii: Partial<Record<FigureAnchorName, number>> = stats.kind === 'humanoid' ? RADII : { torso: stats.flying ? 0.48 : 0.5 };
   const hits: HitSphere[] = [];
   for (const [part, r] of Object.entries(radii) as [FigureAnchorName, number][]) {
@@ -80,7 +80,8 @@ export function animate(e: EnemyRecord, dt: number): void {
     p.torso.position.y = 0.6 + Math.sin(3 * e.age) * 0.1;
     p.torso.rotation.z = e.state === 'stunned' ? e.age * 12 : clamp((e.body.vel.x * Math.cos(e.yaw) - e.body.vel.z * Math.sin(e.yaw)) * -0.08, -0.8, 0.8);
     p.torso.rotation.x = clamp(-e.body.vel.y * 0.06, -0.6, 0.6);
-    p.wingL.rotation.z = Math.sin(14 * e.age) * 0.35;
+    // Tilt-wing motors trim the aircraft; they do not flap like a paper bird.
+    p.wingL.rotation.z = clamp(-p.torso.rotation.z * 0.15, -0.12, 0.12);
     p.wingR.rotation.z = -p.wingL.rotation.z;
     return;
   }
@@ -97,8 +98,8 @@ export function animate(e: EnemyRecord, dt: number): void {
   if (p.foreL) p.foreL.rotation.set(-0.2, 0, 0);
   if (p.foreR) p.foreR.rotation.set(-0.2, 0, 0);
   if (blob) {
-    p.upperL.rotation.x = -2.4 + Math.sin(e.age * 20) * 0.4 * w;
-    p.upperR.rotation.x = -2.4 - Math.sin(e.age * 20) * 0.4 * w;
+    p.upperL.rotation.x = -0.45 + s * 0.35 * w;
+    p.upperR.rotation.x = -0.45 - s * 0.35 * w;
     if (e.fuseT >= 0) p.torso.rotation.z = Math.sin(e.age * 40) * 0.15;
     if (p.spark) p.spark.scale.setScalar(0.7 + rand(0, 0.8) + (e.fuseT >= 0 ? 1.5 : 0));
   } else if (e.stats.weapon === 'blade' && e.attackT > 0) {
@@ -116,8 +117,10 @@ export function animate(e: EnemyRecord, dt: number): void {
     p.torso.rotation.y = -0.35 * e.aimAmt;
   }
   if (e.shieldHp > 0) {
-    p.upperL.rotation.set(-1.2, 0.3, 0);
-    p.foreL.rotation.x = -0.9;
+    // Grip the rear handle, rather than pushing the glove through the plate.
+    p.upperL.rotation.set(-0.5, 0, 0);
+    p.foreL.rotation.x = -1.9;
+    p.upperR.rotation.z = 0.12;
   }
   if (e.type === 'boss' && e.bossAttack) {
     const { kind, t } = e.bossAttack;

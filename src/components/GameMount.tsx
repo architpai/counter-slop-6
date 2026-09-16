@@ -36,7 +36,9 @@ export default function GameMount() {
     let handle: GameHandle | null = null;
 
     import('@/engine/boot')
-      .then(({ boot }) => {
+      .then(async ({ boot, loadTacticalModels }) => {
+        if (cancelled) return;
+        await loadTacticalModels();
         if (cancelled) return;
         handle = boot(canvas, store);
         window.__game = handle;

@@ -53,6 +53,7 @@ function setup(isHost = false) {
     id: other, name: other, alive: true, visible: true, lastSeen: 0,
     body: { pos: new Vector3(20, 0, 0) }, center: new Vector3(20, 1, 0),
     forward: new Vector3(0, 0, -1), right: new Vector3(1, 0, 0), hits: [], blocking: false, parryWindow: false,
+    raycast: (_o: Vector3, _d: Vector3, _max: number): { part: 'torso'; dist: number; point: Vector3 } | null => null,
     updates: 0, pushes: 0, disposed: false,
     update() { this.updates++; }, push() { this.pushes++; }, shots: noop,
     dispose() { this.disposed = true; },
@@ -174,6 +175,22 @@ test('untrusted senders and network damage', async () => {
     setState(gs, 'over');
     t.receive('pdmg', hit, 'host');
     assert(t.damage.length === 1, 'network damage is ignored after the match ends');
+  } finally { t.ffa.leave(); }
+});
+
+test('a distant guard cannot replace a closer player hit', () => {
+  const t = setup(); setState(t.gs, 'play');
+  try {
+    t.remote.raycast = () => ({ part: 'torso', dist: 4, point: new Vector3(0, 1.3, -4) });
+    const far = { ...t.remote, id: 'far', blocking: true, center: new Vector3(0, 1, -10), forward: new Vector3(0, 0, 1),
+      raycast: () => ({ part: 'torso' as const, dist: 10, point: new Vector3(0, 1.3, -10) }) };
+    t.ctx.remotes.set('far', far);
+    const ray = () => t.ffa.raycastPlayers(new Vector3(0, 1.3, 0), new Vector3(0, 0, -1), 20);
+    expect(ray()?.player.id).toBe(t.remote.id);
+    expect(ray()?.part).toBe('torso');
+    t.ctx.remotes.delete(t.remote.id);
+    expect(ray()?.player.id).toBe('far');
+    expect(ray()?.part).toBe('blade');
   } finally { t.ffa.leave(); }
 });
 

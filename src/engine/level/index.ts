@@ -5,6 +5,7 @@ import { LevelBuilder } from './build';
 import { buildDowntown } from './downtown';
 import { buildMexico } from './mexico';
 import { buildHouse } from './house';
+import { buildTraining } from './training';
 
 /** One row of the map picker. */
 export interface LevelEntry {
@@ -30,8 +31,9 @@ export function validKey(key: unknown): LevelKey {
 
 export function buildLevel(scene: THREE.Scene, world: World, key: unknown = 'downtown',
   opts: LevelOpts | null = {}): Level {
-  const builder = new LevelBuilder(scene, world, validKey(key), opts?.arena === true);
-  if (builder.level.key === 'house') buildHouse(builder);
+  const builder = new LevelBuilder(scene, world, key === 'training' ? 'training' : validKey(key), opts?.arena === true);
+  if (builder.level.key === 'training') buildTraining(builder);
+  else if (builder.level.key === 'house') buildHouse(builder);
   else if (builder.level.key === 'mexico') buildMexico(builder);
   else buildDowntown(builder);
   return builder.finish();
@@ -47,6 +49,8 @@ export function disposeLevel(scene: THREE.Scene, level: Level | null | undefined
   const disposed = new Set<THREE.BufferGeometry>();
   for (const object of level.meshes) {
     scene.remove(object);
+    // Name plaques own canvas textures as well as geometry.
+    if (typeof object.userData.dispose === 'function') { object.userData.dispose(); continue; }
     object.traverse(child => {
       if (hasGeometry(child) && !disposed.has(child.geometry)) {
         disposed.add(child.geometry);

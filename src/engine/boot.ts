@@ -11,17 +11,23 @@ import { EnemyManager } from './enemies/index';
 import { Player } from './player/index';
 import { makeGameState } from './game/state';
 import { createSolo } from './game/solo';
+import { createTraining } from './game/training';
+import { Gun } from './weapons/gun';
+import type { RifleOptic } from './weapons/stats';
 import { createFFA } from './game/ffa';
 import { createUI } from './game/ui';
 import { createPickups } from './game/pickups';
 import { createBreakables } from './game/breakables';
 import type { Ctx, GameHooks, GameState, Level, LevelKey, Lobby, Pickup, RemotePlayer, ScoreRow } from './types';
 import type { SoloApi } from './game/solo';
+import type { TrainingApi } from './game/training';
 import type { FfaApi } from './game/ffa';
 import type { UiApi, ScreenName } from './game/ui';
 import type { PickupsApi } from './game/pickups';
 import type { BreakablesApi } from './game/breakables';
 import type { HudView } from './hud/view';
+
+export { loadTacticalModels } from './render/tactical';
 
 export interface Settings {
   mapKey: LevelKey;
@@ -30,6 +36,9 @@ export interface Settings {
   checkpoint: number;
   name: string;
   sens: number;
+  acogSens: number;
+  sniperSens: number;
+  optic: RifleOptic;
   invert: boolean;
 }
 
@@ -48,11 +57,13 @@ export interface App {
   screen: ScreenName | null;
   loadLevel(arena: boolean, key?: unknown, force?: boolean): void;
   applyLook(): void;
+  applyOptic(): void;
   pickups: PickupsApi;
   breakables: BreakablesApi;
   addScore(points: number, label?: string | null): void;
   saveCheckpoint(n: number): void;
   solo: SoloApi;
+  training: TrainingApi;
   endFocus(): void;
   ffa: FfaApi;
   ui: UiApi;
@@ -61,6 +72,7 @@ export interface App {
   resetRun(): void;
   beginCommon(): void;
   beginSolo(): void;
+  beginTraining(): void;
   beginAtWave(n: number): void;
   pause(): void;
   resume(): void;
@@ -85,6 +97,7 @@ export interface GameHandle {
   input: Input;
   world: World;
   beginSolo(): void;
+  beginTraining(): void;
   beginAtWave(n: number): void;
   jumpToWave(n: number): void;
   step(nowMs: number): void;
@@ -129,6 +142,9 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     checkpoint: store.getNum(SKEY.CHECKPOINT, 0),
     name: store.getStr(SKEY.NAME, '').trim().slice(0, 14) || `recruit${randInt(10, 99)}`,
     sens: clamp(store.getNum(SKEY.SENS, 100), 25, 250),
+    acogSens: clamp(store.getNum(SKEY.ACOG_SENS, 120), 25, 250),
+    sniperSens: clamp(store.getNum(SKEY.SNIPER_SENS, 150), 25, 250),
+    optic: store.getStr(SKEY.OPTIC, 'acog') === 'holo' ? 'holo' : 'acog',
     invert: store.getBool(SKEY.INVERT, false),
   };
 
@@ -162,8 +178,11 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     input.mouseSens = 0.0022 * settings.sens / 100;
     input.padSensX = 3.4 * settings.sens / 100;
     input.padSensY = 2.6 * settings.sens / 100;
+    input.acogScale = settings.acogSens / settings.sens;
+    input.sniperScale = settings.sniperSens / settings.sens;
     input.invertY = settings.invert;
     store.set(SKEY.SENS, settings.sens); store.set(SKEY.INVERT, settings.invert);
+    store.set(SKEY.ACOG_SENS, settings.acogSens); store.set(SKEY.SNIPER_SENS, settings.sniperSens);
   }
   applyLook();
 
@@ -182,6 +201,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     },
     onPlayerDeath() {
       app.solo.endFocus();
+      if (gs.mode === 'training') { player.reset(ctx.level.playerStart); return; }
       if (gs.mode === 'ffa') app.ffa.localDeath();
       else { gs.state = 'dying'; gs.deathT = 0; }
     },
@@ -211,7 +231,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
   };
 
   function loadLevel(arena: boolean, key: unknown = null, force = false): void {
-    const resolved = validKey(key ?? (net.active ? lobby.map ?? settings.mapKey : settings.mapKey));
+    const resolved = gs.mode === 'training' ? 'training' : validKey(key ?? (net.active ? lobby.map ?? settings.mapKey : settings.mapKey));
     if (!force && resolved === loadedKey && arena === loadedArena) return;
     loadedKey = resolved; loadedArena = arena;
     disposeLevel(scene, ctx.level); world.clear();
@@ -224,14 +244,22 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
   const enemies = ctx.enemies = new EnemyManager(ctx);
   const player = ctx.player = new Player(ctx);
   player.name = settings.name;
+  function applyOptic(): void {
+    const rifle = player.weapons[0];
+    if (rifle instanceof Gun) rifle.setOptic(settings.optic);
+    hud.setWeapon(player.weapon.name, player.weapon.hint);
+    store.set(SKEY.OPTIC, settings.optic);
+  }
+  applyOptic();
 
   // ---- run control
-  const app = { ctx, gs, lobby, scores, settings, busy: false, screen: null, loadLevel, applyLook } as unknown as App;
+  const app = { ctx, gs, lobby, scores, settings, busy: false, screen: null, loadLevel, applyLook, applyOptic } as unknown as App;
   app.pickups = createPickups(ctx);
   app.breakables = createBreakables(ctx, app.pickups);
   app.addScore = game.addScore;
   app.saveCheckpoint = n => { settings.checkpoint = n; store.set(SKEY.CHECKPOINT, n); };
   app.solo = createSolo(app);
+  app.training = createTraining(app);
   app.endFocus = app.solo.endFocus;
   app.ffa = createFFA(app);
   app.ui = createUI(app);
@@ -258,9 +286,14 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     hud.hideScreen(); hud.setGameplayVisible(true); gs.menu = false;
   };
   app.beginSolo = () => {
+    const reset = gs.mode !== 'solo' || gs.state === 'start' || gs.state === 'dead';
     gs.mode = 'solo'; loadLevel(false, settings.mapKey); app.beginCommon();
-    if (gs.state === 'start' || gs.state === 'dead') { app.resetRun(); app.solo.startWave(1); }
+    if (reset) { app.resetRun(); app.solo.startWave(1); }
     gs.state = 'play';
+  };
+  app.beginTraining = () => {
+    gs.mode = 'training'; loadLevel(false); app.resetRun(); app.training.reset();
+    app.beginCommon(); gs.state = 'play';
   };
   app.beginAtWave = n => {
     if (!Number.isInteger(n) || n < 1) return;
@@ -268,14 +301,15 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
   };
   app.pause = () => {
     if (gs.state !== 'play' || gs.menu) return;
-    if (gs.mode === 'solo') gs.state = 'pause';
-    gs.menu = true; app.showScreen(gs.mode === 'solo' ? 'pause' : 'menu'); audio.reelLoop(false);
+    if (gs.mode !== 'ffa') gs.state = 'pause';
+    gs.menu = true; app.showScreen(gs.mode !== 'ffa' ? 'pause' : 'menu'); audio.reelLoop(false);
   };
   app.resume = () => {
     if (gs.mode === 'ffa') {
       gs.menu = false; hud.hideScreen(); hud.setGameplayVisible(true);
       if (!input.usingGamepad) input.requestLock();
-    } else app.beginSolo();
+    } else if (gs.mode === 'training') { app.beginCommon(); gs.state = 'play'; }
+    else app.beginSolo();
   };
   app.mainMenu = () => {
     gs.state = 'start'; gs.mode = 'solo'; gs.menu = false;
@@ -292,7 +326,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
   handle = {
     ctx, gs, player, enemies, net, remotes: ctx.remotes, lobby, scores, pickups: app.pickups.items,
     level: ctx.level, nav: ctx.nav, hud, effects, input, world,
-    beginSolo: app.beginSolo, beginAtWave: app.beginAtWave, jumpToWave: app.jumpToWave, step: t => step(t),
+    beginSolo: app.beginSolo, beginTraining: app.beginTraining, beginAtWave: app.beginAtWave, jumpToWave: app.jumpToWave, step: t => step(t),
     dispose,
     get live() { return live; },
   };
@@ -303,7 +337,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     teardown.push(() => target.removeEventListener(type, fn, options));
   };
   enemies.onKill = app.solo.onKill;
-  enemies.onBoss = app.solo.onBoss;
+  enemies.onBoss = e => { if (gs.mode !== 'training') app.solo.onBoss(e); };
   player.onThrow = d => { if (net.active) net.broadcast('nade', d); };
   hud.onScreenClick = app.ui.screenClick;
   hud.onUiAction = app.ui.onUiAction;
@@ -364,7 +398,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     else if (gs.focus.active) scale = 0.26;
     const sdt = dt * scale;
 
-    if (gs.state === 'play' && gs.mode === 'solo') app.solo.updateFocus(dt);
+    if (gs.state === 'play' && gs.mode !== 'ffa') app.solo.updateFocus(dt);
     else app.solo.endFocus();
 
     if (game.playing()) {
@@ -384,6 +418,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
       app.pickups.update(sdt);
       app.ffa.update(dt, nowMs / 1000);
       if (gs.state === 'play' && gs.mode === 'solo') app.solo.update(sdt);
+      if (gs.state === 'play' && gs.mode === 'training') app.training.update(sdt);
       if (game.isOnline()) app.pickups.arenaUpdate(dt);
       if (gs.comboT > 0) { gs.comboT -= sdt; if (gs.comboT <= 0) { gs.combo = 0; hud.setScore(gs.score, 0); } }
       if (gs.state === 'dying') {
