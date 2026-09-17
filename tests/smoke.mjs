@@ -57,7 +57,9 @@ const report = await page.evaluate(async () => {
 });
 
 assert.equal(await page.locator('[data-act="checkpoint"], .checkpoints').count(), 0);
-assert.equal(await page.evaluate(() => 'beginAtWave' in window.__game || 'jumpToWave' in window.__game), false);
+// `jumpToWave` stays: debug only, no UI reaches it (game-loop.md §34). What must be gone is the
+// checkpoint UI above and any saved wave unlock, both still asserted here.
+assert.equal(await page.evaluate(() => 'beginAtWave' in window.__game), false);
 
 // Phase 8: screens are React components wired to real callbacks. Click the
 // actual START button rather than calling the engine, because the risk in

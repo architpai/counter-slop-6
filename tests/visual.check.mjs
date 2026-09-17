@@ -85,9 +85,13 @@ try {
     assert.equal(await page.evaluate(() => window.__game.level.key), 'house');
     await settle();
     const tip = await page.locator('.tip-line').boundingBox();
+    // The tip sits low and centred now, between the corner clusters: what matters is that it
+    // never covers them, not that it clears their tops.
     for (const selector of ['.bottom-left', '.bottom-right']) {
       const hud = await page.locator(selector).boundingBox();
-      assert(tip && hud && tip.y + tip.height < hud.y, 'tips stay above health, ammo and slots');
+      const clear = tip && hud && (tip.y + tip.height <= hud.y || hud.y + hud.height <= tip.y
+        || tip.x + tip.width <= hud.x || hud.x + hud.width <= tip.x);
+      assert(clear, 'tips never cover health, ammo and slots');
     }
     await shot(`hud-${width}`);
     await page.evaluate(() => {
