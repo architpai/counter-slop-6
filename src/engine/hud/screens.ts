@@ -12,8 +12,8 @@ import type { RifleOptic } from '../weapons/stats';
  */
 export const UI_ACTIONS = [
   'start', 'online', 'back', 'quickPlay', 'create', 'join', 'joinCode',
-  'visibility', 'name', 'pickMap', 'checkpoint', 'mainMenu', 'startMatch',
-  'leave', 'leaveMatch', 'sens', 'acogSens', 'sniperSens', 'optic', 'training', 'invert', 'music',
+  'visibility', 'name', 'pickMap', 'mainMenu', 'startMatch',
+  'leave', 'leaveMatch', 'sens', 'acogSens', 'sniperSens', 'optic', 'r4cOptic', 'training', 'invert', 'music',
 ] as const;
 
 export type UiAction = (typeof UI_ACTIONS)[number];
@@ -23,27 +23,27 @@ export type UiAction = (typeof UI_ACTIONS)[number];
 export interface MapChoice { key: string; name: string; blurb: string }
 export interface LobbyPlayer { id: string; name: string; host: boolean; self: boolean }
 
+export interface WeaponSettingsModel { optic: RifleOptic; r4cOptic: RifleOptic }
 export interface LookModel {
-  sens: number; acogSens: number; sniperSens: number; optic: RifleOptic;
+  sens: number; acogSens: number; sniperSens: number;
   invert: boolean; music: boolean; confirmKey: string;
 }
-export interface MainModel extends LookModel {
-  best: number; checkpoint: number; mapKey: string;
+export interface MainModel extends LookModel, WeaponSettingsModel {
+  best: number; mapKey: string;
   maps: MapChoice[];
 }
-export interface LobbyModel {
+export interface LobbyModel extends WeaponSettingsModel {
   code: string; isPublic: boolean; isHost: boolean; mapKey: string;
   maps: MapChoice[];
-  optic: RifleOptic;
   players: LobbyPlayer[];
   status: string;
 }
 export interface OnlineModel { name: string; isPublic: boolean; status: string; busy: boolean;
                                code: string }
-export interface PauseModel extends LookModel { wave: number; score: number; training: boolean }
-export interface MenuModel extends LookModel { code: string; rows: BoardRow[] }
+export interface PauseModel extends LookModel, WeaponSettingsModel { wave: number; score: number; training: boolean }
+export interface MenuModel extends LookModel, WeaponSettingsModel { code: string; rows: BoardRow[] }
 export interface DeadModel   { waves: number; kills: number; score: number; best: number;
-                               newBest: boolean; checkpoint: number; confirmKey: string }
+                               newBest: boolean; confirmKey: string }
 export interface OverModel   { youWin: boolean; winnerName: string; rows: BoardRow[] }
 export interface BoardModel  { rows: BoardRow[]; code: string }
 /** Top 3 + self if ranked 4th or lower. */

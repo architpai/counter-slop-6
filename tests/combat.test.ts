@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { Group, Mesh, PerspectiveCamera, Scene, Vector3 } from 'three';
 import { Player } from '@/engine/player/index';
+import { RemotePlayer } from '@/engine/players';
 import { updateCamera } from '@/engine/player/camera';
 import { EnemyManager } from '@/engine/enemies/index';
 import { syncModel } from '@/engine/enemies/model';
@@ -24,7 +25,8 @@ function setup() {
   const noop = () => {};
   const ctx = { scene, camera, renderer: { rig }, input, hud, audio: new Audio(), world: new World(),
     level: { playerStart: new Vector3(), movers: [], rings: [] },
-    effects: { shake: 0, tracer: noop, strokeBurst: noop, smoke: noop, shell: noop, blood: noop, sparks: noop },
+    effects: { shake: 0, tracer: noop, strokeBurst: noop, smoke: noop, shell: noop, blood: noop, sparks: noop,
+      debris: noop, fountain: noop, bloodPool: noop },
     game: { raycastPlayers: () => null, playersInArc: () => [], breakablesInArc: () => [], cutRopes: () => false,
       hitPlayer: noop, breakHit: noop, hitstop: noop, addScore: noop, onShot: noop, onPlayerDeath: noop },
   } as unknown as Ctx;
@@ -40,9 +42,9 @@ function setup() {
   return { p, ctx, hud, enemies, frame, key };
 }
 
-test('melee is independent of all four guns, empty ammo, aim and reload', () => {
+test('melee is independent of all five guns, empty ammo, aim and reload', () => {
   const { p, hud, frame, key } = setup();
-  for (let slot = 0; slot < 4; slot++) {
+  for (let slot = 0; slot < 5; slot++) {
     p.switchTo(slot);
     p.weapon.mag = p.weapon.reserve = 0;
     key('KeyF', true); frame();
@@ -63,13 +65,36 @@ test('melee is independent of all four guns, empty ammo, aim and reload', () => 
   for (let i = 0; i < 130; i++) frame();
   expect(pistol.mag).toBe(15);
   expect(pistol.reserve).toBe(78);
-  expect(p.wi).toBe(3);
+  expect(p.wi).toBe(4);
   key('Digit1', true); frame(); key('Digit1', false); frame();
   expect(p.wi).toBe(0);
   key('KeyF', true); frame();
-  key('Digit4', true); frame(); key('Digit4', false); key('KeyF', false);
+  key('Digit5', true); frame(); key('Digit5', false); key('KeyF', false);
   for (let i = 0; i < 60; i++) frame();
-  expect(p.wi).toBe(3);
+  expect(p.wi).toBe(4);
+  expect(p.weapon.kind).toBe('pistol');
+});
+
+test('five digit slots, Digit6 melee and wheel wrap use the same loadout order', () => {
+  const { p, frame, key } = setup();
+  const kinds = ['r4c', 'rifle', 'shotgun', 'sniper', 'pistol'];
+  for (const [slot, kind] of kinds.entries()) {
+    key(`Digit${slot + 1}`, true); frame(); key(`Digit${slot + 1}`, false); frame();
+    expect(p.wi).toBe(slot);
+    expect(p.weapon.kind).toBe(kind);
+    expect(p.melee.active).toBe(false);
+  }
+  key('Digit6', true); frame();
+  expect(p.wi).toBe(4);
+  expect(p.melee.active).toBe(true);
+  key('Digit6', false);
+  for (let i = 0; i < 60; i++) frame();
+  window.dispatchEvent(new WheelEvent('wheel', { deltaY: 1 })); frame();
+  expect(p.wi).toBe(0);
+  expect(p.weapon.kind).toBe('r4c');
+  frame();
+  window.dispatchEvent(new WheelEvent('wheel', { deltaY: -1 })); frame();
+  expect(p.wi).toBe(4);
   expect(p.weapon.kind).toBe('pistol');
 });
 
@@ -87,7 +112,7 @@ test('holding melee guards without stealing aim, and death cancels pending conta
   expect(p.melee.active).toBe(false);
   expect(p.melee.root.visible).toBe(false);
   p.reset(new Vector3());
-  expect(p.weapon.kind).toBe('rifle');
+  expect(p.weapon.kind).toBe('r4c');
   expect(p.headshotT).toBe(0);
 });
 
@@ -131,15 +156,63 @@ test('visible boots register hits, and empty space beside a model does not', () 
   expect(enemies.raycast(new Vector3(2, 1, 0), direction, 10)).toBeNull();
 });
 
-test('accepted gun headshots give a bounded screen wobble and a brief follow-up bonus', () => {
+test('real gun rays keep close-range kill thresholds for recruits and 110 HP online players', () => {
   const { p, ctx, enemies } = setup();
-  const head = { part: 'head', crit: true, source: 'rifle' };
+  const victim = setup().p;
+  const remote = new RemotePlayer(ctx, 'victim', 'victim');
+  cleanups.push(() => remote.dispose());
+  // boot.ts resetRun sets online health to 110, not the constructor's solo 120.
+  victim.maxHp = 110;
+  const cases = [
+    { kind: 'r4c', pve: [3, 2], pvp: [5, 3] },
+    { kind: 'rifle', pve: [5, 2], pvp: [7, 4] },
+    { kind: 'pistol', pve: [3, 1], pvp: [4, 2] },
+    { kind: 'sniper', pve: [1, 1], pvp: [2, 1] },
+  ];
+  for (const row of cases) {
+    const gun = p.weapons.find(w => w.kind === row.kind) as Gun;
+    expect(gun).toBeDefined();
+    for (const [index, part] of ['torso', 'head'].entries()) {
+      enemies.clear();
+      const enemy = enemies.spawn('grunt', new Vector3(0, 0, -10));
+      expect(enemy.hp).toBe(100);
+      enemy.state = 'hunt'; enemy.root.scale.setScalar(1); enemy.root.rotation.y = 0;
+      syncModel(enemy);
+      const hit = enemy.hits.find(h => h.part === part)!;
+      ctx.camera.position.copy(hit.center).add(new Vector3(0, 0, 10));
+      const direction = new Vector3(0, 0, -1);
+      ctx.game.raycastPlayers = () => null;
+      expect(enemies.raycast(ctx.camera.position, direction, 300)?.part).toBe(part);
+      for (let shot = 1; shot <= row.pve[index]!; shot++) {
+        gun._ray(direction);
+        expect(enemy.alive, `${row.kind} PvE ${part}, shot ${shot}`).toBe(shot < row.pve[index]!);
+      }
+      enemies.clear();
+      victim.reset(new Vector3(0, 0, -10));
+      expect(victim.hp).toBe(110);
+      ctx.game.raycastPlayers = () => ({ player: remote, part, dist: 10, point: victim.center.clone() });
+      ctx.game.hitPlayer = (target, amount) => { expect(target).toBe(remote); victim.takeDamage(amount); };
+      for (let shot = 1; shot <= row.pvp[index]!; shot++) {
+        gun._ray(direction);
+        expect(victim.alive, `${row.kind} PvP ${part}, shot ${shot}`).toBe(shot < row.pvp[index]!);
+      }
+    }
+  }
+});
+
+test('accepted gun headshots give a bounded screen wobble and a brief follow-up bonus', () => {
+  const { p, ctx, enemies, hud, frame } = setup();
+  const head = { part: 'head', crit: true, source: 'r4c' };
   const enemy = enemies.spawn('shield', new Vector3(0, 0, -10));
   enemies.damage(enemy, 10, { ...head, part: 'shield' });
+  expect(hud.hitmarkerState).toMatchObject({ blocked: true, crit: false, killNonce: 0 });
   expect(p.headshotT).toBe(0);
   enemies.damage(enemy, 0, head);
   expect(p.headshotT).toBe(0);
+  enemies.damage(enemy, 10, { source: 'rifle', part: 'torso' });
+  expect(hud.hitmarkerState).toMatchObject({ blocked: false, crit: false, kill: false });
   enemies.damage(enemy, 10, head);
+  expect(hud.hitmarkerState).toMatchObject({ blocked: false, crit: true, kill: false });
   expect(p.headshotT).toBe(0.28);
   const kick = p.headshotRoll.vel;
   for (let i = 0; i < 10; i++) p.onHeadshot(head);
@@ -151,6 +224,7 @@ test('accepted gun headshots give a bounded screen wobble and a brief follow-up 
   expect(p.forward.equals(aim)).toBe(true);
 
   const gun = p.weapon as Gun, st = { ...p.weaponState(), fire: true, firePressed: true };
+  for (let i = 0; i < 70; i++) frame(); // wait out the draw
   vi.spyOn(Math, 'random').mockReturnValue(0.5);
   p.headshotT = 0; gun.resetAmmo(); p.pitch = 0; gun.animate(st, 0);
   const normalKick = p.pitch, normalSpread = gun.spreadPx;

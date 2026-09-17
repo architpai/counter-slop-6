@@ -15,6 +15,7 @@ const slider = async (name, value) => page.locator(`input[data-act="${name}"]`).
   el.dispatchEvent(new Event('input', { bubbles: true }));
 }, value);
 const settle = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+const optic = (weapon, kind) => page.getByRole('group', { name: `${weapon} scope`, exact: true }).locator(`[data-value="${kind}"]`);
 const pause = async () => {
   // Headless software rendering can miss a short timed key press. Hold until
   // the game consumes it, and do not resume an already auto-paused game.
@@ -33,12 +34,28 @@ try {
   assert.equal(await page.locator('[data-act="sniperSens"]').inputValue(), '150');
   await page.screenshot({ path: `${out}/settings.png` });
   await slider('acogSens', 140); await slider('sniperSens', 170);
-  await page.getByRole('button', { name: 'play', exact: true }).click();
-  await page.locator('[data-act="optic"][data-value="holo"]').click();
+  assert.equal(await page.locator('.optic-picker').count(), 0, 'scopes are no longer under general settings');
+  await page.getByRole('button', { name: 'weapons', exact: true }).click();
+  await optic('MP5', 'holo').click();
+  assert.equal(await optic('R4-C', 'acog').getAttribute('aria-pressed'), 'true');
   await page.reload();
   await page.waitForFunction(() => window.__game?.live === 1);
-  assert.equal(await page.locator('[data-value="holo"]').getAttribute('aria-pressed'), 'true');
-  assert.equal(await page.evaluate(() => window.__game.player.weapons[0].optic), 'holo');
+  assert.equal(await page.locator('.optic-picker').count(), 0, 'play page has no standalone optic picker');
+  await page.getByRole('button', { name: 'weapons', exact: true }).click();
+  assert.equal(await optic('MP5', 'holo').getAttribute('aria-pressed'), 'true');
+  assert.equal(await optic('R4-C', 'acog').getAttribute('aria-pressed'), 'true');
+  assert.equal(await page.evaluate(() => window.__game.player.weapons.find(w => w.kind === 'rifle').optic), 'holo');
+  await optic('R4-C', 'holo').click();
+  await optic('MP5', 'acog').click();
+  await page.reload();
+  await page.waitForFunction(() => window.__game?.live === 1);
+  await page.getByRole('button', { name: 'weapons', exact: true }).click();
+  assert.equal(await optic('R4-C', 'holo').getAttribute('aria-pressed'), 'true');
+  assert.equal(await optic('MP5', 'acog').getAttribute('aria-pressed'), 'true');
+  assert.deepEqual(await page.evaluate(() => [localStorage.getItem('cs6_r4c_optic'), localStorage.getItem('cs6_optic')]), ['holo', 'acog']);
+  await optic('MP5', 'holo').click();
+  assert.equal(await page.evaluate(() => window.__game.gs.state), 'start', 'scope changes do not launch a run');
+  await page.screenshot({ path: `${out}/weapons.png` });
   await page.getByRole('button', { name: 'settings', exact: true }).click();
   assert.equal(await page.locator('[data-act="acogSens"]').inputValue(), '140');
   assert.equal(await page.locator('[data-act="sniperSens"]').inputValue(), '170');
@@ -61,19 +78,30 @@ try {
   await page.evaluate(() => window.__game.hud.update(10));
   await settle();
   await page.screenshot({ path: `${out}/range.png` });
-  await page.mouse.down({ button: 'right' });
-  await page.waitForFunction(() => window.__game.hud.scope.shown && window.__game.hud.scope.kind === 'holo');
-  await page.waitForFunction(() => Math.abs(window.__game.ctx.camera.fov - 82) < .1);
-  await page.screenshot({ path: `${out}/holo.png` });
-  await page.mouse.up({ button: 'right' });
+  for (const [slot, name] of [[0, 'r4c'], [1, 'mp5']]) {
+    await page.evaluate(slot => window.__game.player.switchTo(slot), slot);
+    await page.mouse.down({ button: 'right' });
+    await page.waitForFunction(() => window.__game.hud.scope.shown && window.__game.hud.scope.kind === 'holo');
+    await page.waitForFunction(() => Math.abs(window.__game.ctx.camera.fov - 82) < .1);
+    assert.equal(await page.evaluate(() => window.__game.player.weapon.root.visible), false);
+    await page.screenshot({ path: `${out}/${name}-holo.png` });
+    await page.mouse.up({ button: 'right' });
+  }
 
   // Measure actual yaw changes, not only stored settings. General look must cancel
   // out of the two independent magnified-sight settings, on mouse and controller.
   await pause();
-  await page.locator('[data-value="acog"]').click();
+  await page.getByRole('button', { name: 'weapons', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await page.evaluate(() => window.__game.gs.state), 'pause', 'keyboard opens Weapons without resuming');
+  await optic('R4-C', 'acog').click();
+  assert.equal(await optic('MP5', 'holo').getAttribute('aria-pressed'), 'true');
+  await optic('MP5', 'acog').click();
+  await page.evaluate(() => window.__game.hud.onUiAction('r4cOptic', 'invalid', new Event('click')));
+  assert.equal(await page.evaluate(() => window.__game.player.weapons[0].scopeKind), 'acog');
   const measure = () => page.evaluate(() => {
     const g = window.__game, p = g.player, values = [];
-    for (const slot of [0, 2]) for (const sensitivity of [g.input.mouseSens, g.input.padSensX, g.input.padSensY]) {
+    for (const slot of [0, 1, 3]) for (const sensitivity of [g.input.mouseSens, g.input.padSensX, g.input.padSensY]) {
       p.switchTo(slot); p.aiming = true; p.dashLock = true;
       g.input.look.x = sensitivity * .01; g.input.look.y = 0;
       const before = p.yaw; p.update(0); values.push(p.yaw - before);
@@ -82,19 +110,20 @@ try {
     return values;
   });
   const before = await measure();
+  await page.getByRole('button', { name: 'settings', exact: true }).click();
   await slider('sens', 200);
   const after = await measure();
   before.forEach((value, i) => assert(Math.abs(value - after[i]) < 1e-10, 'scoped sensitivity is independent of general look'));
   await slider('acogSens', 175);
   const changed = await measure();
-  changed.forEach((value, i) => assert(Math.abs(value - after[i] * (i < 3 ? 175 / 120 : 1)) < 1e-10));
+  changed.forEach((value, i) => assert(Math.abs(value - after[i] * (i < 6 ? 175 / 120 : 1)) < 1e-10));
   await slider('sens', 100); await slider('acogSens', 120);
   await page.locator('[data-act="training"]').click();
   await page.mouse.down({ button: 'right' });
   await page.waitForFunction(() => window.__game.hud.scope.shown && window.__game.hud.scope.kind === 'acog');
   await page.waitForFunction(() => Math.abs(window.__game.ctx.camera.fov - 38) < .1);
   await page.screenshot({ path: `${out}/acog.png` });
-  await page.keyboard.press('Digit3', { delay: 100 });
+  await page.keyboard.press('Digit4', { delay: 100 });
   await page.waitForFunction(() => window.__game.hud.scope.shown && window.__game.hud.scope.kind === 'sniper');
   await page.waitForFunction(() => Math.abs(window.__game.ctx.camera.fov - 20) < .1);
   await page.screenshot({ path: `${out}/sniper.png` });
@@ -104,7 +133,7 @@ try {
   // bullets; machines remain body targets, never headshot multipliers.
   const shots = await page.evaluate(() => {
     const g = window.__game; g.gs.state = 'pause';
-    g.player.switchTo(0);
+    g.player.switchTo(1);
     const gun = g.player.weapon, results = [];
     for (const e of g.enemies.list.filter(e => e.alive)) {
       const part = e.hits.find(h => h.part === 'head') ?? e.hits[0];
@@ -169,6 +198,6 @@ try {
   await page.locator('[data-act="start"]').click();
   await page.waitForFunction(() => window.__game.gs.mode === 'solo' && window.__game.gs.wave === 1);
   assert.deepEqual(errors, []);
-  console.log('OK: passive range, all 10 targets, respawn/reset, ammo, hit registration, cover, optics, saved preference, zoom and independent mouse/controller sensitivity.');
+  console.log('OK: passive range, all 10 targets, respawn/reset, ammo, hit registration, cover, independent R4-C/MP5 optics, Weapons section, saved preferences, zoom and independent mouse/controller sensitivity.');
   console.log(`Screenshots: ${out}`);
 } finally { await browser.close(); }

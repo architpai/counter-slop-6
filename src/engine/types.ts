@@ -145,7 +145,7 @@ export type HitPart =
   | 'legL' | 'legR' | 'shinL' | 'shinR' | 'shield' | 'blade';
 
 export type DamageSource =
-  | 'rifle' | 'shotgun' | 'sniper' | 'revolver' | 'pistol' | 'melee' | 'focus'
+  | 'r4c' | 'rifle' | 'shotgun' | 'sniper' | 'revolver' | 'pistol' | 'melee' | 'focus'
   | 'deflect' | 'blast' | 'fall' | 'grenade';
 
 /** One record for every damage event, from any source, to any victim. */
@@ -358,7 +358,7 @@ export interface Envelope {
  * | 0,1,2    | body position x, y (feet), z | 2 dp                          |
  * | 3        | yaw                          | 2 dp                          |
  * | 4        | pitch                        | 2 dp                          |
- * | 5        | weapon index                 | int 0..3                      |
+ * | 5        | weapon index                 | int 0..4                      |
  * | 6        | flag bits                    | int, see `PS_FLAG`            |
  * | 7        | health                       | rounded int                   |
  * | 8,9,10   | velocity x, y, z             | 1 dp                          |
@@ -492,7 +492,6 @@ export type StorageKey =
   | 'cs6_map'
   | 'cs6_best'
   | 'cs6_music'
-  | 'cs6_checkpoint'
   | 'cs6_name'
   | 'cs6_sens'
   | 'cs6_invert';

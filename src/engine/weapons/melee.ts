@@ -39,6 +39,7 @@ export class Melee extends ViewModel implements Weapon {
   readonly isGun: false;
   readonly scope: false;
   readonly adsFov: number;
+  readonly adsSpeed: 1;
   mag: number;
   reserve: number;
   magSize: number;
@@ -55,6 +56,7 @@ export class Melee extends ViewModel implements Weapon {
     this.isGun = false;
     this.scope = false;
     this.adsFov = 60;
+    this.adsSpeed = 1;
     this.mag = this.reserve = this.magSize = Infinity;
     this.reloading = false;
     this._arcA = new Vector3();
@@ -76,6 +78,14 @@ export class Melee extends ViewModel implements Weapon {
     this._resetPose();
     this.root.visible = false;
     for (const smear of this._model.bloodSmears) smear.visible = false;
+  }
+
+  /** Drop the swing and guard without touching blood or combo (a focus dash takes the hands). */
+  _cancel() {
+    this.blocking = false;
+    this.blockT = this._slashT = this._blockAmt = this._parrySwing = this._deflectKick = 0;
+    this._hitDone = false;
+    this.root.visible = false;
   }
 
   addBlood(amount: number) {
@@ -100,7 +110,9 @@ export class Melee extends ViewModel implements Weapon {
     this.cooldown = 0.33;
     this._ctx.audio.katanaSwing();
     this._player.kickFov(2);
+    // A grounded stab still steps in; rushers strike from 3 m and the blade reaches 2.1.
     if (st.sprinting || !st.grounded) this._player.lunge(3.5);
+    else this._player.step(1.6);
     const side = this.combo % 2 ? 1 : -1;
     for (let i = 0; i < 9; i++) {
       const a = (-1.1 + 2.2 * i / 8) * side, b = a + 0.12 * side;
@@ -119,7 +131,7 @@ export class Melee extends ViewModel implements Weapon {
   animate(st: WeaponState, dt: number) {
     if (this._disposed || !this._equipped) return;
     if (st.blockFire) {
-      this.resetAmmo();
+      this._cancel();
       return;
     }
     this._pose({ ...st, aim: false }, dt);

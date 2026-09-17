@@ -1,6 +1,7 @@
 // Phase 1 smoke check: the engine boots inside Next, renders, and StrictMode's
 // double-mount leaves exactly one live instance. Run against `npm run dev`.
 //   node tests/smoke.mjs [url]
+import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 
 const url = process.argv[2] ?? 'http://localhost:3100/';
@@ -13,6 +14,8 @@ page.on('requestfailed', r => errors.push(`request failed: ${r.url()}`));
 page.on('response', r => r.status() >= 400 && errors.push(`HTTP ${r.status()} ${r.url()}`));
 page.on('pageerror', e => errors.push(String(e)));
 
+// Old saves must not restore wave selection or skip the start of a run.
+await page.addInitScript(() => localStorage.setItem('cs6_checkpoint', '5'));
 await page.goto(url, { waitUntil: 'networkidle' });
 await page.waitForFunction(() => window.__game !== undefined, null, { timeout: 30_000 });
 
@@ -53,11 +56,17 @@ const report = await page.evaluate(async () => {
   };
 });
 
+assert.equal(await page.locator('[data-act="checkpoint"], .checkpoints').count(), 0);
+// `jumpToWave` stays: debug only, no UI reaches it (game-loop.md §34). What must be gone is the
+// checkpoint UI above and any saved wave unlock, both still asserted here.
+assert.equal(await page.evaluate(() => 'beginAtWave' in window.__game), false);
+
 // Phase 8: screens are React components wired to real callbacks. Click the
 // actual START button rather than calling the engine, because the risk in
 // dropping [data-act] delegation is that a button stops reaching game/ui.
 await page.click('.screen-button[data-act="start"]');
 const clicked = await page.evaluate(() => window.__game.gs.state);
+assert.equal(await page.evaluate(() => window.__game.gs.wave), 1);
 
 // Back to the main screen, then prove the backdrop still advances the screen:
 // a click that misses every [data-ui-block] must reach onScreenClick.
@@ -142,6 +151,44 @@ const hudWork = await page.evaluate(async () => {
 
 const shot = await page.screenshot();
 const blank = shot.length < 8000;
+
+// Reach a boss-wave boundary without playing ten waves. It must not save an
+// unlock. Pause keeps the run; death and returning to the menu both reset it.
+await page.evaluate(() => {
+  const g = window.__game;
+  g.gs.mode = 'solo'; g.gs.state = 'play';
+  g.enemies.clear(); g.gs.queue.length = 0;
+  g.gs.wave = 9; g.gs.intermission = .01; g.gs.score = 700;
+});
+await page.waitForFunction(() => window.__game.gs.wave === 10);
+assert.equal(await page.evaluate(() => localStorage.getItem('cs6_checkpoint')), '5');
+assert.equal(await page.evaluate(() => window.__game.hud.killFeed.some(row => row.text.includes('CHECKPOINT'))), false);
+await page.keyboard.down('KeyP');
+await page.waitForFunction(() => window.__game.gs.state === 'pause');
+await page.keyboard.up('KeyP');
+await page.evaluate(() => window.__game.hud.onUiAction?.('checkpoint', '5', new Event('click')));
+assert.equal(await page.evaluate(() => window.__game.gs.state), 'pause');
+await page.mouse.click(20, 20);
+await page.waitForFunction(() => window.__game.gs.state === 'play');
+assert.equal(await page.evaluate(() => window.__game.gs.wave), 10);
+await page.evaluate(() => {
+  const g = window.__game;
+  g.player.takeDamage(100000); g.gs.deathT = 2;
+});
+await page.waitForFunction(() => window.__game.gs.state === 'dead');
+assert.equal(await page.locator('[data-act="checkpoint"], .checkpoints').count(), 0);
+assert.match(await page.locator('.screen-prompt').innerText(), /RESTART AT WAVE 1/);
+assert.equal(await page.evaluate(() => Number(localStorage.getItem('cs6_best'))), 700);
+await page.mouse.click(20, 20);
+await page.waitForFunction(() => window.__game.gs.state === 'play');
+assert.equal(await page.evaluate(() => window.__game.gs.wave), 1);
+assert.equal(await page.evaluate(() => window.__game.gs.score), 0);
+await page.evaluate(() => window.__game.hud.onUiAction?.('mainMenu', null, new Event('click')));
+await page.waitForFunction(() => window.__game.gs.state === 'start');
+assert.equal(await page.locator('[data-act="checkpoint"], .checkpoints').count(), 0);
+await page.locator('[data-act="start"]').click();
+assert.equal(await page.evaluate(() => window.__game.gs.wave), 1);
+console.log('  ok  checkpoints removed; old saves ignored, boss unlocks disabled, pause preserved, retries start at wave 1, best score retained');
 
 // StrictMode alone does not exercise dispose(): the `cancelled` guard usually
 // wins the race against the dynamic import. HMR and route changes do exercise

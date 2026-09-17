@@ -33,12 +33,12 @@ export interface Settings {
   mapKey: LevelKey;
   best: number;
   music: boolean;
-  checkpoint: number;
   name: string;
   sens: number;
   acogSens: number;
   sniperSens: number;
   optic: RifleOptic;
+  r4cOptic: RifleOptic;
   invert: boolean;
 }
 
@@ -61,7 +61,6 @@ export interface App {
   pickups: PickupsApi;
   breakables: BreakablesApi;
   addScore(points: number, label?: string | null): void;
-  saveCheckpoint(n: number): void;
   solo: SoloApi;
   training: TrainingApi;
   endFocus(): void;
@@ -73,11 +72,9 @@ export interface App {
   beginCommon(): void;
   beginSolo(): void;
   beginTraining(): void;
-  beginAtWave(n: number): void;
   pause(): void;
   resume(): void;
   mainMenu(): void;
-  jumpToWave(n: number): void;
 }
 
 export interface GameHandle {
@@ -98,7 +95,7 @@ export interface GameHandle {
   world: World;
   beginSolo(): void;
   beginTraining(): void;
-  beginAtWave(n: number): void;
+  /** Debug only: restart the solo run at wave `n`. No UI reaches this. */
   jumpToWave(n: number): void;
   step(nowMs: number): void;
   dispose(): void;
@@ -139,12 +136,12 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     mapKey: validKey(store.getStr(SKEY.MAP, 'downtown')),
     best: store.getNum(SKEY.BEST, 0),
     music: store.getStr(SKEY.MUSIC, '1') !== '0',
-    checkpoint: store.getNum(SKEY.CHECKPOINT, 0),
     name: store.getStr(SKEY.NAME, '').trim().slice(0, 14) || `recruit${randInt(10, 99)}`,
     sens: clamp(store.getNum(SKEY.SENS, 100), 25, 250),
     acogSens: clamp(store.getNum(SKEY.ACOG_SENS, 120), 25, 250),
     sniperSens: clamp(store.getNum(SKEY.SNIPER_SENS, 150), 25, 250),
     optic: store.getStr(SKEY.OPTIC, 'acog') === 'holo' ? 'holo' : 'acog',
+    r4cOptic: store.getStr(SKEY.R4C_OPTIC, 'acog') === 'holo' ? 'holo' : 'acog',
     invert: store.getBool(SKEY.INVERT, false),
   };
 
@@ -245,10 +242,14 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
   const player = ctx.player = new Player(ctx);
   player.name = settings.name;
   function applyOptic(): void {
-    const rifle = player.weapons[0];
-    if (rifle instanceof Gun) rifle.setOptic(settings.optic);
+    for (const weapon of player.weapons) {
+      if (weapon instanceof Gun && (weapon.kind === 'rifle' || weapon.kind === 'r4c')) {
+        weapon.setOptic(weapon.kind === 'r4c' ? settings.r4cOptic : settings.optic);
+      }
+    }
     hud.setWeapon(player.weapon.name, player.weapon.hint);
     store.set(SKEY.OPTIC, settings.optic);
+    store.set(SKEY.R4C_OPTIC, settings.r4cOptic);
   }
   applyOptic();
 
@@ -257,7 +258,6 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
   app.pickups = createPickups(ctx);
   app.breakables = createBreakables(ctx, app.pickups);
   app.addScore = game.addScore;
-  app.saveCheckpoint = n => { settings.checkpoint = n; store.set(SKEY.CHECKPOINT, n); };
   app.solo = createSolo(app);
   app.training = createTraining(app);
   app.endFocus = app.solo.endFocus;
@@ -295,10 +295,6 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     gs.mode = 'training'; loadLevel(false); app.resetRun(); app.training.reset();
     app.beginCommon(); gs.state = 'play';
   };
-  app.beginAtWave = n => {
-    if (!Number.isInteger(n) || n < 1) return;
-    gs.mode = 'solo'; loadLevel(false, settings.mapKey); app.beginCommon(); app.resetRun(); app.solo.startWave(n); gs.state = 'play';
-  };
   app.pause = () => {
     if (gs.state !== 'play' || gs.menu) return;
     if (gs.mode !== 'ffa') gs.state = 'pause';
@@ -316,17 +312,16 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     loadLevel(false, settings.mapKey); app.resetRun(); audio.reelLoop(false); input.exitLock();
     hud.setGameplayVisible(false); app.showScreen('main');
   };
-  app.jumpToWave = n => {
-    enemies.clear(); effects.clear(); enemies.mods.speed = enemies.mods.damage = 1; app.solo.endFocus();
-    gs.intermission = 0; gs.queue.length = 0; app.solo.startWave(n);
-    hud.hideScreen(); hud.setGameplayVisible(true); gs.state = 'play'; gs.menu = false; audio.reelLoop(false);
-  };
 
   // ---- handle 11 (also the debug surface)
   handle = {
     ctx, gs, player, enemies, net, remotes: ctx.remotes, lobby, scores, pickups: app.pickups.items,
     level: ctx.level, nav: ctx.nav, hud, effects, input, world,
-    beginSolo: app.beginSolo, beginTraining: app.beginTraining, beginAtWave: app.beginAtWave, jumpToWave: app.jumpToWave, step: t => step(t),
+    beginSolo: app.beginSolo, beginTraining: app.beginTraining, step: t => step(t),
+    jumpToWave: n => {
+      if (!Number.isInteger(n) || n < 1) return;
+      gs.mode = 'solo'; loadLevel(false, settings.mapKey); app.beginCommon(); app.resetRun(); app.solo.startWave(n); gs.state = 'play';
+    },
     dispose,
     get live() { return live; },
   };

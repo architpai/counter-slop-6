@@ -150,7 +150,7 @@ Step by step, each frame:
 5. Bob: bobX = sin(bobPhase) · 0.013 · bobAmt · (0.15 + 0.85·ia); bobY = |cos(bobPhase)| · 0.013 · bobAmt · (0.15 + 0.85·ia).
 6. Sprint amount: sprintAmt = damp(sprintAmt, (sprinting and not aiming) ? 1 : 0, 8, dt).
 7. Update both recoil springs.
-8. Draw/raise progress: equipT = min(1, equipT + dt · 3.2) (full raise takes 0.3125 s). Raise offset eq = 1 − easeOut(equipT).
+8. Draw/raise progress: equipT = min(1, equipT + dt / drawTime), where drawTime is the gun's stat (R4-C 0.42 s, MP5 0.22, shotgun 0.45, sniper 0.6, pistol 0.2, revolver 0.3; knife 0.31). Raise offset eq = 1 − easeOut(equipT). A gun is **drawn** (may fire) once equipT ≥ 0.85; the last 15 % is settle. `resetAmmo` does not reset equipT — only `equip` does, and a player reset re-equips.
 9. Position = lerp(restPos, aimPos, aimAmt), then:
    - x += swayPos.x + bobX + recoilPos.x · (0.3 + 0.7·ia) + sprintAmt · 0.06
    - y += swayPos.y + bobY + recoilPos.y · (0.3 + 0.7·ia) − eq · 0.32 − landDip · 0.35 · ia − sprintAmt · 0.09
@@ -259,8 +259,8 @@ Executed each frame for the equipped gun, after the shared pose blend (3.4), in 
 3. If pump timer > 0: run the cycle animation (section 12).
 4. If reloading: run the reload of the gun's type (section 11). For magazine and cylinder reloads, **the frame ends here** — no reload press and no fire input is examined while such a reload runs (they cannot be cancelled). The shell reload falls through to the steps below (it can be interrupted by firing).
 5. Reload press: if reload was pressed this frame AND mag < magazine size AND reserve > 0 AND not reloading AND pump timer ≤ 0 → start reload (11.1) and end the frame.
-6. Want-fire: automatic guns use "fire held"; semi-automatic guns use "fire pressed this frame".
-7. If want-fire AND fire timer ≤ 0 AND pump timer ≤ 0 AND fire is not blocked (player dead):
+6. Want-fire: automatic guns use "fire held". Semi-automatic guns use a **press buffer**: a fire press sets the buffer to 0.1 s, otherwise it counts down; want-fire = buffer > 0. A click that lands up to 100 ms before the fire interval ends therefore still fires when it does, instead of being eaten. The buffer is cleared whenever step 7 passes its gate (fired, empty click or not).
+7. If want-fire AND fire timer ≤ 0 AND pump timer ≤ 0 AND fire is not blocked (player dead) AND the gun is drawn (3.4 step 8):
    - If mag ≤ 0: only on a fire *press* (not hold): play the empty-click cue and start a reload (11.1).
    - Else: if a (shell) reload is running, cancel it (reloading = false; the left hand snaps back to its rest position) and fire (section 8).
 
@@ -270,13 +270,13 @@ Executed each frame for the equipped gun, after the shared pose blend (3.4), in 
 2. spreadNow = currentSpread; then currentSpread = min(currentSpread + spreadKick, spreadMax).
 3. For each pellet (1 or 10): cast one hitscan ray from the player's eye position along a fresh spread direction (section 6) and resolve it (section 9). Count the rays that hit a damageable target.
 4. Muzzle flash: show it, flash timer = 0.045 s, random roll about its forward axis in [0, 2π), uniform scale = flashScale · rand(0.8, 1.4).
-5. Effects at the muzzle's world position: a stroke burst (orange, count = 4 + pellets, speed = 6 · flashScale, life 0.08, size 0.03, no gravity, drag 8) and muzzle smoke along the player's forward vector (5 puffs for the shotgun, 2 for any other gun).
+5. Effects at the muzzle's world position: a stroke burst (orange, count = 4 + pellets, speed = 6 · flashScale, life 0.08, size 0.03, no gravity, drag 8) and muzzle smoke along the player's forward vector (5 puffs for the shotgun, 1 for an automatic gun, 2 for any other gun — automatics fire fast enough that 2 per shot filled the sight picture).
 6. Shell casing: if the gun has a casing definition and its reload type is not "shells", eject one casing now (section 15). (Rifle and sniper eject on fire; the shotgun ejects during the pump; the revolver never ejects.)
 7. If the gun has a cycle duration: pump timer = cycle duration + 0.12; pumped flag = false; if reload type is "shells" set the need-pump flag.
 8. Model kick with K = model kick array: recoil position spring kick ( rand(−K0, K0), rand(0.4·K1, K1), K2 ); recoil rotation spring kick ( K3, rand(−K4, K4), rand(−K5, K5) ).
 9. Camera kick: pitch = camKick[0] · (aiming ? 0.7 : 1) + rand(0, camKick[0] · 0.3); yaw = rand(−camKick[1], camKick[1]); call the player's recoil(pitch, yaw) and FOV kick(fovKick) (see 22.2).
 10. Play the gun's fire cue. Gamepad rumble: strong 0.15 + fovKick · 0.08, weak 0.5, duration 40 + fovKick · 15 ms. Screen shake amount += 0.02 + fovKick · 0.02.
-11. If at least one pellet hit and the gun is the shotgun: hit-stop for 0.03 s at time scale 0.3.
+11. Against a boss (`stats.boss`), the head multiplier is capped at 1.5 for every gun; boss heads are 2.4–2.7× scale and an uncapped 2.5× turned a boss into a two-second magazine. If at least one pellet hit: the shotgun requests hit-stop for 0.03 s at time scale 0.3; the sniper for 0.04 s at 0.3. Other guns leave hit-stop to kills.
 12. If mag is now 0 and the reload type is "magazine": schedule one callback for 250 ms later (real time). If mag is still 0 and not reloading when it runs, start a reload, even if a pump/bolt cycle is running. Cancel the callback on player reset or weapon disposal (11.5).
 
 Derived per-gun values for step 10: rifle rumble (0.246, 0.5, 58 ms), shake +0.044; shotgun (0.47, 0.5, 100 ms), +0.10; sniper (0.51, 0.5, 107.5 ms), +0.11; revolver (0.35, 0.5, 77.5 ms), +0.07.
@@ -326,17 +326,20 @@ Start reload is a no-op if already reloading, or mag is full, or reserve is 0. O
 
 Rounds already in the magazine are never lost; a reload only tops up. The ammo transfer for magazine and cylinder types happens only at the very end (take = min(magSize − mag, reserve); mag += take; reserve −= take). Switching weapons mid-reload freezes it; it resumes on re-equip.
 
-### 11.2 Magazine reload (rifle 1.45 s, sniper 2.1 s)
+### 11.2 Magazine reload (R4-C 2.2 s, MP5 1.65 s, sniper 2.1 s, pistol 1 s)
+
+The old animation dipped the gun *down* while the magazine dropped *below* the frame and the left hand never moved, so a reload read as "the gun dips". The current one lifts the gun so the magazine well is on screen and drives the hand.
 
 With t = reloadTimer / reloadDuration (0 → 1):
 
-- Tilt envelope: tilt = sin( clamp(t / 0.22, 0, 1) · π/2 ) · ( t < 0.82 ? 1 : clamp(1 − (t − 0.82) / 0.18, 0, 1) ). Ramps up over the first 22 %, holds at 1, ramps down over the last 18 %.
-- Model offsets added: rotation x −= 0.3·tilt, z += 0.5·tilt, y += 0.25·tilt; position y −= 0.07·tilt, x += 0.03·tilt.
-- Magazine mesh: mt = clamp((t − 0.18) / 0.5, 0, 1); mag mesh y = restY − sin(mt·π) · 0.3; mag mesh roll (z rotation) = sin(mt·π) · 0.6. The mag drops out and comes back between 18 % and 68 % of the reload.
+- Tilt envelope: tilt = easeOut(clamp(t / 0.16, 0, 1)) · (t < 0.84 ? 1 : 1 − easeOut(clamp((t − 0.84) / 0.16, 0, 1))). In over the first 16 %, out over the last 16 %.
+- Model offsets added: rotation x += 0.45·tilt (muzzle up), y += 0.12·tilt, z −= 0.7·tilt (underside rolled toward the eye); position x −= 0.04·tilt, y += 0.12·tilt, z += 0.05·tilt.
+- Magazine travel, drop ∈ [0, 1] (0 seated, 1 out of frame): out = easeInOut(clamp((t − 0.16) / 0.26, 0, 1)), back = easeInOut(clamp((t − 0.5) / 0.26, 0, 1)); drop = t < 0.5 ? out : 1 − back. Seat bump: for 0.76 ≤ t < 0.84, sin((t − 0.76) / 0.08 · π) · 0.015 added to y. Mag mesh: position = rest + (0, −0.5·drop + seat, 0.08·drop); rotation z = rest + 0.55·drop, x = rest − 0.2·drop.
+- Left hand: grip = easeInOut(clamp((t − 0.04) / 0.12, 0, 1)) − easeInOut(clamp((t − 0.8) / 0.12, 0, 1)) (0 → 1 → 0). Hand position = lerp(rest, magPosition + (−0.05, −0.09, 0.02), grip); hand roll z = rest + 0.6·grip. The hand therefore leaves the fore-end, follows the magazine out of frame and back, and returns. A gun without a magazine part (none today) drops the hand by 0.12·drop instead.
 - Rack event, once when t > 0.86: recoil rotation spring kick (−2.5, 0, 0); recoil position spring kick (0, 0, 0.6).
-- Completion when reloadTimer ≥ duration: transfer ammo, reloading = false.
+- Completion when reloadTimer ≥ duration: transfer ammo, reloading = false, magazine and hand snapped to rest.
 
-Absolute timings — rifle: tilt-in 0–0.319 s, mag out/in 0.261–0.986 s, rack 1.247 s, tilt-out 1.189–1.45 s. Sniper: tilt-in 0–0.462 s, mag 0.378–1.428 s, rack 1.806 s, tilt-out 1.722–2.1 s.
+Phase timings as fractions of the duration: tilt-in 0–0.16, hand to mag 0.04–0.16, mag out 0.16–0.42, mag back 0.5–0.76, seat 0.76–0.84, hand home 0.8–0.92, rack 0.86, tilt-out 0.84–1.
 
 Cannot be interrupted by fire or reload input.
 
@@ -366,6 +369,7 @@ With t = reloadTimer / 1.9:
 
 - Magazine guns (rifle, sniper) auto-reload 250 ms of real time after the shot that emptied the magazine, if still empty and not already reloading. The common reload rules still apply, including the reserve-ammo check. This delayed callback can start a reload during the sniper's bolt cycle; only manual reload input is blocked by that cycle.
 - The callback uses a weapon-owned timer. Its delay continues while holstered, paused, or in hit-stop. Only the equipped weapon advances the reload animation. Cancel any pending callback on player reset or weapon disposal so it cannot affect a later run.
+- Drawing a gun whose magazine is empty starts its reload at once (subject to the common reload rules), so a gun holstered mid-reload is not left empty and silent on return.
 - Any gun with mag = 0: a fire *press* plays the empty click and starts a reload (if reserve > 0). Holding fire on an empty automatic rifle does nothing after the first press.
 
 ## 12. Pump / bolt cycle (shotgun, sniper)
@@ -406,7 +410,7 @@ Ejection (with lateral factor `spread`, default 1): from the gun's eject point (
 
 - **Muzzle flash mesh** (part of the view model, at the muzzle point): three flat stars sharing one centre — a 7-point star (outer radius 0.16, inner 0.06) in the model's xy-plane, a 5-point star (0.11 / 0.04) rotated 90° about y, a 5-point star (0.10 / 0.04) rotated 90° about x. Hidden by default; on each shot shown for 0.045 s with random roll and scale flashScale · rand(0.8, 1.4).
 - **Muzzle burst**: stroke particles at the muzzle, count 4 + pellets, speed 6 · flashScale, life 0.08 s, size 0.03, no gravity, drag 8, orange.
-- **Muzzle smoke**: 2 puffs (5 for the shotgun) drifting along the player's forward.
+- **Muzzle smoke**: 2 puffs (5 for the shotgun, 1 for automatics) drifting along the player's forward.
 - **Tracer**: one per pellet from muzzle to ray end, thickness per gun, life 0.05 s, blue.
 - **Impact** on non-breakable world: bullet-impact effect at (point, normal) in blue (the effects system makes a small hole decal 0.06–0.1 and 5 sparks) plus a 25 % chance of a positional ricochet cue.
 - The katana slash trail is described in 18.4.
@@ -540,7 +544,7 @@ Rest position (0.19, −0.20, −0.30).
 | Player arc (versus) | range 3.0, half-angle 0.95 rad, plus line-of-sight |
 | Rope cut reach | 3.4 |
 | Breakable arc | range 3.2, half-angle 1.0 rad (cos ≈ 0.5403) |
-| Lunge | +5.5 velocity along forward when the swing starts while sprinting or airborne |
+| Lunge | +3.5 velocity along forward when the swing starts while sprinting or airborne; otherwise a flat +1.6 step (no hop, no cue) so a grounded stab reaches a rusher that strikes from 3 m |
 | FOV kick on swing | 2 |
 | Rest position / rotation | (0.27, −0.25, −0.40) / (0.75, 0.15, −0.35) |
 | Aim position | same as rest position |
@@ -586,7 +590,7 @@ Holding fire therefore chains swings automatically every 0.33 s once the first s
 
 1. slashTimer = 0.27; hitDone = false; combo += 1; comboTimer = 0.9; cooldown = 0.33.
 2. Play the "katanaSwing" cue; camera FOV kick 2.
-3. If the player is sprinting or not grounded: lunge(5.5) — the player adds 5.5 units/s along its forward (forward y clamped to −0.2..0.5 before normalising); if grounded, vertical velocity becomes at least 2.5 and the player leaves the ground; the "dash" cue plays and an extra FOV kick 3 is applied (player-owned behaviour).
+3. If the player is sprinting or not grounded: lunge(3.5); otherwise `player.step(1.6)` adds 1.6 units/s along the flat forward with no hop, cue or FOV kick. Lunge(5.5) is the pre-rehaul value; lunge(v) — the player adds 5.5 units/s along its forward (forward y clamped to −0.2..0.5 before normalising); if grounded, vertical velocity becomes at least 2.5 and the player leaves the ground; the "dash" cue plays and an extra FOV kick 3 is applied (player-owned behaviour).
 4. Slash trail: 9 short tracer segments describing an arc 1.3 units in front of the eye. With s the swing side, for i = 0..8: a = (−1.1 + 2.2 · i/8) · s and b = a + 0.12 · s; the arc point for angle θ is eye + forward·1.3 + right·(cos θ · 0.9 · s) + up·(sin θ · 0.55 − 0.1); draw a tracer from point(a) to point(b), thickness 0.03 − 0.002·i, life 0.12 + 0.01·i, blue.
 
 ### 18.5 Slash animation
@@ -636,7 +640,8 @@ Player-owned but weapon-facing: pressing melee while a gun is equipped switches 
 
 - Slot keys 1–5 select min(key − 1, 3); next/previous cycle with wrap-around. Selecting the already-equipped slot is ignored.
 - Switch: hide the old weapon, show the new with a fresh raise (3.5), play the "switchWeapon" cue (except on silent switches such as reset), update the HUD weapon name and hint, and set the crosshair mode to "katana" for the katana and the default otherwise.
-- No holster time, no draw lockout. Fire, reload, pump and slash timers of the holstered weapon are frozen.
+- No holster time. A **draw lockout** of 0.85 × drawTime (3.4) applies before the drawn gun can fire; reload input is not blocked. Fire, pump and slash timers of the holstered weapon are frozen.
+- Holstering **cancels** a reload in progress: reloading = false, reload time = 0, and the magazine / cylinder / left-hand parts snap back to rest. No ammo moves (ammo only transfers at completion), so nothing is lost; the reload restarts from zero on the next reload input or, if the magazine is empty, automatically on draw (11.5).
 - Edge case: the muzzle flash timer is frozen too, so a flash that was visible at the moment of switching is still visible when that gun is re-equipped and hides 0–45 ms later.
 
 ## 20. Ammo pickups and reset

@@ -60,6 +60,17 @@ try {
     await fits();
     await shot(`settings-${width}`);
 
+    await page.getByRole('button', { name: 'weapons', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    assert.equal(await page.evaluate(() => window.__game.gs.state), 'start');
+    assert.equal(await page.getByRole('group', { name: /scope$/ }).count(), 2);
+    await fits();
+    await shot(`weapons-${width}`);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await fits();
+    await shot('weapons-mobile');
+    await page.setViewportSize({ width, height });
+
     await page.getByRole('button', { name: 'play', exact: true }).click();
     await page.getByRole('button', { name: /THE HOUSE/ }).click();
     assert.equal(await page.getByRole('button', { name: /THE HOUSE/ }).getAttribute('aria-pressed'), 'true');
@@ -74,9 +85,13 @@ try {
     assert.equal(await page.evaluate(() => window.__game.level.key), 'house');
     await settle();
     const tip = await page.locator('.tip-line').boundingBox();
+    // The tip sits low and centred now, between the corner clusters: what matters is that it
+    // never covers them, not that it clears their tops.
     for (const selector of ['.bottom-left', '.bottom-right']) {
       const hud = await page.locator(selector).boundingBox();
-      assert(tip && hud && tip.y + tip.height < hud.y, 'tips stay above health, ammo and slots');
+      const clear = tip && hud && (tip.y + tip.height <= hud.y || hud.y + hud.height <= tip.y
+        || tip.x + tip.width <= hud.x || hud.x + hud.width <= tip.x);
+      assert(clear, 'tips never cover health, ammo and slots');
     }
     await shot(`hud-${width}`);
     await page.evaluate(() => {
@@ -86,6 +101,12 @@ try {
     assert.equal(await page.locator('.screen-title').textContent(), 'PAUSED');
     await fits();
     await shot(`pause-${width}`);
+    await page.getByRole('button', { name: 'weapons', exact: true }).click();
+    await page.getByRole('group', { name: 'R4-C scope', exact: true }).getByRole('button', { name: 'HOLO · 1×', exact: true }).click();
+    assert.equal(await page.evaluate(() => window.__game.gs.state), 'pause');
+    assert.equal(await page.evaluate(() => window.__game.player.weapons[0].scopeKind), 'holo');
+    await fits();
+    await shot(`pause-weapons-${width}`);
     await page.getByRole('button', { name: 'MAIN MENU', exact: true }).click();
     await page.getByRole('button', { name: /PLAY ONLINE/ }).click();
     await fits();

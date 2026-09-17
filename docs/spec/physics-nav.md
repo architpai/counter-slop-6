@@ -392,12 +392,12 @@ The player's focus dash does not use rays. It marches the body in horizontal sli
 | Surface probe column half-width | 0.05 | Half-size in X and Z of the thin column used to find boxes under a cell centre. |
 | Surface probe column Y range | −30 to 90 | Vertical extent of the probe column. |
 | Surface height limits | −5 to 70 | Surfaces below −5 or above 70 are ignored. |
-| Node clearance half-width | 0.3 | Half-size in X and Z of the clearance box tested above a candidate surface. |
+| Node clearance half-width | 0.42 | Half-size in X and Z of the clearance box tested above a candidate surface. Covers the widest common walker (heavy, half-width 0.41); bosses (0.89) still rely on open ground. |
 | Node clearance Y range | surface + 0.5 to surface + 1.85 | The clearance box must be free of every box (noNav boxes included). |
 | Max climb per link | 1.35 | A link may rise at most this much. |
 | Max drop per link | 8 | A link may fall at most this much. |
 | Diagonal corner tolerance | 0.75 | For a diagonal link, both adjacent cardinal cells must hold a node within this height of the source or the destination. |
-| Link clearance XZ margin | 0.25 | The link clearance box extends this far beyond the two node centres in X and Z. |
+| Link clearance XZ margin | 0.42 | The link clearance box extends this far beyond the two node centres in X and Z (same value as the node clearance). |
 | Link clearance Y range | base + 0.5 to base + 1.7, where base = max(A.y, B.y) | Starts above knee height so the next stair tread does not read as a wall; 1.0-tall railings still block. |
 | Drop check threshold | dy < −0.6 | Links that fall more than 0.6 get the extra drop-column test. |
 | Drop column half-width | 0.2 | X and Z half-size of the drop column at the destination. |
@@ -430,7 +430,7 @@ For every cell, in row-major order (all ix for iz = 0, then iz = 1, ...):
 2. Collect the set of distinct top-face heights (max.y) of every overlapping box whose noNav flag is false.
 3. For each distinct height y in ascending order:
    - skip if y < −5 or y > 70;
-   - test the clearance box X centre ± 0.3, Y from y + 0.5 to y + 1.85, Z centre ± 0.3 against **all** boxes (noNav included). If it overlaps anything, skip;
+   - test the clearance box X centre ± 0.42, Y from y + 0.5 to y + 1.85, Z centre ± 0.42 against **all** boxes (noNav included). If it overlaps anything, skip;
    - otherwise create a node at (centre x, y, centre z) and add its id to the cell.
 
 Node ids are assigned in creation order. One cell can hold several nodes (street level, a balcony, a rooftop). A surface with less than 0.5 of headroom below a structure still gets a node if the structure starts above y + 1.85 (so bridges and overhangs work); a surface directly under a box that starts between y + 0.5 and y + 1.85 gets none.
@@ -445,7 +445,7 @@ After all nodes exist, for every node A and each of the eight neighbour directio
 2. For every node B in that cell, with dy = B.y − A.y:
    - reject if dy > 1.35 or dy < −8;
    - if the direction is diagonal (dx ≠ 0 and dz ≠ 0): reject unless BOTH cardinal cells (A.ix + dx, A.iz) and (A.ix, A.iz + dz) contain at least one node whose height is within 0.75 of A.y or within 0.75 of B.y. This prevents cutting corners around walls and across height jumps;
-   - reject if the link clearance box overlaps any box. The box spans X from min(A.x, B.x) − 0.25 to max(A.x, B.x) + 0.25, Z likewise, Y from base + 0.5 to base + 1.7 with base = max(A.y, B.y);
+   - reject if the link clearance box overlaps any box. The box spans X from min(A.x, B.x) − 0.42 to max(A.x, B.x) + 0.42, Z likewise, Y from base + 0.5 to base + 1.7 with base = max(A.y, B.y);
    - if dy < −0.6, reject if the drop column overlaps any box: X from B.x − 0.2 to B.x + 0.2, Z likewise, Y from B.y + 0.05 to A.y + 0.05. (The walker must be able to fall straight down at B.)
    - otherwise add a directed link A → B with the cost in 5.5 and the stored dy.
 

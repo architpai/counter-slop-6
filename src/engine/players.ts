@@ -1,10 +1,11 @@
 import { Mesh, Object3D, Vector3 } from 'three';
 import { alignSegment, clamp, damp, rand, round1, round2, wrapAngle } from './util';
 import { makeFigure, makeNameTag, cylGeo, sphereGeo, surfMat, setFlash, TONE, TONE_HEX } from './render/index';
-import type { Figure, FigureAnchorName, FigureAnchors, FigureParts, WeaponPropKind } from './render/figure';
+import type { Figure, FigureAnchorName, FigureAnchors, FigureParts } from './render/figure';
 import { raycastFigure } from './render/figure';
 import type { Ctx, Enemy, Snap, StatePacket, Target } from './types';
 import type { Player } from './player/index';
+import { GUN_LOADOUT } from './weapons/stats';
 
 /**
  * A hit sphere sits on a `FigureAnchors` joint, so its name is one of them.
@@ -38,7 +39,6 @@ const anchorsOf = (figure: Figure): RemoteAnchors => figure.anchors as RemoteAnc
  */
 type ValidState = readonly [number, number, number, number, number, number, number, number, ...number[]];
 
-const WEAPONS: readonly WeaponPropKind[] = ['rifle', 'shotgun', 'sniper', 'pistol'];
 const HIT_RADII: Record<HitJoint, number> = { head: 0.195, torso: 0.33, hips: 0.20, armL: 0.11, armR: 0.11,
   foreL: 0.10, foreR: 0.10, legL: 0.13, legR: 0.13, shinL: 0.11, shinR: 0.11 };
 const LIMBS: readonly (keyof RemoteJoints)[] = ['upperL', 'upperR', 'foreL', 'foreR', 'thighL', 'thighR', 'shinL', 'shinR'];
@@ -182,7 +182,7 @@ export class RemotePlayer implements Target {
 
   _buildFigure(): Figure {
     const figure = makeFigure({ kind: 'humanoid', tactical: 'player', color: TONE_HEX[this._tone], scale: 1,
-      bodyWidth: 1, headSize: 1, limbR: 0.033, hat: 'cap', smile: false, shield: false, weapon: 'rifle' });
+      bodyWidth: 1, headSize: 1, limbR: 0.033, hat: 'cap', smile: false, shield: false, weapon: GUN_LOADOUT[0] });
     this._figure = figure;
     const { root } = figure;
     const anchors = anchorsOf(figure);
@@ -221,10 +221,10 @@ export class RemotePlayer implements Target {
     const yaw = wrapAngle(arr[3]);
     this._a = this._b || { p: p.clone(), yaw, pitch: arr[4], t: now - 0.07 };
     this._b = { p, yaw, pitch: arr[4], t: now };
-    const wi = arr[5] >= 0 && arr[5] <= 3 ? arr[5] : 0;
+    const wi = arr[5] >= 0 && arr[5] < GUN_LOADOUT.length ? arr[5] : 0;
     const melee = !!(arr[6] & 512);
     if (this._figure && (wi !== this._wi || melee !== this.melee || !this._figure.parts.weapon?.parent)) {
-      this._figure.setWeapon(melee ? 'knife' : WEAPONS[wi] ?? 'rifle');
+      this._figure.setWeapon(melee ? 'knife' : GUN_LOADOUT[wi] ?? GUN_LOADOUT[0]);
       this._wi = wi;
     }
     this.melee = melee;
@@ -366,13 +366,13 @@ export class RemotePlayer implements Target {
     for (let i = 0; i < ends.length; i += 3) if (!triple(ends, i)) return;
     muzzle.copy(this.body.pos).addScaledVector(this.right, 0.3).addScaledVector(this.forward, 0.8);
     muzzle.y += 1.35 + this.forward.y * 0.8;
-    const thick = kind === 'shotgun' ? 0.014 : kind === 'sniper' ? 0.03 : 0.02;
+    const thick = kind === 'r4c' ? 0.024 : kind === 'shotgun' ? 0.014 : kind === 'sniper' ? 0.03 : 0.02;
     for (let i = 0; i < ends.length; i += 3) {
       endpoint.set(num(ends[i]), num(ends[i + 1]), num(ends[i + 2]));
       this._ctx.effects.tracer(muzzle, endpoint, TONE.PRIMARY, thick, 0.06);
     }
     this.flash();
-    this._ctx.audio.remoteShot(kind === 'shotgun' || kind === 'sniper' || kind === 'pistol' ? kind : 'rifle', muzzle);
+    this._ctx.audio.remoteShot(kind === 'r4c' || kind === 'shotgun' || kind === 'sniper' || kind === 'pistol' ? kind : 'rifle', muzzle);
   }
 
   flash(): void {

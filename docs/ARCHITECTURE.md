@@ -1135,7 +1135,7 @@ export interface Figure {
   dispose(): void;
 }
 export function makeFigure(o: FigureOpts): Figure;
-export function makeWeaponProp(index: 0|1|2|3): THREE.Group;   // remote-player hand props, N 11.3
+export function makeWeaponProp(kind: WeaponPropKind): THREE.Group;   // remote-player hand props, N 11.3; callers map slot -> kind (render knows no loadout)
 export function makeNameTag(name: string): THREE.Group;      // N 11.2; opaque generated canvas label
 
 // ---- index.js
@@ -1296,7 +1296,7 @@ export class Audio {
   grappleFire(): void; grappleHit(): void; grappleRelease(): void;
   footstep(vol: number): void; jump(): void; land(h: number): void; slide(): void;
   wallJump(): void; mantle(): void; dash(): void; hurt(): void; death(): void;
-  hitEnemy(pos: THREE.Vector3): void; headshot(pos: THREE.Vector3): void;
+  hitEnemy(): void; headshot(): void;             // centred: shooter feedback, never positional
   kill(strong?: boolean): void; enemyDie(pos: THREE.Vector3): void; gib(pos: THREE.Vector3): void;
   spawn(pos: THREE.Vector3): void; lunge(pos: THREE.Vector3): void;
   bulletImpact(pos: THREE.Vector3): void; ricochet(pos: THREE.Vector3): void;
@@ -1613,6 +1613,7 @@ export interface Weapon {
   readonly scope: boolean;
   readonly root: THREE.Group;       // child of ctx.renderer.rig
   readonly adsFov: number;
+  readonly adsSpeed: number;        // walk-speed multiplier while aiming; 1 for the knife
   aimAmt: number;
   mag: number; reserve: number; magSize: number; reloading: boolean;
   readonly spreadPx: number;
@@ -1946,7 +1947,7 @@ Internal split (guidance, not a contract — only `main.js` is imported from out
 declare global { interface Window { __game: {
   ctx: Ctx; gs: GameState; player: Player; enemies: EnemyManager; net: Net;
   remotes: Map<string, RemotePlayer>; lobby: Lobby; scores: Map<string, ScoreRow>;
-  pickups: Pickup[]; beginSolo(): void; beginAtWave(n: number): void; jumpToWave(n: number): void;
+  pickups: Pickup[]; beginSolo(): void; beginTraining(): void; jumpToWave(n: number): void;   // jumpToWave is debug only
 } } }
 ```
 

@@ -33,7 +33,8 @@ try {
       for (let i = 0; i < n; i++) { g.input.update(1 / 60); g.player.update(1 / 60); }
     };
   });
-  await shot('mp5');
+  assert.equal(await page.evaluate(() => window.__game.player.weapon.kind), 'r4c');
+  await shot('r4c');
   await page.mouse.down({ button: 'right' });
   await page.evaluate(() => window.rehaulFrame(60));
   await page.waitForFunction(() => document.querySelector('.scope.acog.is-visible'));
@@ -75,14 +76,14 @@ try {
   await page.evaluate(() => window.rehaulFrame(60));
   assert.equal(await page.evaluate(() => window.__game.player.weapon.root.visible), true);
 
-  for (const [key, kind] of [['2', 'shotgun'], ['3', 'sniper'], ['4', 'pistol']]) {
+  for (const [key, kind] of [['1', 'r4c'], ['2', 'rifle'], ['3', 'shotgun'], ['4', 'sniper'], ['5', 'pistol']]) {
     await page.keyboard.down(key); await page.evaluate(() => window.rehaulFrame(60)); await page.keyboard.up(key);
     assert.equal(await page.evaluate(() => window.__game.player.weapon.kind), kind);
     await shot(kind);
-    if (kind === 'sniper') {
+    if (kind === 'sniper' || kind === 'rifle') {
       await page.mouse.down({ button: 'right' }); await page.evaluate(() => window.rehaulFrame(60));
-      await page.waitForFunction(() => document.querySelector('.scope.sniper.is-visible'));
-      await shot('sniper-scope');
+      await page.waitForFunction(scope => document.querySelector(`.scope.${scope}.is-visible`), kind === 'sniper' ? 'sniper' : 'acog');
+      await shot(`${kind}-scope`);
       await page.mouse.up({ button: 'right' }); await page.evaluate(() => window.rehaulFrame(60));
     }
   }
@@ -92,6 +93,15 @@ try {
   assert.equal(await page.evaluate(() => window.__game.player.weapon.mag), first);
   assert.equal(first, 14);
   await page.mouse.up(); await page.evaluate(() => window.rehaulFrame(1));
+
+  await page.keyboard.down('6'); await page.evaluate(() => window.rehaulFrame(1));
+  assert.deepEqual(await page.evaluate(() => ({ slot: window.__game.player.wi, melee: window.__game.player.melee.active })), { slot: 4, melee: true });
+  await page.keyboard.up('6'); await page.evaluate(() => window.rehaulFrame(60));
+  for (const [deltaY, slot] of [[1, 0], [-1, 4]]) {
+    await page.evaluate(deltaY => { window.dispatchEvent(new WheelEvent('wheel', { deltaY })); window.rehaulFrame(1); }, deltaY);
+    assert.equal(await page.evaluate(() => window.__game.player.wi), slot);
+    await page.evaluate(() => window.rehaulFrame(1));
+  }
 
   const kinds = ['grunt', 'rusher', 'heavy', 'sniper', 'shield', 'bomber', 'flyer', 'boss', 'hitbox', 'lagspike'];
   for (const kind of kinds) {
@@ -112,5 +122,5 @@ try {
     await shot(`mask-${kind}`);
   }
   assert.deepEqual(errors, []);
-  console.log('OK MP5/ACOG, independent melee, four gun slots, sniper scope, semiauto pistol and 10 mask portraits');
+  console.log('OK R4-C and MP5/ACOG, independent melee, five gun slots, wheel wrap, sniper scope, semiauto pistol and 10 mask portraits');
 } finally { await browser.close(); }

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { TONE, TONE_HEX, toneMat, unlitMat, charMat, boxGeo, cylGeo, sphereGeo, torusGeo, starGeo } from '../render/index';
 import type { GunKind, Triple } from './stats';
 import { tacticalPart } from '../render/tactical';
+import { OPTIC_COLOR } from '../render/palette';
 
 const PRIMARY = TONE.PRIMARY, DARK = TONE.DARK, SIGHT = TONE.HOSTILE;
 
@@ -129,47 +130,75 @@ function model(name: string): Draft {
 }
 
 export function makeGunModel(kind: GunKind): GunModel {
-  if (!['rifle', 'pistol', 'shotgun', 'sniper', 'revolver'].includes(kind)) throw new RangeError(`Unknown gun kind: ${kind}`);
+  if (!['r4c', 'rifle', 'pistol', 'shotgun', 'sniper', 'revolver'].includes(kind)) throw new RangeError(`Unknown gun kind: ${kind}`);
   const result = model(kind), { root, parts } = result;
   let muzzlePos: Triple, ejectPos: Triple, leftHand: THREE.Object3D;
-  if (kind === 'rifle') {
-    box(root, 'receiver', [0.10, 0.13, 0.48], [0, 0, 0], DARK);
-    box(root, 'receiver-trim', [0.106, 0.035, 0.42], [0, 0.066, 0.01], PRIMARY);
-    parts.mag = remember(group(root, 'magazine', [0, -0.06, -0.04]));
-    box(parts.mag, 'magazine-upper', [0.062, 0.13, 0.09], [0, -0.055, 0], DARK, [0.12, 0, 0]);
-    box(parts.mag, 'magazine-middle', [0.062, 0.105, 0.09], [0, -0.16, -0.024], DARK, [0.30, 0, 0]);
-    box(parts.mag, 'magazine-lower', [0.062, 0.10, 0.09], [0, -0.245, -0.06], DARK, [0.46, 0, 0]);
-    box(root, 'magazine-lip', [0.065, 0.025, 0.12], [0, -0.055, -0.04], PRIMARY, [0.18, 0, 0]);
-    const handguard = group(root, 'ribbed-handguard', [0, 0, -0.39]);
-    box(handguard, 'handguard-core', [0.082, 0.09, 0.32], [0, 0, 0], DARK);
-    for (let i = 0; i < 5; i++) box(handguard, `handguard-rib-${i}`, [0.088, 0.012, 0.035], [0, 0.05, -0.13 + i * 0.065], PRIMARY);
-    cylinder(root, 'barrel', 0.018, 0.38, [0, 0.015, -0.75], DARK);
-    mesh(root, 'front-sight-hood', torusGeo(0.034, 0.007, 5, 12), toneMat(DARK), [0, 0.083, -0.88]);
-    box(root, 'front-sight-post', [0.008, 0.036, 0.015], [0, 0.066, -0.88], DARK);
-    for (const side of [-1, 1]) cylinder(root, `stock-rail-${side}`, 0.009, 0.30, [side * 0.052, 0.018, 0.36], DARK);
-    box(root, 'stock-end', [0.085, 0.17, 0.035], [0, -0.025, 0.51], DARK);
-    box(root, 'grip', [0.052, 0.15, 0.065], [0, -0.14, 0.13], DARK, [0.3, 0, 0]);
-    box(root, 'charging-handle', [0.018, 0.025, 0.11], [-0.06, 0.075, -0.08], PRIMARY, [0, 0.2, 0]);
+  if (kind === 'rifle' || kind === 'r4c') {
+    if (kind === 'r4c') {
+      box(root, 'receiver', [0.115, 0.15, 0.50], [0, 0, 0], DARK);
+      box(root, 'upper-receiver', [0.105, 0.055, 0.52], [0, 0.075, -0.01], PRIMARY);
+      box(root, 'magwell', [0.09, 0.08, 0.16], [0, -0.075, -0.11], DARK);
+      parts.mag = remember(group(root, 'magazine', [0, -0.12, -0.11]));
+      box(parts.mag, 'magazine-body', [0.07, 0.23, 0.14], [0, -0.085, 0], DARK, [0.12, 0, 0]);
+      box(parts.mag, 'magazine-base', [0.078, 0.025, 0.15], [0, -0.20, -0.015], PRIMARY, [0.12, 0, 0]);
+      const handguard = group(root, 'railed-handguard', [0, 0.02, -0.55]);
+      box(handguard, 'handguard-core', [0.095, 0.11, 0.52], [0, 0, 0], DARK);
+      for (let i = 0; i < 8; i++) {
+        box(handguard, `top-rail-${i}`, [0.105, 0.025, 0.035], [0, 0.068, -0.23 + i * 0.065], PRIMARY);
+        for (const side of [-1, 1]) box(handguard, `vent-${side}-${i}`, [0.008, 0.025, 0.035], [side * 0.05, 0, -0.23 + i * 0.065], PRIMARY);
+      }
+      cylinder(root, 'barrel', 0.022, 0.32, [0, 0.02, -0.96], DARK);
+      cylinder(root, 'flash-hider', 0.033, 0.09, [0, 0.02, -1.115], PRIMARY);
+      cylinder(root, 'buffer-tube', 0.032, 0.27, [0, 0.035, 0.36], DARK);
+      box(root, 'stock', [0.095, 0.13, 0.27], [0, -0.015, 0.43], DARK, [0.08, 0, 0]);
+      box(root, 'stock-pad', [0.105, 0.20, 0.035], [0, -0.025, 0.56], PRIMARY);
+      box(root, 'grip', [0.06, 0.17, 0.08], [0, -0.15, 0.13], DARK, [0.3, 0, 0]);
+      box(root, 'trigger-guard', [0.045, 0.025, 0.11], [0, -0.115, 0.035], PRIMARY);
+      box(root, 'charging-handle', [0.15, 0.025, 0.04], [0, 0.075, 0.25], DARK);
+      box(root, 'ejection-port', [0.008, 0.035, 0.12], [0.061, 0.03, 0.015], PRIMARY);
+    } else {
+      box(root, 'receiver', [0.10, 0.13, 0.48], [0, 0, 0], DARK);
+      box(root, 'receiver-trim', [0.106, 0.035, 0.42], [0, 0.066, 0.01], PRIMARY);
+      parts.mag = remember(group(root, 'magazine', [0, -0.06, -0.04]));
+      box(parts.mag, 'magazine-upper', [0.062, 0.13, 0.09], [0, -0.055, 0], DARK, [0.12, 0, 0]);
+      box(parts.mag, 'magazine-middle', [0.062, 0.105, 0.09], [0, -0.16, -0.024], DARK, [0.30, 0, 0]);
+      box(parts.mag, 'magazine-lower', [0.062, 0.10, 0.09], [0, -0.245, -0.06], DARK, [0.46, 0, 0]);
+      box(root, 'magazine-lip', [0.065, 0.025, 0.12], [0, -0.055, -0.04], PRIMARY, [0.18, 0, 0]);
+      const handguard = group(root, 'ribbed-handguard', [0, 0, -0.39]);
+      box(handguard, 'handguard-core', [0.082, 0.09, 0.32], [0, 0, 0], DARK);
+      for (let i = 0; i < 5; i++) box(handguard, `handguard-rib-${i}`, [0.088, 0.012, 0.035], [0, 0.05, -0.13 + i * 0.065], PRIMARY);
+      cylinder(root, 'barrel', 0.018, 0.38, [0, 0.015, -0.75], DARK);
+      mesh(root, 'front-sight-hood', torusGeo(0.034, 0.007, 5, 12), toneMat(DARK), [0, 0.083, -0.88]);
+      box(root, 'front-sight-post', [0.008, 0.036, 0.015], [0, 0.066, -0.88], DARK);
+      for (const side of [-1, 1]) cylinder(root, `stock-rail-${side}`, 0.009, 0.30, [side * 0.052, 0.018, 0.36], DARK);
+      box(root, 'stock-end', [0.085, 0.17, 0.035], [0, -0.025, 0.51], DARK);
+      box(root, 'grip', [0.052, 0.15, 0.065], [0, -0.14, 0.13], DARK, [0.3, 0, 0]);
+      box(root, 'charging-handle', [0.018, 0.025, 0.11], [-0.06, 0.075, -0.08], PRIMARY, [0, 0.2, 0]);
+    }
+    const acogBody = charMat(new THREE.Color(OPTIC_COLOR.acogBody).getHex());
+    const acogRim = charMat(new THREE.Color(OPTIC_COLOR.acogRim).getHex());
+    const holoBody = charMat(new THREE.Color(OPTIC_COLOR.holoBody).getHex());
+    const holoBase = charMat(new THREE.Color(OPTIC_COLOR.holoBase).getHex());
     const acog = parts.acog = group(root, 'acog');
-    cylinder(acog, 'acog-tube', 0.045, 0.34, [0, 0.145, -0.10], DARK);
-    cylinder(acog, 'acog-objective', 0.062, 0.055, [0, 0.145, -0.29], PRIMARY);
-    cylinder(acog, 'acog-ocular', 0.066, 0.065, [0, 0.145, 0.09], DARK, 16);
-    mesh(acog, 'acog-ocular-rim', torusGeo(0.057, 0.009, 6, 24), toneMat(PRIMARY), [0, 0.145, 0.125]);
-    box(acog, 'acog-prism-body', [0.11, 0.07, 0.19], [0, 0.125, -0.04], DARK);
-    mesh(acog, 'acog-elevation-turret', cylGeo(0.035, 0.035, 12, 'y'), toneMat(DARK), [0, 0.204, -0.045]);
-    mesh(acog, 'acog-windage-turret', cylGeo(0.03, 0.035, 12, 'y'), toneMat(DARK), [0.063, 0.15, -0.045], [0, 0, Math.PI / 2]);
-    box(acog, 'acog-mount-front', [0.035, 0.085, 0.035], [0, 0.087, -0.20], DARK);
-    box(acog, 'acog-mount-rear', [0.035, 0.085, 0.035], [0, 0.087, 0.04], DARK);
+    mesh(acog, 'acog-tube', cylGeo(0.045, 0.34, 8, 'z'), acogBody, [0, 0.145, -0.10]);
+    mesh(acog, 'acog-objective', cylGeo(0.062, 0.055, 8, 'z'), acogRim, [0, 0.145, -0.29]);
+    mesh(acog, 'acog-ocular', cylGeo(0.066, 0.065, 16, 'z'), acogBody, [0, 0.145, 0.09]);
+    mesh(acog, 'acog-ocular-rim', torusGeo(0.057, 0.009, 6, 24), acogRim, [0, 0.145, 0.125]);
+    mesh(acog, 'acog-prism-body', boxGeo(0.11, 0.07, 0.19), acogBody, [0, 0.125, -0.04]);
+    mesh(acog, 'acog-elevation-turret', cylGeo(0.035, 0.035, 12, 'y'), acogBody, [0, 0.204, -0.045]);
+    mesh(acog, 'acog-windage-turret', cylGeo(0.03, 0.035, 12, 'y'), acogBody, [0.063, 0.15, -0.045], [0, 0, Math.PI / 2]);
+    mesh(acog, 'acog-mount-front', boxGeo(0.035, 0.085, 0.035), acogBody, [0, 0.087, -0.20]);
+    mesh(acog, 'acog-mount-rear', boxGeo(0.035, 0.085, 0.035), acogBody, [0, 0.087, 0.04]);
     const holo = parts.holo = group(root, 'holo');
     holo.visible = false;
-    box(holo, 'holo-base', [0.15, 0.035, 0.22], [0, 0.088, -0.10], DARK);
-    box(holo, 'holo-battery', [0.12, 0.055, 0.10], [0, 0.12, -0.22], DARK);
-    for (const side of [-1, 1]) box(holo, `holo-frame-${side}`, [0.02, 0.12, 0.06], [side * 0.065, 0.16, -0.08], PRIMARY);
-    box(holo, 'holo-frame-top', [0.15, 0.02, 0.06], [0, 0.22, -0.08], PRIMARY);
-    mesh(holo, 'holo-dot', sphereGeo(0.003, 6), unlitMat(0xed2428), [0, 0.145, -0.08]);
+    mesh(holo, 'holo-base', boxGeo(0.15, 0.035, 0.22), holoBase, [0, 0.088, -0.10]);
+    mesh(holo, 'holo-battery', boxGeo(0.12, 0.055, 0.10), holoBase, [0, 0.12, -0.22]);
+    for (const side of [-1, 1]) mesh(holo, `holo-frame-${side}`, boxGeo(0.02, 0.12, 0.06), holoBody, [side * 0.065, 0.16, -0.08]);
+    mesh(holo, 'holo-frame-top', boxGeo(0.15, 0.02, 0.06), holoBody, [0, 0.22, -0.08]);
+    mesh(holo, 'holo-dot', sphereGeo(0.003, 6), unlitMat(new THREE.Color(OPTIC_COLOR.reticle).getHex()), [0, 0.145, -0.08]);
     hand(root, 'right-hand', [0.02, -0.15, 0.14], [0.5, -0.6, 1]);
-    leftHand = hand(root, 'left-hand', [-0.05, -0.08, -0.38], [-0.35, -0.9, 0.9]);
-    muzzlePos = [0, 0.015, -0.96]; ejectPos = [0.06, 0.02, 0.02];
+    leftHand = hand(root, 'left-hand', [-0.05, -0.08, kind === 'r4c' ? -0.50 : -0.38], [-0.35, -0.9, 0.9]);
+    muzzlePos = kind === 'r4c' ? [0, 0.02, -1.16] : [0, 0.015, -0.96]; ejectPos = [0.06, 0.02, 0.02];
   } else if (kind === 'pistol') {
     box(root, 'frame', [0.065, 0.12, 0.24], [0, 0, 0], DARK);
     parts.slide = remember(box(root, 'slide', [0.07, 0.075, 0.30], [0, 0.065, -0.10], PRIMARY));

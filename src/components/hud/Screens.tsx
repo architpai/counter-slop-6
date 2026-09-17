@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import { KEYBOARD_ROWS, PAD_ROWS } from '@/engine/hud/labels';
 import type {
   BoardModel, BoardRow, DeadModel, LobbyModel, MainModel, MatchOnModel, MenuModel,
-  OnlineModel, OverModel, PauseModel, PvpModel, ScreenView, UiAction, LookModel,
+  OnlineModel, OverModel, PauseModel, PvpModel, ScreenView, UiAction, LookModel, WeaponSettingsModel,
 } from '@/engine/hud/screens';
 
 /**
@@ -102,16 +102,36 @@ export function Controls({ pad }: { pad: boolean }) {
   );
 }
 
-function Optics({ optic, onAction }: { optic: LookModel['optic']; onAction: Act }) {
-  return <div className="optic-picker" data-ui-block="" role="group" aria-label="MP5 optic">
-    <span>MP5 OPTIC</span>
-    {(['acog', 'holo'] as const).map(kind => <button type="button" className="screen-button" key={kind}
-      data-act="optic" data-value={kind} aria-pressed={optic === kind}
-      onClick={event => onAction('optic', kind, event.nativeEvent)}>
-      {kind === 'acog' ? 'ACOG · 2.5×' : 'HOLO · 1×'}
-    </button>)}
-    <small>Saved for your next session</small>
+function Weapons({ model, onAction, collapsible = false }: {
+  model: WeaponSettingsModel; onAction: Act; collapsible?: boolean;
+}) {
+  const content = <div className="weapon-customization" data-ui-block="" data-ui-input-block="">
+    <p className="weapon-customization-note">Choose a scope for each weapon. Changes apply immediately and are saved on this device.</p>
+    {([
+      { name: 'R4-C', slot: '01', field: 'r4cOptic', role: 'Assault rifle · medium-range damage' },
+      { name: 'MP5', slot: '02', field: 'optic', role: 'SMG · accurate on the move' },
+    ] as const).map(weapon => <div className="weapon-customization-row" key={weapon.field}>
+      <div className="weapon-identity">
+        <span className="slot-badge">{weapon.slot}</span>
+        <div><h4>{weapon.name}</h4><p>{weapon.role}</p></div>
+      </div>
+      <fieldset className="optic-picker" aria-label={`${weapon.name} scope`}>
+        <legend>Scope</legend>
+        {(['acog', 'holo'] as const).map(kind => <button type="button" className="screen-button" key={kind}
+          data-act={weapon.field} data-value={kind} aria-pressed={model[weapon.field] === kind}
+          onClick={event => onAction(weapon.field, kind, event.nativeEvent)}>
+          {kind === 'acog' ? 'ACOG · 2.5×' : 'HOLO · 1×'}
+        </button>)}
+      </fieldset>
+    </div>)}
   </div>;
+  return collapsible ? <details className="weapons-section" data-ui-block="" data-ui-input-block="">
+    <summary>Weapons <span>Scope customization</span></summary>
+    {content}
+  </details> : <section className="weapons-section" aria-label="Weapons">
+    <h3>Weapon customization</h3>
+    {content}
+  </section>;
 }
 
 function Sensitivity({ act, label, value, onAction }: {
@@ -132,7 +152,6 @@ function Settings({ model, onAction }: { model: SettingsModel; onAction: Act }) 
         <Sensitivity act="sniperSens" label="Sniper sensitivity" value={model.sniperSens} key={`sniper-${model.sniperSens}`} onAction={onAction} />
         <p>Scoped settings are independent of look. 100% is the standard scoped speed.</p>
       </div>
-      <Optics optic={model.optic} onAction={onAction} />
       {/*
         Uncontrolled on purpose: toggling one does not make the engine redraw,
         so a controlled box would freeze at its old value. The key remounts it
@@ -141,20 +160,6 @@ function Settings({ model, onAction }: { model: SettingsModel; onAction: Act }) 
       */}
       <label className="settings-row"><input type="checkbox" data-act="invert" key={`invert-${model.invert}`} defaultChecked={model.invert} onChange={event => onAction('invert', event.target.checked ? '1' : '0', event.nativeEvent)} /> invert vertical look</label>
       <label className="settings-row"><input type="checkbox" data-act="music" key={`music-${model.music}`} defaultChecked={model.music} onChange={event => onAction('music', event.target.checked ? '1' : '0', event.nativeEvent)} /> music <span className="dim">(M)</span></label>
-    </div>
-  );
-}
-
-function Checkpoints({ wave, onAction }: { wave: number; onAction: Act }) {
-  // ponytail: render at most 1,000 checkpoint buttons; paginate if runs pass wave 5,000.
-  const n = Math.min(1000, Math.floor(count(wave) / 5));
-  if (!n) return null;
-  return (
-    <div className="checkpoints" data-ui-block="">
-      <h3>checkpoints</h3>
-      {Array.from({ length: n }, (_, i) => (
-        <Button act="checkpoint" text={`WAVE ${(i + 1) * 5}`} value={String((i + 1) * 5)} onAction={onAction} key={i} />
-      ))}
     </div>
   );
 }
@@ -196,7 +201,7 @@ function ScoreRows({ rows, full = false }: { rows: BoardRow[]; full?: boolean })
 // ------------------------------------------------------------------ screens
 
 function MainScreen({ model, pad, onAction }: { model: MainModel; pad: boolean; onAction: Act }) {
-  const [page, setPage] = useState<'play' | 'controls' | 'settings' | null>(null);
+  const [page, setPage] = useState<'play' | 'weapons' | 'controls' | 'settings' | null>(null);
   // Controller-only players can read their controls before the confirm button
   // starts play; explicit mouse/keyboard navigation keeps the chosen page.
   const currentPage = page ?? (pad ? 'controls' : 'play');
@@ -205,25 +210,24 @@ function MainScreen({ model, pad, onAction }: { model: MainModel; pad: boolean; 
       <p className="menu-eyebrow">SURVIVE. RELOAD. REPEAT.</p>
       <Title text="COUNTER SLOP 6" sub="a tactical survival shooter, allegedly" />
       <nav className="menu-nav" aria-label="Main menu pages" data-ui-block="">
-        {(['play', 'controls', 'settings'] as const).map(item => (
+        {(['play', 'weapons', 'controls', 'settings'] as const).map(item => (
           <button type="button" key={item} aria-pressed={currentPage === item} aria-controls="main-menu-content" onClick={() => setPage(item)}>{item}</button>
         ))}
       </nav>
       <div id="main-menu-content" className="menu-page">
         {currentPage === 'play' ? <>
           <Maps model={model} onAction={onAction} previews />
-          <Optics optic={model.optic} onAction={onAction} />
           <div className="screen-actions launch-actions" data-ui-block="">
             <Button act="start" text="START SOLO" primary sub="survive the waves" onAction={onAction} />
             <Button act="online" text="PLAY ONLINE" sub="free for all · up to 8 players" onAction={onAction} />
             <Button act="training" text="TRAINING GROUND" sub="inspect models · passive targets" onAction={onAction} />
           </div>
-          <Checkpoints wave={model.checkpoint} onAction={onAction} />
           <p className="screen-footer">{count(model.best) > 0 ? `Personal best · ${count(model.best)}` : 'One more wave. One more try.'}</p>
         </> : currentPage === 'controls' ? <>
           <Controls pad={pad} />
           {pad ? <p className="screen-footer">Press {model.confirmKey} to start solo</p> : null}
-        </> : <Settings model={model} onAction={onAction} />}
+        </> : currentPage === 'weapons' ? <Weapons model={model} onAction={onAction} />
+          : <Settings model={model} onAction={onAction} />}
       </div>
     </div>
   );
@@ -270,7 +274,7 @@ function LobbyScreen({ model, onAction }: { model: LobbyModel; onAction: Act }) 
       <Title text="LOBBY" sub={`free for all · first to 20 · ${players.length}/8 players`} />
       <p>code <strong className="lobby-code">{model.code}</strong></p>
       <Maps model={model} onAction={onAction} disabled={!model.isHost} />
-      <Optics optic={model.optic} onAction={onAction} />
+      <Weapons model={model} onAction={onAction} collapsible />
       <p className="screen-footer">{model.isPublic
         ? 'this lobby is public: anyone can quick play in, or type the code'
         : 'private lobby: friends type this code under PLAY ONLINE → JOIN'}</p>
@@ -292,13 +296,26 @@ function LobbyScreen({ model, onAction }: { model: LobbyModel; onAction: Act }) 
   );
 }
 
+function PauseOptions({ model, pad, onAction }: { model: LookModel & WeaponSettingsModel; pad: boolean; onAction: Act }) {
+  const [page, setPage] = useState<'controls' | 'settings' | 'weapons'>('controls');
+  return <>
+    <nav className="menu-nav" aria-label="Pause menu pages" data-ui-block="">
+      {(['controls', 'settings', 'weapons'] as const).map(item => <button type="button" key={item}
+        aria-pressed={page === item} onClick={() => setPage(item)}>{item}</button>)}
+    </nav>
+    <div className="menu-page">
+      {page === 'controls' ? <Controls pad={pad} /> : page === 'settings' ? <Settings model={model} onAction={onAction} />
+        : <Weapons model={model} onAction={onAction} />}
+    </div>
+  </>;
+}
+
 function PauseScreen({ model, pad, onAction }: { model: PauseModel; pad: boolean; onAction: Act }) {
   return (
     <>
       <Title text="PAUSED" sub={model.training ? 'training ground · no return fire' : `wave ${count(model.wave)} · score ${count(model.score)}`} />
       {model.training ? <div className="screen-actions" data-ui-block=""><Button act="training" text="RESET RANGE" sub="restore targets, ammo and starting position" onAction={onAction} /></div> : null}
-      <Controls pad={pad} />
-      <Settings model={model} onAction={onAction} />
+      <PauseOptions model={model} pad={pad} onAction={onAction} />
       <MainMenu onAction={onAction} />
       <Prompt confirmKey={model.confirmKey} end="TO RESUME" />
     </>
@@ -310,8 +327,7 @@ function MenuScreen({ model, pad, onAction }: { model: MenuModel; pad: boolean; 
     <>
       <Title text="MENU" sub={`free for all · lobby ${model.code ?? ''}`} />
       <ScoreRows rows={model.rows} />
-      <Controls pad={pad} />
-      <Settings model={model} onAction={onAction} />
+      <PauseOptions model={model} pad={pad} onAction={onAction} />
       <div className="screen-actions" data-ui-block=""><Button act="leaveMatch" text="LEAVE MATCH" onAction={onAction} /></div>
       <Prompt confirmKey={model.confirmKey} end="TO KEEP PLAYING" />
     </>
@@ -328,9 +344,8 @@ function DeadScreen({ model, onAction }: { model: DeadModel; onAction: Act }) {
     <>
       <Title text="ELIMINATED" />
       <p className="screen-stats">you survived <b>{waves}</b> {waves === 1 ? 'wave' : 'waves'} · <b>{count(model.kills)}</b> kills · score <b>{count(model.score)}</b> · {model.newBest ? <b>NEW BEST</b> : `best ${count(model.best)}`}</p>
-      <Checkpoints wave={model.checkpoint} onAction={onAction} />
       <MainMenu onAction={onAction} />
-      <Prompt confirmKey={model.confirmKey} end="TO DRAW AGAIN" start="CLICK" />
+      <Prompt confirmKey={model.confirmKey} end="TO RESTART AT WAVE 1" start="CLICK" />
     </>
   );
 }

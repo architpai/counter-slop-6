@@ -1,6 +1,6 @@
 import { BufferGeometry, Vector3 } from 'three';
 import type { Group, Object3D } from 'three';
-import { Spring3, clamp, damp, easeOut, rand, TAU } from '../util';
+import { Spring3, clamp, damp, easeInOut, easeOut, rand, TAU } from '../util';
 import { TONE } from '../render/index';
 import { seeThrough } from '../physics';
 import { GUN_STATS } from './stats';
@@ -9,6 +9,9 @@ import { makeGunModel, restPose } from './models';
 import type { GunModel, WeaponModel } from './models';
 import type { Ctx, Enemy, HitInfo, Player, WeaponState } from '../types';
 import type { Weapon } from './index';
+
+/** Where the left hand holds the magazine during a reload, in model space. Scratch. */
+const gripPoint = new Vector3();
 
 /** Duck-typed like the rest of three: meshes, lines and points all carry geometry. */
 function hasGeometry(node: Object3D): node is Object3D & { geometry: BufferGeometry } {
@@ -47,11 +50,13 @@ export abstract class ViewModel<M extends WeaponModel = WeaponModel> {
   _swayRot: Vector3;
   aimAmt: number;
   _sprintAmt: number;
+  /** Raise progress 0..1; reaches 1 after `_drawTime` seconds. */
   _equipT: number;
+  _drawTime: number;
   _equipped: boolean;
   _disposed: boolean;
 
-  constructor(ctx: Ctx, player: Player, model: M, restPos: Triple, restRot: Triple = [0, 0, 0]) {
+  constructor(ctx: Ctx, player: Player, model: M, restPos: Triple, restRot: Triple = [0, 0, 0], drawTime = 0.31) {
     this._ctx = ctx;
     this._player = player;
     this._model = model;
@@ -66,6 +71,7 @@ export abstract class ViewModel<M extends WeaponModel = WeaponModel> {
     this.aimAmt = 0;
     this._sprintAmt = 0;
     this._equipT = 0;
+    this._drawTime = drawTime;
     this._equipped = false;
     this._disposed = false;
     ctx.renderer.rig.add(this.root);
@@ -95,7 +101,7 @@ export abstract class ViewModel<M extends WeaponModel = WeaponModel> {
     const bob = 0.013 * st.bobAmt * (0.15 + 0.85 * ia);
     this._sprintAmt = damp(this._sprintAmt, st.sprinting && !st.aim ? 1 : 0, 8, dt);
     const sprint = this._sprintAmt, p = this._posSpring.update(dt), r = this._rotSpring.update(dt);
-    this._equipT = Math.min(1, this._equipT + dt * 3.2);
+    this._equipT = Math.min(1, this._equipT + dt / this._drawTime);
     const eq = 1 - easeOut(this._equipT);
     this.root.position.lerpVectors(this._restPos, this._aimPos, this.aimAmt);
     this.root.position.x += sp.x + Math.sin(st.bobPhase) * bob + p.x * recoilScale + sprint * 0.06;
@@ -111,7 +117,8 @@ export abstract class ViewModel<M extends WeaponModel = WeaponModel> {
   }
 
   _resetPose() {
-    this.aimAmt = this._sprintAmt = this._equipT = 0;
+    // `_equipT` belongs to `equip()`: a reset re-equips through the player and raises from there.
+    this.aimAmt = this._sprintAmt = 0;
     this._swayPos.set(0, 0, 0);
     this._swayRot.set(0, 0, 0);
     for (const spring of [this._posSpring, this._rotSpring]) {
@@ -156,6 +163,8 @@ export interface Gun {
   _racked: boolean;
   /** A shell reload owes the gun one pump when it ends. */
   _needPump: boolean;
+  /** Seconds a semi-auto press stays queued, so a click just before the interval ends still fires. */
+  _fireBuffer: number;
 }
 
 export class Gun extends ViewModel<GunModel> implements Weapon {
@@ -176,7 +185,7 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
   constructor(ctx: Ctx, player: Player, kind: GunKind) {
     const stats = GUN_STATS[kind];
     if (!stats) throw new TypeError('Unknown gun kind');
-    super(ctx, player, makeGunModel(kind), stats.restPos);
+    super(ctx, player, makeGunModel(kind), stats.restPos, [0, 0, 0], stats.drawTime);
     this._stats = stats;
     this.kind = kind;
     this.name = stats.name;
@@ -194,12 +203,15 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
   }
 
   get spreadPx() { return 5 + this._spread * 900; }
-  get scopeKind(): ScopeKind { return this.kind === 'rifle' ? this.optic : 'sniper'; }
-  get adsFov(): number { return this.kind === 'rifle' && this.optic === 'holo' ? 82 : this._stats.adsFov; }
-  get hint(): string { return this.kind === 'rifle' && this.optic === 'holo' ? 'auto · holographic sight' : this._stats.hint; }
+  get adsSpeed(): number { return this._stats.adsSpeed; }
+  /** Raised far enough to fire. The raise takes `drawTime`; the last 15 % is settle. */
+  get drawn(): boolean { return this._equipT >= 0.85; }
+  get scopeKind(): ScopeKind { return this.kind === 'rifle' || this.kind === 'r4c' ? this.optic : 'sniper'; }
+  get adsFov(): number { return this.scopeKind === 'holo' ? 82 : this._stats.adsFov; }
+  get hint(): string { return this.scopeKind === 'holo' ? `${this._stats.hint} · holo` : this._stats.hint; }
 
   setOptic(optic: RifleOptic): void {
-    if (this.kind !== 'rifle') return;
+    if ((this.kind !== 'rifle' && this.kind !== 'r4c') || (optic !== 'acog' && optic !== 'holo')) return;
     this.optic = optic;
     if (this._model.parts.acog) this._model.parts.acog.visible = optic === 'acog';
     if (this._model.parts.holo) this._model.parts.holo.visible = optic === 'holo';
@@ -219,7 +231,7 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
     this.mag = this.magSize;
     this.reserve = this._stats.startingReserve;
     this.reloading = false;
-    this._fireT = this._reloadTime = this._flashT = this._pumpT = 0;
+    this._fireT = this._reloadTime = this._flashT = this._pumpT = this._fireBuffer = 0;
     this._pumped = this._racked = this._needPump = false;
     this._spread = this._stats.hipSpread;
     this._model.flash.visible = false;
@@ -227,6 +239,24 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
   }
 
   dispose() { this._cancelAutoReload(); super.dispose(); }
+
+  /** Holstering cancels a reload in progress; ammo only moves at completion, so nothing is lost. */
+  unequip() {
+    super.unequip();
+    if (!this.reloading) return;
+    this.reloading = false;
+    this._reloadTime = 0;
+    const parts = this._model.parts;
+    for (const part of [parts.mag, parts.cylinder, parts.leftHand]) {
+      if (part) { part.position.copy(restPose(part).restPos); part.rotation.copy(restPose(part).restRot); }
+    }
+  }
+
+  /** Drawing an empty gun starts its reload, as the auto-reload would have. */
+  equip() {
+    super.equip();
+    if (this.mag === 0) this.startReload();
+  }
 
   startReload() {
     if (this._disposed || this.reloading || this.mag >= this.magSize || this.reserve <= 0) return;
@@ -261,8 +291,10 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
       this.startReload();
       return;
     }
-    const wantFire = stats.automatic ? st.fire : st.firePressed;
-    if (!wantFire || this._fireT > 0 || this._pumpT > 0 || st.blockFire) return;
+    this._fireBuffer = st.firePressed ? 0.1 : this._fireBuffer - dt;
+    const wantFire = stats.automatic ? st.fire : this._fireBuffer > 0;
+    if (!wantFire || this._fireT > 0 || this._pumpT > 0 || st.blockFire || !this.drawn) return;
+    this._fireBuffer = 0;
     if (this.mag <= 0) {
       if (st.firePressed) { this._ctx.audio.empty(); this.startReload(); }
       return;
@@ -296,7 +328,7 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
     flash.scale.setScalar(s.flashScale * rand(0.8, 1.4));
     effects.strokeBurst(this._muzzle, TONE.ACCENT, 4 + s.pellets, 6 * s.flashScale,
       { life: 0.08, size: 0.03, gravity: 0, drag: 8 });
-    effects.smoke(this._muzzle, this._player.forward, this.kind === 'shotgun' ? 5 : 2);
+    effects.smoke(this._muzzle, this._player.forward, this.kind === 'shotgun' ? 5 : s.automatic ? 1 : 2);
     if (s.casing && s.reloadType !== 'shells') this._ejectShell();
     if (s.cycleDuration) {
       this._pumpT = s.cycleDuration + 0.12;
@@ -312,6 +344,7 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
     input.rumble(0.15 + s.fovKick * 0.08, 0.5, 40 + s.fovKick * 15);
     effects.shake += 0.02 + s.fovKick * 0.02;
     if (hits > 0 && this.kind === 'shotgun') game.hitstop(0.03, 0.3);
+    else if (hits > 0 && this.kind === 'sniper') game.hitstop(0.04, 0.3);
     if (this.mag === 0 && s.reloadType === 'magazine') {
       this._cancelAutoReload();
       this._autoReload = window.setTimeout(() => {
@@ -339,7 +372,9 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
       game.breakHit(wall.box.data.breakable, s.damage, point, dir);
     } else if (enemy && enemyDist < wallDist) {
       point = enemy.point;
-      enemies?.damage(enemy.enemy, this._damage(s.damage, s.headMult, s.falloff, enemy),
+      // Bosses have huge heads; cap the multiplier so a boss is a fight, not a two-second headshot mag.
+      const headMult = enemy.enemy.stats.boss ? Math.min(s.headMult, 1.5) : s.headMult;
+      enemies?.damage(enemy.enemy, this._damage(s.damage, headMult, s.falloff, enemy),
         { point, dir, part: enemy.part, source: this.kind, crit: enemy.part === 'head' });
     } else if (wall) {
       point = wall.point;
@@ -421,18 +456,35 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
       return;
     }
     if (s.reloadType === 'magazine') {
-      const tilt = Math.sin(clamp(t / 0.22, 0, 1) * Math.PI / 2)
-        * (t < 0.82 ? 1 : clamp(1 - (t - 0.82) / 0.18, 0, 1));
-      this.root.rotation.x -= 0.3 * tilt;
-      this.root.rotation.y += 0.25 * tilt;
-      this.root.rotation.z += 0.5 * tilt;
-      this.root.position.x += 0.03 * tilt;
-      this.root.position.y -= 0.07 * tilt;
-      const wave = Math.sin(clamp((t - 0.18) / 0.5, 0, 1) * Math.PI);
+      // Roll the gun up toward the eye so the magazine well is on screen, pull the
+      // magazine out with the left hand, bring a fresh one up from below and seat it.
+      const tilt = easeOut(clamp(t / 0.16, 0, 1)) * (t < 0.84 ? 1 : 1 - easeOut(clamp((t - 0.84) / 0.16, 0, 1)));
+      // Muzzle up, underside rolled toward the eye, whole gun lifted: the magazine well is on screen.
+      this.root.rotation.x += 0.45 * tilt;
+      this.root.rotation.y += 0.12 * tilt;
+      this.root.rotation.z -= 0.7 * tilt;
+      this.root.position.x -= 0.04 * tilt;
+      this.root.position.y += 0.12 * tilt;
+      this.root.position.z += 0.05 * tilt;
+      // 0 = seated, 1 = out of frame. Out over 0.16..0.42, back in over 0.5..0.76 with a small seat bump.
+      const out = easeInOut(clamp((t - 0.16) / 0.26, 0, 1)), back = easeInOut(clamp((t - 0.5) / 0.26, 0, 1));
+      const drop = t < 0.5 ? out : 1 - back;
+      const seat = t >= 0.76 && t < 0.84 ? Math.sin((t - 0.76) / 0.08 * Math.PI) * 0.015 : 0;
       // Every magazine-fed gun models a magazine; a revolver reloads through `cylinder` below.
-      if (parts.mag) {
-        parts.mag.position.y = restPose(parts.mag).restPos.y - wave * 0.3;
-        parts.mag.rotation.z = wave * 0.6;
+      const mag = parts.mag, hand = parts.leftHand, handRest = restPose(hand).restPos;
+      if (mag) {
+        const rest = restPose(mag);
+        mag.position.set(rest.restPos.x, rest.restPos.y - 0.5 * drop + seat, rest.restPos.z + 0.08 * drop);
+        mag.rotation.z = rest.restRot.z + 0.55 * drop;
+        mag.rotation.x = rest.restRot.x - 0.2 * drop;
+        // The hand goes to the magazine, follows it out and back, then returns to the fore-end.
+        const grip = easeInOut(clamp((t - 0.04) / 0.12, 0, 1)) - easeInOut(clamp((t - 0.8) / 0.12, 0, 1));
+        gripPoint.copy(mag.position); gripPoint.x -= 0.05; gripPoint.y -= 0.09; gripPoint.z += 0.02;
+        hand.position.lerpVectors(handRest, gripPoint, grip);
+        hand.rotation.z = restPose(hand).restRot.z + 0.6 * grip;
+      } else {
+        hand.position.copy(handRest);
+        hand.position.y -= 0.12 * drop;
       }
       if (t > 0.86 && !this._racked) {
         this._racked = true;
@@ -457,7 +509,7 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
       this.mag += take;
       this.reserve -= take;
       this.reloading = false;
-      for (const part of [parts.mag, parts.cylinder]) {
+      for (const part of [parts.mag, parts.cylinder, parts.leftHand]) {
         if (part) { part.position.copy(restPose(part).restPos); part.rotation.copy(restPose(part).restRot); }
       }
     }

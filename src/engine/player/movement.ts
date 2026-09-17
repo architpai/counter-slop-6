@@ -33,6 +33,9 @@ export interface MovementState {
   wasGround: boolean;
 }
 
+/** Extra jumps available in the air. 0: no double jump; the air dash, wall jump and grapple carry the kit. */
+export const AIR_JUMPS = 0;
+
 const point = new Vector3();
 const probe = new Vector3();
 const lower = new Vector3();
@@ -47,7 +50,7 @@ export function initMovement(p: Player): void {
   p.sprinting = p.sprintToggle = p.crouching = p.sliding = p.aiming = false;
   p.slideTime = p.coyote = p.jumpBuffer = p.wallJumpCd = p.mantleCd = p.dashCd = p.landGrace = p.airTime = 0;
   p.wallTouch = 9;
-  p.airJumps = 1;
+  p.airJumps = AIR_JUMPS;
   p.wasGround = true;
 }
 
@@ -65,7 +68,8 @@ export function updateMovement(p: Player, dt: number): void {
     if (p.move.y < 0.1) p.sprintToggle = false;
   } else p.sprintToggle = input.down('sprint');
   p.aiming = input.down('aim') && !p.melee.active && !input.down('melee');
-  p.sprinting = p.sprintToggle && p.move.y > 0.1 && !p.crouching && !p.aiming;
+  // Firing drops out of the sprint: no full-speed hip-fire from the lowered pose.
+  p.sprinting = p.sprintToggle && p.move.y > 0.1 && !p.crouching && !p.aiming && !input.down('fire');
   let speed = Math.hypot(v.x, v.z);
   if (input.pressed('crouch') && b.onGround && speed > 6.3 && !p.sliding) {
     const boost = clamp(12.8 - speed, 0, 4.5);
@@ -95,7 +99,7 @@ export function updateMovement(p: Player, dt: number): void {
   if (b.onGround) {
     p.coyote = 0.13;
     p.airTime = 0;
-    p.airJumps = 1;
+    p.airJumps = AIR_JUMPS;
     if (p.sliding) {
       const nextSpeed = Math.max(0, speed - 6.5 * dt);
       const ratio = speed > 0 ? nextSpeed / speed : 0;
@@ -112,7 +116,7 @@ export function updateMovement(p: Player, dt: number): void {
       const friction = Math.max(0, 1 - (p.landGrace > 0 ? 2 : 8) * dt);
       v.x *= friction;
       v.z *= friction;
-      const maxSpeed = p.crouching ? 3.6 : p.sprinting ? 10.6 : 6.6;
+      const maxSpeed = p.crouching ? 3.6 : p.sprinting ? 10.6 : 6.6 * (p.aiming ? p.weapon.adsSpeed : 1);
       accelerate(v, p.wish, wishLen, maxSpeed, 140 * dt);
     }
   } else {
@@ -135,7 +139,7 @@ export function updateMovement(p: Player, dt: number): void {
       p.jumpBuffer = p.coyote = 0;
       v.y = 9.6;
       b.onGround = false;
-      p.airJumps = 1;
+      p.airJumps = AIR_JUMPS;
       if (p.sliding) {
         v.x *= 1.06;
         v.z *= 1.06;
@@ -149,7 +153,7 @@ export function updateMovement(p: Player, dt: number): void {
       v.x = p.wallNormal.x * 7.5 + v.x * 0.35 + p.flatForward.x * 2.5;
       v.z = p.wallNormal.z * 7.5 + v.z * 0.35 + p.flatForward.z * 2.5;
       v.y = 9.2;
-      p.airJumps = 1;
+      p.airJumps = AIR_JUMPS;
       audio.wallJump();
       p.roll += p.wallNormal.dot(p.right) > 0 ? -0.1 : 0.1;
       p.kickFov(2);

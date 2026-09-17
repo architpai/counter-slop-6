@@ -7,10 +7,11 @@ import { NavGrid } from '@/engine/nav';
 // Decorative trim must not change collision, navigation or spawns.
 // Downtown includes the intended stair-landing and rail-opening fixes;
 // downtown-routes.test.ts verifies those routes with walking bodies.
+// Node counts reflect the 0.42 nav clearance (physics-nav.md 5.3).
 const baseline = {
-  downtown: '1cf24dad1c58f85f937ffb033791a285963698d4b50f616c17214b38268b00fe',
-  house: 'db9fb9825dc0dcd6e71b13bf1a6db5bbfde738232e4d5fd409712c691fa5219e',
-  mexico: 'c778bdf88edacf2a16541629e06e232dd3bd8fc9c179b3abcb2591247e90e141',
+  downtown: 'd4cba9f111e79fc4b422ef82e905f3e6f529ee1865a674702ca08f0d0210a9c1',
+  house: 'c2c62a1d4dfd5d56b95e9ae1923ffc10ef77d84116f27c96556be5aa885d6a87',
+  mexico: 'b6e7e398997c31deae6bf346ff1794004201d6deb17030cbca92aaa93c827fd9',
 };
 
 test('visual polish preserves the playable maps', async () => {

@@ -25,7 +25,7 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .game-hud [hidden] { display: none !important; }
 .game-hud b, .game-hud strong { font-weight: 700; }
 .hud-block { position: absolute; text-shadow: 0 1px 2px rgba(10, 18, 24, .9); }
-.no-gameplay :is(.hud-block, .crosshair, .grapple-reticle, .kill-feed, .tip-line, .boss-bar, .scope, .focus-mark, .focus-meter) { display: none; }
+.no-gameplay :is(.hud-block, .crosshair, .grapple-reticle, .hit-marker, .kill-marker, .kill-feed, .tip-line, .boss-bar, .scope, .focus-mark, .focus-meter) { display: none; }
 .game-hud .pad-only { display: none; }
 .game-hud.gamepad .pad-only { display: initial; }
 .game-hud.gamepad .keyboard-only { display: none; }
@@ -58,9 +58,9 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .acog-optic, .holo-optic { position: absolute; left: 50%; top: 50%; width: 94vmin; height: 94vmin; transform: translate(-50%, -50%); overflow: visible; }
 .holo-optic { width: 86vmin; height: 86vmin; }
 .acog-reticle { fill: none; stroke: #101313; stroke-width: 2.5; }
-.acog-reticle .acog-chevron { fill: #ed2428; stroke: none; }
-.acog-reticle .acog-illuminated { stroke: #ed2428; stroke-width: 3; }
-.acog-reticle text { fill: #ed2428; stroke: none; font: 11px monospace; }
+.acog-reticle .acog-chevron { fill: currentColor; stroke: none; }
+.acog-reticle .acog-illuminated { stroke: currentColor; stroke-width: 3; }
+.acog-reticle text { fill: currentColor; stroke: none; font: 11px monospace; }
 .grapple-reticle { position: absolute; left: 50%; top: 50%; width: 30px; height: 30px; border: 2.5px dashed var(--cool); border-radius: 50%; opacity: 0; transform: translate(-50%, -50%) scale(1.6); transition: opacity .1s, transform .12s; }
 .grapple-reticle[data-state="1"] { opacity: .9; transform: translate(-50%, -50%) scale(1) rotate(20deg); }
 .grapple-reticle[data-state="2"] { opacity: .9; border-style: solid; transform: translate(-50%, -50%) scale(.65); }
@@ -68,12 +68,11 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .grapple-breath > div { width: var(--breath); height: 100%; background: var(--cool); }
 .grapple-breath.low { border-color: var(--hot); }
 .grapple-breath.low > div { background: var(--hot); }
-.hit-marker { position: absolute; left: 50%; top: 50%; width: 28px; height: 28px; opacity: 0; transform: translate(-50%, -50%); color: var(--cool); }
-.hit-marker > i { position: absolute; left: 50%; top: 50%; width: 2.5px; height: 28px; background: currentColor; transform: translate(-50%, -50%) rotate(45deg); }
-.hit-marker > i + i { transform: translate(-50%, -50%) rotate(-45deg); }
-.hit-marker.kill { color: var(--hot); }
-.hit-marker.kill > i { height: 38px; }
-.hit-marker.crit > i { width: 4px; }
+.hit-marker, .kill-marker { position: absolute; left: 50%; top: 50%; opacity: 0; transform: translate(-50%, -50%); filter: drop-shadow(0 1px 1px #000) drop-shadow(0 0 1px #000); }
+.hit-marker { width: 40px; height: 40px; color: #fff; fill: none; stroke: currentColor; stroke-width: 2.5; }
+.hit-marker.crit { color: var(--hot); }
+.hit-marker.blocked { color: #69b7ff; }
+.kill-marker { top: calc(50% + 46px); width: 24px; height: 26px; fill: #ffd166; }
 .damage-indicators, .damage-direction { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
 .damage-direction { left: 0; top: 0; transform-origin: 0 0; }
 .damage-direction::before { content: ''; position: absolute; top: -140px; left: -16px; border-left: 16px solid transparent; border-right: 16px solid transparent; border-bottom: 22px solid var(--hot); }
@@ -129,7 +128,7 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .melee-hint b { color: var(--fg); }
 .melee-hint span { min-width: 44px; }
 .weapon-name, .weapon-hint { display: none; }
-.tip-line { position: absolute; left: 50%; bottom: max(210px, 24%); transform: translateX(-50%); width: max-content; max-width: 60%; padding: 8px 14px; border-radius: 3px; background: rgba(14, 24, 32, .88); text-align: center; font-size: 16px; line-height: 1.45; color: var(--fg); opacity: 0; transition: opacity .4s; }
+.tip-line { position: absolute; left: 50%; bottom: 9%; transform: translateX(-50%); width: max-content; max-width: 40%; padding: 8px 14px; border-radius: 3px; background: rgba(14, 24, 32, .88); text-align: center; font-size: 16px; line-height: 1.45; color: var(--fg); opacity: 0; transition: opacity .4s; }
 .tip-line.is-visible { opacity: .9; }
 .tip-line:empty { display: none; }
 .tip-line b { color: var(--hot); }
@@ -181,7 +180,7 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .screen-button[data-act="start"] { font-size: 26px; }
 .screen-button[data-act="online"] { font-size: 20px; }
 .screen-button[data-act="startMatch"], .screen-button[data-act="quickPlay"] { font-size: 28px; }
-.screen-panel :is(button,input,select,textarea):focus-visible { outline: 2px solid var(--warn); outline-offset: 3px; }
+.screen-panel :is(button,input,select,textarea,summary):focus-visible { outline: 2px solid var(--warn); outline-offset: 3px; }
 .screen-button:active, .menu-nav button:active, .control-switch button:active { transform: translateY(1px); }
 .screen-controls { margin: 16px 0; text-align: left; font: 400 16px/1.45 var(--font-body), system-ui, sans-serif; }
 .control-column { min-width: 0; max-width: 800px; }
@@ -204,11 +203,20 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .sensitivity-settings { flex-basis: 100%; max-width: 100%; }
 .sensitivity-settings .settings-row { display: grid; grid-template-columns: minmax(170px, 1fr) minmax(100px, 180px) 55px; text-align: left; }
 .sensitivity-settings p { margin: 10px 0 0; color: var(--fg-dim); font-size: 13px; }
-.optic-picker { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 16px 0 0; }
-.optic-picker > span, .optic-picker small { color: var(--fg-dim); font: 400 12px/1.4 var(--font-body), sans-serif; }
-.optic-picker .screen-button { padding: 9px 14px; font-size: 14px; }
-.optic-picker .screen-button[aria-pressed="true"] { border-color: #91b1ff; background: #22394b; }
-.settings .optic-picker { margin-top: 0; }
+.weapons-section { width: 100%; text-align: left; }
+.weapons-section h3 { margin: 0; font-size: 22px; font-weight: 500; }
+.weapons-section summary { padding: 14px 0; cursor: pointer; font-size: 18px; border-top: 1px solid var(--line); }
+.weapons-section summary span { margin-left: 10px; color: var(--fg-dim); font-size: 13px; }
+.weapon-customization-note { margin: 8px 0 18px; color: var(--fg-dim); font: 400 13px/1.5 var(--font-body), sans-serif; }
+.weapon-customization-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 20px; padding: 20px 0; border-top: 1px solid var(--line); }
+.weapon-identity { display: flex; align-items: center; gap: 16px; }
+.weapon-identity .slot-badge { padding: 8px; color: #91b1ff; border-color: #5476aa; }
+.weapon-identity h4 { margin: 0; font-size: 24px; }
+.weapon-identity p { margin: 5px 0 0; color: var(--fg-dim); font: 400 13px/1.4 var(--font-body), sans-serif; }
+.optic-picker { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.optic-picker legend { padding: 0 0 8px; color: var(--fg-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+.optic-picker .screen-button { min-height: 44px; padding: 10px 14px; font-size: 14px; }
+.optic-picker .screen-button[aria-pressed="true"] { border-color: #91b1ff; background: #22394b; box-shadow: inset 0 -2px #91b1ff; }
 .settings-row label { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 10px; }
 .settings input[type="range"] { width: 160px; max-width: 100%; min-width: 100px; accent-color: var(--cool); cursor: pointer; }
 .settings output { min-width: 55px; font-weight: 700; color: var(--hot); }
@@ -222,9 +230,8 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .screen-footer { margin: 8px 0; font: 400 17px/1.4 var(--font-body), system-ui, sans-serif; opacity: .8; }
 .screen-status { min-height: 22px; margin: 8px 0; color: var(--hot); font: 400 17px/1.3 var(--font-body), system-ui, sans-serif; overflow-wrap: anywhere; }
 .dim { color: var(--fg-dim); }
-.checkpoints, .map-picker { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
-.checkpoints h3, .map-picker h3 { margin: 0 0 8px; font-size: 17px; font-weight: 500; color: var(--fg-dim); }
-.checkpoints .screen-button { margin: 3px; font-size: 17px; }
+.map-picker { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.map-picker h3 { margin: 0 0 8px; font-size: 17px; font-weight: 500; color: var(--fg-dim); }
 .map-choice { display: inline-flex; flex-direction: column; margin: 4px; max-width: 100%; font-size: 19px; }
 .map-choice.selected { color: var(--fg); background: #22394b; border-color: #91b1ff; }
 .map-previews { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0; border: 0; }
@@ -272,6 +279,8 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
   .sensitivity-settings .settings-row { grid-template-columns: 1fr 55px; }
   .sensitivity-settings input { grid-row: 2; width: 100%; }
   .control-column ol { grid-template-columns: 1fr; gap: 8px; }
+  .weapon-customization-row { grid-template-columns: 1fr; gap: 12px; padding: 16px 0; }
+  .menu-nav { gap: 18px; }
   .bottom-left, .bottom-right { padding: 8px; }
   .health-track { width: 80px; }
   .ammo-tally { max-width: 165px; }

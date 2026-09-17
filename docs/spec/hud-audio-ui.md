@@ -237,7 +237,7 @@ Bottom-right block (right 4 %, bottom 5 %, right-aligned):
 
 ### 3.14 Tip line
 
-- Centred text line at bottom 17 %, 26 px, tone, fades in/out over 0.4 s to 0.9 opacity. Bold spans inside a tip are red. HTML allowed (bold only).
+- Centred text line at bottom 9 % (below both scope lenses, above the bottom edge of the ACOG housing; the corner panels sit at 3 %), 26 px, tone, fades in/out over 0.4 s to 0.9 opacity. Bold spans inside a tip are red. HTML allowed (bold only).
 - "tip(text, duration = 5)" shows the text and starts a countdown; the HUD's per-frame update decrements it (real time) and hides the tip when it reaches 0. A new tip replaces the old one and restarts the countdown.
 - Hidden in "no gameplay".
 
@@ -331,7 +331,6 @@ The controls block is a two-column table (columns 46 px apart, left-aligned, 22 
 1. **WASD** move   **Mouse** look   **Shift** sprint
 2. **LMB** fire / slash   **RMB** aim down sights / block
 3. **Space** jump (again on a wall = wall jump)
-4. **Space** again in the air = double jump
 5. **C / Ctrl** slide on the ground · air dash in the air
 6. **Q / E** grapple: tap to swing, hold to reel, jump to launch
 7. **F** quick katana slash   **R** reload   **M** music
@@ -524,7 +523,7 @@ Wave modifier names (top-right line and wave sub-line): "" (none), "CAFFEINATED 
 | Wave 2 start | block with **<block>** and some of their bullets go back at them | 7 |
 | Wave 3 start | kills in the air are worth more · stay off the floor | 7 |
 | Wave 4 start | **<grenade>** lobs a grenade · pickups give you more | 7 |
-| Wave 5 start | press **<jump>** again in the air for a double jump | 7 |
+| Wave 5 start | **<dash>** in the air dashes · **<jump>** on a wall jumps off it | 7 |
 | Focus (dash-slash) becomes ready | **SLASH READY** · hold <focus> to dash | 2.2 |
 | Focus dash blocked by geometry | blocked · the dash did not reach | 1.2 |
 | Your bullet parried by another player and returned | RETURNED | 0.9 |
@@ -604,7 +603,7 @@ Timing of the weapon cues (weapon module): a gun's fire cue plays on every shot;
 | Grapple release | let go of the rope without a launch boost | sawtooth 900→300, 0.12 s, 0.12 |
 | Reel loop | on while attached to geometry; off on detach, pause, menu, reset | see section 10 |
 | Footstep(f) | every 2.0 m walked (2.5 m sprinting) on the ground; f = clamp(horizontal speed / 8, 0.3, 1) | noise low-pass rand(400, 800), 0.07 s, 0.12 × f |
-| Jump | ground jump, double jump, grapple launch (jump while attached) | triangle 260→480, 0.1 s, 0.1; noise low-pass 600, 0.05 s, 0.1 |
+| Jump | ground jump, grapple launch (jump while attached); double jump when AIR_JUMPS > 0 (it is 0) | triangle 260→480, 0.1 s, 0.1; noise low-pass 600, 0.05 s, 0.1 |
 | Land(h) | landing; h = clamp(−landing velocity / 14, 0, 1.5) | noise low-pass 350, 0.14 s, 0.15 + 0.35 h |
 | Slide | slide starts | noise low-pass 1200→300, 0.45 s, 0.18 |
 | Wall jump | wall jump | noise low-pass 700, 0.08 s, 0.25; triangle 300→600, 0.12 s, 0.12 |
@@ -612,8 +611,8 @@ Timing of the weapon cues (weapon module): a gun's fire cue plays on every shot;
 | Dash | air dash, katana lunge, focus dash start | noise band-pass 800→2500 Q1, 0.25 s, 0.3 |
 | Hurt | you take damage | sawtooth 200→90, 0.2 s, 0.35; noise low-pass 500, 0.12 s, 0.3 |
 | Death | you die | sawtooth 220→30, 1.2 s, 0.4; noise low-pass 800→80, 0.8 s, 0.35 |
-| Hit enemy (pos) | your shot/blade damages an enemy body (non-crit) or another player | noise low-pass 900, 0.06 s, 0.3; square rand(200, 260)→120, 0.1 s, 0.15 |
-| Headshot (pos) | your hit is a critical (head) hit on an enemy | noise high-pass 3000, 0.05 s, 0.5; triangle 1500→500, 0.09 s, 0.2 |
+| Hit enemy | your shot/blade damages an enemy body (non-crit) or another player. Centred, not positional: it is shooter feedback and must read at any range | noise low-pass 900, 0.06 s, 0.3; square rand(200, 260)→120, 0.1 s, 0.15 |
+| Headshot | your hit is a critical (head) hit on an enemy. Centred, not positional | noise high-pass 3000, 0.05 s, 0.5; triangle 1500→500, 0.09 s, 0.2 |
 | Kill(strong) | you kill an enemy (strong = headshot or boss); you kill a player online (strong) | square 880, 0.07 s, 0.22; square 1320, 0.16 s, 0.2, delay 0.07; sine 140→50, 0.16 s, 0.6 if strong else 0.35; strong only: triangle 1760, 0.22 s, 0.12, delay 0.14 |
 | Enemy die (pos) | an enemy dies; a remote player dies | sawtooth rand(160, 220)→40, 0.4 s, 0.3; noise low-pass 600→100, 0.3 s, 0.4; noise band-pass 1400 Q1, 0.12 s, 0.3, delay 0.03 |
 | Gib (pos) | an enemy is overkilled into pieces | noise low-pass 500→120, 0.2 s, 0.45; noise band-pass 2000 Q0.8, 0.1 s, 0.3, delay 0.02 |

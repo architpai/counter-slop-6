@@ -297,10 +297,10 @@ export class Audio {
     this.#reel = { source, gain };
   }
 
-  shot(): void {
-    this.#noise({ type: 'bandpass', freq: 1200, end: 250, Q: 0.7, duration: 0.17, gain: 0.7 });
-    this.#noise({ type: 'highpass', freq: 2800, duration: 0.06, gain: 0.45 });
-    this.#tone({ type: 'triangle', freq: 160, end: 40, duration: 0.15, gain: 0.6 });
+  shot(pos?: Vector3): void {
+    this.#noise({ type: 'bandpass', freq: 1200, end: 250, Q: 0.7, duration: 0.17, gain: 0.7, pos });
+    this.#noise({ type: 'highpass', freq: 2800, duration: 0.06, gain: 0.45, pos });
+    this.#tone({ type: 'triangle', freq: 160, end: 40, duration: 0.15, gain: 0.6, pos });
   }
   mp5Fire(pos?: Vector3): void {
     this.#noise({ type: 'bandpass', freq: 1550, end: 420, Q: 0.7, duration: 0.09, gain: 0.52, pos });
@@ -395,13 +395,14 @@ export class Audio {
     this.#tone({ type: 'sawtooth', freq: 220, end: 30, duration: 1.2, gain: 0.4 });
     this.#noise({ freq: 800, end: 80, duration: 0.8, gain: 0.35 });
   }
-  hitEnemy(pos: Vector3): void {
-    this.#noise({ freq: 900, duration: 0.06, gain: 0.3, pos });
-    this.#tone({ type: 'square', freq: rand(200, 260), end: 120, duration: 0.1, gain: 0.15, pos });
+  // Hit confirms are shooter feedback, not world sounds: centred, full volume at any range.
+  hitEnemy(): void {
+    this.#noise({ freq: 900, duration: 0.06, gain: 0.3 });
+    this.#tone({ type: 'square', freq: rand(200, 260), end: 120, duration: 0.1, gain: 0.15 });
   }
-  headshot(pos: Vector3): void {
-    this.#noise({ type: 'highpass', freq: 3000, duration: 0.05, gain: 0.5, pos });
-    this.#tone({ type: 'triangle', freq: 1500, end: 500, duration: 0.09, gain: 0.2, pos });
+  headshot(): void {
+    this.#noise({ type: 'highpass', freq: 3000, duration: 0.05, gain: 0.5 });
+    this.#tone({ type: 'triangle', freq: 1500, end: 500, duration: 0.09, gain: 0.2 });
   }
   kill(strong = false): void {
     this.#tone({ type: 'square', freq: 880, duration: 0.07, gain: 0.22 });
@@ -479,6 +480,7 @@ export class Audio {
       this.#noise({ type: 'bandpass', freq: 750, end: 120, Q: 0.5, duration: 0.4, gain: 1, pos });
       this.#tone({ type: 'sawtooth', freq: 420, end: 50, duration: 0.32, gain: 0.5, pos });
     } else if (kind === 'pistol') this.pistolFire(pos);
+    else if (kind === 'r4c') this.shot(pos);
     else this.mp5Fire(pos);
   }
   enemyShot(pos: Vector3): void {

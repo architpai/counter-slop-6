@@ -3,13 +3,14 @@ import { choose, shuffle, round1, round2, clamp } from '../util';
 import { RemotePlayer, encodeState } from '../players';
 import { validKey } from '../level/index';
 import { TONE } from '../render/index';
+import { GUN_STATS } from '../weapons/stats';
 import type { BoardRow } from '../hud/screens';
 import type { HitInfo, PlayerHit, ScoreRow, Target } from '../types';
 import type { PeerMeta } from '../net';
 import type { App } from '../boot';
 
 const KILL_TARGET = 20, TIME_LIMIT = 480, RESPAWN = 3.5, SILENT_MS = 9000;
-const HOW: Record<string, string> = { rifle: 'MP5', pistol: 'pistol', shotgun: 'shotgun', sniper: 'sniper', melee: 'knife', grenade: 'grenade', deflect: 'their own bullet' };
+const HOW: Record<string, string> = { r4c: 'R4-C', rifle: 'MP5', pistol: 'pistol', shotgun: 'shotgun', sniper: 'sniper', melee: 'knife', grenade: 'grenade', deflect: 'their own bullet' };
 
 const obj = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
 const arr = (v: unknown): v is unknown[] => Array.isArray(v);
@@ -365,7 +366,7 @@ export function createFFA(app: App): FfaApi {
     const point = info.point ?? t.center;
     if (info.part === 'blade') {
       ctx.effects.strokeBurst(point, TONE.ACCENT, 8, 6, { life: 0.22, size: 0.035 });
-      ctx.audio.shieldHit(t.center);
+      ctx.audio.shieldHit(t.center); hud.hitmarker(false, false, true);
       const ret = Math.random() < 0.4;
       if (ret) {
         ctx.effects.tracer(point, p.eye, TONE.HOSTILE, 0.03, 0.08);
@@ -380,16 +381,16 @@ export function createFFA(app: App): FfaApi {
     const frontHit = /^(head|torso|arm|fore)/.test(info.part ?? '');
     if (facing > 0.6 && frontHit && info.source === 'melee' && t.parryWindow) {
       ctx.effects.strokeBurst(point, TONE.ACCENT, 10, 6, { life: 0.25, size: 0.04 });
-      ctx.audio.shieldHit(t.center); ctx.game.hitstop(0.08, 0.15);
+      ctx.audio.shieldHit(t.center); hud.hitmarker(false, false, true); ctx.game.hitstop(0.08, 0.15);
       p.melee.cooldown = Math.max(p.melee.cooldown, 0.6);
       ctx.input.rumble(0.6, 0.3, 90); hud.tip('PARRIED', 0.9);
       return;
     }
     ctx.effects.blood(point, info.dir ?? d1.subVectors(t.center, p.eye).normalize(), clamp(0.4 + damage / 80, 0.4, 1.6), { tone: TONE.HOSTILE });
-    hud.hitmarker(false, !!info.crit); ctx.audio.hitEnemy(t.center); t.flash();
+    hud.hitmarker(false, !!info.crit); ctx.audio.hitEnemy(); t.flash();
     const source = info.source ?? 'rifle';
     const shotId = ++hitId;
-    if (info.crit && info.part === 'head' && ['rifle', 'shotgun', 'sniper', 'pistol', 'revolver'].includes(source)) {
+    if (info.crit && info.part === 'head' && Object.hasOwn(GUN_STATS, source)) {
       if (pendingHeadshots.size >= 64) pendingHeadshots.clear();
       pendingHeadshots.set(shotId, { target: t.id, source, until: now() + 1 });
     }
@@ -533,7 +534,7 @@ export function createFFA(app: App): FfaApi {
     const killerId = killer !== null && scores.has(killer) ? killer : null;
     if (r) { r.ragdoll(dir, over); ctx.audio.enemyDie(r.center); }
     const howText = how ? ` · ${how}${crit ? ' headshot' : ''}` : '';
-    if (killerId === net.id) { gs.kills++; app.addScore(100, `ELIMINATED ${victim}${howText}`); ctx.audio.kill(true); }
+    if (killerId === net.id) { gs.kills++; hud.hitmarker(true, crit); app.addScore(100, `ELIMINATED ${victim}${howText}`); ctx.audio.kill(true); }
     else {
       const killerName = killerId === null ? null : scores.get(killerId)?.name ?? null;
       hud.kill(killerName ? `${killerName} eliminated ${victim}${howText}` : `${victim} fell off the map`);
