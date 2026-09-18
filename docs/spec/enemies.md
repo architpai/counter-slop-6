@@ -320,7 +320,7 @@ From (body + dir × 0.9, y + 0.5), cast down 3.5. True if something is hit. Used
 
 Each enemy keeps a personal slot angle and slot radius so a group surrounds the target instead of forming a line.
 
-- The re-roll timer counts down. On expiry: timer = random 2.5 – 5; slot angle += random(−0.7, 0.7); slot radius = random 2 – 4.5 for melee types (blade, bomb), random 4.5 – 9 for everyone else.
+- The re-roll timer counts down. On expiry: timer = random 2.5 – 5; slot radius = random 2 – 4.5 for melee types (blade, bomb), random 7 – 13 for everyone else. Slot angle: three candidate bearings are rolled and the one furthest from every other ground enemy's slot (same target) wins. For non-blades a candidate is the current slot angle + random(−1.4, 1.4). For **blades** (rushers) the candidates sit around the target's rear — atan2(−target.forward.x, −target.forward.z) + strafe direction × random(0, 1.5), ± 0.5 — so a rusher arrives from the side or behind while the rifles hold the front.
 - d = horizontal distance from the enemy to the target.
 - r = clamp(0.55 × d, min(2, 0.9 × d), slot radius). (Lower bound applies first: if 0.55 d is below the lower bound, r = lower bound even if that exceeds the slot radius.)
 - If |target y − enemy y| > 1.5 (target is on another level), r = min(r, 1.1) so the enemy aims almost exactly at the target and does not walk off ramps.
@@ -328,7 +328,7 @@ Each enemy keeps a personal slot angle and slot radius so a group surrounds the 
 
 ### 6.4 Pairwise separation
 
-Every 0.05 s, for each pair of alive **ground** enemies: rr = halfW_a + halfW_b + 0.75. If their horizontal distance d < rr, d > 0.001 and |Δy| ≤ 1.5: push = (rr − d) × 9, applied as an instantaneous horizontal velocity change of magnitude push to each, away from the other. (Not scaled by dt: it is a velocity impulse each 0.05 s.)
+Every 0.05 s, for each pair of alive **ground** enemies: rr = halfW_a + halfW_b + 0.75, or + 1.6 when both carry a gun (rifle, pistol, shotgun, sniper) — a firing line should spread, a charge may bunch. If their horizontal distance d < rr, d > 0.001 and |Δy| ≤ 1.5: push = (rr − d) × 9, applied as an instantaneous horizontal velocity change of magnitude push to each, away from the other. (Not scaled by dt: it is a velocity impulse each 0.05 s.)
 
 ### 6.5 Wander (no live target)
 
@@ -336,7 +336,7 @@ Horizontal velocity damps toward 0 with rate 6; aim amount damps toward 0 with r
 
 ### 6.6 Path following ("follow")
 
-Inputs: the target feet position and desired speed. The nav subsystem (section 18.3) supplies A* paths over a 1 m grid.
+Inputs: the target feet position and desired speed. The nav subsystem (section 18.3) supplies A* paths over a 1 m grid; a boss asks the boss grid (0.95 clearance, 5.1 headroom) and every other type the walker grid. A boss that has hopped after 0.9 s stuck also zeroes its slot timer so the next approach point is a different bearing.
 
 1. Path timer −= dt. Compute the approach point (6.3); that is the goal handed to the pathfinder.
 2. The path is **stale** if there is no path, the path index is past the end, or (path timer ≤ 0 and (there is no recorded path goal, or the recorded goal is > 3.5 from the new approach point, or the path was flagged incomplete)).
@@ -401,6 +401,7 @@ Let stop′ = stop × keep multiplier and keep′ = keep × keep multiplier (the
 - Stationary types (sniper): no movement at all.
 - Else if dist > stop′: path-follow at 0.8 × speed while also running fire control (section 8); face the target; stop.
 - Else if |dy| > 1.2 (target is above or below): path-follow at 0.85 × speed while running fire control; face the target; stop. (In this branch the spread's target-speed term uses the local player's speed rather than the actual target's.)
+- Else if **crowded** — another alive ground enemy with line of sight, not spawning, within 3 m horizontally and 1.5 m vertically — and the type is not stationary: path-follow toward the approach slot at 0.85 × speed while running fire control; face the target; stop. This is what stops a wave piling up at the first corner with line of sight.
 - Else choose a horizontal move direction (mx, mz) with (nx, nz) = unit vector to the target:
   - dist < keep′ → move away: (−nx, −nz).
   - dist > 0.7 × range and weapon is shotgun → move in: (nx, nz).
@@ -530,7 +531,7 @@ Flyers ignore the ground brain entirely (they also skip the "wander" rule: a fly
 
 Flight phases:
 
-- **Orbit**: angle = atan2(body.x − c.x, body.z − c.z) + orbit direction × 0.45; want = (c.x + sin(angle) × 11, c.y + 6 + sin(1.3 × age) × 1.5, c.z + cos(angle) × 11); fly-to at 6.2, accel 22. So it circles at radius 11, 4.5 – 7.5 above the target's centre. If cooldown ≤ 0, the target is alive and there is LOS from the flyer centre to the target centre → **dive**: flight timer = 1.6, hit flag cleared, dive sound. A buzz sound triggers with probability 1.5 × dt per frame.
+- **Orbit**: angle = atan2(body.x − c.x, body.z − c.z) + orbit direction × 0.45; want = (c.x + sin(angle) × 11, c.y + 6 + sin(1.3 × age) × 1.5, c.z + cos(angle) × 11); fly-to at 6.2, accel 22. So it circles at radius 11, 4.5 – 7.5 above the target's centre. If cooldown ≤ 0, the target is alive, there is LOS from the flyer centre to the target centre, and either the target is aiming or firing (busy with someone else) or the cooldown has been ≤ 0 for 2.5 s → **dive**: flight timer = 1.6, hit flag cleared, dive sound. A buzz sound triggers with probability 1.5 × dt per frame.
 - **Dive**: fly-to the target centre at 16, accel 28. When the centre-to-centre distance < 1.4 and it has not hit yet: mark hit; ask the target to block the melee; if blocked → stunned (flight phase and state), age reset, velocity = (−0.3 vx, −3, −0.3 vz); else the target takes 10 × damage multiplier from the flyer centre and knockback 3 along the flyer's velocity direction. The dive ends (→ **climb**, flight timer 1.1, cooldown = random 2.8 – 4.2) when the flight timer ≤ 0, or it has hit, or the body bumped a wall.
 - **Climb**: want = (c.x + (body.x − c.x) × 1.5, c.y + 8, c.z + (body.z − c.z) × 1.5), fly-to at 6.2, accel 18; when the flight timer ≤ 0 → orbit.
 - **Stunned**: gravity −20 /s². When on the ground or age > 2.2 → climb, flight timer 1.2, state hunt.

@@ -3,6 +3,7 @@ import { Group, Mesh, PerspectiveCamera, Scene, Vector3 } from 'three';
 import { Player } from '@/engine/player/index';
 import { RemotePlayer } from '@/engine/players';
 import { updateCamera } from '@/engine/player/camera';
+import { updateGrapple } from '@/engine/player/grapple';
 import { EnemyManager } from '@/engine/enemies/index';
 import { syncModel } from '@/engine/enemies/model';
 import { Input } from '@/engine/input';
@@ -41,6 +42,21 @@ function setup() {
   });
   return { p, ctx, hud, enemies, frame, key };
 }
+
+test('the grapple awards a yank only when the moderator cast window accepts it', () => {
+  const { p, ctx, enemies } = setup(), score = vi.fn(); ctx.game.addScore = score;
+  const boss = enemies.spawn('moderator', new Vector3(0, 8, -10));
+  const attach = () => {
+    p.grapple.mode = 'fly'; p.grapple.enemy = boss;
+    p.grapple.flyTime = 1; p.grapple.flyDuration = 0.1;
+    updateGrapple(p, 0.01);
+  };
+  attach(); expect(score).not.toHaveBeenCalled(); expect(boss.state).not.toBe('stunned');
+  boss.yankableT = 2; attach();
+  expect(score).toHaveBeenCalledExactlyOnceWith(30, 'YANKED');
+  expect(boss.state).toBe('stunned'); expect(boss.body.vel.y).toBeLessThan(0);
+  attach(); expect(score).toHaveBeenCalledTimes(1);
+});
 
 test('melee is independent of all five guns, empty ammo, aim and reload', () => {
   const { p, hud, frame, key } = setup();

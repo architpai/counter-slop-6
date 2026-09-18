@@ -62,7 +62,7 @@ try {
   await slider('acogSens', 120); await slider('sniperSens', 150);
   await page.getByRole('button', { name: 'play', exact: true }).click();
   await page.locator('[data-act="training"]').click();
-  await page.waitForFunction(() => window.__game.gs.mode === 'training' && window.__game.enemies.alive === 10);
+  await page.waitForFunction(() => window.__game.gs.mode === 'training' && window.__game.enemies.alive === 22);
   const passive = await page.evaluate(() => {
     const g = window.__game;
     const positions = g.enemies.list.map(e => e.body.pos.clone());
@@ -129,8 +129,8 @@ try {
   await page.screenshot({ path: `${out}/sniper.png` });
   await page.mouse.up({ button: 'right' });
 
-  // Trace real zero-spread shots through all ten visible models. Shields block
-  // bullets; machines remain body targets, never headshot multipliers.
+  // Trace real zero-spread shots through the expanded range. Shields block
+  // bullets; the moderator is the only flying model with a separate head.
   const shots = await page.evaluate(() => {
     const g = window.__game; g.gs.state = 'pause';
     g.player.switchTo(1);
@@ -148,8 +148,8 @@ try {
     return results;
   });
   for (const hit of shots) {
-    assert.equal(hit.part, hit.type === 'shield' ? 'shield' : ['bomber', 'flyer', 'hitbox', 'lagspike'].includes(hit.type) ? 'torso' : 'head', hit.type);
-    assert(hit.type === 'shield' ? hit.damage === 0 : hit.damage > 0, hit.type);
+    assert.equal(hit.part, ['shield', 'breacher'].includes(hit.type) ? 'shield' : ['bomber', 'flyer', 'carrier', 'hitbox', 'lagspike'].includes(hit.type) ? 'torso' : 'head', hit.type);
+    assert(['shield', 'breacher'].includes(hit.type) ? hit.damage === 0 : hit.damage > 0, hit.type);
   }
   const wall = await page.evaluate(() => {
     const g = window.__game, e = g.enemies.list.find(e => e.type === 'grunt');
@@ -186,7 +186,7 @@ try {
   assert.equal(await page.evaluate(() => window.__game.player.weapons[0].reserve), 300);
   await pause();
   await page.locator('[data-act="training"]').click();
-  assert(await page.evaluate(() => window.__game.enemies.alive === 10 && window.__game.enemies.list.every(e => e.hp === e.maxHp)));
+  assert(await page.evaluate(() => window.__game.enemies.alive === 22 && window.__game.enemies.list.every(e => e.hp === e.maxHp)));
   await pause();
   await page.locator('[data-act="mainMenu"]').click();
   assert.equal(await page.evaluate(() => window.__game.level.key), 'downtown');
@@ -198,6 +198,6 @@ try {
   await page.locator('[data-act="start"]').click();
   await page.waitForFunction(() => window.__game.gs.mode === 'solo' && window.__game.gs.wave === 1);
   assert.deepEqual(errors, []);
-  console.log('OK: passive range, all 10 targets, respawn/reset, ammo, hit registration, cover, independent R4-C/MP5 optics, Weapons section, saved preferences, zoom and independent mouse/controller sensitivity.');
+  console.log('OK: passive range, all 22 targets, respawn/reset, ammo, hit registration, cover, independent R4-C/MP5 optics, Weapons section, saved preferences, zoom and independent mouse/controller sensitivity.');
   console.log(`Screenshots: ${out}`);
 } finally { await browser.close(); }

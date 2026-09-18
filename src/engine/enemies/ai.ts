@@ -27,7 +27,7 @@ export function steer(m: EnemyManager, e: EnemyRecord, goal: Vector3, speed: num
   const dist = Math.hypot(dx, dz);
   if (dist < 0.0001) { stop(e, 8, dt); return; }
   const a = accel * dt * (e.body.onGround ? 1 : 0.3);
-  speed *= m.mods.speed;
+  speed *= m.mods.speed * (e.boostT > 0 ? 1.4 : 1);
   e.body.vel.x += clamp(dx / dist * speed - e.body.vel.x, -a, a);
   e.body.vel.z += clamp(dz / dist * speed - e.body.vel.z, -a, a);
   e.yawTo = Math.atan2(dx, dz);
@@ -39,14 +39,24 @@ export function approachPoint(m: EnemyManager, e: EnemyRecord, target: Vector3, 
     e.slotT = rand(2.5, 5);
     // Of three candidate bearings take the one furthest from the pack, so a group fans out instead of queuing.
     let bestA = e.slotAngle, bestSep = -1;
+    // Blades flank: their candidate bearings sit 60-150 degrees off the target's facing, so a rusher
+    // arrives from the side or behind while the rifles hold the front. Everyone else fans from its own slot.
+    const flank = e.stats.weapon === 'blade' && e.target
+      ? Math.atan2(-e.target.forward.x, -e.target.forward.z) + e.strafeDir * rand(0, 1.5) : null;
     for (let k = 0; k < 3; k++) {
-      const a = e.slotAngle + rand(-1.4, 1.4);
+      const a = flank !== null ? flank + rand(-0.5, 0.5) : e.slotAngle + rand(-1.4, 1.4);
       let sep = Infinity;
       for (const o of m.list) if (o !== e && o.alive && !o.stats.flying && o.target === e.target) sep = Math.min(sep, Math.abs(wrapAngle(a - o.slotAngle)));
       if (sep > bestSep) { bestSep = sep; bestA = a; }
     }
     e.slotAngle = bestA;
-    e.slotRadius = ['blade', 'bomb'].includes(e.stats.weapon) ? rand(2, 4.5) : rand(4.5, 9);
+    e.slotRadius = ['blade', 'bomb'].includes(e.stats.weapon) ? rand(2, 4.5) : rand(7, 13);
+    if (e.type === 'rusher' && e.mutated && e.target) {
+      const pair = m.list.filter(o => o.alive && o.type === 'rusher' && o.target === e.target);
+      e.slotAngle = Math.atan2(e.target.forward.x, e.target.forward.z)
+        + (pair.indexOf(e) % 2 === 0 ? Math.PI / 2 : -Math.PI / 2);
+      e.slotRadius = 4;
+    }
   }
   const d = Math.hypot(e.body.pos.x - target.x, e.body.pos.z - target.z);
   // The lower bound wins even before the first slot radius has been chosen.
@@ -61,7 +71,7 @@ export function follow(m: EnemyManager, e: EnemyRecord, target: Vector3, speed: 
   const stale = !e.path || e.pathIndex >= e.path.length || (e.pathT <= 0 && (!e.pathGoal || e.pathGoal.distanceTo(approach) > 3.5 || !e.path.complete));
   if (stale && (e.pathT <= 0 || !e.path)) {
     e.pathT = 0.8 + rand(0, 0.6);
-    const path = m.ctx.nav.findPath(e.body.pos, approach);
+    const path = (e.stats.boss ? m.ctx.bossNav : m.ctx.nav).findPath(e.body.pos, approach);
     if (path?.length) {
       e.path = path; e.pathIndex = 0;
       if (!e.pathGoal) e.pathGoal = new Vector3();
@@ -85,7 +95,11 @@ export function follow(m: EnemyManager, e: EnemyRecord, target: Vector3, speed: 
     const prev = e.stuckT;
     e.stuckT += dt;
     if (prev <= 0.35 && e.stuckT > 0.35) e.pathT = 0;
-    if (e.stuckT > 0.9) { e.body.vel.y = 9; e.body.onGround = false; e.stuckT = 0; e.pathT = 0; }
+    if (e.stuckT > 0.9) {
+      e.body.vel.y = 9; e.body.onGround = false; e.stuckT = 0; e.pathT = 0;
+      // A boss that hopped and is still blocked wants a different approach bearing, not the same wall again.
+      if (e.stats.boss) e.slotT = 0;
+    }
   } else e.stuckT = 0;
 }
 
@@ -214,7 +228,7 @@ function fireControl(m: EnemyManager, e: EnemyRecord, dt: number, targetSpeed: n
 }
 
 /** A reachable nav node a few metres away that the target cannot see. Null when the ground is open. */
-function findCover(m: EnemyManager, e: EnemyRecord, target: Target): Vector3 | null {
+export function findCover(m: EnemyManager, e: EnemyRecord, target: Target): Vector3 | null {
   const pos = e.body.pos, tc = target.center, nodes = m.ctx.nav.nodes;
   // ponytail: linear scan of every nav node per request (~7k), once per burst per rifle; index the grid if it shows in a profile.
   const near = [];
@@ -237,6 +251,15 @@ function findCover(m: EnemyManager, e: EnemyRecord, target: Target): Vector3 | n
     best = new Vector3(n.x, n.y, n.z); bestD = d;
   }
   return best;
+}
+
+/** Another ground enemy with line of sight stands within 3 m: this one is part of a pile. */
+function crowded(m: EnemyManager, e: EnemyRecord): boolean {
+  for (const o of m.list) {
+    if (o === e || !o.alive || o.stats.flying || !o.hasLOS || o.state === 'spawn') continue;
+    if (Math.hypot(o.body.pos.x - e.body.pos.x, o.body.pos.z - e.body.pos.z) < 3 && Math.abs(o.body.pos.y - e.body.pos.y) < 1.5) return true;
+  }
+  return false;
 }
 
 /** Run from the local player's live grenades. True while dodging. */
@@ -280,7 +303,7 @@ export function groundThink(m: EnemyManager, e: EnemyRecord, dt: number): void {
     e.losT = 0.12 + rand(0, 0.1);
     const anchors = e.figure.anchors as EyeAnchors;
     (anchors.head || anchors.torso).getWorldPosition(eye);
-    e.hasLOS = m.ctx.world.lineOfSight(eye, target.center, seeThrough);
+    e.hasLOS = m.ctx.world.lineOfSight(eye, target.center, seeThrough) && !m.hazards.obscures(eye, target.center);
   }
   e.attackCd -= dt;
   if (s.weapon === 'bomb') {
@@ -294,11 +317,30 @@ export function groundThink(m: EnemyManager, e: EnemyRecord, dt: number): void {
     else follow(m, e, target.body.pos, s.speed, dt);
     return;
   }
-  if (s.weapon === 'blade') { rusher(m, e, dt, dist, dy, dx, dz, yaw); return; }
   if (s.boss) { bossThink(m, e, dt, dist, dy, dx, dz); return; }
+  if (s.weapon === 'blade') { rusher(m, e, dt, dist, dy, dx, dz, yaw); return; }
   // Everything still here is one of the four ranged classes, so it fills in the
   // fire-control block.
   const r = s as RangedType;
+  if (e.type === 'turret') {
+    stop(e, 30, dt);
+    const inArc = Math.abs(wrapAngle(yaw - e.homeYaw)) <= Math.PI / 4;
+    e.yawTo = inArc ? yaw : e.homeYaw;
+    if (e.hasLOS && inArc && dist < r.range) fireControl(m, e, dt, target.speed);
+    else { e.aimT = 0; e.aimPoint = null; e.aimWarned = false; if (e.laser) e.laser.visible = false; }
+    return;
+  }
+  if (e.type === 'grunt') {
+    const shield = m.list.find(o => o.alive && o.type === 'shield' && o.mutated && o.body.pos.distanceTo(pos) < 12);
+    if (shield) {
+      const behind = probe.copy(shield.body.pos).addScaledVector(side.set(Math.sin(shield.yaw), 0, Math.cos(shield.yaw)), -2.5);
+      if (behind.distanceTo(pos) > 1.2) follow(m, e, behind.clone(), s.speed, dt, true);
+      else stop(e, 8, dt);
+      e.yawTo = yaw;
+      if (e.hasLOS) fireControl(m, e, dt, target.speed);
+      return;
+    }
+  }
   if (dodgeNades(m, e, dt)) { e.yawTo = yaw; return; }
   if (e.wantCover) {
     e.wantCover = false;
@@ -323,6 +365,13 @@ export function groundThink(m: EnemyManager, e: EnemyRecord, dt: number): void {
       follow(m, e, target.body.pos, s.speed * (dist > r.stop * e.keepMult ? 0.8 : 0.85), dt);
       e.yawTo = yaw;
       fireControl(m, e, dt, dist > r.stop * e.keepMult ? target.speed : m.ctx.player?.speed || 0);
+      return;
+    } else if (!s.stationary && crowded(m, e)) {
+      // In range but shoulder to shoulder with another rifle: keep walking to the slot instead of
+      // stopping at the first corner with line of sight, which is where every wave used to pile up.
+      follow(m, e, target.body.pos, s.speed * 0.85, dt);
+      e.yawTo = yaw;
+      fireControl(m, e, dt, target.speed);
       return;
     } else {
       const nx = dist > 0.0001 ? dx / dist : 0, nz = dist > 0.0001 ? dz / dist : 1;

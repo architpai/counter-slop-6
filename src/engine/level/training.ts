@@ -4,7 +4,8 @@ import { makeNameTag } from '../render/figure';
 import type { EnemyKind } from '../types';
 import type { LevelBuilder } from './build';
 
-export const TRAINING_TYPES = Object.keys(TYPES) as EnemyKind[];
+const original: EnemyKind[] = ['grunt', 'rusher', 'heavy', 'sniper', 'shield', 'bomber', 'flyer', 'boss', 'hitbox', 'lagspike'];
+export const TRAINING_TYPES = [...original, ...(Object.keys(TYPES) as EnemyKind[]).filter(type => !original.includes(type))];
 
 /** One open firing line; leave space behind the targets for model inspection. */
 export function buildTraining(b: LevelBuilder): void {
@@ -25,11 +26,12 @@ export function buildTraining(b: LevelBuilder): void {
     b.addObject(tag);
   };
   TRAINING_TYPES.forEach((type, i) => {
-    const x = (i - (TRAINING_TYPES.length - 1) / 2) * 6;
-    b.marker('spawns', x, type === 'flyer' ? 1.3 : 0, -20);
-    b.box(x, 0.003, -20, 4, 0.012, 3, { mat: 'metal', noCollide: true });
-    label(TYPES[type].name, x, -17.5);
-    b.box(x - 3, 0.003, -4, 0.035, 0.008, 28, { mat: 'metal', noCollide: true });
+    // Extra display rows fit the existing floor; walls, stairs and collision geometry stay unchanged.
+    const x = (i % 10 - 4.5) * 6, z = -20 + Math.floor(i / 10) * 12;
+    b.marker('spawns', x, TYPES[type].flying ? 1.3 : 0, z);
+    b.box(x, 0.003, z, 4, 0.012, 3, { mat: 'metal', noCollide: true });
+    label(TYPES[type].name, x, z + 2.5);
+    if (i < 10) b.box(x - 3, 0.003, -4, 0.035, 0.008, 28, { mat: 'metal', noCollide: true });
   });
   for (const distance of [5, 10, 20, 30, 40, 50]) {
     const z = -20 + distance;

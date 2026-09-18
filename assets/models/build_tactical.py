@@ -238,13 +238,51 @@ def mask(parent, heavy):
     elif kind == 'lagspike':
         for sign in [-1, 1]:
             plate(face, 'jagged-mask-edge', [(sign*.126, .06), (sign*.20, .13), (sign*.14, .16), (sign*.20, .26), (sign*.116, .25)], .116, .018, 'signal')
+    # Expansion masks keep the same shell and eye openings, with role-specific hardware.
+    if kind == 'medic':
+        box(face, 'medical-brow-cross', (.025, .078, .012), (0, .279, .162), 'red', .002)
+        box(face, 'medical-brow-cross', (.069, .024, .012), (0, .279, .163), 'red', .002)
+    elif kind == 'breacher':
+        box(face, 'breacher-visor-brow', (.32, .044, .032), (0, .263, .166), 'hazard')
+        for sign in [-1, 1]:
+            box(face, 'breacher-jaw-rail', (.036, .14, .036), (sign*.127, .06, .153), 'steel')
+    elif kind in ('carrier', 'moderator'):
+        for sign in [-1, 1]:
+            plate(face, 'flight-mask-fin', [(sign*.12, .09), (sign*.22, .25), (sign*.12, .27)], .12, .018, 'gold' if kind == 'moderator' else 'edge')
+        if kind == 'moderator':
+            paint('moderator-sigil', [(-.028, .268), (0, .32), (.028, .268), (0, .24)], 'gold', .009)
+    elif kind in ('turret', 'aimbot'):
+        box(face, 'optic-housing', (.105, .085, .067), (.069, .206, .177), 'steel')
+        oval(face, 'optic-lens', (.035, .03, .013), (.069, .206, .216), 'led' if kind == 'aimbot' else 'glass')
+        if kind == 'aimbot':
+            for i in range(3):
+                box(face, 'cheek-vent', (.054, .011, .017), (-.094, .084+i*.024, .163), 'ink', .002)
+    elif kind == 'packleader':
+        for sign in [-1, 1]:
+            plate(face, 'leader-cheek', [(sign*.09, .12), (sign*.16, .17), (sign*.12, .035)], .164, .018, 'gold')
+    elif kind == 'smoker':
+        for sign in [-1, 1]:
+            oval(face, 'respirator-filter', (.057, .057, .047), (sign*.113, .07, .155), 'web')
+        box(face, 'respirator-grille', (.098, .046, .035), (0, .045, .192), 'rubber')
+    elif kind == 'rubberbander':
+        for sign in [-1, 1]:
+            for i in range(3):
+                box(face, 'broken-mask-pixel', (.053, .025, .024), (sign*(.10+i*.028), .26-i*.082, .13), 'signal', .002)
+    elif kind == 'sapper':
+        box(face, 'blast-goggle-brow', (.28, .035, .028), (0, .262, .167), 'hazard')
+        box(face, 'headlamp', (.054, .038, .032), (0, .294, .168), 'led')
+    elif kind == 'parry':
+        plate(face, 'duelist-half-mask', [(-.14, .28), (-.02, .31), (-.02, .14), (-.11, .1)], .18, .015, 'steel')
+    elif kind == 'ragequit':
+        for sign in [-1, 1]:
+            plate(face, 'rage-jaw-tooth', [(sign*.03, -.02), (sign*.075, -.02), (sign*.065, .075)], .18, .025, 'steel')
     return face
 
 
 def build_character(which):
     global kind
     kind = which
-    heavy = kind in ('heavy', 'boss')
+    heavy = kind in ('heavy', 'boss', 'ragequit')
     player = kind == 'player'
     width = {'heavy': 1.55, 'rusher': .82, 'sniper': .78, 'shield': 1.2, 'boss': 1.35}.get(kind, 1)
     w = {'heavy': 1.4, 'boss': 1.25}.get(kind, width)
@@ -379,7 +417,7 @@ def build_character(which):
         plate(p, 'short-cape', [(-.23, .42), (.23, .42), (.25, -.19), (-.19, -.24)], -.176, .025, 'sand')
         for i in range(3):
             box(p, 'sniper-round', (.026, .075, .02), (.09 + i*.035, .38, .194), 'gold', .005)
-    elif kind == 'shield':
+    elif kind in ('shield', 'breacher'):
         rings(surfaces['head'], 'riot-helmet', [(.265, .181, .16, -.025), (.36, .157, .14, -.028), (.388, .085, .08, -.03)], 'armor', .015)
         shield = joint('shield', torso, (-.17, .34, .46))
         p = surfaces['shield']
@@ -403,6 +441,79 @@ def build_character(which):
             box(surfaces[f'upper{side}'], 'command-epaulette', (.20, .039, .16), (0, .061, 0), 'gold')
             plate(surfaces[f'thigh{side}'], 'coat-skirt', [(sign*.04, .07), (sign*.19, .06), (sign*.18, -.29), (sign*.08, -.26)], -.06, .047, 'navy')
         plate(surfaces['torso'], 'command-collar', [(-.13, .48), (-.13, .6), (-.07, .57), (.07, .57), (.13, .6), (.13, .48)], .056, .20, 'armor')
+    if kind in ('medic', 'breacher', 'turret', 'packleader', 'smoker', 'rubberbander', 'sapper', 'parry', 'aimbot', 'ragequit'):
+        p = empty(f'equipment-{kind}', surfaces['torso'])
+        if kind == 'medic':
+            box(p, 'medical-pack', (.43, .47, .20), (0, .30, -.26), 'ivory', .028)
+            for z in [-.366, .245]:
+                box(p, 'medical-cross', (.065, .23, .018), (0, .33, z), 'red', .003)
+                box(p, 'medical-cross', (.22, .065, .018), (0, .33, z), 'red', .003)
+            for sign in [-1, 1]:
+                beam(p, 'medical-cylinder', (sign*.27, .13, -.22), (sign*.27, .50, -.22), .058, 'ivory')
+        elif kind == 'breacher':
+            q = empty('equipment-breacher-shield', surfaces['shield'])
+            for sign in [-1, 1]:
+                box(q, 'breach-shield-bumper', (.11, .98, .11), (sign*.39, -.12, .104), 'hazard', .017)
+            box(q, 'breach-ram-bar', (.74, .095, .12), (0, -.41, .14), 'steel')
+            box(p, 'breaching-charge-pack', (.36, .37, .18), (0, .29, -.25), 'hazard')
+        elif kind == 'turret':
+            box(p, 'sentry-yoke', (.72, .20, .35), (0, .40, -.04), 'edge', .024)
+            box(p, 'sentry-power-block', (.42, .38, .23), (0, .25, -.27), 'armor')
+            for sign, side in [(-1, 'L'), (1, 'R')]:
+                box(surfaces[f'upper{side}'], 'sentry-arm-plate', (.19, .28, .22), (0, -.12, 0), 'armor')
+                box(surfaces[f'shin{side}'], 'sentry-outrigger', (.34, .07, .40), (sign*.07, -.38, .03), 'steel')
+                beam(p, 'sentry-aerial', (sign*.25, .43, -.23), (sign*.25, .79, -.23), .018, 'steel')
+        elif kind == 'packleader':
+            box(p, 'command-radio-pack', (.32, .39, .16), (0, .3, -.25), 'web')
+            # Flared loudhailer above one shoulder; distinct even in profile.
+            beam(p, 'horn-stem', (-.24, .4, -.18), (-.34, .64, -.12), .043, 'gold')
+            horn = rings(p, 'command-horn', [(0, .043, .043, 0), (.24, .13, .13, 0)], 'gold')
+            horn.location = xyz((-.34, .64, -.12))
+            horn.rotation_euler.x = math.pi/2
+            box(p, 'leader-sash', (.072, .42, .025), (.09, .29, .25), 'gold')
+        elif kind == 'smoker':
+            for sign in [-1, 1]:
+                beam(p, 'smoke-canister', (sign*.19, .04, -.27), (sign*.19, .57, -.27), .105, 'web')
+                beam(p, 'smoke-nozzle', (sign*.19, .57, -.27), (sign*.32, .66, -.23), .032, 'steel')
+                box(p, 'canister-band', (.218, .047, .218), (sign*.19, .28, -.27), 'ivory')
+        elif kind == 'rubberbander':
+            for sign in [-1, 1]:
+                for i in range(3):
+                    plate(p, 'glitch-fin', [(sign*.19, .47-i*.16), (sign*(.48-i*.04), .64-i*.16), (sign*.34, .32-i*.16)], -.20-i*.04, .025, 'signal')
+                    box(p, 'glitch-fin-tip', (.08, .027, .035), (sign*(.48-i*.04), .64-i*.16, -.21-i*.04), 'led', .002)
+        elif kind == 'sapper':
+            box(p, 'charge-pack', (.43, .42, .19), (0, .27, -.27), 'hazard')
+            for i in range(3):
+                box(p, 'packed-charge', (.11, .19, .08), ((i-1)*.13, .30, -.40), 'rubber')
+                box(p, 'charge-indicator', (.025, .018, .008), ((i-1)*.13, .34, -.444), 'led', .002)
+            beam(p, 'tool-shaft', (.30, -.05, -.21), (.30, .68, -.21), .025, 'steel')
+            box(p, 'tool-wrench', (.15, .11, .055), (.30, .69, -.21), 'steel')
+            box(p, 'tool-jaw-gap', (.07, .06, .06), (.30, .73, -.21), 'rubber', .002)
+        elif kind == 'parry':
+            plate(p, 'duelist-collar', [(-.2, .46), (-.14, .61), (0, .51), (.14, .61), (.2, .46)], .05, .17, 'steel')
+            q = empty('blade-guard', surfaces['foreR'])
+            box(q, 'guard-basket', (.24, .065, .23), (0, -.24, .035), 'steel')
+            for sign in [-1, 1]:
+                beam(q, 'guard-rail', (sign*.10, -.24, .12), (sign*.075, -.39, .075), .02, 'gold')
+            plate(surfaces['foreL'], 'parrying-bracer', [(-.085, -.02), (.085, -.02), (.07, -.26), (-.07, -.26)], .098, .035, 'steel')
+        elif kind == 'aimbot':
+            box(p, 'targeting-computer', (.38, .42, .19), (0, .32, -.27), 'edge')
+            vent = empty('aimbot-vent', p, (0, .32, -.27))
+            for i in range(5):
+                box(vent, 'cooling-vent', (.43, .023, .25), (0, -.16+i*.065, -.02), 'rubber')
+            beam(p, 'scope-boom', (.23, .47, -.15), (.33, .74, .10), .035, 'steel')
+            beam(p, 'scope-body', (.33, .74, .03), (.33, .74, .30), .065, 'armor')
+            oval(p, 'scope-lens', (.053, .053, .012), (.33, .74, .309), 'led')
+        elif kind == 'ragequit':
+            for sign, side in [(-1, 'L'), (1, 'R')]:
+                box(surfaces[f'upper{side}'], 'rage-pauldron', (.31, .21, .32), (sign*.025, -.01, 0), 'edge', .025)
+                for i in range(2):
+                    beam(surfaces[f'upper{side}'], 'rage-armor-spike', (sign*.08, .05, -.09+i*.16), (sign*.14, .25, -.09+i*.16), .043, 'steel')
+            # Heavy blade casing follows the hand and the existing melee animation.
+            q = empty('heavy-melee', surfaces['foreR'])
+            box(q, 'cleaver-spine', (.11, .80, .09), (0, -.81, .07), 'edge')
+            plate(q, 'cleaver-edge', [(-.055, -.43), (.18, -.43), (.23, -1.18), (-.055, -1.23)], .11, .065, 'steel')
+            box(q, 'cleaver-red-inlay', (.046, .52, .016), (.04, -.81, .124), 'red')
     return root
 
 
@@ -428,13 +539,39 @@ def build_machine(which):
         surfaces[label] = empty(f'{label}-surface', p)
         return p
 
-    if kind == 'flyer':
+    if kind in ('flyer', 'carrier', 'moderator'):
         torso = joint('torso', root, (0, .6, 0))
         p = surfaces['torso']
         rings(p, 'drone-hull', [(-.16, .12, .37, 0), (-.06, .29, .43, .04), (.10, .27, .40, 0), (.16, .10, .29, -.04)], 'armor')
         plate(p, 'nose-armor', [(-.19, -.095), (.19, -.095), (.14, .10), (-.14, .10)], .419, .03, 'edge')
-        f = mask(p, False)
-        f.location = xyz((0, -.095, .48)); f.scale *= .82
+        if kind == 'moderator':
+            joint('head', torso, (0, .23, .43))
+            oval(surfaces['head'], 'moderator-core', (.16, .19, .14), (0, .13, 0), 'signal')
+            mask(surfaces['head'], False)
+        else:
+            f = mask(p, False)
+            f.location = xyz((0, -.095, .48)); f.scale *= .82
+        if kind == 'carrier':
+            q = empty('equipment-carrier', p)
+            for sign in [-1, 1]:
+                beam(q, 'payload-clamp', (sign*.20, -.08, -.18), (sign*.20, -.43, -.18), .035, 'hazard')
+            box(q, 'carried-sentry', (.34, .20, .30), (0, -.38, -.08), 'edge')
+            beam(q, 'carried-sentry-barrel', (0, -.36, .06), (0, -.36, .49), .036, 'steel')
+            box(q, 'carried-sentry-optic', (.10, .075, .11), (0, -.24, .02), 'glass')
+            for sign in [-1, 1]:
+                beam(q, 'folded-sentry-leg', (sign*.13, -.48, -.08), (sign*.21, -.48, -.34), .026, 'rubber')
+        elif kind == 'moderator':
+            q = empty('equipment-moderator', p)
+            for radius, y, mat in [(.64, .13, 'gold'), (.76, .13, 'edge')]:
+                bpy.ops.mesh.primitive_torus_add(major_radius=radius, minor_radius=.026, major_segments=40, minor_segments=6)
+                ring = finish(bpy.context.object, 'moderator-ring', q, mat)
+                ring.location = xyz((0, y, -.08))
+                ring.rotation_euler.x = math.pi/2
+            for i in range(8):
+                a = i*math.tau/8
+                box(q, 'ring-relay', (.075, .075, .13), (math.cos(a)*.7, .13+math.sin(a)*.7, -.08), 'signal')
+            for sign in [-1, 1]:
+                beam(q, 'ring-support', (sign*.20, 0, 0), (sign*.59, .13, -.08), .026, 'steel')
         for sign, side in [(-1, 'L'), (1, 'R')]:
             joint(f'wing{side}', torso, (sign*.48, 0, -.14))
             wing = surfaces[f'wing{side}']
@@ -534,8 +671,9 @@ def build_machine(which):
     return root
 
 
-roots = [build_character(k) for k in ['player', 'grunt', 'heavy', 'rusher', 'sniper', 'shield', 'boss']]
-roots += [build_machine(k) for k in ['bomber', 'flyer', 'hitbox', 'lagspike']]
+roots = [build_character(k) for k in ['player', 'grunt', 'heavy', 'rusher', 'sniper', 'shield', 'boss',
+    'medic', 'breacher', 'turret', 'packleader', 'smoker', 'rubberbander', 'sapper', 'parry', 'aimbot', 'ragequit']]
+roots += [build_machine(k) for k in ['bomber', 'flyer', 'hitbox', 'lagspike', 'carrier', 'moderator']]
 kind = 'player'
 # First-person gloves and sleeves. +Y runs from the grip towards the elbow.
 for side, sign in [('L', -1), ('R', 1)]:

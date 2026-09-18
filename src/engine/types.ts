@@ -51,6 +51,8 @@ export interface Ctx {
   renderer: Renderer;
   world: World;
   nav: NavGrid;
+  /** The same grid at boss clearance; bosses path on it and boss spawns are checked against it. */
+  bossNav: NavGrid;
   level: Level;
 
   input: Input;
@@ -129,6 +131,9 @@ export interface Target {
   readonly right: THREE.Vector3;
   /** Speed of travel. Remote players always report 0. */
   readonly speed: number;
+  /** Down sights / trigger held. Enemies read these as "busy" cues. */
+  readonly aiming: boolean;
+  readonly firing: boolean;
   /** Local: 0.95 while guarding and off cooldown, else 0. Remote: always 0. */
   readonly blockRadius: number;
   takeDamage(amount: number, from?: THREE.Vector3 | null): void;
@@ -254,6 +259,8 @@ export interface Level {
   bounds: Bounds;
   /** Ground enemy spawn points. */
   spawns: THREE.Vector3[];
+  /** AIMBOT's authored position and stair route. No geometry is added by these markers. */
+  bossPerch?: { position: THREE.Vector3; route: THREE.Vector3[] };
   /** Sniper perches. */
   snipers: THREE.Vector3[];
   pickups: THREE.Vector3[];
@@ -294,7 +301,8 @@ export interface Pickup {
 
 export type EnemyKind =
   | 'grunt' | 'rusher' | 'heavy' | 'sniper' | 'shield' | 'bomber' | 'flyer'
-  | 'boss' | 'hitbox' | 'lagspike';
+  | 'medic' | 'breacher' | 'carrier' | 'turret' | 'packleader' | 'smoker' | 'rubberbander' | 'sapper' | 'parry'
+  | 'boss' | 'hitbox' | 'lagspike' | 'aimbot' | 'ragequit' | 'moderator';
 
 export type EnemyState = 'spawn' | 'hunt' | 'stunned' | 'dead';
 

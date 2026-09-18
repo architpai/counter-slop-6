@@ -184,10 +184,14 @@ export function updateGrapple(p: Player, dt: number): void {
     if (f < 1) return;
     if (g.enemy) {
       if (g.enemy.alive) {
-        enemies?.yank(g.enemy, p.center);
-        game.addScore(30, 'YANKED');
-        audio.grappleHit();
-        input.rumble(0.5, 0.5, 90);
+        if (enemies?.yank(g.enemy, p.center)) {
+          game.addScore(30, 'YANKED');
+          audio.grappleHit();
+          input.rumble(0.5, 0.5, 90);
+        } else {
+          audio.shieldHit(g.enemy.center);
+          hud.tip(g.enemy.type === 'moderator' ? 'YANK AFTER ITS CAST' : 'TOO HEAVY TO PULL', 1.2);
+        }
       }
       detachGrapple(p, false);
       return;

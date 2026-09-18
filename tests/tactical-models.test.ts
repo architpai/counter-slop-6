@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { page } from 'vitest/browser';
 import { Box3, BoxGeometry, Mesh, MeshStandardMaterial, Object3D, Vector3 } from 'three';
-import { makeFigure } from '@/engine/render/figure';
+import { makeFigure, raycastFigure } from '@/engine/render/figure';
 import { makeModel, animate, syncModel, corpse } from '@/engine/enemies/model';
 import type { EnemyRecord } from '@/engine/enemies';
 import { TYPES } from '@/engine/enemies/types';
@@ -24,12 +24,16 @@ test('tactical assets preserve joints, head targets, materials and instance owne
     try {
       figure.root.scale.setScalar(stats.scale);
       expect(figure.root.userData.tactical).toBe(type);
-      expect(hits).toHaveLength(stats.kind === 'humanoid' ? (stats.shield ? 12 : 11) : 1);
+      expect(hits).toHaveLength(stats.kind === 'humanoid' ? (stats.shield ? 12 : 11) : type === 'moderator' ? 2 : 1);
       for (const part of TACTICAL_MODELS[type]) expect(figure.parts[part]?.getObjectByName(`${part}-surface`), `${type}/${part}`).toBeDefined();
       if (stats.kind === 'humanoid') {
         const head = hits.find(hit => hit.part === 'head')!;
         expect(head.r).toBeCloseTo(.195 * stats.scale);
         expect(head.obj.getWorldPosition(new Vector3()).y).toBeCloseTo(1.65 * stats.scale);
+      } else if (type === 'moderator') {
+        expect(figure.parts.head).not.toBe(figure.parts.torso);
+        expect(figure.anchors.head).not.toBe(figure.anchors.torso);
+        expect(hits.find(hit => hit.part === 'head')!.r).toBeCloseTo(.195 * stats.scale);
       } else {
         expect(figure.parts.head).toBe(figure.parts.torso);
         expect(figure.anchors.head).toBe(figure.anchors.torso);
@@ -69,6 +73,53 @@ test('tactical assets preserve joints, head targets, materials and instance owne
   decorative.dispose();
 });
 
+test('expansion equipment follows the rig, state cues and visible hit regions', () => {
+  for (const type of ['medic', 'breacher', 'carrier', 'turret', 'packleader', 'smoker', 'rubberbander', 'sapper', 'parry', 'aimbot', 'ragequit', 'moderator'] as const) {
+    const stats = TYPES[type];
+    const { figure, hits } = makeModel(stats);
+    const record = { stats, figure, root: figure.root, type, body: { vel: new Vector3(), onGround: true },
+      walkAmt: 0, phase: 0, age: 1, flinch: 0, aimAmt: 0, fuseT: -1, attackT: 0, shieldHp: stats.shield ? 2 : 0,
+      state: 'hunt', target: null, yaw: 0, hits, center: new Vector3(), bossAttack: null,
+      payload: true, weakT: 0, yankableT: 0, guardT: 0 } as unknown as EnemyRecord;
+    try {
+      figure.root.scale.setScalar(stats.scale);
+      const equipment = figure.root.getObjectByName(`equipment-${type}`)!;
+      expect(equipment, type).toBeDefined();
+      animate(record, 1 / 60);
+      const direction = new Vector3(0, 0, -1);
+      if (type === 'moderator' || stats.kind === 'humanoid' && !stats.shield) {
+        const head = figure.anchors.head!.getWorldPosition(new Vector3());
+        const hit = raycastFigure(figure.root, head.clone().add(new Vector3(0, 0, 5)), direction, 10);
+        expect(hit?.part, `${type} head ray`).toBe('head');
+      }
+      if (type === 'carrier') {
+        const target = equipment.localToWorld(new Vector3(0, -.38, -.08));
+        const origin = target.add(new Vector3(0, 0, 5));
+        expect(raycastFigure(figure.root, origin, direction, 10)?.part).toBe('torso');
+        record.payload = false;
+        animate(record, 1 / 60);
+        expect(equipment.visible).toBe(false);
+        expect(raycastFigure(figure.root, origin, direction, 10)).toBeNull();
+      }
+      if (type === 'ragequit') {
+        figure.root.getObjectByName('heavy-melee')!.traverse(object => expect(object.userData.hitPart).toBeUndefined());
+      }
+      if (stats.shield) {
+        const target = figure.anchors.shield!.getWorldPosition(new Vector3());
+        expect(raycastFigure(figure.root, target.add(new Vector3(0, 0, 5)), direction, 10)?.part).toBe('shield');
+        const shield = figure.dropShield()!;
+        expect(figure.anchors.shield).toBeUndefined();
+        shield.traverse(object => { if (object instanceof Mesh) object.geometry.dispose(); });
+      }
+      record.weakT = record.yankableT = record.guardT = 1;
+      animate(record, 1 / 60);
+      if (type === 'aimbot') expect(figure.root.getObjectByName('aimbot-vent')!.rotation.x).toBe(-.65);
+      if (type === 'moderator') expect(equipment.scale.x).toBe(1.12);
+      if (type === 'parry') expect(figure.parts.foreR!.rotation.x).toBe(-1.15);
+    } finally { figure.dispose(); }
+  }
+});
+
 test('render the tactical cast and exercise each animation rig', async () => {
   await page.viewport(1440, 900);
   const canvas = document.createElement('canvas');
@@ -84,6 +135,10 @@ test('render the tactical cast and exercise each animation rig', async () => {
     { name: 'specialists', kinds: ['rusher', 'sniper', 'shield'], gap: 1.6, distance: 7.2, height: 1.05 },
     { name: 'machines', kinds: ['bomber', 'flyer'], gap: 1.8, distance: 6, height: .8 },
     { name: 'bosses', kinds: ['boss', 'hitbox', 'lagspike'], gap: 3.9, distance: 19, height: 2.5 },
+    { name: 'support', kinds: ['medic', 'breacher', 'packleader'], gap: 1.7, distance: 8, height: 1.05 },
+    { name: 'disruptors', kinds: ['smoker', 'rubberbander', 'sapper', 'parry'], gap: 1.7, distance: 9, height: 1.05 },
+    { name: 'sentries', kinds: ['carrier', 'turret'], gap: 2, distance: 7, height: .8 },
+    { name: 'expansion-bosses', kinds: ['aimbot', 'ragequit', 'moderator'], gap: 3.5, distance: 16, height: 1.9 },
   ];
   try {
     for (const row of rows) {
@@ -109,19 +164,21 @@ test('render the tactical cast and exercise each animation rig', async () => {
         await page.screenshot({ path: `.vitest/tactical-${row.name}.png` });
         for (const { type, figure, hits } of models) {
           const record = { stats: TYPES[type], figure, root: figure.root, type, body: { vel: new Vector3(3, 0, 3), onGround: true },
-            walkAmt: 0, phase: 0, age: 1, flinch: 0, aimAmt: 1, fuseT: -1, attackT: 0, shieldHp: type === 'shield' ? 2 : 0,
-            state: 'hunt', target: null, yaw: 0, hits, center: new Vector3(), bossAttack: null } as unknown as EnemyRecord;
+            walkAmt: 0, phase: 0, age: 1, flinch: 0, aimAmt: 1, fuseT: -1, attackT: 0, shieldHp: TYPES[type].shield ? 2 : 0,
+            state: 'hunt', target: null, yaw: 0, hits, center: new Vector3(), bossAttack: null,
+            payload: true, weakT: 0, yankableT: 0, guardT: 0 } as unknown as EnemyRecord;
           for (let i = 0; i < 45; i++) animate(record, 1 / 60);
           record.body.onGround = false; animate(record, 1 / 60);
           record.state = 'stunned'; animate(record, 1 / 60);
           record.body.onGround = true; record.state = 'hunt';
           record.body.vel.set(0, 0, 0);
-          record.attackT = type === 'rusher' ? .3 : 0;
+          record.attackT = TYPES[type].weapon === 'blade' ? .3 : 0;
+          record.weakT = record.yankableT = record.guardT = 1;
           record.fuseT = type === 'bomber' ? .5 : -1;
           if (type === 'boss') record.bossAttack = { kind: 'stomp', t: .6, fired: false };
           for (let i = 0; i < 90; i++) animate(record, 1 / 60);
           syncModel(record);
-          if (type === 'shield') {
+          if (TYPES[type].shield) {
             const hand = figure.parts.foreL!.localToWorld(new Vector3(0, -.303, .008));
             figure.parts.torso!.worldToLocal(hand);
             expect(hand.z + .05).toBeLessThan(.425); // Glove stays behind the plate.

@@ -2,6 +2,7 @@ import { Vector3 } from 'three';
 import { rand } from '../util';
 import { seeThrough } from '../physics';
 import type { EnemyManager, EnemyRecord } from './index';
+import { spawnProjectile } from './projectiles';
 
 const want = new Vector3(), delta = new Vector3(), heading = new Vector3();
 const down = new Vector3(0, -1, 0);
@@ -26,12 +27,20 @@ export function flyerThink(m: EnemyManager, e: EnemyRecord, dt: number): void {
     const angle = Math.atan2(pos.x - c.x, pos.z - c.z) + e.orbitDir * 0.45;
     want.set(c.x + Math.sin(angle) * 11, c.y + 6 + Math.sin(1.3 * e.age) * 1.5, c.z + Math.cos(angle) * 11);
     flyTo(m, e, want, 6.2, 22, dt);
-    if (e.attackCd <= 0 && e.target.alive && m.ctx.world.lineOfSight(e.center, c, seeThrough)) {
-      e.flightPhase = 'dive'; e.flightT = 1.6; e.diveHit = false; m.ctx.audio.flyerDive(e.center);
+    // Dive on a cue: the target is aiming or shooting (busy with someone else), or 2.5 s have passed since ready.
+    const busy = e.target.aiming || e.target.firing;
+    if (e.attackCd <= 0 && (busy || e.attackCd <= -2.5) && e.target.alive && m.ctx.world.lineOfSight(e.center, c, seeThrough) && !m.hazards.obscures(e.center, c)) {
+      e.flightPhase = 'dive'; e.flightT = 1.6; e.diveHit = false;
+      if (e.mutated) e.payload = true;
+      m.ctx.audio.flyerDive(e.center);
     }
     if (rand() < 1.5 * dt) m.ctx.audio.flyerBuzz(e.center);
   } else if (e.flightPhase === 'dive') {
     flyTo(m, e, c, 16, 28, dt);
+    if (e.mutated && e.payload && e.center.distanceTo(c) < 6) {
+      e.payload = false;
+      spawnProjectile(m, e.center, heading.subVectors(c, e.center).normalize(), 12, 14 * m.mods.damage, e, 3, 0.25, true);
+    }
     if (e.center.distanceTo(c) < 1.4 && !e.diveHit) {
       e.diveHit = true;
       if (e.target.tryBlockMelee(e)) {

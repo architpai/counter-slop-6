@@ -392,13 +392,13 @@ The player's focus dash does not use rays. It marches the body in horizontal sli
 | Surface probe column half-width | 0.05 | Half-size in X and Z of the thin column used to find boxes under a cell centre. |
 | Surface probe column Y range | −30 to 90 | Vertical extent of the probe column. |
 | Surface height limits | −5 to 70 | Surfaces below −5 or above 70 are ignored. |
-| Node clearance half-width | 0.42 | Half-size in X and Z of the clearance box tested above a candidate surface. Covers the widest common walker (heavy, half-width 0.41); bosses (0.89) still rely on open ground. |
-| Node clearance Y range | surface + 0.5 to surface + 1.85 | The clearance box must be free of every box (noNav boxes included). |
+| Node clearance half-width | 0.42 (walker grid) / 0.95 (boss grid) | Half-size in X and Z of the clearance box tested above a candidate surface. The walker value covers the widest common walker (heavy, half-width 0.41). Bosses (0.86–0.89 wide, 4.8–5 m tall) path on a second grid built with 0.95 and 5.1 m headroom; the walker grid routed them into 3 m doorways with 3.2 m lintels. |
+| Node clearance Y range | surface + 0.5 to surface + headroom (1.85 walker, 5.1 boss) | The clearance box must be free of every box (noNav boxes included). |
 | Max climb per link | 1.35 | A link may rise at most this much. |
 | Max drop per link | 8 | A link may fall at most this much. |
 | Diagonal corner tolerance | 0.75 | For a diagonal link, both adjacent cardinal cells must hold a node within this height of the source or the destination. |
 | Link clearance XZ margin | 0.42 | The link clearance box extends this far beyond the two node centres in X and Z (same value as the node clearance). |
-| Link clearance Y range | base + 0.5 to base + 1.7, where base = max(A.y, B.y) | Starts above knee height so the next stair tread does not read as a wall; 1.0-tall railings still block. |
+| Link clearance Y range | base + 0.5 to base + (headroom − 0.15), where base = max(A.y, B.y) | Starts above knee height so the next stair tread does not read as a wall; 1.0-tall railings still block. |
 | Drop check threshold | dy < −0.6 | Links that fall more than 0.6 get the extra drop-column test. |
 | Drop column half-width | 0.2 | X and Z half-size of the drop column at the destination. |
 | Drop column Y range | B.y + 0.05 to A.y + 0.05 | Must be free of boxes. |
