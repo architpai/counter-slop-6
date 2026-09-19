@@ -153,8 +153,8 @@ export class Input {
     });
     this.#listen(this.#win, 'mousemove', e => {
       if (!this.locked || editing(this.#doc.activeElement)) return;
-      this.#dx += Math.abs(e.movementX) <= 400 ? e.movementX : 0;
-      this.#dy += Math.abs(e.movementY) <= 400 ? e.movementY : 0;
+      this.#dx += clamp(e.movementX, -400, 400);
+      this.#dy += clamp(e.movementY, -400, 400);
       if (this.#device === 'touch') this.#setDevice('keyboard');
       else this.#device = 'keyboard'; // Preserve the silent mouse/gamepad switch.
       this.anyInput = true;
