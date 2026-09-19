@@ -75,6 +75,8 @@ export abstract class ViewModel<M extends WeaponModel = WeaponModel> {
     this._equipped = false;
     this._disposed = false;
     ctx.renderer.rig.add(this.root);
+    // Flags the rig meshes once; `?.` keeps stub renderers in tests working.
+    ctx.renderer.prepareRig?.(this.root);
   }
 
   equip() {
