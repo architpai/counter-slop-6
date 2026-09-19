@@ -172,8 +172,21 @@ function oval(parent: THREE.Object3D, color: number, x: number, y: number, z: nu
   return object;
 }
 
+/** Shared and never drawn: tactical figures keep the pivots, not the surfaces. */
+const EMPTY_GEO = new THREE.BufferGeometry();
+EMPTY_GEO.userData.shared = true;
+
+function stub(parent: THREE.Object3D, x = 0, y = 0, z = 0): THREE.Mesh {
+  const object = new THREE.Mesh(EMPTY_GEO, unlitMat(DARK));
+  object.visible = false;
+  object.position.set(x, y, z);
+  parent.add(object);
+  return object;
+}
+
+/** Tactical and template geometry outlives the figure holding it. */
 function release(root: THREE.Object3D): void {
-  root.traverse(object => { if (isMesh(object)) object.geometry.dispose(); });
+  root.traverse(object => { if (isMesh(object) && object.geometry.userData.shared !== true) object.geometry.dispose(); });
   root.removeFromParent();
 }
 
@@ -382,6 +395,13 @@ export function makeFigure(o: FigureOpts): Figure {
   const parts: FigureParts = {}, anchors: FigureAnchors = {};
   const color = o.color ?? TONE_HEX[TONE.HOSTILE];
   let eyeSets: FaceSets, weapon: THREE.Group | null = null;
+  // Tactical actors release every primitive surface below and replace it with authored
+  // geometry, so build stubs instead: same pivots, names and positions, no surface.
+  const prim: typeof mesh = o.tactical ? (parent, _geo, _color, x, y, z) => stub(parent, x, y, z) : mesh;
+  const ball: typeof oval = o.tactical ? (parent, _color, x, y, z) => stub(parent, x, y, z) : oval;
+  const faces = (mount: THREE.Group, radius: number, smile?: boolean): FaceSets => o.tactical
+    ? { root: mount, eyes: group(mount, 'eyes'), dead: group(mount, 'deadEyes') }
+    : face(mount, radius, smile, o.mask);
   const joint = (name: FigurePartName, parent: THREE.Object3D, x: number, y: number, z: number) =>
     (parts[name] = group(parent, name, x, y, z));
   const anchor = (name: FigureAnchorName, parent: THREE.Object3D, x = 0, y = 0, z = 0) =>
@@ -390,12 +410,12 @@ export function makeFigure(o: FigureOpts): Figure {
     radius: number, offset: number) => {
     for (const [side, sign] of [['L', -1], ['R', 1]] as const) {
       const thigh = joint(`thigh${side}`, hips, sign * width, offset, 0);
-      mesh(thigh, cylGeo(radius * 1.15, thighLength, 7, 'y'), color, 0, -thighLength / 2, 0);
+      prim(thigh, cylGeo(radius * 1.15, thighLength, 7, 'y'), color, 0, -thighLength / 2, 0);
       anchor(`leg${side}`, thigh, 0, -thighLength * 0.55, 0);
       const shin = joint(`shin${side}`, thigh, 0, -thighLength, 0);
-      mesh(shin, cylGeo(radius * 1.06, shinLength, 7, 'y'), color, 0, -shinLength / 2, 0);
+      prim(shin, cylGeo(radius * 1.06, shinLength, 7, 'y'), color, 0, -shinLength / 2, 0);
       anchor(`shin${side}`, shin, 0, -shinLength * 0.55, 0);
-      oval(shin, DARK, 0, -shinLength + 0.03, 0.065, radius * 2.4, 0.055, 0.145);
+      ball(shin, DARK, 0, -shinLength + 0.03, 0.065, radius * 2.4, 0.055, 0.145);
     }
   };
 
@@ -404,18 +424,18 @@ export function makeFigure(o: FigureOpts): Figure {
     parts.hips = parts.head = body;
     anchor('torso', body);
     anchors.head = anchors.torso;
-    const dart = mesh(body, coneGeo(0.32, 1.25, 3), color, 0, 0, 0.08);
+    const dart = prim(body, coneGeo(0.32, 1.25, 3), color, 0, 0, 0.08);
     dart.rotation.x = Math.PI / 2;
     for (const [side, sign] of [['L', -1], ['R', 1]] as const) {
       const wing = joint(`wing${side}`, body, sign * 0.48, 0, -0.14);
-      mesh(wing, boxGeo(0.86, 0.025, 0.5), color);
+      prim(wing, boxGeo(0.86, 0.025, 0.5), color);
     }
-    const tail = mesh(body, coneGeo(0.16, 0.38, 3), DARK, 0, 0.13, -0.52);
+    const tail = prim(body, coneGeo(0.16, 0.38, 3), DARK, 0, 0.13, -0.52);
     tail.rotation.x = -Math.PI / 2;
     parts.tail = tail;
     const faceMount = joint('face', body, 0, -0.06, 0.3);
     faceMount.scale.setScalar(0.72);
-    eyeSets = face(faceMount, 0.24, true, o.mask);
+    eyeSets = faces(faceMount, 0.24, true);
     parts.tip = group(body, 'tip', 0, 0, 0.7);
     if (o.tactical === 'moderator') {
       const head = joint('head', body, 0, 0.23, 0.43);
@@ -428,36 +448,36 @@ export function makeFigure(o: FigureOpts): Figure {
     anchor('hips', hips);
     anchor('torso', torso, 0, 0.32, 0);
     anchors.head = anchors.torso;
-    oval(torso, color, 0, 0.32, 0, 0.44, 0.44, 0.44);
+    ball(torso, color, 0, 0.32, 0, 0.44, 0.44, 0.44);
     const faceMount = joint('face', torso, 0, 0.32, 0.17);
-    eyeSets = face(faceMount, 0.28, o.smile, o.mask);
+    eyeSets = faces(faceMount, 0.28, o.smile);
     for (const [side, sign] of [['L', -1], ['R', 1]] as const) {
       const arm = joint(`upper${side}`, torso, sign * 0.42, 0.42, 0);
       parts[`shoulder${side}`] = arm;
-      mesh(arm, cylGeo(0.038, 0.26, 6, 'y'), color, 0, -0.13, 0);
+      prim(arm, cylGeo(0.038, 0.26, 6, 'y'), color, 0, -0.13, 0);
       anchor(`arm${side}`, arm, 0, -0.143, 0);
       const fore = joint(`fore${side}`, arm, 0, -0.26, 0);
-      oval(fore, color, 0, 0, 0, 0.07, 0.07, 0.07);
+      ball(fore, color, 0, 0, 0, 0.07, 0.07, 0.07);
     }
     legs(hips, 0.16, 0.26, 0.24, 0.035, -0.06);
     parts.tip = group(torso, 'tip', 0, 0.5, 0.5);
     if (o.blob === 'hitbox') {
-      parts.lid = mesh(torso, boxGeo(0.7, 0.32, 0.5), color, 0, 0.86, 0);
-      mesh(torso, boxGeo(0.71, 0.055, 0.51), DARK, 0, 0.705, 0);
+      parts.lid = prim(torso, boxGeo(0.7, 0.32, 0.5), color, 0, 0.86, 0);
+      prim(torso, boxGeo(0.71, 0.055, 0.51), DARK, 0, 0.705, 0);
     } else if (o.blob === 'lagspike') {
       const spikes = parts.spikes = group(torso, 'spikes');
       for (let i = 0; i < 9; i++) {
         const a = i / 9 * Math.PI * 2;
-        const spike = mesh(spikes, coneGeo(0.12, 0.42, 5), color,
+        const spike = prim(spikes, coneGeo(0.12, 0.42, 5), color,
           Math.cos(a) * 0.42, 0.32 + Math.sin(2.3 * a) * 0.25, Math.sin(a) * 0.42);
         spike.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(Math.cos(a), 0, Math.sin(a)));
       }
     } else {
-      parts.cap = mesh(torso, cylGeo(0.14, 0.085, 8, 'y'), DARK, 0, 0.76, 0);
+      parts.cap = prim(torso, cylGeo(0.14, 0.085, 8, 'y'), DARK, 0, 0.76, 0);
       const path = new THREE.QuadraticBezierCurve3(
         new THREE.Vector3(0, 0.8, 0), new THREE.Vector3(-0.02, 1.15, 0), new THREE.Vector3(0.24, 1.14, 0));
-      parts.fuse = mesh(torso, new THREE.TubeGeometry(path, 7, 0.025, 5, false), DARK);
-      parts.spark = mesh(torso, sphereGeo(0.075), ACCENT, 0.24, 1.14, 0, true);
+      parts.fuse = prim(torso, new THREE.TubeGeometry(path, 7, 0.025, 5, false), DARK);
+      parts.spark = prim(torso, sphereGeo(0.075), ACCENT, 0.24, 1.14, 0, true);
     }
   } else {
     const width = o.bodyWidth ?? 1, size = o.headSize ?? 1, radius = o.limbR ?? 0.033;
@@ -465,32 +485,32 @@ export function makeFigure(o: FigureOpts): Figure {
     const torso = joint('torso', hips, 0, 0.04, 0);
     anchor('hips', hips);
     anchor('torso', torso, 0, 0.26, 0);
-    oval(torso, color, 0, 0.26, 0, 0.3 * width, 0.3, 0.19 * width);
-    mesh(torso, new THREE.CylinderGeometry(0.045, 0.05, 0.12, 7), color, 0, 0.56, 0);
+    ball(torso, color, 0, 0.26, 0, 0.3 * width, 0.3, 0.19 * width);
+    prim(torso, new THREE.CylinderGeometry(0.045, 0.05, 0.12, 7), color, 0, 0.56, 0);
     const head = joint('head', torso, 0, 0.62, 0);
     anchor('head', head, 0, 0.26, 0);
-    oval(head, color, 0, 0.26, 0, 0.275 * size * rand(0.95, 1.06), 0.3 * size, 0.25 * size);
+    ball(head, color, 0, 0.26, 0, 0.275 * size * rand(0.95, 1.06), 0.3 * size, 0.25 * size);
     const faceMount = joint('face', head, 0, 0.26, 0.015 * size);
     faceMount.scale.setScalar(size);
-    eyeSets = face(faceMount, 0.25, o.smile, o.mask);
-    parts.hat = hat(head, o.hat ?? 'none', color, size);
+    eyeSets = faces(faceMount, 0.25, o.smile);
+    parts.hat = o.tactical ? group(head, 'hat', 0, 0.26, 0) : hat(head, o.hat ?? 'none', color, size);
     for (const [side, sign] of [['L', -1], ['R', 1]] as const) {
       const shoulder = joint(`shoulder${side}`, torso, sign * 0.26 * width, 0.46, 0);
       const upper = joint(`upper${side}`, shoulder, 0, 0, 0);
-      mesh(upper, cylGeo(radius, 0.3, 7, 'y'), color, 0, -0.15, 0);
+      prim(upper, cylGeo(radius, 0.3, 7, 'y'), color, 0, -0.15, 0);
       anchor(`arm${side}`, upper, 0, -0.165, 0);
       const fore = joint(`fore${side}`, upper, 0, -0.3, 0);
-      mesh(fore, cylGeo(radius * (0.03 / 0.033), 0.28, 7, 'y'), color, 0, -0.14, 0);
+      prim(fore, cylGeo(radius * (0.03 / 0.033), 0.28, 7, 'y'), color, 0, -0.14, 0);
       anchor(`fore${side}`, fore, 0, -0.154, 0);
-      oval(fore, color, 0, -0.3, 0, 0.076, 0.076, 0.076);
+      ball(fore, color, 0, -0.3, 0, 0.076, 0.076, 0.076);
     }
     legs(hips, 0.13 * width, 0.42, 0.42, radius, -0.02);
     parts.gunMount = group(built(parts.foreR, 'foreR'), 'gunMount', 0, -0.29, 0.07);
     if (o.shield) {
       const shield = joint('shield', torso, -0.17, 0.34, 0.46);
-      mesh(shield, boxGeo(0.92, 1.3, 0.07), color);
-      mesh(shield, boxGeo(0.1, 1.1, 0.035), DARK, 0, 0, 0.045);
-      mesh(shield, boxGeo(0.75, 0.1, 0.035), DARK, 0, 0.12, 0.045);
+      prim(shield, boxGeo(0.92, 1.3, 0.07), color);
+      prim(shield, boxGeo(0.1, 1.1, 0.035), DARK, 0, 0, 0.045);
+      prim(shield, boxGeo(0.75, 0.1, 0.035), DARK, 0, 0.12, 0.045);
       anchor('shield', shield);
     }
   }

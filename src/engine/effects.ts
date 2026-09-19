@@ -404,7 +404,8 @@ export class Effects {
       const geometry = 'geometry' in child ? child.geometry : null;
       if (geometry instanceof THREE.BufferGeometry) geometries.add(geometry);
     });
-    for (const geometry of geometries) geometry.dispose();
+    // Gibs are tactical parts: their geometry is shared with every live figure.
+    for (const geometry of geometries) if (geometry.userData.shared !== true) geometry.dispose();
     if (d.blood) this._bloodyGibs--;
   }
 
