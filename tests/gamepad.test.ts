@@ -99,7 +99,7 @@ test('edges work on the pad, so taps are not held', () => {
   assert(!input.pressed('jump') && input.down('jump'), 'holding is down but no longer pressed');
 });
 
-test('the stick deadzone rescales instead of snapping', () => {
+test('the stick deadzone is radial: it rescales instead of snapping, and does not notch diagonals', () => {
   const pad = makePad();
   pads = [pad];
   pad.axes = [0.1, 0, 0, 0];
@@ -117,6 +117,13 @@ test('the stick deadzone rescales instead of snapping', () => {
   pad.axes = [0, -1, 0, 0];
   input.update(0.016);
   near(input.move.y, 1, 'pushing the stick up moves forward');
+
+  pad.axes = [0.15 * Math.SQRT1_2, 0.15 * Math.SQRT1_2, 0, 0];
+  input.update(0.016);
+  assert(input.move.x !== 0 || input.move.y !== 0, 'a diagonal push just past the deadzone radius is not notched to zero');
+  // move.y is negated from the raw axis (pushing up is a negative axis value),
+  // so a symmetric diagonal push yields equal *magnitudes*, opposite signs.
+  near(Math.abs(input.move.x), Math.abs(input.move.y), 'radial deadzone keeps a 45\u00b0 push symmetric');
 });
 
 test('look uses a response curve, and accelerates only when held', () => {

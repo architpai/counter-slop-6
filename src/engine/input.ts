@@ -30,7 +30,17 @@ const PAD: readonly (Action | null)[] = [
 ];
 const PREVENT: ReadonlySet<string> = new Set(['Space', 'Tab', 'ArrowUp', 'ArrowDown']);
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
-const deadzone = (v: number) => Math.abs(v) < 0.14 ? 0 : (v - Math.sign(v) * 0.14) / 0.86;
+// Radial deadzone: scales the (x, y) vector so the dead zone is a circle, not a
+// per-axis notch (a per-axis zone clips diagonals early and shrinks the reachable
+// circle). Writes into module-level scratch to stay allocation-free per frame.
+let radialX = 0, radialY = 0;
+const radial = (x: number, y: number) => {
+  const m = Math.hypot(x, y);
+  if (m < 0.14) { radialX = 0; radialY = 0; return; }
+  const scale = clamp((m - 0.14) / 0.86, 0, 1) / m;
+  radialX = x * scale;
+  radialY = y * scale;
+};
 const curve = (v: number) => Math.sign(v) * Math.abs(v) ** 1.8;
 
 /** The parts of a focused node `editing` duck-types. Both may be absent. */
@@ -289,8 +299,10 @@ export class Input {
     }
     this.#padIndex = this.#pad.index;
     const axes = this.#pad.axes;
-    const lx = deadzone(axes[0] || 0), ly = deadzone(axes[1] || 0);
-    const rx = deadzone(axes[2] || 0), ry = deadzone(axes[3] || 0);
+    radial(axes[0] || 0, axes[1] || 0);
+    const lx = radialX, ly = radialY;
+    radial(axes[2] || 0, axes[3] || 0);
+    const rx = radialX, ry = radialY;
     const active = !!(lx || ly || rx || ry || this.#pad.buttons.some(b => b && (b.pressed || b.value > .35)));
     if (active) {
       this.anyInput = true;
