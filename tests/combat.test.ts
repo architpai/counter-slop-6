@@ -285,3 +285,17 @@ test('accepted gun headshots give a bounded screen wobble and a brief follow-up 
   p.onHeadshot({ ...head, part: 'torso' });
   expect(p.headshotT).toBe(0);
 });
+
+test('ground friction is independent of frame rate', () => {
+  const { p, ctx } = setup();
+  ctx.world.addBox(new Vector3(-100, -1, -100), new Vector3(100, 0, 100)); ctx.world.finalize();
+  const measure = (dt: number): number => {
+    p.reset(new Vector3()); ctx.input.update(dt); p.update(dt);
+    expect(p.body.onGround).toBe(true);
+    p.body.vel.set(10, 0, 0);
+    for (let i = 0; i < Math.round(1 / dt); i++) { ctx.input.update(dt); p.update(dt); }
+    return Math.hypot(p.body.vel.x, p.body.vel.z);
+  };
+  const slow = measure(1 / 20), fast = measure(1 / 120);
+  expect(Math.abs(slow - fast) / Math.max(slow, fast)).toBeLessThan(0.05);
+});

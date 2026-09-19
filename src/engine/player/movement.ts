@@ -113,7 +113,7 @@ export function updateMovement(p: Player, dt: number): void {
         v.z *= nextSpeed / steeredSpeed;
       }
     } else {
-      const friction = Math.max(0, 1 - (p.landGrace > 0 ? 2 : 8) * dt);
+      const friction = Math.exp(-(p.landGrace > 0 ? 2 : 8) * dt);
       v.x *= friction;
       v.z *= friction;
       const maxSpeed = p.crouching ? 3.6 : p.sprinting ? 10.6 : 6.6 * (p.aiming ? p.weapon.adsSpeed : 1);
