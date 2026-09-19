@@ -28,12 +28,12 @@ Every item below was verified against source. IDs are stable; tick the work orde
 - [x] **G1 + G2** — merge tactical geometry per `kind/part` at load; skip the legacy primitive body when `o.tactical` — `render/tactical.ts:56-61`, `render/figure.ts:456-471`
 - [x] **P2** — per-frame path budget on `EnemyManager`, cap `findCover` at 3 — `nav.ts:190`, `ai.ts:74,96-98,235-249`
 
-### 4. Feel
-- [ ] **F3** — rebalance R4-C (450 DPS vs 293 next best) — `weapons/stats.ts:68-69`
-- [ ] **F4** — derive ADS sensitivity from `adsFov` — `player/index.ts:206-207`
-- [ ] **F5** — patterned recoil from shots fired, 30 % noise — `weapons/gun.ts:296`
-- [ ] **F7** — radial gamepad deadzone — `input.ts:40`
-- [ ] **F8** — endless scaling past wave 30 (`mods`, double `MODS` roll) — `game/solo.ts:75-76,171,177`
+### 4. Feel — done 2026-09-19 (F4: sniper ADS now 0.30× vs old 0.57×; tune the in-game sniper sensitivity slider if too slow)
+- [x] **F3** — rebalance R4-C (450 DPS vs 293 next best) — `weapons/stats.ts:68-69`
+- [x] **F4** — derive ADS sensitivity from `adsFov` — `player/index.ts:206-207`
+- [x] **F5** — patterned recoil from shots fired, 30 % noise — `weapons/gun.ts:296`
+- [x] **F7** — radial gamepad deadzone — `input.ts:40`
+- [x] **F8** — endless scaling past wave 30 (`mods`, double `MODS` roll) — `game/solo.ts:75-76,171,177`
 
 ### 5. Cleanup
 - [ ] Dead code: `AIR_JUMPS`/`airJumps` (5 places + README), `mergeByMaterial`, unused `PS_FLAG`, `revolver`
