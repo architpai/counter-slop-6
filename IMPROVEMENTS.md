@@ -18,10 +18,10 @@ Every item below was verified against source. IDs are stable; tick the work orde
 - [x] **N5** — call `net.leave()` unconditionally on dispose, stops the Peer leak — `boot.ts:358,486`
 - [x] **P5 (focus rounding)** — write `--focus` with `toFixed(1)` so the store dedupe fires — `store.ts:346`
 
-### 2. Fairness (closes cheat vectors, small diffs)
-- [ ] **N1** — clamp victim-reported `pdmg` to `GUN_STATS[src]`, drop unknown `src` — `ffa.ts:510-519`
-- [ ] **N2** — host ignores a repeat `pdead` from the same peer within `RESPAWN` — `ffa.ts:529-542`
-- [ ] **N6** — proximity check (`< 3 m`) on `take` — `ffa.ts:502-504`
+### 2. Fairness (closes cheat vectors, small diffs) — done 2026-09-19
+- [x] **N1** — clamp victim-reported `pdmg` to `GUN_STATS[src]`, drop unknown `src` — `ffa.ts:510-519`
+- [x] **N2** — host ignores a repeat `pdead` from the same peer within `RESPAWN` — `ffa.ts:529-542`
+- [x] **N6** — proximity check (`< 3 m`) on `take` — `ffa.ts:502-504`
 
 ### 3. Performance
 - [ ] **P1** — DDA raycast over the existing spatial hash + boolean `raycastHit()` — `physics.ts:224-254`
