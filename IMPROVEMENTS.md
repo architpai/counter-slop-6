@@ -9,6 +9,17 @@ Every item below was verified against source. IDs are stable; tick the work orde
 
 ## Work order
 
+### 6. Follow-ups — done 2026-09-19
+- [x] **G5** shadow box follows the viewer, 35 m, texel-snapped — `render/index.ts`
+- [x] **G6** room environment (0.35) so GLB metal is not black — `render/index.ts`
+- [x] **G7** rig flags set once on attach — `render/index.ts`, `weapons/gun.ts`
+- [x] **N3** `ps` paced at 20 Hz by dt accumulator — `game/ffa.ts`
+- [x] **F10** pointer-lock retry on next gesture, no timer — `input.ts`
+- [x] boss fallback spawn uses `level.bounds`; lagspike probes the landing before a hop
+- [x] ported `48ccf45` from main (smoke `jumpToWave`, tip-line 40 %) — this branch forked before it
+- [ ] **F9** auto-reload timer — LEFT: spec (ARCHITECTURE §9.5, READINESS "Reload") allows the one 250 ms real-time timer and `weapons.test.ts` pins "starts while holstered"; reload progress is dt-driven so pause only leaks the start cue
+
+
 ### 1. One-liners (big win per character changed) — done 2026-09-19, branch `improvements`
 - [x] **G3** — post FX target to `HalfFloatType`, kills sky/shadow banding — `render/postfx.ts:38`
 - [x] **G4** — `antialias: false` on the canvas, MSAA already runs on the target — `render/index.ts:30`
