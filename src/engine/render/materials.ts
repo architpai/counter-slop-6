@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { SURF, TONE, TONE_HEX, TOON_STEPS } from './palette';
 import type { SurfKey } from './palette';
 
@@ -15,10 +14,6 @@ gradient.generateMipmaps = false;
 gradient.needsUpdate = true;
 
 export type PostUniforms = Record<string, THREE.IUniform>;
-export interface MergePart {
-  geo: THREE.BufferGeometry;
-  key: SurfKey;
-}
 
 /** Duck-typed like the rest of three, so a mesh from any build still matches. */
 function isMesh(node: THREE.Object3D): node is THREE.Mesh {
@@ -63,34 +58,6 @@ export function setFlash(root: THREE.Object3D, on: boolean, tone: number = TONE.
       }
     }
   });
-}
-
-export function mergeByMaterial(parts: MergePart[]): THREE.Mesh[] {
-  const groups = new Map<SurfKey, THREE.BufferGeometry[]>();
-  for (const { geo, key } of parts) {
-    let group = groups.get(key);
-    if (group === undefined) groups.set(key, group = []);
-    group.push(geo);
-  }
-  const meshes: THREE.Mesh[] = [];
-  for (const [key, source] of groups) {
-    const geometries = source.map(geo => geo.index ? geo.toNonIndexed() : geo.clone());
-    // Level primitives need only positions and normals. Keep the attributes uniform for merging.
-    for (const geo of geometries) {
-      for (const name of Object.keys(geo.attributes)) if (name !== 'position' && name !== 'normal') geo.deleteAttribute(name);
-      if (!geo.hasAttribute('normal')) geo.computeVertexNormals();
-    }
-    // ponytail: @types/three types mergeGeometries as non-null, but it returns null on
-    // mismatched attributes, so the guard below is live despite looking dead.
-    const merged = mergeGeometries(geometries, false);
-    for (const geo of geometries) geo.dispose();
-    if (!merged) throw new Error('Level geometry could not be merged.');
-    const mesh = new THREE.Mesh(merged, surfMat(key));
-    mesh.castShadow = mesh.receiveShadow = true;
-    meshes.push(mesh);
-  }
-  for (const geo of new Set(parts.map(part => part.geo))) geo.dispose();
-  return meshes;
 }
 
 /** Vertex-coloured, unlit, inside-out: the sky dome. One instance, never fogged. */
