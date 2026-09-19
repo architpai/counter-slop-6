@@ -92,9 +92,15 @@ function setup(isHost = false, mode: OnlineMode = 'ffa') {
     ['host', { id: 'host', name: 'Host', kills: 7, deaths: 2 }],
     ['client', { id: 'client', name: 'Client', kills: 3, deaths: 5 }],
   ]);
+  const pickupItems: { id: number; mesh: { position: Vector3 } }[] = [];
+  const removePickup = vi.fn((rid: number) => {
+    const i = pickupItems.findIndex(p => p.id === rid);
+    if (i < 0) return false;
+    pickupItems.splice(i, 1); return true;
+  });
   const app = {
     ctx, gs, lobby, scores, settings: { name: id, mapKey: 'downtown' }, busy: false,
-    pickups: { spawn: noop, remove: () => false, clear: noop }, breakables: { breakProp: noop },
+    pickups: { items: pickupItems, spawn: noop, remove: removePickup, clear: noop }, breakables: { breakProp: noop },
     loadLevel(arena: boolean, key = 'downtown') { ctx.level.key = key; },
     resetRun() {
       player.reset(ctx.level.playerStart);
@@ -186,6 +192,23 @@ test('untrusted senders and network damage', async () => {
     setState(gs, 'over');
     t.receive('pdmg', hit, 'host');
     assert(t.damage.length === 1, 'network damage is ignored after the match ends');
+  } finally { t.ffa.leave(); }
+});
+
+test('host validates pickup take range', () => {
+  const t = setup(true);
+  setState(t.gs, 'play');
+  try {
+    t.app.pickups.items.push({ id: 1, mesh: { position: new Vector3(30, 0, 0) } });
+    t.remote.body.pos.set(0, 0, 0);
+    t.receive('take', { id: 1 }, 'client');
+    expect(t.app.pickups.remove).not.toHaveBeenCalled();
+    assert(!t.sent.some(m => m.type === 'taken'), 'a take from across the map is dropped');
+    t.remote.body.pos.set(29, 0, 0);
+    t.receive('take', { id: 1 }, 'client');
+    expect(t.app.pickups.remove).toHaveBeenCalledWith(1);
+    assert(t.sent.some(m => m.type === 'taken' && (m.data as { id: number }).id === 1),
+      'a take within range removes the pickup and confirms it');
   } finally { t.ffa.leave(); }
 });
 

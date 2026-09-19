@@ -15,6 +15,9 @@ import type { PeerMeta } from '../net';
 import type { App } from '../boot';
 
 const KILL_TARGET = 20, TIME_LIMIT = 480, RESPAWN = 3.5, SILENT_MS = 9000;
+// Host trusts a `take` only within this radius of the sender's avatar. Generous
+// vs the 1.5 m local collect: remotes render ~80 ms behind. ponytail: shrink if stealable.
+const TAKE_RANGE = 4;
 const HOW: Record<string, string> = { r4c: 'R4-C', rifle: 'MP5', pistol: 'pistol', shotgun: 'shotgun', sniper: 'sniper', melee: 'knife', grenade: 'grenade', deflect: 'their own bullet' };
 
 /** Most one `pdmg` packet may claim per source: a point-blank headshot with every pellet. */
@@ -758,6 +761,8 @@ export function createFFA(app: App): FfaApi {
   net.on('taken', (d, from) => { if (fromHost(from) && obj(d) && int(d.id)) app.pickups.remove(d.id); });
   net.on('take', (d, from) => {
     if (!net.isHost || !roster(from) || !obj(d) || !int(d.id)) return;
+    const p = app.pickups.items.find(item => item.id === d.id), who = ctx.remotes.get(from);
+    if (!p || !who || p.mesh.position.distanceTo(who.body.pos) > TAKE_RANGE) return;
     if (app.pickups.remove(d.id)) net.send('taken', { id: d.id });
   });
   net.on('ps', (d, from) => {
