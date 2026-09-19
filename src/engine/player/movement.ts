@@ -36,6 +36,13 @@ export interface MovementState {
 /** Extra jumps available in the air. 0: no double jump; the air dash, wall jump and grapple carry the kit. */
 export const AIR_JUMPS = 0;
 
+export const GRAVITY = 26;
+export const STAND_HEIGHT = 1.75;
+export const CROUCH_HEIGHT = 1.05;
+export const EYE_HEIGHT = 1.6;
+export const CROUCH_EYE = 0.88;
+export const JUMP_SPEED = 9.6;
+
 const point = new Vector3();
 const probe = new Vector3();
 const lower = new Vector3();
@@ -88,11 +95,11 @@ export function updateMovement(p: Player, dt: number): void {
   }
   let crouch = (input.down('crouch') && b.onGround) || p.sliding;
   if (!crouch && p.crouching) {
-    b.height = 1.75;
+    b.height = STAND_HEIGHT;
     if (world.overlapsBody(b)) crouch = true;
   }
   p.crouching = crouch;
-  b.height = crouch ? 1.05 : 1.75;
+  b.height = crouch ? CROUCH_HEIGHT : STAND_HEIGHT;
   p.landGrace -= dt;
   p.dashCd -= dt;
   p.blockCd -= dt;
@@ -137,7 +144,7 @@ export function updateMovement(p: Player, dt: number): void {
       p.detachGrapple(true);
     } else if (b.onGround || p.coyote > 0) {
       p.jumpBuffer = p.coyote = 0;
-      v.y = 9.6;
+      v.y = JUMP_SPEED;
       b.onGround = false;
       p.airJumps = AIR_JUMPS;
       if (p.sliding) {
@@ -161,7 +168,7 @@ export function updateMovement(p: Player, dt: number): void {
     } else if (p.airJumps > 0) {
       p.jumpBuffer = 0;
       p.airJumps--;
-      v.y = 9.6 * 0.92;
+      v.y = JUMP_SPEED * 0.92;
       accelerate(v, p.wish, wishLen, 7.5, Infinity);
       audio.jump();
       p.kickFov(1.6);
@@ -185,7 +192,7 @@ export function updateMovement(p: Player, dt: number): void {
     point.copy(p.center).addScaledVector(dir, -0.6);
     effects.strokeBurst(point, TONE.PRIMARY, 10, 5, { life: 0.25, size: 0.03 });
   }
-  v.y -= 26 * p.gravityScale * (p.grapple.mode === 'on' ? 0.88 : 1) * dt;
+  v.y -= GRAVITY * p.gravityScale * (p.grapple.mode === 'on' ? 0.88 : 1) * dt;
 }
 
 function accelerate(velocity: Vector3, wish: Vector3, amount: number, cap: number, acceleration: number): void {
