@@ -7,6 +7,7 @@ import type { GameState, GameStateName } from '@/engine/types';
 import { createTeamMatch, assignTeams } from '@/engine/game/team-rules';
 import type { OnlineMode, TeamMatch } from '@/engine/game/team-rules';
 import { teamLayout } from '@/engine/game/team-world';
+import { GUN_STATS } from '@/engine/weapons/stats';
 
 const assert = (cond: unknown, message: string): void => { expect(cond, message).toBeTruthy(); };
 const must = <T>(value: T | undefined | null, what: string): T => {
@@ -231,7 +232,10 @@ test('PvP feedback distinguishes guards, headshots and confirmed local kills', (
     t.receive('pdead', { ...death, crit: 'invalid' });
     t.receive('pdead', { ...death, killer: null });
     expect(marker).not.toHaveBeenCalled();
-    t.receive('pdead', death);
+    // The same peer dying twice only counts once per respawn, so the second death needs the clock.
+    const clock = vi.spyOn(performance, 'now').mockReturnValue(performance.now() + 4000);
+    try { t.receive('pdead', death); }
+    finally { clock.mockRestore(); }
     expect(marker).toHaveBeenCalledExactlyOnceWith(true, true);
   } finally { t.ffa.leave(); }
 });
@@ -441,4 +445,35 @@ test('a new placement does not inherit elapsed time from a delayed host frame', 
     expect(s.flag.holdLeft).toBe(30);
     expect(s.scores).toEqual([0, 0]);
   } finally { t.ffa.leave(); }
+});
+
+test('network damage cannot exceed what the named weapon can do', () => {
+  const t = setup();
+  setState(t.gs, 'play');
+  const { pvp, pellets } = GUN_STATS.rifle, cap = pvp[0] * pvp[1] * pellets;
+  const hit = { amount: 5000, from: [3, 1, 0], by: 'host', crit: true, src: 'rifle' };
+  try {
+    t.receive('pdmg', hit);
+    assert(t.damage.length === 1 && must(t.damage[0], 'damage').amount === cap,
+      'an inflated packet lands for the weapon cap instead of its claim');
+    assert(t.ctx.player.lastHit?.amount === cap, 'the death report records the capped amount');
+    t.receive('pdmg', { ...hit, amount: 20, src: 'laser' });
+    assert(t.damage.length === 1, 'damage from a weapon that does not exist is dropped');
+  } finally { t.ffa.leave(); }
+});
+
+test('a repeated death report only counts once per respawn', () => {
+  const t = setup(true), { scores } = t;
+  setState(t.gs, 'play');
+  must(scores.get('client'), 'client score').deaths = 0;
+  must(scores.get('host'), 'host score').kills = 0;
+  const death = { killer: 'host', dir: null, over: false, how: 'MP5', crit: false };
+  const clock = vi.spyOn(performance, 'now').mockReturnValue(1000);
+  try {
+    t.receive('pdead', death);
+    clock.mockReturnValue(1100);
+    t.receive('pdead', death);
+    assert(must(scores.get('client'), 'client score').deaths === 1 && must(scores.get('host'), 'host score').kills === 1,
+      'a second death 0.1s later scores neither the death nor the kill again');
+  } finally { clock.mockRestore(); t.ffa.leave(); }
 });

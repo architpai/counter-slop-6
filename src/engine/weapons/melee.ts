@@ -9,6 +9,9 @@ import type { Weapon } from './index';
 const GUARD_POS = new Vector3(0.21, -0.31, -0.36);
 const GUARD_ROT = new Vector3(1.40, 0.30, 1.24);
 
+/** Flat damage of one blade hit on another player. No falloff, no headshot bonus. */
+export const MELEE_PVP_DAMAGE = 55;
+
 
 /** The blade state `resetAmmo` owns, which the constructor calls. */
 export interface Melee {
@@ -203,7 +206,7 @@ export class Melee extends ViewModel implements Weapon {
       hit = true;
     }
     for (const remote of game.playersInArc(p.eye, p.forward, 2.1, Math.cos(0.8))) {
-      game.hitPlayer(remote, 55, { point: remote.center, dir: d, part: 'torso', source: 'melee', crit: false });
+      game.hitPlayer(remote, MELEE_PVP_DAMAGE, { point: remote.center, dir: d, part: 'torso', source: 'melee', crit: false });
       hit = true;
     }
     if (game.cutRopes(p.eye, p.forward, 2.4)) hit = true;

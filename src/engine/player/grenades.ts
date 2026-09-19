@@ -64,6 +64,11 @@ export interface GrenadeState {
 const RADIUS = 0.16;
 const BLAST = 6.4;
 const HURT_RADIUS = BLAST * 0.95;
+
+/** PvP blast damage at the centre of the boom. `explode` falls off by 50 over `HURT_RADIUS`. */
+export const GRENADE_PVP_MAX = 62;
+/** Fastest a throw can leave the hand: `launch`'s 9 + 20 forward, its 3.5 + 2.5 lob, and half the 48 body-speed cap. */
+export const MAX_THROW_SPEED = 29 + 6 + 0.5 * 48;
 const SPARKS = { life: 0.12, size: 0.02 };
 
 export function initGrenades(p: Player): void {
@@ -211,7 +216,7 @@ function explode(p: Player, n: Nade): void {
       if (!target.alive || !ctx.game.canHurt(target)) continue;
       const d = target.center.distanceTo(center);
       if (d < HURT_RADIUS) {
-        ctx.game.hitPlayer(target, 12 + 50 * (1 - d / HURT_RADIUS), { point: center, source: 'grenade' });
+        ctx.game.hitPlayer(target, GRENADE_PVP_MAX - 50 * (d / HURT_RADIUS), { point: center, source: 'grenade' });
       }
     }
   }
