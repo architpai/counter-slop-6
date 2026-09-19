@@ -82,8 +82,6 @@ export class Input {
   #lockUsesPromise = false;
   #lockRaw = false;
   #lockAttempt = 0;
-  /** `Window.setTimeout` handle, a number. Never `NodeJS.Timeout`. */
-  #lockRetry: number | null = null;
   #disposed = false;
 
   readonly move: { x: number; y: number };
@@ -136,6 +134,7 @@ export class Input {
         return;
       }
       this.#setDevice('keyboard');
+      if (this.#lockWanted && !this.locked) this.requestLock();
       const action = KEYS[e.code];
       if (action) this.#keys.add(action);
       // An event without Shift must never leave sprint held, including Shift itself.
@@ -152,6 +151,7 @@ export class Input {
       this.anyInput = true;
       this.#setDevice('keyboard');
       if (editing(e.target) || editing(this.#doc.activeElement) || this.#menuTarget(e.target)) return;
+      if (this.#lockWanted && !this.locked) this.requestLock();
       const action = MOUSE[e.button];
       if (action) this.#mouse.add(action);
       if (e.button === 1 || e.button === 3 || e.button === 4) e.preventDefault();
@@ -194,7 +194,7 @@ export class Input {
       }
     });
     this.#listen(this.#doc, 'pointerlockchange', () => {
-      if (this.locked) this.#cancelRetry();
+      if (this.locked) this.#cancelPending();
       this.onLockChange?.(this.locked);
     });
     this.#listen(this.#doc, 'pointerlockerror', () => {
@@ -345,7 +345,7 @@ export class Input {
     if (this.#disposed || this.usingTouch) return;
     this.#lockWanted = true;
     if (this.locked || this.#lockPending) return;
-    this.#cancelRetry();
+    this.#cancelPending();
     this.#tryLock(true);
   }
 
@@ -371,23 +371,19 @@ export class Input {
     if (attempt !== this.#lockAttempt || !this.#lockPending) return;
     this.#lockPending = false;
     if (!this.#lockWanted || this.#disposed || this.locked) return;
+    // Non-raw attempt also failed: wait for the next user gesture (mousedown/keydown)
+    // instead of retrying blind, since requestPointerLock needs a transient activation.
     if (this.#lockRaw) this.#tryLock(false);
-    else this.#lockRetry = this.#win.setTimeout(() => {
-      this.#lockRetry = null;
-      if (this.#lockWanted && !this.locked) this.requestLock();
-    }, 1200);
   }
 
-  #cancelRetry() {
-    if (this.#lockRetry !== null) this.#win.clearTimeout(this.#lockRetry);
-    this.#lockRetry = null;
+  #cancelPending() {
     this.#lockPending = false;
     this.#lockAttempt++;
   }
 
   exitLock() {
     this.#lockWanted = false;
-    this.#cancelRetry();
+    this.#cancelPending();
     if (this.#doc.pointerLockElement) {
       try {
         const result: unknown = this.#doc.exitPointerLock();
@@ -411,7 +407,7 @@ export class Input {
     this.touch.enabled = false;
     if (this.locked) this.exitLock();
     this.#lockWanted = false;
-    this.#cancelRetry();
+    this.#cancelPending();
     for (const remove of this.#listeners) remove();
     this.#listeners.length = 0;
     this.#clearRaw();
