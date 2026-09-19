@@ -23,10 +23,10 @@ Every item below was verified against source. IDs are stable; tick the work orde
 - [x] **N2** — host ignores a repeat `pdead` from the same peer within `RESPAWN` — `ffa.ts:529-542`
 - [x] **N6** — proximity check (`< 3 m`) on `take` — `ffa.ts:502-504`
 
-### 3. Performance
-- [ ] **P1** — DDA raycast over the existing spatial hash + boolean `raycastHit()` — `physics.ts:224-254`
-- [ ] **G1 + G2** — merge tactical geometry per `kind/part` at load; skip the legacy primitive body when `o.tactical` — `render/tactical.ts:56-61`, `render/figure.ts:456-471`
-- [ ] **P2** — per-frame path budget on `EnemyManager`, cap `findCover` at 3 — `nav.ts:190`, `ai.ts:74,96-98,235-249`
+### 3. Performance — done 2026-09-19 (G1 merge-by-material stretch skipped: named-node keep-list makes it marginal)
+- [x] **P1** — DDA raycast over the existing spatial hash + boolean `raycastHit()` — `physics.ts:224-254`
+- [x] **G1 + G2** — merge tactical geometry per `kind/part` at load; skip the legacy primitive body when `o.tactical` — `render/tactical.ts:56-61`, `render/figure.ts:456-471`
+- [x] **P2** — per-frame path budget on `EnemyManager`, cap `findCover` at 3 — `nav.ts:190`, `ai.ts:74,96-98,235-249`
 
 ### 4. Feel
 - [ ] **F3** — rebalance R4-C (450 DPS vs 293 next best) — `weapons/stats.ts:68-69`
