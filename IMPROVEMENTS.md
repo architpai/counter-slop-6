@@ -9,14 +9,14 @@ Every item below was verified against source. IDs are stable; tick the work orde
 
 ## Work order
 
-### 1. One-liners (big win per character changed)
-- [ ] **G3** — post FX target to `HalfFloatType`, kills sky/shadow banding — `render/postfx.ts:38`
-- [ ] **G4** — `antialias: false` on the canvas, MSAA already runs on the target — `render/index.ts:30`
-- [ ] **F1** — accumulate `_fireT` instead of resetting, fixes frame-rate-bound rate of fire — `weapons/gun.ts:274,313`
-- [ ] **F2** — friction to `Math.exp(-k*dt)`, frame-rate independent — `player/movement.ts:116`
-- [ ] **F6** — clamp mouse delta instead of dropping it, keeps fast flicks — `input.ts:135`
-- [ ] **N5** — call `net.leave()` unconditionally on dispose, stops the Peer leak — `boot.ts:358,486`
-- [ ] **P5 (focus rounding)** — write `--focus` with `toFixed(1)` so the store dedupe fires — `store.ts:346`
+### 1. One-liners (big win per character changed) — done 2026-09-19, branch `improvements`
+- [x] **G3** — post FX target to `HalfFloatType`, kills sky/shadow banding — `render/postfx.ts:38`
+- [x] **G4** — `antialias: false` on the canvas, MSAA already runs on the target — `render/index.ts:30`
+- [x] **F1** — accumulate `_fireT` instead of resetting, fixes frame-rate-bound rate of fire — `weapons/gun.ts:274,313`
+- [x] **F2** — friction to `Math.exp(-k*dt)`, frame-rate independent — `player/movement.ts:116`
+- [x] **F6** — clamp mouse delta instead of dropping it, keeps fast flicks — `input.ts:135`
+- [x] **N5** — call `net.leave()` unconditionally on dispose, stops the Peer leak — `boot.ts:358,486`
+- [x] **P5 (focus rounding)** — write `--focus` with `toFixed(1)` so the store dedupe fires — `store.ts:346`
 
 ### 2. Fairness (closes cheat vectors, small diffs)
 - [ ] **N1** — clamp victim-reported `pdmg` to `GUN_STATS[src]`, drop unknown `src` — `ffa.ts:510-519`
