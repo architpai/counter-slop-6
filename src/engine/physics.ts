@@ -68,25 +68,34 @@ export class World {
   #hits: Box[] = [];
   #rayOrigin = new Vector3();
   #rayDir = new Vector3();
+  // Boxes added since the last `finalize`: outside the hash (queries wait for finalize), rays scan them.
+  #loose: StampedBox[] = [];
+  #hitBox: Box | null = null;
+  #hitDist = 0;
+  #hitAxis: Axis | '' = '';
+  #hitSign = 0;
 
   constructor() { this.boxes = []; }
   addBox(min: Vector3, max: Vector3, data: BoxData = {}): Box {
     const box: StampedBox = { min: new Vector3().copy(min), max: new Vector3().copy(max), data, id: this.boxes.length, _stamp: -1 };
     this.boxes.push(box);
+    this.#loose.push(box);
     return box;
+  }
+  #insert(box: StampedBox): void {
+    for (let x = Math.floor(box.min.x / 8); x <= Math.floor(box.max.x / 8); x++) {
+      for (let z = Math.floor(box.min.z / 8); z <= Math.floor(box.max.z / 8); z++) {
+        const key = cellKey(x, z);
+        let bucket = this.#hash.get(key);
+        if (!bucket) this.#hash.set(key, bucket = []);
+        bucket.push(box);
+      }
+    }
   }
   finalize(): void {
     this.#hash.clear();
-    for (const box of this.boxes as StampedBox[]) {
-      for (let x = Math.floor(box.min.x / 8); x <= Math.floor(box.max.x / 8); x++) {
-        for (let z = Math.floor(box.min.z / 8); z <= Math.floor(box.max.z / 8); z++) {
-          const key = cellKey(x, z);
-          let bucket = this.#hash.get(key);
-          if (!bucket) this.#hash.set(key, bucket = []);
-          bucket.push(box);
-        }
-      }
-    }
+    this.#loose.length = 0;
+    for (const box of this.boxes as StampedBox[]) this.#insert(box);
   }
   removeBox(box: Box): void {
     const index = this.boxes.indexOf(box);
@@ -94,7 +103,7 @@ export class World {
     this.boxes.splice(index, 1);
     this.finalize();
   }
-  clear(): void { this.boxes.length = 0; this.#hash.clear(); this.#stamp = 0; }
+  clear(): void { this.boxes.length = 0; this.#loose.length = 0; this.#hash.clear(); this.#stamp = 0; }
   query(min: Vector3, max: Vector3, out: Box[] = []): Box[] {
     out.length = 0;
     if (!finiteVector(min) || !finiteVector(max)) return out;
@@ -221,36 +230,68 @@ export class World {
     body.wallNormal.set(nx, 0, nz);
     body.landVel = land;
   }
-  raycast(origin: Vector3, dir: Vector3, maxDist = 1000, ignore?: BoxFilter): RayHit | null {
-    if (!finiteVector(origin) || !finiteVector(dir) || !(maxDist > 0)) return null;
-    let best = maxDist, hitBox: Box | null = null, hitAxis: Axis | '' = '', hitSign = 0;
-    for (const box of this.boxes) {
-      if (ignore?.(box)) continue;
-      let tmin = 0, tmax = best, entryAxis: Axis | '' = '', entrySign = 0, missed = false;
-      for (const axis of axes) {
-        if (Math.abs(dir[axis]) < 1e-9) {
-          if (origin[axis] < box.min[axis] || origin[axis] > box.max[axis]) { missed = true; break; }
-        } else {
-          let t1 = (box.min[axis] - origin[axis]) / dir[axis];
-          let t2 = (box.max[axis] - origin[axis]) / dir[axis], sign = -1;
-          if (t1 > t2) { [t1, t2] = [t2, t1]; sign = 1; }
-          if (t1 > tmin) { tmin = t1; entryAxis = axis; entrySign = sign; }
-          if (t2 < tmax) tmax = t2;
-          if (tmin > tmax) { missed = true; break; }
-        }
-      }
-      if (!missed && entryAxis && tmin < best) {
-        best = tmin;
-        hitBox = box;
-        hitAxis = entryAxis;
-        hitSign = entrySign;
+  /** Slab test against the current best distance; keeps the hit in the `#hit*` fields. */
+  #testBox(box: Box, origin: Vector3, dir: Vector3, ignore?: BoxFilter): void {
+    if (ignore?.(box)) return;
+    let tmin = 0, tmax = this.#hitDist, entryAxis: Axis | '' = '', entrySign = 0;
+    for (const axis of axes) {
+      if (Math.abs(dir[axis]) < 1e-9) {
+        if (origin[axis] < box.min[axis] || origin[axis] > box.max[axis]) return;
+      } else {
+        let t1 = (box.min[axis] - origin[axis]) / dir[axis];
+        let t2 = (box.max[axis] - origin[axis]) / dir[axis], sign = -1;
+        if (t1 > t2) { [t1, t2] = [t2, t1]; sign = 1; }
+        if (t1 > tmin) { tmin = t1; entryAxis = axis; entrySign = sign; }
+        if (t2 < tmax) tmax = t2;
+        if (tmin > tmax) return;
       }
     }
-    // `hitAxis` is always set together with `hitBox`; the second test is for the type only.
-    if (!hitBox || !hitAxis) return null;
+    // No entry axis means the ray starts inside the box, which never counts as a hit.
+    if (!entryAxis || tmin >= this.#hitDist) return;
+    this.#hitDist = tmin;
+    this.#hitBox = box;
+    this.#hitAxis = entryAxis;
+    this.#hitSign = entrySign;
+  }
+  /** Walks the hash cells the ray crosses (2D DDA over x/z) and leaves the nearest hit in `#hit*`. */
+  #trace(origin: Vector3, dir: Vector3, maxDist: number, ignore?: BoxFilter): boolean {
+    this.#hitBox = null;
+    this.#hitAxis = '';
+    this.#hitSign = 0;
+    // A finite bound is what ends the cell walk below; an infinite one would never return on a miss.
+    this.#hitDist = Number.isFinite(maxDist) ? maxDist : 1000;
+    if (!finiteVector(origin) || !finiteVector(dir) || !(maxDist > 0)) return false;
+    const stamp = ++this.#stamp;
+    for (const box of this.#loose) {
+      box._stamp = stamp;
+      this.#testBox(box, origin, dir, ignore);
+    }
+    const flatX = Math.abs(dir.x) < 1e-9, flatZ = Math.abs(dir.z) < 1e-9;
+    let cx = Math.floor(origin.x / 8), cz = Math.floor(origin.z / 8);
+    // A vertical ray keeps both boundary times at Infinity and so walks a single cell.
+    let tMaxX = flatX ? Infinity : ((cx + (dir.x > 0 ? 1 : 0)) * 8 - origin.x) / dir.x;
+    let tMaxZ = flatZ ? Infinity : ((cz + (dir.z > 0 ? 1 : 0)) * 8 - origin.z) / dir.z;
+    const tDeltaX = flatX ? Infinity : 8 / Math.abs(dir.x), tDeltaZ = flatZ ? Infinity : 8 / Math.abs(dir.z);
+    for (;;) {
+      const bucket = this.#hash.get(cellKey(cx, cz));
+      if (bucket) for (const box of bucket) {
+        if (box._stamp === stamp) continue;
+        box._stamp = stamp;
+        this.#testBox(box, origin, dir, ignore);
+      }
+      // A box spans cells, so a hit can sit past this cell: walk until the next cell starts beyond it.
+      if (!((tMaxX < tMaxZ ? tMaxX : tMaxZ) < this.#hitDist)) return this.#hitBox !== null;
+      if (tMaxX < tMaxZ) { cx += dir.x > 0 ? 1 : -1; tMaxX += tDeltaX; } else { cz += dir.z > 0 ? 1 : -1; tMaxZ += tDeltaZ; }
+    }
+  }
+  raycast(origin: Vector3, dir: Vector3, maxDist = 1000, ignore?: BoxFilter): RayHit | null {
+    if (!this.#trace(origin, dir, maxDist, ignore)) return null;
+    const box = this.#hitBox, axis = this.#hitAxis;
+    // `#hitAxis` is always set together with `#hitBox`; the second test is for the type only.
+    if (!box || !axis) return null;
     const normal = new Vector3();
-    normal[hitAxis] = hitSign;
-    return { dist: best, point: new Vector3().copy(origin).addScaledVector(dir, best), normal, box: hitBox };
+    normal[axis] = this.#hitSign;
+    return { dist: this.#hitDist, point: new Vector3().copy(origin).addScaledVector(dir, this.#hitDist), normal, box };
   }
   groundBelow(x: number, y: number, z: number, maxDrop = 100): number {
     return this.raycast(this.#rayOrigin.set(x, y, z), down, maxDrop)?.point.y ?? y - maxDrop;
@@ -259,6 +300,6 @@ export class World {
     if (!finiteVector(a) || !finiteVector(b)) return false;
     this.#rayDir.subVectors(b, a);
     const distance = this.#rayDir.length();
-    return distance < 1e-4 || this.raycast(a, this.#rayDir.multiplyScalar(1 / distance), distance, ignore) === null;
+    return distance < 1e-4 || !this.#trace(a, this.#rayDir.multiplyScalar(1 / distance), distance, ignore);
   }
 }
