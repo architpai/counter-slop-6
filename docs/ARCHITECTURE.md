@@ -2,6 +2,13 @@
 
 > Current online extension: [Online team modes](spec/online-team-modes.md) defines the team-rule, HUD, and wire additions to this original rebuild contract. The current implementation uses TypeScript/React/Next static export; the original delivery instructions below are historical.
 
+> **Status (2026-09-19):** the delivery mechanism changed. The game ships as Next.js +
+> TypeScript, built with `next build` (`output: 'export'` in `next.config.ts`) and mounted by
+> `src/components/GameMount.tsx`. `src/engine/*` implements the modules described below as
+> `.ts` files under `src/engine/` (`src/main.js` → `src/engine/boot.ts`; `src/game/*` →
+> `src/engine/game/*`; `src/render/*` → `src/engine/render/*`; the rest follow the same
+> `src/<module>/*` → `src/engine/<module>/*` pattern). Header rules 4 and 5 below no longer apply.
+
 This file is the integration contract for the rebuild. It is written so that fifteen people can
 implement fifteen modules in parallel, from this file plus their own spec document, and have the
 result link together on the first try.
@@ -19,11 +26,11 @@ your module's **Implementer checklist**).
 3. Runtime cross-module calls go through the shared **context object** (`ctx`, section 5.1).
    Static `import` is only for pure things: classes you construct, factories, constants, math.
    This is what keeps the dependency graph acyclic.
-4. No bundler, no build step, no transpile. Everything is a real ES module served as a static file.
-   Browsers do **not** resolve directory imports: always import the explicit file
-   (`import { Renderer } from './render/index.js'`).
-5. No `npm install`, no framework, no TypeScript. The `.d.ts`-style blocks below are documentation
-   of JavaScript shapes, not files to write.
+4. ~~No bundler, no build step, no transpile. Everything is a real ES module served as a static
+   file. Browsers do **not** resolve directory imports: always import the explicit file
+   (`import { Renderer } from './render/index.js'`).~~ (superseded, see Status)
+5. ~~No `npm install`, no framework, no TypeScript. The `.d.ts`-style blocks below are
+   documentation of JavaScript shapes, not files to write.~~ (superseded, see Status)
 
 
 ## Contents
