@@ -536,7 +536,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     app.ffa.dispose();
     for (const remote of ctx.remotes.values()) remote.dispose();
     ctx.remotes.clear();
-    if (net.active) net.leave();
+    net.leave();
     input.dispose();
     player.melee.dispose();
     for (const weapon of player.weapons) weapon.dispose();
