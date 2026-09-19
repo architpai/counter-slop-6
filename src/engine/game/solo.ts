@@ -139,7 +139,7 @@ export function createSolo(app: App): SoloApi {
       if (far.length || clear.length) return choose(far.length ? far : clear).clone();
       for (let i = 0; i < 200; i++) {
         const a = rand(0, Math.PI * 2), r = rand(22, 40);
-        const p = new THREE.Vector3(clamp(pp.x + Math.cos(a) * r, -44, 44), 0, clamp(pp.z + Math.sin(a) * r, -44, 44));
+        const p = new THREE.Vector3(clamp(pp.x + Math.cos(a) * r, level.bounds.minX + 4, level.bounds.maxX - 4), 0, clamp(pp.z + Math.sin(a) * r, level.bounds.minZ + 4, level.bounds.maxZ - 4));
         p.y = world.groundBelow(p.x, 30, p.z, 40);
         if (p.y > -3 && fits(p)) return p;
       }
