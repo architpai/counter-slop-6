@@ -245,3 +245,12 @@ test('ring placement rejects an enclosed safe pocket instead of counting standin
   expect(hasRingEscape(ctx.nav, player as unknown as Target, [], ctx.world)).toBe(true);
   expect(hasRingEscape(ctx.nav, player as unknown as Target, [new Vector3(0, 0, -7), new Vector3(0, 0, 7)], ctx.world)).toBe(false);
 });
+
+test('past wave 30 the plain mod ramps enemy speed and damage, capped at +60%', () => {
+  const { m, solo } = setup();
+  const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
+  solo.startWave(30); expect(m.mods.damage).toBe(1); expect(m.mods.speed).toBe(1);
+  solo.startWave(40); expect(m.mods.damage).toBeCloseTo(1.3); expect(m.mods.speed).toBeCloseTo(1.3);
+  solo.startWave(80); expect(m.mods.damage).toBe(1.6); expect(m.mods.speed).toBe(1.6);
+  randomSpy.mockRestore();
+});
