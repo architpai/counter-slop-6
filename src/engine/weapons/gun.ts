@@ -271,7 +271,8 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
   animate(st: WeaponState, dt: number) {
     if (this._disposed || !this._equipped) return;
     this._pose(st, dt);
-    this._fireT -= dt;
+    // Carry the residual so the rate of fire is frame-rate independent; clamp so idling banks no burst.
+    this._fireT = Math.max(this._fireT - dt, -dt);
     if (this._flashT > 0) {
       this._flashT -= dt;
       if (this._flashT <= 0) this._model.flash.visible = false;
@@ -310,7 +311,7 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
   _fire(st: WeaponState) {
     const s = this._stats, { effects, audio, input, game } = this._ctx;
     const followUp = this._player.headshotT > 0 ? 0.6 : 1;
-    this._fireT = s.fireInterval;
+    this._fireT += s.fireInterval;
     this.mag--;
     const spreadNow = this._spread;
     this._spread = Math.min(this._spread + s.spreadKick * followUp, s.spreadMax);

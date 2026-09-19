@@ -220,6 +220,20 @@ test('R4-C holds automatic fire at 80 ms and reloads at 2.2 seconds', () => {
   r4c.resetAmmo(); r4c.unequip();
 });
 
+test('automatic rate of fire is frame-rate independent', () => {
+  const held = { ...neutral, fire: true };
+  // 2 s of held fire at one frame rate, counted off the magazine. 2 / 0.08 = 25 shots either way.
+  const shots = (dt: number) => {
+    r4c.resetAmmo(); draw(r4c); r4c.resetAmmo();
+    for (let i = Math.round(2 / dt); i > 0; i--) r4c.animate(held, dt);
+    return r4c.magSize - r4c.mag;
+  };
+  const slow = shots(1 / 30), fast = shots(1 / 120);
+  expect(slow, '30 Hz shot count').toBeGreaterThanOrEqual(24);
+  expect(Math.abs(slow - fast), `30 Hz fired ${slow}, 120 Hz fired ${fast}`).toBeLessThanOrEqual(1);
+  r4c.resetAmmo(); r4c.unequip();
+});
+
 test('accepted spread and recoil settings', () => {
   expect(GUN_STATS.rifle).toMatchObject({ hipSpread: 0.012, moveSpread: 0.0005, spreadKick: 0.005 });
   expect(GUN_STATS.pistol).toMatchObject({ hipSpread: 0.008, adsSpread: 0.002, spreadKick: 0.006,
