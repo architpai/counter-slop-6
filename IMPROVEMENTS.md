@@ -35,11 +35,11 @@ Every item below was verified against source. IDs are stable; tick the work orde
 - [x] **F7** — radial gamepad deadzone — `input.ts:40`
 - [x] **F8** — endless scaling past wave 30 (`mods`, double `MODS` roll) — `game/solo.ts:75-76,171,177`
 
-### 5. Cleanup
-- [ ] Dead code: `AIR_JUMPS`/`airJumps` (5 places + README), `mergeByMaterial`, unused `PS_FLAG`, `revolver`
-- [ ] Constants: gravity 26/24/20, stand height 1.75 ×4, eye 1.6 ×3, jump 9.6 ×2
-- [ ] Duplicated charge attack ×3 and LOS ×4 into one helper each
-- [ ] `docs/ARCHITECTURE.md` contradicts the repo ("No TypeScript, no bundler, `src/main.js`")
+### 5. Cleanup — done 2026-09-19
+- [x] Dead code: `mergeByMaterial` deleted; `PS_FLAG` now used by the encoder/decoder. Left on purpose: `AIR_JUMPS` (spec player-input.md §6.10 keeps the rule behind the constant) and `revolver` (spec: implemented, not issued; has tests/model/audio)
+- [x] Constants: player `GRAVITY/STAND_HEIGHT/CROUCH_HEIGHT/EYE_HEIGHT/CROUCH_EYE/JUMP_SPEED` in movement.ts; `ENEMY_GRAVITY = 24` in enemies/types.ts (the two 20s became 24)
+- [x] LOS ×4 → one throttled `see()` (ragequit now respects smoke; medic retargets at 5 Hz); `stop()` ×2 → one. Charge ×3 reviewed and LEFT: different wind-ups/durations/hit rules/block reactions — a config-driven helper would read worse
+- [x] `docs/ARCHITECTURE.md` status note + rules 4/5 struck ("No TypeScript, no bundler, `src/main.js`")
 
 ---
 
