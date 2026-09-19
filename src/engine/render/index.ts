@@ -27,7 +27,7 @@ export class Renderer {
   readonly _onResize: () => void;
 
   constructor(canvas: HTMLCanvasElement) {
-    this.three = new THREE.WebGLRenderer({ canvas, antialias: true, stencil: false, powerPreference: 'high-performance' });
+    this.three = new THREE.WebGLRenderer({ canvas, antialias: false, stencil: false, powerPreference: 'high-performance' });
     this.three.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     this.three.outputColorSpace = THREE.SRGBColorSpace;
     this.three.toneMapping = THREE.NoToneMapping;

@@ -35,7 +35,7 @@ export class Composite {
 
   constructor() {
     this.target = new THREE.WebGLRenderTarget(2, 2, {
-      format: THREE.RGBAFormat, type: THREE.UnsignedByteType,
+      format: THREE.RGBAFormat, type: THREE.HalfFloatType,
       colorSpace: THREE.LinearSRGBColorSpace, depthBuffer: true, stencilBuffer: false,
       minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: false,
       // The canvas `antialias` flag does nothing for an offscreen target; MSAA has to live here.
