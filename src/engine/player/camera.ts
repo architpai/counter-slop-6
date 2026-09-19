@@ -24,6 +24,9 @@ export interface CameraState {
   bobY: number;
 }
 
+/** Hip-fire vertical FOV. ADS look sensitivity scales against it. */
+export const HIP_FOV = 82;
+
 const target = new Vector3(0, 10, 0);
 
 export function initCamera(p: Player): void {
@@ -84,7 +87,7 @@ export function updateCamera(p: Player, dt: number): void {
     'YXZ',
   );
   const targetFov = p.aiming ? p.weapon.adsFov
-    : 82 + clamp((p.speed - 7) / 16, 0, 1) * 8 + (p.sprinting ? 3 : 0)
+    : HIP_FOV + clamp((p.speed - 7) / 16, 0, 1) * 8 + (p.sprinting ? 3 : 0)
       + (p.sliding ? 4 : 0) + (p.grapple.mode === 'on' ? 3 : 0) + p.fovKick.value;
   const fov = damp(camera.fov, targetFov, p.aiming || p.melee.active ? 16 : 8, dt);
   if (Math.abs(fov - camera.fov) > 0.01) {

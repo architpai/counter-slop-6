@@ -6,7 +6,7 @@ import { makeLoadout, GUN_STATS, Melee } from '../weapons/index';
 import type { Gun, Weapon } from '../weapons/index';
 import { MAX_GRENADES } from '../types';
 import type { Ctx, Enemy, HitInfo, LastHit, Projectile, Target, WeaponState } from '../types';
-import { initCamera, updateBob, updateCamera, idleCamera } from './camera';
+import { initCamera, updateBob, updateCamera, idleCamera, HIP_FOV } from './camera';
 import type { CameraState } from './camera';
 import { initMovement, updateMovement, integrateMovement, AIR_JUMPS } from './movement';
 import type { MovementState } from './movement';
@@ -204,8 +204,10 @@ export class Player implements Target {
     this.ctx.renderer.rig.visible = true;
     const { input } = this.ctx;
     const optic = isGun(this.weapon) && this.weapon.scope ? this.weapon.scopeKind : null;
-    const sensitivity = !this.aiming ? 1 : optic === 'acog' ? 0.38 * input.acogScale
-      : optic === 'sniper' ? 0.38 * input.sniperScale : 0.62;
+    // Constant on-screen travel per mouse count: scale by the tangent ratio of the two FOVs.
+    const ratio = Math.tan(this.weapon.adsFov * Math.PI / 360) / Math.tan(HIP_FOV * Math.PI / 360);
+    const sensitivity = !this.aiming ? 1
+      : ratio * (optic === 'acog' ? input.acogScale : optic === 'sniper' ? input.sniperScale : 1);
     this.yaw += input.look.x * sensitivity;
     this.pitch = clamp(this.pitch + input.look.y * sensitivity, -1.5, 1.5);
     if (this.dashLock) {

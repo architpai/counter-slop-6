@@ -286,6 +286,27 @@ test('accepted gun headshots give a bounded screen wobble and a brief follow-up 
   expect(p.headshotT).toBe(0);
 });
 
+test('ADS look sensitivity tracks the aimed FOV, holo stays hip speed', () => {
+  const { p, ctx } = setup();
+  const r4c = p.weapon as Gun;
+  // `input.update` clears `look`, so write it after and read the yaw the same frame.
+  const yawDelta = (aiming: boolean): number => {
+    ctx.input.update(1 / 60);
+    ctx.input.look.x = 0.01;
+    p.aiming = aiming;
+    const before = p.yaw;
+    p.update(1 / 60);
+    return p.yaw - before;
+  };
+  const hip = yawDelta(false);
+  expect(hip).toBeCloseTo(0.01, 12);
+  r4c.setOptic('holo');
+  expect(yawDelta(true) / hip).toBeCloseTo(1, 6);
+  r4c.setOptic('acog');
+  const acog = Math.tan(38 * Math.PI / 360) / Math.tan(82 * Math.PI / 360) * ctx.input.acogScale;
+  expect(yawDelta(true) / hip).toBeCloseTo(acog, 6);
+});
+
 test('ground friction is independent of frame rate', () => {
   const { p, ctx } = setup();
   ctx.world.addBox(new Vector3(-100, -1, -100), new Vector3(100, 0, 100)); ctx.world.finalize();
