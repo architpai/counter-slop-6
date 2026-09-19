@@ -15,6 +15,8 @@ import type { PeerMeta } from '../net';
 import type { App } from '../boot';
 
 const KILL_TARGET = 20, TIME_LIMIT = 480, RESPAWN = 3.5, SILENT_MS = 9000;
+// 20 Hz matches the 80 ms interpolation delay remotes render at (see players.ts).
+const PS_INTERVAL = 0.05;
 // Host trusts a `take` only within this radius of the sender's avatar. Generous
 // vs the 1.5 m local collect: remotes render ~80 ms behind. ponytail: shrink if stealable.
 const TAKE_RANGE = 4;
@@ -67,7 +69,7 @@ export function createFFA(app: App): FfaApi {
   const { ctx, gs, lobby, scores } = app;
   const { net, hud } = ctx;
   const d1 = new THREE.Vector3(), d2 = new THREE.Vector3(), d3 = new THREE.Vector3();
-  let tick = 0;
+  let psT = 0;
   let shotQueue: number[] = [];
   let boardShown = false;
   let timer: number | undefined = undefined;
@@ -366,7 +368,7 @@ export function createFFA(app: App): FfaApi {
     dispose();
     gs.mode = 'ffa'; app.loadLevel(true, lobby.map ?? app.settings.mapKey); app.resetRun();
     gs.teamMatch = teamState; gs.matchT = teamState?.elapsed ?? 0;
-    lastClock = now(); syncT = 0; seenDead = false; deathMessage = '';
+    lastClock = now(); syncT = 0; psT = 0; seenDead = false; deathMessage = '';
     applyTeams();
     if (net.id) ready.add(net.id);
     if (teamState) teamWorld = createTeamWorld(ctx);
@@ -533,7 +535,6 @@ export function createFFA(app: App): FfaApi {
   function update(dt: number, t: number = now()): void {
     if (!net.active) return;
     for (const [id, hit] of pendingHeadshots) if (hit.until < t) pendingHeadshots.delete(id);
-    tick++;
     for (const r of ctx.remotes.values()) r.update(dt, t);
     if (inMatch()) {
       for (const [rid, r] of [...ctx.remotes]) {
@@ -544,7 +545,8 @@ export function createFFA(app: App): FfaApi {
         if (net.isHost) { net.close(rid); net.send('leave', { id: rid }); broadcastLobby(); sendScores(); }
       }
     }
-    if (tick % 3 === 0 && inMatch()) sendPlayerState();
+    psT += dt;
+    if (psT >= PS_INTERVAL && inMatch()) { psT = 0; sendPlayerState(); }
     if (shotQueue.length) {
       const player = ctx.player;
       if (player !== null) { net.broadcast('shots', { k: player.weapon.kind, e: shotQueue }); shotQueue = []; }

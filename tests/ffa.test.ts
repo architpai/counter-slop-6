@@ -500,3 +500,19 @@ test('a repeated death report only counts once per respawn', () => {
       'a second death 0.1s later scores neither the death nor the kill again');
   } finally { clock.mockRestore(); t.ffa.leave(); }
 });
+
+test('player-state packets are paced by a time accumulator, not frame rate', () => {
+  const t = setup();
+  setState(t.gs, 'play');
+  try {
+    for (let i = 0; i < 60; i++) t.ffa.update(1 / 144);
+    const hz144 = t.sent.filter(m => m.type === 'ps').length;
+    // ~0.417s at a 20Hz reset-to-zero accumulator (no carry) lands at 7; old code gave 20.
+    assert(hz144 >= 6 && hz144 <= 8, `144fps for ~0.417s sends ~7 ps packets at 20Hz, got ${hz144}`);
+    t.sent.length = 0;
+    for (let i = 0; i < 12; i++) t.ffa.update(1 / 30);
+    const hz30 = t.sent.filter(m => m.type === 'ps').length;
+    // 0.4s at 20Hz lands at 6 (1/30s dt does not divide 0.05s evenly); old code gave 4.
+    assert(hz30 >= 5 && hz30 <= 7, `30fps for 0.4s sends ~6 ps packets at 20Hz, got ${hz30}`);
+  } finally { t.ffa.leave(); }
+});
