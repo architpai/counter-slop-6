@@ -2,9 +2,9 @@ import { Mesh, Vector3 } from 'three';
 import { Body, seeThrough } from '../physics';
 import { alignSegment, clamp, damp, rand, TAU } from '../util';
 import { boxGeo, unlitMat, TONE, TONE_HEX } from '../render/index';
-import { stop } from './ai';
+import { see, stop } from './ai';
 import { spawnProjectile } from './projectiles';
-import { TYPES } from './types';
+import { ENEMY_GRAVITY, TYPES } from './types';
 import type { EnemyManager, EnemyRecord } from './index';
 
 const origin = new Vector3(), direction = new Vector3(), goal = new Vector3(), end = new Vector3();
@@ -53,8 +53,7 @@ function aimbot(m: EnemyManager, e: EnemyRecord, dt: number): void {
   if (e.specialCd <= 0) carrier(m, e);
   const target = e.target;
   origin.copy(m.eye(e));
-  e.hasLOS = !!target?.alive && m.ctx.world.lineOfSight(origin, target.center, seeThrough)
-    && !m.hazards.obscures(origin, target.center);
+  e.hasLOS = !!target?.alive && see(m, e, origin, target, dt);
   e.aimAmt = damp(e.aimAmt, e.hasLOS && e.attackCd <= 0 ? 1 : 0, 8, dt);
   if (!target?.alive || e.attackCd > 0) { cancelAttack(e); return; }
   if (!e.aimPoint) {
@@ -101,7 +100,7 @@ function ragequit(m: EnemyManager, e: EnemyRecord, dt: number): void {
   if (!target?.alive) { cancelAttack(e); stop(e, 8, dt); return; }
   const dx = target.body.pos.x - e.body.pos.x, dz = target.body.pos.z - e.body.pos.z;
   const dist = Math.hypot(dx, dz), dy = target.body.pos.y - e.body.pos.y;
-  e.hasLOS = m.ctx.world.lineOfSight(e.center, target.center, seeThrough);
+  see(m, e, e.center, target, dt);
   if (!e.actionPoint) {
     if (e.attackCd <= 0 && dist < 18 && Math.abs(dy) < 2 && e.hasLOS) {
       e.actionPoint = new Vector3(dx, 0, dz).normalize();
@@ -189,14 +188,14 @@ export function expansionBossThink(m: EnemyManager, e: EnemyRecord, dt: number):
   if (e.type !== 'aimbot' && e.type !== 'ragequit' && e.type !== 'moderator') return false;
   e.attackCd -= dt; e.specialCd -= dt;
   if (e.type === 'aimbot') e.body.vel.x = e.body.vel.z = 0;
-  if (!e.stats.flying) e.body.vel.y -= 24 * dt;
+  if (!e.stats.flying) e.body.vel.y -= ENEMY_GRAVITY * dt;
   if (e.state === 'stunned') {
     if (e.type === 'moderator' && !e.body.onGround) e.age = 0;
     cancelAttack(e); e.aimAmt = 0;
     if (e.age < e.stunDuration) {
       stop(e, 5, dt);
       if (e.stats.flying) {
-        e.flightPhase = 'stunned'; e.body.vel.y -= 24 * dt;
+        e.flightPhase = 'stunned'; e.body.vel.y -= ENEMY_GRAVITY * dt;
         e.weakT = Math.max(e.weakT, e.stunDuration - e.age);
       }
       return true; // Landing never ends a moderator's 1.3-second yank stun early.

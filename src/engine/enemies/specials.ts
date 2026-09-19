@@ -4,6 +4,7 @@ import { seeThrough } from '../physics';
 import { findCover, follow, steer, stop, takePath } from './ai';
 import { flyerThink } from './flyer';
 import { spawnProjectile } from './projectiles';
+import { ENEMY_GRAVITY } from './types';
 import type { EnemyManager, EnemyRecord } from './index';
 
 const goal = new Vector3(), direction = new Vector3();
@@ -15,11 +16,18 @@ function medic(m: EnemyManager, e: EnemyRecord, dt: number): void {
   if (e.cover && e.coverT > 0) { e.coverT -= dt; follow(m, e, e.cover, e.stats.speed, dt, true); return; }
   e.cover = null;
   const allies = m.list.filter(o => o !== e && o.alive && o.type !== 'medic' && !o.stats.flying);
-  let patient: EnemyRecord | undefined, distance = Infinity;
-  for (const ally of allies) {
-    const d = ally.center.distanceTo(e.center);
-    if (ally.hp < ally.maxHp && d < distance && visible(m, e.center, ally.center)) { patient = ally; distance = d; }
+  // Searching costs one ray per wounded ally, so do it five times a second; holding one costs a single ray.
+  e.losT -= dt;
+  if (e.losT <= 0 || !e.patient?.alive || e.patient.hp >= e.patient.maxHp) {
+    e.losT = 0.2; e.patient = null;
+    let best = Infinity;
+    for (const ally of allies) {
+      const d = ally.center.distanceTo(e.center);
+      if (ally.hp < ally.maxHp && d < best && visible(m, e.center, ally.center)) { e.patient = ally; best = d; }
+    }
   }
+  const patient = e.patient?.alive && visible(m, e.center, e.patient.center) ? e.patient : undefined;
+  const distance = patient ? patient.center.distanceTo(e.center) : Infinity;
   const anchor = patient ?? allies.reduce<EnemyRecord | undefined>((best, o) => !best || o.center.distanceTo(e.center) < best.center.distanceTo(e.center) ? o : best, undefined);
   if (!anchor) { stop(e, 8, dt); return; }
   direction.subVectors(anchor.body.pos, target.body.pos).setY(0).normalize();
@@ -81,7 +89,7 @@ function breacher(m: EnemyManager, e: EnemyRecord, dt: number): void {
 function carrier(m: EnemyManager, e: EnemyRecord, dt: number): void {
   if (!e.payload) { flyerThink(m, e, dt); return; }
   if (e.state === 'stunned') {
-    e.body.vel.y -= 20 * dt;
+    e.body.vel.y -= ENEMY_GRAVITY * dt;
     if (e.age > e.stunDuration) { e.state = 'hunt'; e.flightPhase = 'orbit'; }
     return;
   }

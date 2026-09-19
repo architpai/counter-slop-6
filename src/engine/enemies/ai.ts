@@ -28,6 +28,19 @@ export function stop(e: EnemyRecord, rate: number, dt: number): void {
   e.body.vel.z = damp(e.body.vel.z, 0, rate, dt);
 }
 
+/**
+ * Throttled line of sight from `from` to the target, cached on `e.hasLOS` and
+ * refreshed every 0.12-0.22 s. Smoke blocks sight like a wall.
+ */
+export function see(m: EnemyManager, e: EnemyRecord, from: Vector3, target: Target, dt: number): boolean {
+  e.losT -= dt;
+  if (e.losT <= 0) {
+    e.losT = 0.12 + rand(0, 0.1);
+    e.hasLOS = m.ctx.world.lineOfSight(from, target.center, seeThrough) && !m.hazards.obscures(from, target.center);
+  }
+  return e.hasLOS;
+}
+
 export function steer(m: EnemyManager, e: EnemyRecord, goal: Vector3, speed: number, accel: number, dt: number): void {
   const dx = goal.x - e.body.pos.x, dz = goal.z - e.body.pos.z;
   const dist = Math.hypot(dx, dz);
@@ -309,13 +322,9 @@ export function groundThink(m: EnemyManager, e: EnemyRecord, dt: number): void {
   if (!target) return;
   const dx = target.body.pos.x - pos.x, dz = target.body.pos.z - pos.z, dy = target.body.pos.y - pos.y;
   const dist = Math.hypot(dx, dz), yaw = Math.atan2(dx, dz);
-  e.losT -= dt;
-  if (e.losT <= 0) {
-    e.losT = 0.12 + rand(0, 0.1);
-    const anchors = e.figure.anchors as EyeAnchors;
-    (anchors.head || anchors.torso).getWorldPosition(eye);
-    e.hasLOS = m.ctx.world.lineOfSight(eye, target.center, seeThrough) && !m.hazards.obscures(eye, target.center);
-  }
+  const anchors = e.figure.anchors as EyeAnchors;
+  (anchors.head || anchors.torso).getWorldPosition(eye);
+  see(m, e, eye, target, dt);
   e.attackCd -= dt;
   if (s.weapon === 'bomb') {
     if (e.fuseT >= 0) {

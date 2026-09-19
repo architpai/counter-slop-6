@@ -1,5 +1,6 @@
 import { Vector3 } from 'three';
 import { damp, rand, TAU } from '../util';
+import { stop } from './ai';
 import { spawnProjectile } from './projectiles';
 import { rollCooldown } from './types';
 import type { EyeAnchors } from './model';
@@ -19,11 +20,6 @@ export type LagSpikeAttack = Telegraph<'summon'> | { kind: 'spray'; t: number; s
 export type BossAttack = AdminAttack | HitboxAttack | LagSpikeAttack;
 
 const origin = new Vector3(), direction = new Vector3(), particlePos = new Vector3(), particleVel = new Vector3();
-
-function stop(e: EnemyRecord, rate: number, dt: number): void {
-  e.body.vel.x = damp(e.body.vel.x, 0, rate, dt);
-  e.body.vel.z = damp(e.body.vel.z, 0, rate, dt);
-}
 
 function hitRing(m: EnemyManager, e: EnemyRecord, radius: number, height: number, damage: number, force: number,
   absoluteHeight = false): void {
