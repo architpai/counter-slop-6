@@ -246,6 +246,23 @@ test('ring placement rejects an enclosed safe pocket instead of counting standin
   expect(hasRingEscape(ctx.nav, player as unknown as Target, [new Vector3(0, 0, -7), new Vector3(0, 0, 7)], ctx.world)).toBe(false);
 });
 
+test('lagspike probes the landing before hopping and skips a hop that would run off a ledge', () => {
+  const { ctx, m, player, spawn } = setup();
+  player.body.pos.set(0, 0, 20);
+  const e = spawn('lagspike', new Vector3(0, 0, 0));
+  ctx.world.clear();
+  ctx.world.addBox(new Vector3(-40, -1, -40), new Vector3(40, 0, 3)); ctx.world.finalize();
+  e.hopT = 0; e.body.onGround = true;
+  groundThink(m, e, 1 / 60);
+  expect(e.hopping).toBe(false); expect(e.body.vel.y).toBeLessThan(5);
+
+  ctx.world.clear();
+  ctx.world.addBox(new Vector3(-40, -1, -40), new Vector3(40, 0, 40)); ctx.world.finalize();
+  e.hopT = 0; e.body.onGround = true;
+  groundThink(m, e, 1 / 60);
+  expect(e.hopping).toBe(true); expect(e.body.vel.y).toBeCloseTo(13);
+});
+
 test('past wave 30 the plain mod ramps enemy speed and damage, capped at +60%', () => {
   const { m, solo } = setup();
   const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
