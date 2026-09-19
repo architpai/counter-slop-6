@@ -137,6 +137,8 @@ export interface EnemyArcHit {
 }
 
 const GOLDEN = 2.39996;
+/** A* searches allowed across all enemies in one frame; the rest retry next frame. */
+export const PATH_BUDGET = 6;
 const STATE_CODE: Record<EnemyState, number> = { spawn: 0, hunt: 1, stunned: 2, dead: 3 };
 const STATE_NAME: readonly EnemyState[] = ['spawn', 'hunt', 'stunned', 'dead'];
 const up = new Vector3(0, 1, 0);
@@ -162,6 +164,8 @@ export class EnemyManager {
   ids: number;
   slots: number;
   sepT: number;
+  /** Remaining A* searches this frame. See `takePath`. */
+  pathBudget = PATH_BUDGET;
   alive: number;
   _steer: (e: EnemyRecord, goal: Vector3, speed: number, accel: number, dt: number) => void;
   _follow: (e: EnemyRecord, target: Vector3, speed: number, dt: number) => void;
@@ -260,6 +264,7 @@ export class EnemyManager {
 
   update(dt: number): void {
     const { world } = this.ctx;
+    this.pathBudget = PATH_BUDGET;
     const passive = this.ctx.game.mode === 'training';
     for (const e of this.list) {
       e.age += dt;

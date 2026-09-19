@@ -1,7 +1,7 @@
 import { Vector3 } from 'three';
 import { rand } from '../util';
 import { seeThrough } from '../physics';
-import { findCover, follow, steer, stop } from './ai';
+import { findCover, follow, steer, stop, takePath } from './ai';
 import { flyerThink } from './flyer';
 import { spawnProjectile } from './projectiles';
 import type { EnemyManager, EnemyRecord } from './index';
@@ -86,12 +86,17 @@ function carrier(m: EnemyManager, e: EnemyRecord, dt: number): void {
     return;
   }
   if (!e.actionPoint) {
-    const candidates = m.ctx.level.snipers.filter(p => {
-      if (p.distanceTo(e.target!.body.pos) < 10) return false;
-      if (m.ctx.world.overlapsAABB(p.clone().add(new Vector3(-0.35, 0.05, -0.35)), p.clone().add(new Vector3(0.35, 1.8, 0.35)))) return false;
+    const candidates = [];
+    let scanned = true;
+    for (const p of m.ctx.level.snipers) {
+      if (p.distanceTo(e.target!.body.pos) < 10) continue;
+      if (m.ctx.world.overlapsAABB(p.clone().add(new Vector3(-0.35, 0.05, -0.35)), p.clone().add(new Vector3(0.35, 1.8, 0.35)))) continue;
+      if (!takePath(m)) { scanned = false; break; }
       const path = m.ctx.nav.findPath(e.target!.body.pos, p), end = path?.at(-1);
-      return !!path?.complete && !!end && end.distanceTo(p) < 1.5 && Math.abs(end.y - p.y) < 0.6;
-    });
+      if (path?.complete && end && end.distanceTo(p) < 1.5 && Math.abs(end.y - p.y) < 0.6) candidates.push(p);
+    }
+    // Budget ran out with nothing found yet: hold the payload and finish the scan next frame.
+    if (!candidates.length && !scanned) return;
     candidates.sort((a, b) => a.distanceToSquared(e.body.pos) - b.distanceToSquared(e.body.pos));
     e.actionPoint = candidates[0]?.clone() ?? null;
     if (!e.actionPoint) { e.payload = false; return; }

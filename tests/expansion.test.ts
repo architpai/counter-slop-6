@@ -2,7 +2,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { Group, Scene, Vector3 } from 'three';
 import { Body, World } from '@/engine/physics';
 import { NavGrid } from '@/engine/nav';
-import { EnemyManager, TYPES, BOSS_ORDER } from '@/engine/enemies';
+import { EnemyManager, PATH_BUDGET, TYPES, BOSS_ORDER } from '@/engine/enemies';
 import { syncModel } from '@/engine/enemies/model';
 import { specialThink } from '@/engine/enemies/specials';
 import { groundThink } from '@/engine/enemies/ai';
@@ -225,6 +225,17 @@ test('all new brains run with real physics without non-finite state and training
   for (const [i, kind] of kinds.entries()) spawn(kind, new Vector3(-18 + i * 3, 0, 0));
   for (let i = 0; i < 180; i++) m.update(1 / 60);
   expect(player.takeDamage).not.toHaveBeenCalled(); expect(m.projectiles).toHaveLength(0); expect(m.hazards.rings).toHaveLength(0);
+});
+
+test('a pack re-pathing on one frame spends at most the frame budget and drains over later frames', () => {
+  const { ctx, m, spawn } = setup();
+  const findPath = vi.spyOn(ctx.nav, 'findPath');
+  const pack = Array.from({ length: 12 }, (_, i) => spawn('grunt', new Vector3(-11 + i * 2, 0, -15)));
+  m.update(1 / 60);
+  expect(findPath.mock.calls.length).toBeGreaterThan(0);
+  expect(findPath.mock.calls.length).toBeLessThanOrEqual(PATH_BUDGET);
+  for (let i = 0; i < 10; i++) m.update(1 / 60);
+  expect(pack.every(e => !!e.path)).toBe(true);
 });
 
 test('ring placement rejects an enclosed safe pocket instead of counting standing still as escape', () => {

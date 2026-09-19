@@ -14,6 +14,12 @@ const down = new Vector3(0, -1, 0);
 const eye = new Vector3(), probe = new Vector3(), muzzle = new Vector3(), shot = new Vector3();
 const arcA = new Vector3(), arcB = new Vector3(), lead = new Vector3(), side = new Vector3();
 
+/** Claim one of the frame's A* searches. False means the caller steers on stale data and retries next frame. */
+export function takePath(m: EnemyManager): boolean {
+  if (m.pathBudget <= 0) return false;
+  m.pathBudget--; return true;
+}
+
 /** Rifle carriers duck behind cover between bursts and when shot at. */
 const usesCover = (e: EnemyRecord) => e.stats.weapon === 'rifle';
 
@@ -70,16 +76,19 @@ export function follow(m: EnemyManager, e: EnemyRecord, target: Vector3, speed: 
   const approach = exact ? target : approachPoint(m, e, target, dt);
   const stale = !e.path || e.pathIndex >= e.path.length || (e.pathT <= 0 && (!e.pathGoal || e.pathGoal.distanceTo(approach) > 3.5 || !e.path.complete));
   if (stale && (e.pathT <= 0 || !e.path)) {
-    e.pathT = 0.8 + rand(0, 0.6);
-    const path = (e.stats.boss ? m.ctx.bossNav : m.ctx.nav).findPath(e.body.pos, approach);
-    if (path?.length) {
-      e.path = path; e.pathIndex = 0;
-      if (!e.pathGoal) e.pathGoal = new Vector3();
-      e.pathGoal.copy(approach);
-      while (e.pathIndex < path.length - 1) {
-        const node = path[e.pathIndex];
-        if (!node || Math.hypot(node.x - e.body.pos.x, node.z - e.body.pos.z) >= 0.7 || Math.abs(node.y - e.body.pos.y) >= 1) break;
-        e.pathIndex++;
+    if (!takePath(m)) e.pathT = 0; // out of budget: steer on the stale path or the approach point, retry next frame
+    else {
+      e.pathT = 0.8 + rand(0, 0.6);
+      const path = (e.stats.boss ? m.ctx.bossNav : m.ctx.nav).findPath(e.body.pos, approach);
+      if (path?.length) {
+        e.path = path; e.pathIndex = 0;
+        if (!e.pathGoal) e.pathGoal = new Vector3();
+        e.pathGoal.copy(approach);
+        while (e.pathIndex < path.length - 1) {
+          const node = path[e.pathIndex];
+          if (!node || Math.hypot(node.x - e.body.pos.x, node.z - e.body.pos.z) >= 0.7 || Math.abs(node.y - e.body.pos.y) >= 1) break;
+          e.pathIndex++;
+        }
       }
     }
   }
@@ -94,9 +103,10 @@ export function follow(m: EnemyManager, e: EnemyRecord, target: Vector3, speed: 
   } else if (e.body.hitWall) {
     const prev = e.stuckT;
     e.stuckT += dt;
-    if (prev <= 0.35 && e.stuckT > 0.35) e.pathT = 0;
+    // Jitter the re-path so a pack that hits one wall does not all search on the same frame.
+    if (prev <= 0.35 && e.stuckT > 0.35) e.pathT = rand(0, 0.25);
     if (e.stuckT > 0.9) {
-      e.body.vel.y = 9; e.body.onGround = false; e.stuckT = 0; e.pathT = 0;
+      e.body.vel.y = 9; e.body.onGround = false; e.stuckT = 0; e.pathT = rand(0, 0.25);
       // A boss that hopped and is still blocked wants a different approach bearing, not the same wall again.
       if (e.stats.boss) e.slotT = 0;
     }
@@ -238,7 +248,7 @@ export function findCover(m: EnemyManager, e: EnemyRecord, target: Target): Vect
     near.push(n);
   }
   let best: Vector3 | null = null, bestD = Infinity;
-  for (let k = 0; k < 12 && near.length; k++) {
+  for (let k = 0; k < 3 && near.length; k++) {
     const i = Math.floor(rand(0, near.length)), n = near[i];
     near[i] = near[near.length - 1]; near.pop();
     if (!n) break;
@@ -246,6 +256,7 @@ export function findCover(m: EnemyManager, e: EnemyRecord, target: Target): Vect
     if (d >= bestD) continue;
     eye.set(n.x, n.y + 1.5, n.z);
     if (m.ctx.world.lineOfSight(eye, tc, seeThrough)) continue;
+    if (!takePath(m)) break; // budget spent: take the best candidate found so far
     const path = m.ctx.nav.findPath(pos, probe.set(n.x, n.y, n.z), 4000);
     if (!path?.complete) continue;
     best = new Vector3(n.x, n.y, n.z); bestD = d;
