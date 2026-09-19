@@ -4,6 +4,8 @@ import { Player } from '@/engine/player/index';
 import { RemotePlayer } from '@/engine/players';
 import { updateCamera } from '@/engine/player/camera';
 import { updateGrapple } from '@/engine/player/grapple';
+import { updateGrenades } from '@/engine/player/grenades';
+import { integrateMovement } from '@/engine/player/movement';
 import { EnemyManager } from '@/engine/enemies/index';
 import { syncModel } from '@/engine/enemies/model';
 import { Input } from '@/engine/input';
@@ -42,6 +44,35 @@ function setup() {
   });
   return { p, ctx, hud, enemies, frame, key };
 }
+
+test('replicated grenades are visual only; own grenades still hurt the thrower', () => {
+  const { p, ctx } = setup();
+  ctx.effects.boom = vi.fn(); ctx.game.blastBreakables = vi.fn(); ctx.remotes = new Map();
+  p.throwGrenade({ pos: [0, 0, 0], vel: [0, 0, 0] });
+  const remote = p.nades[0]!;
+  remote.pos.copy(p.center); remote.rest = true; remote.fuse = 0;
+  updateGrenades(p, 0, false);
+  expect(p.hp).toBe(120);
+  expect(p.body.vel.length()).toBe(0);
+  p.throwGrenade();
+  const own = p.nades[0]!;
+  own.pos.copy(p.center); own.rest = true; own.fuse = 0;
+  updateGrenades(p, 0, false);
+  expect(p.hp).toBeLessThan(120);
+  expect(p.body.vel.length()).toBeGreaterThan(0);
+});
+
+test('team out-of-bounds death uses the wave instead of teleporting a flag carrier', () => {
+  const { p, ctx } = setup();
+  ctx.game.isOnline = () => true;
+  ctx.game.onPlayerDeath = vi.fn();
+  p.team = 1; p.body.pos.y = -20; p.lastHitBy = 'old attacker';
+  integrateMovement(p, 0.01);
+  expect(p.alive).toBe(false);
+  expect(p.lastHitBy).toBeNull();
+  expect(ctx.game.onPlayerDeath).toHaveBeenCalledOnce();
+  expect(p.body.pos.y).toBeLessThan(-12);
+});
 
 test('the grapple awards a yank only when the moderator cast window accepts it', () => {
   const { p, ctx, enemies } = setup(), score = vi.fn(); ctx.game.addScore = score;

@@ -3,9 +3,11 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { KEYBOARD_ROWS, PAD_ROWS } from '@/engine/hud/labels';
+import { ONLINE_MODES, TEAM_NAMES, isTeam } from '@/engine/game/team-rules';
+import type { OnlineMode } from '@/engine/game/team-rules';
 import type {
-  BoardModel, BoardRow, DeadModel, LobbyModel, MainModel, MatchOnModel, MenuModel,
-  OnlineModel, OverModel, PauseModel, PvpModel, ScreenView, UiAction, LookModel, WeaponSettingsModel,
+  BoardModel, BoardRow, DeadModel, LobbyModel, LobbyPlayer, MainModel, MatchOnModel, MenuModel,
+  OnlineInfo, OnlineModel, OverModel, PauseModel, PvpModel, ScreenView, UiAction, LookModel, WeaponSettingsModel,
 } from '@/engine/hud/screens';
 
 /**
@@ -23,6 +25,8 @@ export const SCREEN_TITLE_ID = 'hud-screen-title';
 const count = (value: number): number => Number.isFinite(value) ? Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, Math.floor(value))) : 0;
 const list = <T,>(value: T[] | undefined): T[] => Array.isArray(value) ? value.filter(item => item && typeof item === 'object') : [];
 const sorted = (rows: BoardRow[]): BoardRow[] => list(rows).slice().sort((a, b) => count(b.kills) - count(a.kills) || count(a.deaths) - count(b.deaths));
+const modeChoice = (mode?: OnlineMode) => ONLINE_MODES.find(choice => choice.key === mode) ?? ONLINE_MODES[0];
+const TEAMS = [0, 1] as const;
 
 /** The subset of any model that `Settings` renders. */
 type SettingsModel = LookModel;
@@ -185,7 +189,48 @@ function Maps({ model, onAction, disabled = false, previews = false }: { model: 
   );
 }
 
-function ScoreRows({ rows, full = false }: { rows: BoardRow[]; full?: boolean }) {
+function Modes({ mode, disabled, onAction }: { mode?: OnlineMode; disabled: boolean; onAction: Act }) {
+  const selected = modeChoice(mode);
+  return <>
+    <div className="mode-picker" role="group" aria-label="Online mode" data-ui-block="">
+      {ONLINE_MODES.map(choice => <button type="button" className="screen-button" key={choice.key}
+        data-act="onlineMode" data-value={choice.key} aria-pressed={selected.key === choice.key} disabled={disabled}
+        onClick={event => onAction('onlineMode', choice.key, event.nativeEvent)}>{choice.name}</button>)}
+    </div>
+    <p className="screen-footer mode-rules">{selected.blurb}{selected.key === 'flag' ? ' · up to 4v4' : ''}</p>
+  </>;
+}
+
+function TeamSummary({ model }: { model: OnlineInfo }) {
+  if (modeChoice(model.mode).key === 'ffa') return null;
+  return <div className="team-summary">
+    <div className="team-scores" aria-label="Team scores">
+      <span data-team="0">RED <b>{count(model.teamScores?.[0] ?? 0)}</b></span>
+      <span className="dim">vs</span>
+      <span data-team="1">BLUE <b>{count(model.teamScores?.[1] ?? 0)}</b></span>
+    </div>
+    {isTeam(model.selfTeam) ? <p className="your-team" data-team={model.selfTeam}>YOUR TEAM · {TEAM_NAMES[model.selfTeam]}</p> : null}
+    {model.status ? <p className="match-status">{model.status}</p> : null}
+  </div>;
+}
+
+function LobbyRoster({ players }: { players: LobbyPlayer[] }) {
+  return <div className="lobby-players">
+    {players.map(player => <div className={player.self ? 'self' : undefined} key={player.id}>
+      <span>{player.name}{player.host ? <span className="dim"> · host</span> : null}</span>
+      <span>{player.self ? 'you' : ''}</span>
+    </div>)}
+    {players.length === 0 ? <p className="screen-footer">Waiting for players</p> : null}
+  </div>;
+}
+
+function ScoreRows({ rows, full = false, mode }: { rows: BoardRow[]; full?: boolean; mode?: OnlineMode }) {
+  if (modeChoice(mode).key !== 'ffa') return <div className="team-rosters">
+    {TEAMS.map(team => <section className="team-roster" data-team={team} key={team} aria-label={`${TEAM_NAMES[team]} team scores`}>
+      <h3>{TEAM_NAMES[team]} TEAM</h3>
+      <ScoreRows rows={list(rows).filter(row => row.team === team)} full={full} />
+    </section>)}
+  </div>;
   return (
     <div className="score-rows">
       {sorted(rows).map(row => (
@@ -219,7 +264,7 @@ function MainScreen({ model, pad, onAction }: { model: MainModel; pad: boolean; 
           <Maps model={model} onAction={onAction} previews />
           <div className="screen-actions launch-actions" data-ui-block="">
             <Button act="start" text="START SOLO" primary sub="survive the waves" onAction={onAction} />
-            <Button act="online" text="PLAY ONLINE" sub="free for all · up to 8 players" onAction={onAction} />
+            <Button act="online" text="PLAY ONLINE" sub="solo deathmatch · team modes · up to 8" onAction={onAction} />
             <Button act="training" text="TRAINING GROUND" sub="inspect models · passive targets" onAction={onAction} />
           </div>
           <p className="screen-footer">{count(model.best) > 0 ? `Personal best · ${count(model.best)}` : 'One more wave. One more try.'}</p>
@@ -248,11 +293,12 @@ function OnlineScreen({ model, onAction }: { model: OnlineModel; onAction: Act }
   const isPublic = model.isPublic !== false;
   return (
     <>
-      <Title text="PLAY ONLINE" sub="free for all · first to 20 · up to 8 players" />
+      <Title text="PLAY ONLINE" sub="up to 8 players · public or private lobbies" />
       <div className="online-box" data-ui-block="" data-ui-input-block="">
+        <Modes mode={model.mode} disabled={model.busy} onAction={onAction} />
         <label className="settings-row">your name <input type="text" data-act="name" maxLength={14} defaultValue={String(model.name ?? '').slice(0, 14)} autoComplete="nickname" spellCheck={false} onChange={event => onAction('name', event.target.value, event.nativeEvent)} /></label>
         <div className="screen-actions"><Button act="quickPlay" text="QUICK PLAY" primary disabled={model.busy} onAction={onAction} /></div>
-        <p className="screen-footer">jumps into an open public lobby, or opens one for you</p>
+        <p className="screen-footer">Finds a public {modeChoice(model.mode).name} lobby, or creates one.</p>
         <p className="online-or">or</p>
         <div className="screen-actions"><Button act="create" text="CREATE LOBBY" disabled={model.busy} onAction={onAction} /></div>
         <div className="visibility-options" role="group" aria-label="Lobby visibility">
@@ -260,6 +306,7 @@ function OnlineScreen({ model, onAction }: { model: OnlineModel; onAction: Act }
           <label><input type="radio" name="lobby-visibility" data-act="visibility" value="private" defaultChecked={!isPublic} onChange={event => onAction('visibility', 'private', event.nativeEvent)} /> private · friends only</label>
         </div>
         <div className="settings-row"><label>have a code? <CodeInput code={model.code} onAction={onAction} /></label><Button act="join" text="JOIN" disabled={model.busy} onAction={onAction} /></div>
+        <p className="screen-footer">Joining by code uses the host’s mode.</p>
         <Status text={model.status} />
         <div className="screen-actions"><Button act="back" text="BACK" onAction={onAction} /></div>
       </div>
@@ -269,29 +316,37 @@ function OnlineScreen({ model, onAction }: { model: OnlineModel; onAction: Act }
 
 function LobbyScreen({ model, onAction }: { model: LobbyModel; onAction: Act }) {
   const players = list(model.players);
+  const teamMode = modeChoice(model.mode).key !== 'ffa';
+  const ready = !teamMode || TEAMS.every(team => players.some(player => player.team === team));
   return (
     <>
-      <Title text="LOBBY" sub={`free for all · first to 20 · ${players.length}/8 players`} />
+      <Title text="LOBBY" sub={`${modeChoice(model.mode).name} · ${players.length}/8 players`} />
       <p>code <strong className="lobby-code">{model.code}</strong></p>
+      <Modes mode={model.mode} disabled={!model.isHost || model.isPublic} onAction={onAction} />
+      {model.isPublic ? <p className="screen-footer">Public lobby mode is fixed. Create another lobby to change it.</p> : null}
+      {!model.isHost ? <p className="screen-footer">The host chooses the mode and map.</p> : null}
       <Maps model={model} onAction={onAction} disabled={!model.isHost} />
       <Weapons model={model} onAction={onAction} collapsible />
       <p className="screen-footer">{model.isPublic
         ? 'this lobby is public: anyone can quick play in, or type the code'
         : 'private lobby: friends type this code under PLAY ONLINE → JOIN'}</p>
-      <div className="lobby-players">
-        {players.map(player => (
-          <div className={player.self ? 'self' : undefined} key={player.id}>
-            <span>{player.name}{player.host ? <span className="dim"> · host</span> : null}</span>
-            <span>{player.self ? 'you' : ''}</span>
-          </div>
-        ))}
-      </div>
+      {teamMode ? <div className="team-rosters">
+        {TEAMS.map(team => {
+          const members = players.filter(player => player.team === team);
+          return <section className="team-roster" data-team={team} key={team} aria-label={`${TEAM_NAMES[team]} team roster`}>
+            <h3>{TEAM_NAMES[team]} TEAM <span>{members.length}/4</span></h3>
+            <LobbyRoster players={members} />
+          </section>;
+        })}
+      </div> : <LobbyRoster players={players} />}
       <div className="screen-actions" data-ui-block="">
-        <Button act="startMatch" text="START MATCH" primary onAction={onAction} />
+        <Button act="startMatch" text="START MATCH" primary disabled={!ready} onAction={onAction} />
         <Button act="leave" text="LEAVE" onAction={onAction} />
       </div>
       <Status text={model.status} />
-      <p className="screen-footer">anyone can start · {players.length < 2 ? 'people can still join once it is running' : `${players.length} players in`}</p>
+      <p className="screen-footer">{teamMode
+        ? ready ? 'Anyone can start · teams assigned by the host · up to 4v4' : 'Need at least 2 players, with one on each team.'
+        : `anyone can start · ${players.length < 2 ? 'people can still join once it is running' : `${players.length} players in`}`}</p>
     </>
   );
 }
@@ -325,8 +380,9 @@ function PauseScreen({ model, pad, onAction }: { model: PauseModel; pad: boolean
 function MenuScreen({ model, pad, onAction }: { model: MenuModel; pad: boolean; onAction: Act }) {
   return (
     <>
-      <Title text="MENU" sub={`free for all · lobby ${model.code ?? ''}`} />
-      <ScoreRows rows={model.rows} />
+      <Title text="MENU" sub={`${modeChoice(model.mode).name} · lobby ${model.code ?? ''}`} />
+      <TeamSummary model={model} />
+      <ScoreRows rows={model.rows} mode={model.mode} />
       <PauseOptions model={model} pad={pad} onAction={onAction} />
       <div className="screen-actions" data-ui-block=""><Button act="leaveMatch" text="LEAVE MATCH" onAction={onAction} /></div>
       <Prompt confirmKey={model.confirmKey} end="TO KEEP PLAYING" />
@@ -335,7 +391,8 @@ function MenuScreen({ model, pad, onAction }: { model: MenuModel; pad: boolean; 
 }
 
 function MatchOnScreen({ model }: { model: MatchOnModel }) {
-  return <><Title text="MATCH ON" sub="free for all · first to 20" /><Prompt confirmKey={model.confirmKey} end="TO PLAY" /></>;
+  const mode = modeChoice(model.mode);
+  return <><Title text="MATCH ON" sub={`${mode.name} · ${mode.blurb}`} /><TeamSummary model={model} /><Prompt confirmKey={model.confirmKey} end="TO PLAY" /></>;
 }
 
 function DeadScreen({ model, onAction }: { model: DeadModel; onAction: Act }) {
@@ -353,8 +410,9 @@ function DeadScreen({ model, onAction }: { model: DeadModel; onAction: Act }) {
 function OverScreen({ model }: { model: OverModel }) {
   return (
     <>
-      <Title text={model.youWin ? 'YOU WIN' : `${model.winnerName || 'someone'} WINS`} />
-      <ScoreRows rows={model.rows} />
+      <Title text={model.youWin ? 'YOU WIN' : `${model.winnerName || 'someone'} WINS`} sub={modeChoice(model.mode).name} />
+      <TeamSummary model={model} />
+      <ScoreRows rows={model.rows} mode={model.mode} />
       <p className="screen-prompt">back to the lobby in a moment…</p>
     </>
   );
@@ -379,14 +437,23 @@ export function Screen({ view, pad, onAction }: { view: ScreenView; pad: boolean
 export function BoardPanel({ model }: { model: BoardModel }) {
   return (
     <>
-      <h2 className="screen-subtitle">FREE FOR ALL</h2>
-      <ScoreRows rows={model.rows} full />
-      <p className="screen-footer">first to 20 · lobby {model.code}</p>
+      <h2 className="screen-subtitle">{modeChoice(model.mode).name.toUpperCase()}</h2>
+      <TeamSummary model={model} />
+      <ScoreRows rows={model.rows} mode={model.mode} full />
+      <p className="screen-footer">{modeChoice(model.mode).blurb} · lobby {model.code}</p>
     </>
   );
 }
 
 export function PvpPanel({ model }: { model: PvpModel }) {
+  if (modeChoice(model.mode).key !== 'ffa') {
+    const self = list(model.rows).find(row => row.id === model.selfId);
+    return <div className="team-hud">
+      <h2>{modeChoice(model.mode).name}</h2>
+      <TeamSummary model={model} />
+      {self ? <p className="screen-footer">YOU · {count(self.kills)} K · {count(self.deaths)} D</p> : null}
+    </div>;
+  }
   return (
     <>
       <div className="score-rows">

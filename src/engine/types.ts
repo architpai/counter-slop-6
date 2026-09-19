@@ -13,6 +13,7 @@
 import type * as THREE from 'three';
 import type { Body, Box, World } from './physics';
 import type { NavGrid } from './nav';
+import type { OnlineMode, Team, TeamMatch } from './game/team-rules';
 
 // Ported subsystems: real types.
 export type { Renderer } from './render/index';
@@ -407,6 +408,8 @@ export interface ScoreRow {
 }
 
 export interface Lobby {
+  mode: OnlineMode;
+  teams: Record<string, Team>;
   /** Peer id -> name, insertion ordered. */
   players: Map<string, string>;
   hostId: string | null;
@@ -478,6 +481,7 @@ export interface GameState {
   boss: Enemy | null;
   respawnT: number;
   matchT: number;
+  teamMatch: TeamMatch | null;
   over: { id: string; name: string } | null;
   overT: number;
 }

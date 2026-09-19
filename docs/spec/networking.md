@@ -1,5 +1,7 @@
 # Networking Subsystem Specification
 
+> Online extension: [Online team modes](online-team-modes.md) defines the v2 namespace, mode-specific discovery, team roster and host-owned objective snapshots.
+
 > Current combat changes: [Combat rehaul](combat-rehaul.md). It replaces slot 3, extends flags to 1023 and adds addressed headshot confirmation.
 
 This document describes the multiplayer networking of the game: peer-to-peer transport, lobby discovery, the message protocol, state replication, hit validation, score authority, and the representation of remote players. It is written so that an implementer can build identical gameplay from it alone.

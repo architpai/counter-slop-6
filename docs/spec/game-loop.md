@@ -1,5 +1,7 @@
 # Game Loop and Orchestration Specification
 
+> Online extension: [Online team modes](online-team-modes.md) adds Team Deathmatch and Flag Hold, shared respawn waves, and team match rules. It supersedes the FFA-only statements below.
+
 This document describes the top-level game orchestration subsystem. It covers boot, the main loop, game modes, match lifecycle, lobbies, waves, scoring, the kill feed, pickups, breakable props, spawn placement, remote-player bookkeeping, menus, and win/lose rules. An implementer must be able to rebuild identical gameplay from this document alone.
 
 Units: distances are in world meters. Times are in seconds unless the text says milliseconds. Angles are in radians. "Real dt" is the wall-clock frame time. "Scaled dt" is the frame time after the time-scale of section 7 is applied.

@@ -1,9 +1,11 @@
 import Peer from 'peerjs';
 import type { DataConnection, PeerError, PeerOptions } from 'peerjs';
 import type { Envelope } from './types';
+import { isOnlineMode, validTeams, validTeamMatch } from './game/team-rules';
+import type { OnlineMode } from './game/team-rules';
 
 export const NET = Object.freeze({
-  PREFIX_LIVE: 'shooter-rebuild-v1-', PREFIX_DEV: 'shooter-rebuild-dev-v1-',
+  PREFIX_LIVE: 'shooter-rebuild-v2-', PREFIX_DEV: 'shooter-rebuild-dev-v2-',
   PUBLIC_SLOTS: 8, CODE_LEN: 5, CODE_ALPHABET: 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789',
   CODE_RETRIES: 3, MAX_PLAYERS: 8, SIGNAL_TIMEOUT: 12000, JOIN_TIMEOUT: 14000,
   QUICK_TIMEOUT: 11000, REFUSE_CLOSE_DELAY: 400, SILENT_TIMEOUT: 9000,
@@ -20,7 +22,7 @@ interface Welcome { hostId: string; code: string; isPublic: boolean }
 /** One lobby a knock is racing. */
 interface Attempt { conn: DataConnection; id: string; code: string; failed: boolean; welcome: Welcome | null }
 
-const HOST = new Set(['lobby', 'leave', 'start', 'end', 'backtolobby', 'score', 'pickup', 'taken', 'refused']);
+const HOST = new Set(['lobby', 'leave', 'start', 'end', 'backtolobby', 'score', 'pickup', 'taken', 'refused', 'teamstate']);
 const REQUEST = new Set(['startreq', 'take']);
 const ADDRESSED = new Set(['pdmg', 'headshot', 'parry', 'cut']);
 const BROADCAST = new Set(['ps', 'shots', 'pdead', 'nade', 'brk']);
@@ -54,36 +56,40 @@ const rows = (arr: unknown, score = false) => array(arr) && arr.length <= NET.MA
 const welcomeOf = (d: unknown): d is Welcome => fields(d, ['hostId', 'code', 'isPublic']) && peerId(d.hostId) &&
   text(d.code, 64, 1) && typeof d.isPublic === 'boolean';
 
-function validPayload(type: string, d: unknown) {
+function validPayload(type: string, d: unknown): boolean {
   switch (type) {
     case 'welcome': return welcomeOf(d);
     case 'refused': return fields(d, [], ['reason']) && optional(d, 'reason', s => text(s, 256));
-    case 'lobby': return fields(d, ['players', 'hostId', 'isPublic'], ['map']) &&
-      rows(d.players) && peerId(d.hostId) && typeof d.isPublic === 'boolean' && optional(d, 'map', s => text(s, 64));
+    case 'lobby': return fields(d, ['players', 'hostId', 'isPublic'], ['map', 'mode', 'teams']) &&
+      rows(d.players) && peerId(d.hostId) && typeof d.isPublic === 'boolean' && optional(d, 'map', s => text(s, 64)) &&
+      optional(d, 'mode', isOnlineMode) && optional(d, 'teams', validTeams);
     case 'leave': return fields(d, ['id']) && peerId(d.id);
-    case 'startreq': case 'backtolobby': case 'cut': return empty(d);
-    case 'start': return fields(d, [], ['spawns', 'spawn', 'map', 'late', 'broken']) &&
+    case 'startreq': case 'backtolobby': return empty(d);
+    case 'cut': return fields(d, [], ['round']) && optional(d, 'round', integer);
+    case 'start': return fields(d, [], ['spawns', 'spawn', 'map', 'late', 'broken', 'mode', 'teams', 'teamState']) &&
+      optional(d, 'mode', isOnlineMode) && optional(d, 'teams', validTeams) && optional(d, 'teamState', validTeamMatch) &&
       optional(d, 'map', s => text(s, 64)) && optional(d, 'late', b => typeof b === 'boolean') &&
       optional(d, 'spawn', integer) && optional(d, 'spawns', s => object(s) &&
         Object.keys(s).length <= NET.MAX_PLAYERS && Object.entries(s).every(([id, index]) => peerId(id) && integer(index))) &&
       optional(d, 'broken', a => array(a) && a.length <= 4096 && a.every(integer));
+    case 'teamstate': return validTeamMatch(d);
     case 'end': return fields(d, ['id', 'name']) && peerId(d.id) && text(d.name, 14);
     case 'score': return rows(d, true);
-    case 'ps': return array(d) && [8, 11, 14].includes(d.length) &&
+    case 'ps': return fields(d, ['round', 'state']) ? integer(d.round) && array(d.state) && validPayload('ps', d.state) : array(d) && [8, 11, 14].includes(d.length) &&
       d.slice(0, 3).every(n => bounded(n)) && finite(d[3]) && bounded(d[4], 1.6) &&
       Number.isSafeInteger(d[5]) && integer(d[6]) && d[6] <= 1023 && integer(d[7]) && d[7] <= 120 &&
       d.slice(8).every(n => bounded(n));
     case 'shots': return fields(d, ['k', 'e']) && text(d.k, 32) && array(d.e) &&
       d.e.length > 0 && d.e.length <= 90 && d.e.length % 3 === 0 && d.e.every(n => bounded(n));
-    case 'headshot': return fields(d, ['hitId']) && integer(d.hitId);
-    case 'pdmg': return fields(d, ['amount', 'from', 'by', 'src'], ['crit', 'hitId']) &&
+    case 'headshot': return fields(d, ['hitId'], ['round']) && integer(d.hitId) && optional(d, 'round', integer);
+    case 'pdmg': return fields(d, ['amount', 'from', 'by', 'src'], ['crit', 'hitId', 'round']) && optional(d, 'round', integer) &&
       finite(d.amount) && d.amount > 0 && d.amount <= 100000 &&
       (d.from === null || vector(d.from)) && peerId(d.by) && text(d.src, 32) &&
       optional(d, 'crit', b => typeof b === 'boolean') && optional(d, 'hitId', integer);
-    case 'pdead': return fields(d, ['killer', 'dir', 'over', 'how', 'crit']) &&
+    case 'pdead': return fields(d, ['killer', 'dir', 'over', 'how', 'crit'], ['round']) && optional(d, 'round', integer) &&
       (d.killer === null || peerId(d.killer)) && (d.dir === null || vector(d.dir, 1)) &&
       typeof d.over === 'boolean' && typeof d.crit === 'boolean' && (d.how === null || text(d.how, 64));
-    case 'parry': return fields(d, ['ret', 'by']) && typeof d.ret === 'boolean' && peerId(d.by);
+    case 'parry': return fields(d, ['ret', 'by'], ['round']) && typeof d.ret === 'boolean' && peerId(d.by) && optional(d, 'round', integer);
     case 'nade': return fields(d, ['pos', 'vel']) && vector(d.pos) && vector(d.vel);
     case 'brk': return idRecord(d);
     case 'pickup': return fields(d, ['id', 'kind', 'pos']) && integer(d.id) && d.id > 0 &&
@@ -93,7 +99,7 @@ function validPayload(type: string, d: unknown) {
   }
 }
 
-function validEnvelope(m: unknown): m is Envelope {
+export function validEnvelope(m: unknown): m is Envelope {
   try {
     return fields(m, ['t', 'd'], ['from', 'to', 'relay']) && text(m.t, 64, 1) && TYPES.has(m.t) &&
       optional(m, 'from', peerId) && optional(m, 'to', peerId) &&
@@ -140,6 +146,8 @@ function randomCode() {
   return Array.from({ length: NET.CODE_LEN }, () => NET.CODE_ALPHABET[Math.floor(Math.random() * NET.CODE_ALPHABET.length)]).join('');
 }
 
+export const publicCode = (mode: OnlineMode, index: number): string => `${mode === 'tdm' ? 'TDM' : mode === 'flag' ? 'FLG' : 'PUB'}${index}`;
+
 export class Net {
   #peer: Peer | null = null;
   #id: string | null = null;
@@ -181,7 +189,7 @@ export class Net {
   get active() { return !!this.#peer && this.#connected; }
   get conns(): Map<string, DataConnection> { return this.#conns; }
 
-  async host(o: { isPublic?: boolean; code?: string } = {}): Promise<void> {
+  async host(o: { isPublic?: boolean; code?: string; mode?: OnlineMode } = {}): Promise<void> {
     this.leave();
     const epoch = this.#epoch;
     this.isHost = true;
@@ -189,7 +197,7 @@ export class Net {
     const explicit = typeof o?.code === 'string' ? o.code.toUpperCase() : null;
     const count = explicit !== null ? 1 : this.isPublic ? NET.PUBLIC_SLOTS : NET.CODE_RETRIES;
     for (let i = 0; i < count; i++) {
-      const code = explicit ?? (this.isPublic ? `PUB${i}` : randomCode());
+      const code = explicit ?? (this.isPublic ? publicCode(o.mode ?? 'ffa', i) : randomCode());
       try {
         if (!text(code, 64, 1)) throw new Error('enter a lobby code');
         await this.#openPeer(prefix() + code, epoch);
@@ -221,14 +229,14 @@ export class Net {
     await this.#knock([code], meta, NET.JOIN_TIMEOUT, epoch, false);
   }
 
-  async quickJoin(meta?: unknown, onStatus?: (s: string) => void): Promise<void> {
+  async quickJoin(meta?: unknown, onStatus?: (s: string) => void, mode: OnlineMode = 'ffa'): Promise<void> {
     this.leave();
     const epoch = this.#epoch;
     onStatus?.('looking for an open lobby…');
     await this.#openPeer(null, epoch);
     if (epoch !== this.#epoch) throw new Error('connection request cancelled');
     try {
-      await this.#knock(Array.from({ length: NET.PUBLIC_SLOTS }, (_, i) => `PUB${i}`), meta,
+      await this.#knock(Array.from({ length: NET.PUBLIC_SLOTS }, (_, i) => publicCode(mode, i)), meta,
         NET.QUICK_TIMEOUT, epoch, true);
     } catch (error) {
       if (epoch === this.#epoch) this.leave();

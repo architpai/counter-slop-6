@@ -193,7 +193,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
   applyLook();
 
   const gs = makeGameState();
-  const lobby: Lobby = { players: new Map(), hostId: null, isPublic: true, status: '', code: null, map: null };
+  const lobby: Lobby = { mode: 'ffa', teams: {}, players: new Map(), hostId: null, isPublic: true, status: '', code: null, map: null };
   const scores = new Map<string, ScoreRow>();
 
   // ---- hooks 9
@@ -240,6 +240,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     const resolved = gs.mode === 'training' ? 'training' : validKey(key ?? (net.active ? lobby.map ?? settings.mapKey : settings.mapKey));
     if (!force && resolved === loadedKey && arena === loadedArena) return;
     loadedKey = resolved; loadedArena = arena;
+    if (handle !== null) app.ffa.dispose();
     disposeLevel(scene, ctx.level); world.clear();
     const rebuilt = makeLevel(arena, resolved);
     ctx.level = rebuilt.level; ctx.nav = rebuilt.nav; ctx.bossNav = rebuilt.bossNav;
@@ -282,10 +283,11 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     const online = gs.mode === 'ffa';
     player.maxHp = online ? 110 : 120; player.regenDelay = online ? 4 : 4.5; player.regenRate = online ? 14 : 11;
     player.reset(ctx.level.playerStart); player.name = settings.name; player.lastHitBy = player.lastHit = null;
+    player.team = 0; player.shieldT = 0;
     enemies.mods.speed = enemies.mods.damage = 1; hud.setModifier(''); hud.setBoss(null); gs.boss = null;
     app.solo.endFocus(); gs.katanaStreak = 0;
     gs.score = gs.kills = gs.combo = gs.comboT = gs.wave = gs.intermission = gs.spawnT = 0; gs.queue.length = 0;
-    gs.time = 0; gs.over = null; gs.matchT = gs.respawnT = gs.deathT = gs.overT = 0;
+    gs.time = 0; gs.over = null; gs.teamMatch = null; gs.matchT = gs.respawnT = gs.deathT = gs.overT = 0;
     hud.setScore(0, 0); hud.setTimer(''); hud.setPvpScore(null); hud.setWave(1, 0); app.ffa.showBoard(false);
   };
   app.beginCommon = () => {
@@ -416,6 +418,10 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
       }
       const b = ctx.level.bounds, pos = player.body.pos;
       if (pos.x < b.minX - 8 || pos.x > b.maxX + 8 || pos.z < b.minZ - 8 || pos.z > b.maxZ + 8 || pos.y > 150) pos.y = -100;
+      if (gs.teamMatch) {
+        player.dashLock = gs.teamMatch.breakLeft > 0;
+        if (input.down('fire') || input.down('melee') || input.down('grenade')) player.shieldT = 0;
+      }
       player.update(sdt);
       enemies.update(sdt);
       effects.update(sdt);
@@ -483,6 +489,9 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     window.clearInterval(keepAlive);
     for (const remove of teardown) remove();
     teardown.length = 0;
+    app.ffa.dispose();
+    for (const remote of ctx.remotes.values()) remote.dispose();
+    ctx.remotes.clear();
     if (net.active) net.leave();
     input.dispose();
     player.melee.dispose();
