@@ -178,7 +178,7 @@ const GFX_OPTIONS = {
     ['msaa2smaa', 'MSAA 2× + SMAA'], ['msaa4smaa', 'MSAA 4× + SMAA']],
   shadows: [['off', 'Off'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['ultra', 'Ultra']],
   ao: [['off', 'Off'], ['half', 'Half resolution'], ['full', 'Full resolution']],
-  textures: [['low', 'Low (512)'], ['medium', 'Medium (1K)'], ['high', 'High (2K)']],
+  textures: [['low', 'Low (512, baked AO)'], ['medium', 'Medium (1K, lightmap)'], ['high', 'High (2K, lightmap)']],
   effects: [['reduced', 'Reduced'], ['full', 'Full']],
   viewDistance: [['normal', 'Normal'], ['long', 'Long']],
 } as const satisfies Partial<Record<keyof GfxValues, readonly (readonly [string, string])[]>>;
@@ -219,7 +219,8 @@ function Graphics({ model, onAction }: { model: GfxModel; onAction: Act }) {
           {(Object.keys(GFX_OPTIONS) as (keyof typeof GFX_OPTIONS)[]).map(key => <label key={key}>{GFX_LABELS[key]}
             {/* The flat look (Low) has no textures to size; the setting waits for a realistic preset. */}
             <select data-act="gfx" value={String(values[key])} disabled={key === 'textures' && values.look !== 'realistic'}
-              title={key === 'textures' && values.look !== 'realistic' ? 'Medium, High and Ultra only' : undefined}
+              title={key !== 'textures' ? undefined : values.look !== 'realistic' ? 'Medium, High and Ultra only'
+                : 'Texture size, and the map\'s baked lighting: an ambient occlusion map on Low, a 1K or 2K lightmap above'}
               onChange={event => set(key, event.target.value, event.nativeEvent)}>
               {GFX_OPTIONS[key].map(([value, text]) => <option value={value} key={value}>{text}</option>)}
             </select>

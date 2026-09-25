@@ -10,3 +10,4 @@ AGENTS.md
 CLAUDE.md
 tools/textures/.build/
 tools/blender/materials/__pycache__/
+tools/lightmaps/.build/

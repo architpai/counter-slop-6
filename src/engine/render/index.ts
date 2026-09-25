@@ -2,18 +2,24 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { GRADE, LIGHT, SURF } from './palette';
 import { Composite, RIG_DEPTH } from './postfx';
-import { casterGroups, hiddenMat, levelDepthMat, realMat, realMaterials, skyMat, standInMaps, surfMat, wearMaps } from './materials';
+import {
+  BAKE_UNIFORMS, GRID_UNIFORMS, casterGroups, hiddenMat, levelDepthMat, realMat, realMaterials, skyMat, standInGrid, standInLightmap,
+  standInMaps, surfMat, wearMaps,
+} from './materials';
+import { BAKE_FILE, LIGHTMAP_SIZE, bakeFor, bakedTriangles, layoutLightmap, lightmapCharts, wearLightmapUVs } from './lightmap';
 import { ANTIALIAS_SPEC, AO_SCALE, PRESET_VALUES, SHADOW_SPEC, VIEW_SCALE } from './quality';
 import { aimShadowBox, cascadeCentre, sizeShadowBox } from './shadows';
 import { disposeSky, loadSky } from './sky';
 import { TEXTURE_SIZE, resolveMaterial, setInfo, setsFor } from './surfaces';
-import { TextureStreamer, ktx2Loader, warmCompressedUploads } from './textures';
+import { BakeStreamer, TextureStreamer, fetchGrid, ktx2Loader, lightmapLoader, warmCompressedUploads } from './textures';
 import type { PostFX } from './postfx';
 import type { SkyUniforms } from './materials';
 import type { GfxValues, ShadowBox } from './quality';
 import type { SkyAssets } from './sky';
 import type { TextureSet } from './surfaces';
-import type { LevelSurface, Mood } from '../types';
+import type { BakedLight, LoadBake } from './textures';
+import type { BakeInfo } from './lightmap';
+import type { Level, LevelSurface, Mood } from '../types';
 
 export { TONE, TONE_HEX, WHITE_HEX, SMOKE_HEX, SURF } from './palette';
 export { surfMat, charMat, toneMat, unlitMat, cloudMat, setFlash } from './materials';
@@ -55,8 +61,10 @@ const HAZE_CHROMA = 1.5;
  * Share of the sky probe's colour kept on realistic tiers. The probe is sky
  * only, and a clear sky is deep blue, so shade came out navy (grey concrete
  * more saturated than the sky above it). In a real street the sunlit walls
- * and ground bounce warm light into that shade; until baked lighting (R3)
- * brings that bounce, the probe keeps its brightness and loses some of its blue.
+ * and ground bounce warm light into that shade. The probe keeps its
+ * brightness and loses some of its blue. Where a map is baked (R3) the bake
+ * carries that bounce instead; the probe still lights backdrops, and Medium's
+ * level times its AO map.
  */
 const PROBE_CHROMA = 0.6;
 /** Towards the sun when a mood sets none; `tools/blender/sky.py` renders training's sky with it. */
@@ -90,6 +98,12 @@ const UPLOAD_SLOW_MS = 4;
  * maps of a session); half a second later none did.
  */
 export const UPLOAD_SETTLE_MS = 500;
+/**
+ * A map's bake fades in over this long (eased) once it is on the GPU, so the
+ * light does not pop: indoors the bake is about half the probe's light, and a
+ * short fade reads as the room dimming at spawn.
+ */
+export const BAKE_FADE_MS = 1500;
 /** The weapon rig's fixed vertical FOV (V8). The world keeps its own, speed kick and all. */
 export const VIEW_MODEL_FOV = 65;
 const _follow = new THREE.Vector3();
@@ -186,6 +200,28 @@ export class Renderer {
   _uploadsWarm = false;
   /** The streamer's current sets are on the materials. */
   _texturesWorn = false;
+  /** The current level's key, arena flag and bounds: which bake it takes, if any (R3). */
+  _level: Pick<Level, 'key' | 'arena' | 'bounds'> | null = null;
+  /**
+   * The current level's bake, once its geometry is checked against the
+   * manifest (`_checkBake`, on the first realistic frame); null without one.
+   */
+  _bake: { name: string; info: BakeInfo } | null = null;
+  _bakeChecked: readonly LevelSurface[] | null = null;
+  /** Each bake's checked `uv1` per static surface, kept for the session: its geometry is the manifest's, so it never changes. */
+  _bakeLayouts = new Map<string, Float32Array[]>();
+  /** Realistic tiers: the bake streaming or on the level. Null on Low. */
+  _bakes: BakeStreamer | null = null;
+  /**
+   * The bakes' KTX2 loader: its own transcoder (UASTC to ASTC or BC7) next to
+   * the textures'. Made on the first download, kept while the look stays
+   * realistic, so a map change does not fetch and compile the transcoder again.
+   */
+  _bakeKtx2: ReturnType<typeof lightmapLoader> | null = null;
+  _bakeAsked = false;
+  /** The bake on the materials (its map's name), and when it started fading in (`performance.now()`). */
+  _bakeWorn: string | null = null;
+  _bakeFade = 0;
   _disposed = false;
 
   constructor(canvas: HTMLCanvasElement) {
@@ -528,9 +564,14 @@ export class Renderer {
     this.scene.environmentIntensity = ENV_INTENSITY;
   }
 
-  /** The level's surface meshes (`Level.surfaces`). Low keeps them in the flat palette; the realistic tiers texture them. */
-  setSurfaces(surfaces: readonly LevelSurface[]): void {
+  /**
+   * The level's surface meshes (`Level.surfaces`). Low keeps them in the flat
+   * palette; the realistic tiers texture them and, given the level (its key,
+   * arena flag and bounds) and a bake for it, light them with it.
+   */
+  setSurfaces(surfaces: readonly LevelSurface[], level: Pick<Level, 'key' | 'arena' | 'bounds'> | null = null): void {
     this._surfaces = surfaces;
+    this._level = level;
     this._surfaceSets = setsFor(surfaces.flatMap(s => s.materials.filter(tag => tag !== null)));
     this._applySurfaces();
   }
@@ -548,7 +589,7 @@ export class Renderer {
    * again. A material swap, not a rebuild: the merged geometry serves both looks.
    */
   _applySurfaces(): void {
-    this._texturesAsked = false;
+    this._texturesAsked = this._bakeAsked = false;
     this._casters = [];
     if (this._quality.look !== 'realistic') {
       for (const { mesh, surf } of this._surfaces) {
@@ -561,11 +602,13 @@ export class Renderer {
     if (!this._uploadsWarm) warmCompressedUploads(this.three);
     this._uploadsWarm = true;
     this._uploadAt = performance.now() + UPLOAD_SETTLE_MS;
-    for (const { mesh, surf, materials } of this._surfaces) {
+    // Until the first realistic frame checks it (`_checkBake`), a level with a bake in the manifest wears baked materials.
+    const baked = this._bakeChecked === this._surfaces ? this._bake !== null : this._level !== null && bakeFor(this._level) !== null;
+    for (const { mesh, surf, materials, static: fixed } of this._surfaces) {
       const looks = materials.map(tag => {
         if (tag === null) return hiddenMat();
         const real = resolveMaterial(tag, surf);
-        return realMat(real, setInfo(real.set));
+        return realMat(real, setInfo(real.set), fixed && baked);
       });
       mesh.material = looks.length === 1 ? looks[0]! : looks;
       mesh.customDepthMaterial = levelDepthMat();
@@ -575,7 +618,7 @@ export class Renderer {
     this._texturesWorn = false;
   }
 
-  /** Free every streamed texture and put the stand-ins back on the materials that wore them. */
+  /** Free every streamed texture and bake, and put the stand-ins back on the materials that wore them. */
   _releaseTextures(): void {
     this._textures?.clear();
     this._dropFreedMaps();
@@ -583,6 +626,127 @@ export class Renderer {
     this._ktx2?.dispose();
     this._ktx2 = null;
     this._texturesAsked = this._texturesWorn = false;
+    this._bakes?.clear();
+    this._wearBake(null);
+    this._bakes = null;
+    this._bakeKtx2?.dispose();
+    this._bakeKtx2 = null;
+    this._bakeAsked = false;
+  }
+
+  /**
+   * Once per level, on its first realistic frame (so Low never pays for it):
+   * does the level have a bake, and is its geometry the one that was baked?
+   * The game hashes the static triangles, lays the lightmap charts out again
+   * at the manifest's density (render/lightmap.ts) and puts `uv1` on the
+   * static meshes only if the hash, chart count and atlas height all match; a
+   * map edited without a new bake keeps the sky probe (and the unit test
+   * fails), and its static pieces go back to the unbaked materials. The
+   * layout costs 35-65 ms on a desktop (the arena about 130), once per bake
+   * a session (`_bakeLayouts`): a restart or a return to the map only hashes,
+   * a few ms. It runs in the load's first frame, before the level is shown.
+   */
+  _checkBake(): void {
+    if (this._bakeChecked === this._surfaces) return;
+    this._bakeChecked = this._surfaces;
+    this._bake = null;
+    const level = this._level, bake = level ? bakeFor(level) : null;
+    if (!level || !bake) return;
+    const triangles = bakedTriangles(this._surfaces);
+    let uvs = triangles.hash === bake.info.hash ? this._bakeLayouts.get(bake.name) ?? null : null;
+    if (uvs && !uvs.every((uv, i) => uv.length === 2 * triangles.surfaces[i]!.mesh.geometry.getAttribute('position').count)) uvs = null;
+    if (!uvs && triangles.hash === bake.info.hash) {
+      const layout = layoutLightmap(lightmapCharts(this._surfaces, level.bounds, triangles), LIGHTMAP_SIZE, bake.info.density);
+      if (layout && layout.charts.length === bake.info.charts && layout.rows === bake.info.rows && layout.triangles === bake.info.triangles) {
+        this._bakeLayouts.set(bake.name, uvs = layout.uvs);
+      }
+    }
+    if (!uvs || uvs.length !== triangles.surfaces.length) {
+      console.warn(`bake ${bake.name}: the map changed since it was baked (npm run lightmaps); using the sky probe`);
+      this._applySurfaces();
+      return;
+    }
+    wearLightmapUVs(triangles.surfaces, uvs);
+    this._bake = bake;
+  }
+
+  /**
+   * Put a bake on the level's baked materials and the probe grid's uniforms;
+   * null takes it off (stand-ins, the probe's light). A new map's bake fades
+   * in from the probe; another file of the bake on screen (a Textures change)
+   * swaps in place, at full strength.
+   */
+  _wearBake(light: BakedLight | null): void {
+    const lightmap = light?.lightmap ?? standInLightmap();
+    for (const material of realMaterials()) if (material.userData.baked) material.lightMap = lightmap;
+    GRID_UNIFORMS.probeGrid.value = light?.grid ?? standInGrid();
+    if (light?.name !== this._bakeWorn) {
+      BAKE_UNIFORMS.bakeMix.value = GRID_UNIFORMS.probeGridMix.value = 0;
+      this._bakeFade = performance.now();
+    }
+    this._bakeWorn = light?.name ?? null;
+    if (!light) return;
+    const { info } = light;
+    BAKE_UNIFORMS.bakeAo.value = light.ao ? 1 : 0;
+    BAKE_UNIFORMS.bakeScale.value = light.ao ? info.aoScale : info.scale * Math.PI;
+    GRID_UNIFORMS.probeGridMin.value.fromArray(info.grid.min);
+    GRID_UNIFORMS.probeGridCells.value.fromArray(info.grid.cells);
+    GRID_UNIFORMS.probeGridCell.value = info.grid.cell;
+    GRID_UNIFORMS.probeGridScale.value = info.probeScale * Math.PI;
+  }
+
+  /**
+   * Realistic tiers: keep the level's bake streaming at the file the Textures
+   * setting shows (the AO map on low, the 1K or 2K lightmap above), uploaded
+   * in the texture streaming's time slots ahead of the textures (two pieces,
+   * so the room's light settles first), then swap it onto the materials and
+   * fade it in. A new map's request takes the old map's bake off at once.
+   */
+  _streamBake(): void {
+    if (this._quality.look !== 'realistic') return;
+    this._checkBake();
+    const bake = this._bake;
+    if (!this._bakes) {
+      if (!bake) return;
+      const load: LoadBake = url => (this._bakeKtx2 ??= lightmapLoader(this.three)).load(url);
+      this._bakes = new BakeStreamer(load, fetchGrid, texture => this.three.initTexture(texture));
+    }
+    const bakes = this._bakes;
+    if (!this._bakeAsked) {
+      bakes.want(bake ? { ...bake, file: BAKE_FILE[this._quality.textures] } : null);
+      if (bakes.current === null) this._wearBake(null);
+      this._bakeAsked = true;
+    }
+    const now = performance.now();
+    if (!bakes.ready) {
+      if (now >= this._uploadAt) {
+        const bytes = bakes.pump();
+        if (bytes > 0) this._uploadAt = now + Math.max(UPLOAD_GAP_MS, bytes / UPLOAD_BYTES_PER_MS) * this._uploadPace;
+      }
+      return;
+    }
+    const light = bakes.take();
+    if (light) this._wearBake(light);
+    const t = bakes.current ? Math.min(1, (now - this._bakeFade) / BAKE_FADE_MS) : 0;
+    BAKE_UNIFORMS.bakeMix.value = GRID_UNIFORMS.probeGridMix.value = t * t * (3 - 2 * t);
+  }
+
+  /** A realistic tier's level bake is still streaming (or not yet on the materials, or not yet checked). */
+  get bakePending(): boolean {
+    if (this._quality.look !== 'realistic') return false;
+    if (this._bakeChecked !== this._surfaces) return this._level !== null && bakeFor(this._level) !== null;
+    return this._bake !== null
+      && (!this._bakeAsked || this._bakes === null || this._bakes.waiting || (this._bakes.current === null && !this._bakes.failed));
+  }
+
+  /** The level's bake is on the materials but still fading in from the probe (`BAKE_FADE_MS`): the look is not final yet. */
+  get bakeFading(): boolean {
+    return this._quality.look === 'realistic' && this._bakeWorn !== null && BAKE_UNIFORMS.bakeMix.value < 1;
+  }
+
+  /** The bake's texture objects alive and their GPU bytes, for the tier report. */
+  get bakeStats(): { textures: number; residentBytes: number; file: string | null } {
+    return { ...(this._bakes?.stats ?? { textures: 0, residentBytes: 0 }), file: this._bakes?.current?.file ?? null };
   }
 
   /** Any realistic material still wearing a freed texture goes back to its stand-in. */
@@ -724,6 +888,7 @@ export class Renderer {
   render(time: number, fx: PostFX): void {
     this._frame++;
     if (this._skyLoading === null && this.skyPending) this._requestSky();
+    this._streamBake();
     this._streamTextures();
     // The shadow boxes only move on frames that redraw the maps, so a skipped
     // frame samples the old map with the matrix it was drawn with.

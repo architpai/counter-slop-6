@@ -1,6 +1,7 @@
 import { Group, Mesh, MeshStandardMaterial, type Object3D } from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import type { EnemyKind } from '../types';
+import { gridLit } from './materials';
 import type { FigurePartName } from './figure';
 
 export type TacticalKind = 'player' | EnemyKind;
@@ -43,7 +44,12 @@ export function loadTacticalModels(): Promise<void> {
       }
     }
     // One GPU buffer set per part, shared by every instance: disposers skip it.
-    gltf.scene.traverse(object => { if (object instanceof Mesh) object.geometry.userData.shared = true; });
+    // Their ambient light comes from the map's probe grid on the realistic tiers (render/materials.ts `gridLit`).
+    gltf.scene.traverse(object => {
+      if (!(object instanceof Mesh)) return;
+      object.geometry.userData.shared = true;
+      for (const material of Array.isArray(object.material) ? object.material : [object.material]) gridLit(material);
+    });
     source = gltf.scene;
   }).catch((error: unknown) => {
     loading = null;
@@ -65,7 +71,7 @@ export function tacticalPart(kind: TacticalKind, part: string, color?: number): 
     if (color !== undefined && object.material instanceof MeshStandardMaterial && object.material.name === 'player-mark') {
       let material = markings.get(color);
       if (!material) {
-        material = object.material.clone();
+        material = gridLit(object.material.clone());
         material.color.setHex(color);
         markings.set(color, material);
       }

@@ -10,7 +10,8 @@
     "test:watch": "vitest",
     "smoke": "node tests/smoke.mjs",
     "check": "node tests/bugfix.check.mjs",
-    "textures": "node tools/textures/build.mjs"
+    "textures": "node tools/textures/build.mjs",
+    "lightmaps": "node tools/lightmaps/build.mjs"
   },
   "type": "module",
   "dependencies": {
@@ -27,6 +28,7 @@
     "@types/three": "^0.170.0",
     "@vitest/browser": "^5.0.0",
     "@vitest/browser-playwright": "^5.0.0",
+    "ktx-parse": "^1.1.0",
     "ktx2-encoder": "^0.6.0",
     "playwright": "^1.63.0",
     "typescript": "^7.0.2",

@@ -236,9 +236,10 @@ PINK → `boss`, RED → `hot`.
 Rules: at most **12 distinct materials visible in one frame** of level geometry on Low. Do not tint
 per-object; pick a palette key. No external image textures, normal maps or emissive maps on
 materials. The only generated textures are the three-step toon gradient and opaque name-tag labels
-made by render. Two exceptions, both realistic tiers only and both self-made in Blender: each map's
-sky images, streamed from `public/sky/<map>/`, feed the sky dome and the environment (§3.3); and the
-level's texture sets (§3.2, material tags).
+made by render. Three exceptions, all realistic tiers only and all self-made in Blender: each map's
+sky images, streamed from `public/sky/<map>/`, feed the sky dome and the environment (§3.3); the
+level's texture sets (§3.2, material tags); and each map's baked lighting, a lightmap or AO map and
+a probe grid streamed from `public/maps/<map>/` (§3.3, baked lighting).
 
 **Material tags** (realistic tiers, R2). Every level primitive also carries a `material` tag
 (`BuildOpts.material`; `render/surfaces.ts` lists 34: concrete, cast-concrete, brick, plaster, stucco,
@@ -315,7 +316,15 @@ Three material families, all created and cached by `render/materials.js`. Nothin
   and 34.5k; no measurable render cost). Normal maps use three's derivative tangent frame, so there
   is no tangent attribute. Loose pieces (breakable props, figure accessories) come from
   `LevelBuilder.part` and are tagged the same way. Mexico keeps its breakable props as separate meshes, as before.
-  No second UV set yet (lightmaps, R3).
+  The static level also gets a second UV set, `uv1`, for its lightmap (§3.3, baked lighting), made by
+  a deterministic chart packer (`render/lightmap.ts`) on the first realistic frame; Low never makes it.
+- **Baked variant** (R3): on a map with a bake in the manifest, the static level's realistic
+  materials are `realMat(real, info, true)`, cached apart (one more program): the same PBR material
+  wearing a lightmap on `uv1` (a 1 × 1 stand-in until the bake is in) and a patch that takes its
+  diffuse sky light from the bake instead of the probe (below); if the first realistic frame finds
+  the geometry changed since the bake, they go back to the plain variant. Loose pieces (Mexico's props, the
+  drones) keep the plain variant, lit by the probe grid. `gridLit(material)` puts the probe grid on
+  a moving thing's material: the GLB's (`tactical.ts`) and every `charMat` (view model, figures).
 - The post passes (§3.6) are `ShaderMaterial`s from `makePostMaterial`; SMAA comes from three's
   `SMAAPass` addon, which builds its own.
 
@@ -343,6 +352,8 @@ the SH replaces the hemisphere light (its lower half is a neutral grey floor as 
 the map's sunlit ground: bounce light, grey so interiors and eaves do not take the lawn's green).
 The probe keeps 60 % of the sky's colour at full brightness (`PROBE_CHROMA`): a sky-only probe
 has none of the warm bounce from sunlit walls, and at full colour shade on grey concrete read navy.
+On a baked map the bake carries that bounce instead (below); the probe still lights backdrops, and
+Medium's level times its AO map.
 The sky's PMREM (`env.hdr`, 1024 × 512, so a 256 cube like the room environment's) is the
 environment at full strength. The GLB characters take its diffuse on top of the probe, a double
 sky fill that keeps them readable in shade; the level's materials take only its specular (§3.2). The fog and clear colour are the radiance of the lowest degree of
@@ -416,7 +427,41 @@ A sky that lands after the map or the look changed is freed without its PMREM be
   change. Low loads none and switching to it frees them all. `renderer.texturesPending` is true
   until the level's sets are on; `textureStats` reports what is resident. Per map download: Medium
   1.1–1.5 MB, High 3.9–5.6 MB, Ultra 15.2–21.9 MB; resident on the GPU 8–12, 32–46 and 126–185 MB,
-  with no CPU copy.
+  with no CPU copy. Anisotropic filtering follows the size (4×, 8×, 16× at 512, 1K, 2K; capped at
+  the GPU's), so grazing roads and sand keep their detail on each tier.
+- **Baked lighting** (R3, `render/lightmap.ts`, `tools/lightmaps/`, `tools/blender/bake_level.py`;
+  `npm run lightmaps` regenerates every bake). Each map's static level is baked in Cycles under its
+  own sky and sun: sky light and every bounce, the sun's included, but not the sun's direct light,
+  which stays the dynamic sun with its shadow maps. The game rebuilds the lightmap charts from the
+  level (every planar piece projected at one density per map, about 17–21 cm a texel at 2K, 4 texels
+  of padding on a 4-texel grid) and uses the bake only if the geometry hash, chart, triangle and atlas
+  row counts match `lightmaps.json`, so an edited map falls back to the probe (and
+  `tests/lightmaps.test.ts` fails until it is re-baked). The layout costs 35–65 ms (the arena about
+  130) in a level's first realistic frame, once per bake a session: the renderer keeps each checked
+  layout, so a restart or a return to the map only hashes the triangles (3–6 ms). The Textures setting picks the file: low
+  (Medium) `ao-512.ktx2`, the bake's light over the probe's at a quarter size (the probe's colour,
+  the bake's occlusion and bounce, up to 4×); medium (High) `light-1024.ktx2`; high (Ultra) `light-2048.ktx2`: UASTC,
+  transcoded to ASTC or BC7, sRGB of light / scale, trilinear with no anisotropic filtering (its
+  footprint would reach past a chart's padding into the next chart's light). On baked faces the bake's light replaces the
+  probe's, so shade is lit once, with the warm bounce the probe lacked; the sky's reflections dim by
+  the same share of the open sky's light; a soft floor (60 % of the open sky's light, as a 4-norm, so
+  open ground gains about 3 %) keeps rooms lit only through a door readable, dark brick included; and
+  sand in shade takes a warm lift (`SHADE_LIFT` in `materials.ts`, fading out where the sun lights
+  the face), so it reads as light sand about a stop under sunlit sand. Faces with no texels (never seen, or backdrop beyond the bounds or above 50 m) keep
+  the probe. `probes.bin` is the map's probe grid: an ambient cube per 1.5–4 m cell and the cell's
+  share of sun, one sRGB 3D texture sampled per fragment by everything `gridLit` (characters, view
+  model, figures, loose props): its light replaces the probe's, the environment's diffuse and
+  reflections dim with it, a mesh that receives no shadows (the view model) loses the sun where the
+  cell cannot see it (down to 30 %), and characters keep at least 75 % of the open sky's ambient. The
+  bake streams ahead of the level's texture sets in the same paced upload slots (it is on about
+  0.6 s after a level starts) and fades in, eased, over 1.5 s; its KTX2 loader (a second
+  transcoder) is made on the first download and kept while the look stays realistic, so a map
+  change does not fetch and compile it again. A new map takes the old one's off at once, a size
+  change keeps the old file until the new one is in and then swaps it in place at full strength,
+  and Low frees it all (the grid's mix is 0 there and the patched shaders take their old path).
+  `renderer.bakePending` is true until it is on and `renderer.bakeFading` until its fade is done
+  (screenshot scripts wait for both); `bakeStats` reports it. Per map download:
+  Medium 0.38–0.47 MB, High 0.79–0.90 MB, Ultra 2.1–2.3 MB; resident on the GPU about 0.9, 2 and 6 MB.
 - **Sky streaming** (`render/sky.ts`): the first realistic frame drawn on a map asks for its sky
   (so boot, which builds the menu map before it applies the saved preset, fetches nothing on Low);
   the frame never waits. `renderer.skyPending` is true until it is

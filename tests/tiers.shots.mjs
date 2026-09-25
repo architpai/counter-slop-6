@@ -2,6 +2,10 @@
 //   node tests/tiers.shots.mjs URL OUTDIR
 // Environment: CS6_PRESETS=low,high  CS6_MAPS=downtown  CS6_GL=swiftshader  CS6_SIZE=1440x900  CS6_DPR=2
 //
+// Maps: the solo maps by key, `training` (the training mode, its 22 dummies kept for the weapon
+// view and its frame times, as the player gets it), and `downtown-arena` (the online match's own
+// geometry, loaded through the debug handle's `loadArena`).
+//
 // Each preset × map gets four views (five on House), all deterministic:
 //   spawn    the player's start view (no gun, no HUD)
 //   enemies  grunts at 10, 30 and 60 m, one sunlit and one shadowed at each range where the map
@@ -14,14 +18,14 @@
 //   overview a fixed high corner view of the whole map
 //   weapon   first person at spawn with the R4-C at the hip
 // Enemies, effects and pickups are cleared per map, and the run is paused, so shots only differ
-// by preset. Realistic presets wait for the map's sky and environment, and its texture sets, to
-// stream in first.
+// by preset. Realistic presets wait for the map's sky and environment, its texture sets and its
+// bake (lightmap or AO map, and probe grid) to stream in first.
 // Dynamic resolution is pinned at full scale, so every preset is judged at its base resolution. The page renders at CS6_DPR (default 2, so the presets' pixel-ratio caps apply);
 // screenshots are saved at CSS size. On the real GPU vsync and the frame-rate limit are off, so
 // live frame times show the cost of each preset instead of the display's refresh.
 // OUTDIR/summary.json records frame times (live rAF, and a synchronous render + readback, both
 // with the gun in view, after a discarded warm-up), the fog at 60 m, where each grunt stood, and
-// the streamed textures: KTX2 bytes fetched for the map and GPU bytes resident.
+// the streamed textures: KTX2 bytes fetched for the map and GPU bytes resident, and the same for the bake.
 // Later phases rerun this script to compare before and after.
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -30,7 +34,7 @@ import { chromium } from 'playwright';
 const url = process.argv[2] ?? 'http://127.0.0.1:3000/';
 const out = process.argv[3] ?? '/tmp/cs6-tiers';
 const presets = (process.env.CS6_PRESETS ?? 'low,medium,high,ultra').split(',');
-const maps = (process.env.CS6_MAPS ?? 'downtown,house,mexico').split(',');
+const maps = (process.env.CS6_MAPS ?? 'downtown,house,mexico,training,downtown-arena').split(',');
 const [width, height] = (process.env.CS6_SIZE ?? '1440x900').split('x').map(Number);
 const dpr = Number(process.env.CS6_DPR ?? 2);
 // Real GPU by default on macOS; SwiftShader everywhere else, or when asked for.
@@ -88,9 +92,15 @@ try {
         const g = window.__game;
         g.hud.onUiAction('mainMenu', null, new Event('click'));
         g.hud.onUiAction('gfxPreset', preset, new Event('click'));
-        g.hud.onUiAction('pickMap', map, new Event('click'));
-        g.beginSolo();
-        g.gs.state = 'pause'; g.gs.queue.length = 0; g.enemies.clear(); g.effects.clear();
+        if (map === 'training') g.beginTraining();
+        else if (map.endsWith('-arena')) g.loadArena(map.slice(0, -'-arena'.length));
+        else {
+          g.hud.onUiAction('pickMap', map, new Event('click'));
+          g.beginSolo();
+        }
+        g.gs.state = 'pause'; g.gs.queue.length = 0; g.effects.clear();
+        // Training's dummies stand where they always do; a solo wave's spawns differ run to run.
+        if (map !== 'training') g.enemies.clear();
         // Wave-start drops differ run to run; the paused run spawns no more.
         while (g.pickups.length > 0) g.pickups.pop().mesh.removeFromParent();
         g.ctx.audio.music(false);
@@ -100,18 +110,24 @@ try {
         g.hud.hideScreen(); g.hud.tip('', 0); g.hud.message('', '', 0); g.hud.update(10);
         g.hud.setGameplayVisible(false);
       }, { preset, map });
-      assert.equal(await page.evaluate(() => window.__game.level.key), map);
+      assert.equal(await page.evaluate(() => window.__game.level.key + (window.__game.level.arena ? '-arena' : '')), map);
       assert.equal(await page.evaluate(() => window.__game.quality.preset), preset);
-      await page.waitForFunction(() => !window.__game.ctx.renderer.skyPending && !window.__game.ctx.renderer.texturesPending,
-        null, { timeout: 30_000 });
+      await page.waitForFunction(() => {
+        const r = window.__game.ctx.renderer;
+        // The bake fades in over BAKE_FADE_MS once it is on the GPU; shoot the final look.
+        return !r.skyPending && !r.texturesPending && !r.bakePending && !r.bakeFading;
+      }, null, { timeout: 30_000 });
       await frames(20);
 
       const row = { shots: [] };
       row.textures = await page.evaluate(() => {
-        const stats = window.__game.ctx.renderer.textureStats;
-        const fetched = performance.getEntriesByType('resource').filter(e => e.name.endsWith('.ktx2'));
-        return { files: fetched.length, fetchedMB: +(fetched.reduce((n, e) => n + e.encodedBodySize, 0) / 1e6).toFixed(2),
-          textures: stats.textures, residentMB: +(stats.residentBytes / 1e6).toFixed(1) };
+        const stats = window.__game.ctx.renderer.textureStats, bake = window.__game.ctx.renderer.bakeStats;
+        const resources = performance.getEntriesByType('resource');
+        const fetched = resources.filter(e => e.name.includes('/textures/') && e.name.endsWith('.ktx2'));
+        const baked = resources.filter(e => e.name.includes('/maps/') && /\.(ktx2|bin)$/.test(e.name));
+        const mb = list => +(list.reduce((n, e) => n + e.encodedBodySize, 0) / 1e6).toFixed(2);
+        return { files: fetched.length, fetchedMB: mb(fetched), textures: stats.textures, residentMB: +(stats.residentBytes / 1e6).toFixed(1),
+          bakeFile: bake.file, bakeMB: mb(baked), bakeResidentMB: +(bake.residentBytes / 1e6).toFixed(1) };
       });
       // How much fog a grunt at 60 m wears on this preset (linear fog).
       row.fogAt60 = await page.evaluate(() => {
@@ -354,8 +370,9 @@ try {
       });
       row.shots.push(await shot(`${preset}-${map}-overview`));
       summary.presets[preset][map] = row;
-      console.log(preset.padEnd(7), map.padEnd(9), `frame ${row.frameMs} ms (p95 ${row.frameP95Ms})`, `render ${row.renderMs} ms`,
+      console.log(preset.padEnd(7), map.padEnd(14), `frame ${row.frameMs} ms (p95 ${row.frameP95Ms})`, `render ${row.renderMs} ms`,
         `tex ${row.textures.fetchedMB} MB fetched, ${row.textures.residentMB} MB resident`,
+        `bake ${row.textures.bakeFile ?? '-'} ${row.textures.bakeMB} MB`,
         row.enemies ? `grunts ${row.enemies.placed.map((p, i) => {
           // A shade slot only the second view filled is shown in brackets: [H].
           const extra = row.enemiesShade?.placed[i];

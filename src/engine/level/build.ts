@@ -28,6 +28,8 @@ export interface BuildOpts {
   rotation?: THREE.Euler;
   /** Keep this piece as its own object instead of merging it. */
   separate?: boolean;
+  /** A separate piece the level moves (the drones): left out of the baked lighting. */
+  moving?: boolean;
   noCollide?: boolean;
   noNav?: boolean;
   noShoot?: boolean;
@@ -130,7 +132,7 @@ export class LevelBuilder {
     if (opts.rotation) object.rotation.copy(opts.rotation);
     if (opts.separate) {
       object.geometry = surfaceGeometry(geometry, material);
-      this.level.surfaces.push({ mesh: object, surf: key, materials: [opts.flatOnly ? null : material] });
+      this.level.surfaces.push({ mesh: object, surf: key, materials: [opts.flatOnly ? null : material], static: !opts.moving });
       return this.addObject(object);
     }
     object.updateMatrix();
@@ -151,7 +153,7 @@ export class LevelBuilder {
   part(geometry: THREE.BufferGeometry, surf: SurfKey, material: MaterialTag = DEFAULT_MATERIAL[surf]): THREE.Mesh {
     const mesh = new THREE.Mesh(surfaceGeometry(geometry, material), surfMat(surf));
     mesh.castShadow = mesh.receiveShadow = true;
-    this.level.surfaces.push({ mesh, surf, materials: [material] });
+    this.level.surfaces.push({ mesh, surf, materials: [material], static: false });
     return mesh;
   }
 
@@ -253,7 +255,7 @@ export class LevelBuilder {
     for (let i = 0; i < n; i++) {
       const geo = coneGeo(1.2 * scale, 4 * scale, 3);
       geo.rotateX(Math.PI / 2);
-      const mesh = this.mesh(geo, [0, 0, 0], { material: 'painted-metal', ...opts, separate: true });
+      const mesh = this.mesh(geo, [0, 0, 0], { material: 'painted-metal', ...opts, separate: true, moving: true });
       const r = baseRadius + i * radiusStep, h = baseHeight + i * heightStep;
       const s = speed + 0.01 * i, phase = 2.1 * i;
       const next = new THREE.Vector3();
@@ -330,7 +332,7 @@ export class LevelBuilder {
       });
       for (const part of geometries) part.dispose();
       const mesh = this.addObject(new THREE.Mesh(geometry, surfMat(surf)));
-      this.level.surfaces.push({ mesh, surf, materials: [...tags.keys()].map(tag => (tag === 'flat' ? null : tag)) });
+      this.level.surfaces.push({ mesh, surf, materials: [...tags.keys()].map(tag => (tag === 'flat' ? null : tag)), static: true });
     }
     this.parts.clear();
     this.world.finalize();

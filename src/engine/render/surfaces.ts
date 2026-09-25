@@ -62,6 +62,12 @@ export const isMaterialTag = (value: unknown): value is MaterialTag => MATERIAL_
 /** Texels per side of every map in a set, per setting (docs/VISUALS.md, Q presets). */
 export const TEXTURE_SIZE: Readonly<Record<TextureQuality, TextureSize>> = Object.freeze({ low: 512, medium: 1024, high: 2048 });
 export type TextureSize = 512 | 1024 | 2048;
+/**
+ * Anisotropic filtering per texture size, so per tier (Medium, High, Ultra),
+ * capped at the GPU's maximum: grazing ground (roads, Mexico's sand) keeps its
+ * detail instead of smearing into the next mip.
+ */
+export const ANISOTROPY: Readonly<Record<TextureSize, number>> = Object.freeze({ 512: 4, 1024: 8, 2048: 16 });
 export const TEXTURE_MAPS = ['albedo', 'normal', 'orm'] as const;
 export type TextureMap = (typeof TEXTURE_MAPS)[number];
 

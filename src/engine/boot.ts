@@ -108,6 +108,8 @@ export interface GameHandle {
   resume(): void;
   /** Debug only: restart the solo run at wave `n`. No UI reaches this. */
   jumpToWave(n: number): void;
+  /** Debug only: load a map's arena variant (the online match's geometry) into a paused solo run, for tests that measure it. No UI reaches this. */
+  loadArena(key: string): void;
   step(nowMs: number): void;
   dispose(): void;
   /** Live engine instances. Must be 1; higher means a leaked mount. */
@@ -178,7 +180,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     const level = buildLevel(scene, world, resolved, { arena });
     renderer.setLevelShadow(level.shadow.center, level.shadow.radius);
     renderer.setMood(level.mood);
-    renderer.setSurfaces(level.surfaces);
+    renderer.setSurfaces(level.surfaces, level);
     const nav = new NavGrid(world, level.bounds, 1);
     nav.build();
     const bossNav = new NavGrid(world, level.bounds, 1, BOSS_CLEARANCE, BOSS_HEADROOM);
@@ -390,6 +392,9 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     jumpToWave: n => {
       if (!Number.isInteger(n) || n < 1) return;
       gs.mode = 'solo'; loadLevel(false, settings.mapKey); app.beginCommon(); app.resetRun(); app.solo.startWave(n); gs.state = 'play';
+    },
+    loadArena: key => {
+      gs.mode = 'solo'; loadLevel(true, key, true); app.resetRun(); gs.state = 'pause';
     },
     dispose,
     get live() { return live; },

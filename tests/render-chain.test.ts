@@ -96,7 +96,8 @@ test('each preset reaches the renderer: passes, tone mapping, MSAA, AO depth, ca
   renderer.applyQuality({ ...PRESET_VALUES.medium, antialias: 'fxaa', bloom: false });
   expect(passes(renderer)).toEqual(['post:agx', 'post:final']);
   expect('FXAA' in renderer.post._final.defines).toBe(true);
-});
+  // It compiles every preset's programs: about 5 s alone, three times that beside the other GPU tests.
+}, 60_000);
 
 test('dynamic resolution only moves viewports, a pass switched off frees its targets, and dispose frees them all', () => {
   const three = new THREE.WebGLRenderer({ canvas: document.createElement('canvas') });

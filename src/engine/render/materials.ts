@@ -31,7 +31,7 @@ export function surfMat(key: SurfKey): THREE.MeshLambertMaterial {
 
 export function charMat(color: number): THREE.MeshToonMaterial {
   let material = characters.get(color);
-  if (material === undefined) characters.set(color, material = new THREE.MeshToonMaterial({ color, gradientMap: gradient }));
+  if (material === undefined) characters.set(color, material = gridLit(new THREE.MeshToonMaterial({ color, gradientMap: gradient })));
   return material;
 }
 
@@ -132,6 +132,142 @@ export function skyMat(uniforms: SkyUniforms): THREE.ShaderMaterial {
 }
 
 const reals = new Map<string, THREE.MeshStandardMaterial>();
+const LUMA_GLSL = 'vec3( 0.2126, 0.7152, 0.0722 )';
+
+/**
+ * Baked lighting's shared uniforms (R3), one object for every baked level
+ * material, so the renderer's swap and fade are single writes. `bakeMix` fades
+ * the bake in over the sky probe (0 while the stand-in is on); `bakeAo` picks
+ * Medium's AO map (the probe times the stored ratio) over a lightmap (the
+ * stored light itself); `bakeScale` undoes the file's scaling and turns a
+ * white surface's radiance into three's irradiance (x pi). `bakeFloor` keeps
+ * about that share of the open sky's light on the level, however little the
+ * bake saw (a soft floor: the fourth root of the sum of fourth powers, so the
+ * bake's gradients survive and open ground gains about 3 %). A room lit only
+ * through its door is near black in a physical bake at outdoor exposure, and
+ * play needs its walls, dark brick included (Downtown's building B); with it,
+ * rooms read two to three stops under the street.
+ */
+export const BAKE_UNIFORMS = {
+  bakeMix: { value: 0 },
+  bakeAo: { value: 0 },
+  bakeScale: { value: 1 },
+  bakeFloor: { value: 0.6 },
+};
+
+/**
+ * The probe grid's shared uniforms (R3): enemies, the view model and loose
+ * props take their ambient light from the map's baked ambient cubes, so they
+ * darken indoors and in deep shade. `probeGridMix` fades it in (0 on Low and
+ * until a grid is in, where the patched shader runs its old path unchanged);
+ * `probeGridFloor` keeps at least that share of the open sky's light on them,
+ * so an enemy in the darkest room still reads (VISUALS.md, readability), and
+ * `probeGridSunFloor` that share of the sun on the view model indoors, so the
+ * gun stays a gun and not a silhouette.
+ */
+export const GRID_UNIFORMS = {
+  probeGrid: { value: null as THREE.Data3DTexture | null },
+  probeGridMix: { value: 0 },
+  probeGridMin: { value: new THREE.Vector3() },
+  probeGridCells: { value: new THREE.Vector3(1, 1, 1) },
+  probeGridCell: { value: 1 },
+  probeGridScale: { value: 1 },
+  probeGridFloor: { value: 0.75 },
+  probeGridSunFloor: { value: 0.3 },
+};
+
+let standInLight: THREE.DataTexture | undefined;
+/** The 1 x 1 lightmap every baked material wears until its map's bake is in (`bakeMix` is 0 then). */
+export function standInLightmap(): THREE.DataTexture {
+  if (standInLight === undefined) {
+    standInLight = pixel(1, 1, 1, THREE.NoColorSpace);
+    standInLight.channel = 1;
+  }
+  return standInLight;
+}
+
+let standInCubes: THREE.Data3DTexture | undefined;
+/** A one-cell probe grid (six faces), bound until a map's grid is in, so the sampler is never empty. */
+export function standInGrid(): THREE.Data3DTexture {
+  if (standInCubes === undefined) {
+    standInCubes = new THREE.Data3DTexture(new Uint8Array(6 * 4).fill(255), 1, 1, 6);
+    standInCubes.needsUpdate = true;
+  }
+  return standInCubes;
+}
+GRID_UNIFORMS.probeGrid.value = standInGrid();
+
+/** The probe grid lookup: the ambient cube at a world point, trilinear, seen by a world normal. */
+const GRID_GLSL = `
+uniform sampler3D probeGrid;
+uniform vec3 probeGridMin, probeGridCells;
+uniform float probeGridCell, probeGridScale, probeGridMix, probeGridFloor, probeGridSunFloor;
+varying vec3 vGridPos;
+vec4 gridFace( vec3 f, float face ) {
+	return texture( probeGrid, vec3( f.x / probeGridCells.x, f.z / probeGridCells.z, ( face * probeGridCells.y + f.y ) / ( 6.0 * probeGridCells.y ) ) );
+}
+// The ambient cube's light for normal n in rgb, and in a the cell's share of sun.
+vec4 gridIrradiance( vec3 p, vec3 n ) {
+	vec3 f = clamp( ( p - probeGridMin ) / probeGridCell, vec3( 0.5 ), probeGridCells - 0.5 );
+	vec3 n2 = n * n;
+	vec4 light = n2.x * gridFace( f, n.x >= 0.0 ? 0.0 : 1.0 ) + n2.y * gridFace( f, n.y >= 0.0 ? 2.0 : 3.0 )
+		+ n2.z * gridFace( f, n.z >= 0.0 ? 4.0 : 5.0 );
+	return vec4( probeGridScale * light.rgb, light.a );
+}`;
+
+/**
+ * After the probe (and hemisphere) light is in \`irradiance\`: swap in the
+ * grid's, and dim the environment's diffuse and reflections by the same share
+ * of the open sky. A mesh that receives no shadows (the view model) also
+ * loses the sun where the grid's cells cannot see it, so the gun is not
+ * sunlit indoors (V18). Skipped outright while \`probeGridMix\` is 0.
+ */
+const GRID_APPLY = `
+#if defined( RE_IndirectDiffuse )
+if ( probeGridMix > 0.0 ) {
+	vec4 gridCube = gridIrradiance( vGridPos, inverseTransformDirection( geometryNormal, viewMatrix ) );
+	vec3 gridLight = gridCube.rgb;
+	if ( ! receiveShadow ) {
+		float gridSun = mix( 1.0, max( gridCube.a, probeGridSunFloor ), probeGridMix );
+		reflectedLight.directDiffuse *= gridSun;
+		reflectedLight.directSpecular *= gridSun;
+	}
+	float open = max( dot( irradiance, ${LUMA_GLSL} ), 1e-4 );
+	gridLight = max( gridLight, irradiance * probeGridFloor );
+	float gridShade = mix( 1.0, clamp( dot( gridLight, ${LUMA_GLSL} ) / open, 0.0, 1.0 ), probeGridMix );
+	irradiance = mix( irradiance, gridLight, probeGridMix );
+	#if defined( STANDARD )
+	iblIrradiance *= gridShade;
+	radiance *= gridShade;
+	#endif
+}
+#endif`;
+
+/** Add the probe grid to a lit shader (Lambert, Toon or Standard). */
+function withGrid(shader: THREE.WebGLProgramParametersWithUniforms): void {
+  Object.assign(shader.uniforms, GRID_UNIFORMS);
+  shader.vertexShader = shader.vertexShader
+    .replace('#include <common>', '#include <common>\nvarying vec3 vGridPos;')
+    .replace('#include <project_vertex>', '#include <project_vertex>\nvGridPos = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', `#include <common>${GRID_GLSL}`)
+    .replace('#include <lights_fragment_maps>', `#include <lights_fragment_maps>${GRID_APPLY}`);
+}
+
+const gridded = new WeakSet<THREE.Material>();
+const gridKey = (): string => 'probe-grid';
+/**
+ * Light a moving thing's material from the probe grid (R3): characters (the
+ * GLB's materials), the view model and figures (\`charMat\`). One patch for
+ * every look: on Low \`probeGridMix\` is 0 and the shader takes its old path.
+ */
+export function gridLit<T extends THREE.Material>(material: T): T {
+  if (gridded.has(material)) return material;
+  gridded.add(material);
+  material.onBeforeCompile = withGrid;
+  material.customProgramCacheKey = gridKey;
+  return material;
+}
 const standIns = new Map<TextureSet, SetMaps>();
 let flatNormal: THREE.DataTexture | undefined;
 
@@ -185,8 +321,17 @@ const MACRO: Partial<Record<TextureSet, number>> = { glass: 0, water: 0, grass: 
 const MACRO_DEFAULT = 0.09;
 
 /**
+ * Baked light's lift in shade, per set (R3), on the static level only. Sand
+ * in shade lit by a blue sky alone came out a dull grey-brown about two stops
+ * under the sunlit sand; the eye reads a desert's shade as warm, light sand.
+ * The lift fades out where the sun lights the face, so sunlit sand, and every
+ * other surface, keep the bake's light as it is.
+ */
+const SHADE_LIFT: Partial<Record<TextureSet, readonly [number, number, number]>> = { sand: [3.2, 2.8, 2.1] };
+
+/**
  * The level's shader patch, the same function on every level material so they
- * share one program.
+ * share one program per kind (baked, or not).
  *
  * Anti-tiling (R2): two octaves of world-space value noise, a few metres
  * across, scale each texel's albedo by ±`macro` and its roughness by ±1.5 ×
@@ -198,6 +343,14 @@ const MACRO_DEFAULT = 0.09;
  * PMREM (`scene.environment`). Taking the PMREM's diffuse as well would light
  * shade twice, lifting and greying it; the double fill is kept for the GLB
  * characters (render/index.ts, `REAL_ENV_INTENSITY`).
+ *
+ * Baked lighting (R3), on the static level of a map with a bake: the
+ * lightmap's light replaces the probe's (so shade is lit once, by the sky and
+ * the bounce the bake saw), or on Medium the AO map scales the probe's; the
+ * sky's reflections dim by the same share of the open sky's light, so glass
+ * and metal indoors stop mirroring the sky. Faces with no texels (`uv1` below
+ * 0: backdrop and hidden faces) keep the probe. Loose pieces (Mexico's props,
+ * the drones) take the probe grid instead, like the characters.
  */
 function macroVariation(this: THREE.MeshStandardMaterial, shader: THREE.WebGLProgramParametersWithUniforms): void {
   shader.uniforms.macro = this.userData.macro as THREE.IUniform<number>;
@@ -225,10 +378,39 @@ float macroTone = macroNoise( vMacroPos * 0.16 ) * 0.65 + macroNoise( vMacroPos 
 float macroSheen = macroNoise( vMacroPos * 0.41 + 3.1 );
 diffuseColor.rgb *= 1.0 + macro * ( macroTone * 2.0 - 1.0 );`)
     .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-roughnessFactor = clamp( roughnessFactor * ( 1.0 + 1.5 * macro * ( macroSheen * 2.0 - 1.0 ) ), 0.03, 1.0 );`)
-    .replace('#include <lights_fragment_maps>', '#include <lights_fragment_maps>\niblIrradiance = vec3( 0.0 );');
+roughnessFactor = clamp( roughnessFactor * ( 1.0 + 1.5 * macro * ( macroSheen * 2.0 - 1.0 ) ), 0.03, 1.0 );`);
+  if (this.userData.baked) {
+    Object.assign(shader.uniforms, BAKE_UNIFORMS);
+    shader.uniforms.shadeLift = this.userData.shadeLift as THREE.IUniform<THREE.Vector3>;
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform float bakeMix, bakeAo, bakeScale, bakeFloor;\nuniform vec3 shadeLift;')
+      // In place of three's chunk, which would add the lightmap to the probe.
+      .replace('#include <lights_fragment_maps>', `
+float bakedShade = 1.0;
+#if defined( RE_IndirectDiffuse )
+	vec3 bakedTexel = texture2D( lightMap, vLightMapUv ).rgb;
+	vec3 baked = bakeAo > 0.5 ? irradiance * bakedTexel.r * bakeScale : bakedTexel * bakeScale;
+	vec3 bakedFloor = irradiance * bakeFloor;
+	baked = sqrt( sqrt( baked * baked * baked * baked + bakedFloor * bakedFloor * bakedFloor * bakedFloor ) );
+	float bakedSun = dot( reflectedLight.directDiffuse, ${LUMA_GLSL} );
+	bakedSun /= max( bakedSun + dot( baked * BRDF_Lambert( material.diffuseColor ), ${LUMA_GLSL} ), 1e-6 );
+	baked *= mix( shadeLift, vec3( 1.0 ), smoothstep( 0.15, 0.6, bakedSun ) );
+	float bakedOn = bakeMix * step( 0.0, vLightMapUv.x );
+	bakedShade = mix( 1.0, clamp( dot( baked, ${LUMA_GLSL} ) / max( dot( irradiance, ${LUMA_GLSL} ), 1e-4 ), 0.0, 1.0 ), bakedOn );
+	irradiance = mix( irradiance, baked, bakedOn );
+#endif
+#if defined( USE_ENVMAP ) && defined( RE_IndirectSpecular )
+	radiance += getIBLRadiance( geometryViewDir, geometryNormal, material.roughness ) * bakedShade;
+#endif
+iblIrradiance = vec3( 0.0 );`);
+  } else {
+    withGrid(shader);
+    shader.fragmentShader = shader.fragmentShader.replace('#include <lights_fragment_maps>', '#include <lights_fragment_maps>\niblIrradiance = vec3( 0.0 );');
+  }
 }
-const macroKey = (): string => 'level-pbr';
+function macroKey(this: THREE.Material): string {
+  return this.userData.baked ? 'level-pbr-baked' : 'level-pbr';
+}
 
 /**
  * Tags laid over another piece's faces. House's door and window trim shares
@@ -242,10 +424,14 @@ const OVERLAY_TAGS: ReadonlySet<MaterialTag> = new Set(['painted-wood']);
 /**
  * A realistic level material (R2): PBR with a texture set, tinted so the set's
  * mean albedo lands on the tag's colour. It starts on the set's stand-in maps;
- * the renderer swaps the streamed ones in. Cached per (tag, colour) key.
+ * the renderer swaps the streamed ones in. Cached per (tag, colour) key, and
+ * per kind: `baked` for the static level of a map with a bake (it wears a
+ * lightmap, the stand-in until the bake is in, and reads `uv1`), else lit by
+ * the probe grid.
  */
-export function realMat(real: RealMaterial, info: SetInfo): THREE.MeshStandardMaterial {
-  let material = reals.get(real.key);
+export function realMat(real: RealMaterial, info: SetInfo, baked = false): THREE.MeshStandardMaterial {
+  const key = baked ? `${real.key}|baked` : real.key;
+  let material = reals.get(key);
   if (material === undefined) {
     const color = new THREE.Color(real.color);
     color.setRGB(color.r / info.albedo[0], color.g / info.albedo[1], color.b / info.albedo[2], THREE.LinearSRGBColorSpace);
@@ -253,10 +439,13 @@ export function realMat(real: RealMaterial, info: SetInfo): THREE.MeshStandardMa
     if (OVERLAY_TAGS.has(real.tag)) Object.assign(material, { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
     material.userData.set = real.set;
     material.userData.macro = { value: MACRO[real.set] ?? MACRO_DEFAULT };
+    material.userData.baked = baked;
+    material.userData.shadeLift = { value: new THREE.Vector3(...(SHADE_LIFT[real.set] ?? [1, 1, 1])) };
+    if (baked) material.lightMap = standInLightmap();
     material.onBeforeCompile = macroVariation;
     material.customProgramCacheKey = macroKey;
     wearMaps(material, standInMaps(real.set, info));
-    reals.set(real.key, material);
+    reals.set(key, material);
   }
   return material;
 }

@@ -299,6 +299,12 @@ export interface LevelSurface {
    * hidden on the realistic tiers (`BuildOpts.flatOnly`).
    */
   materials: readonly (MaterialTag | null)[];
+  /**
+   * Part of the fixed level: the merged pieces and the fixed separate ones.
+   * These carry the baked lighting on the realistic tiers (render/lightmap.ts);
+   * movers and breakable props do not, and take the probe grid like characters.
+   */
+  static: boolean;
 }
 
 export interface Level {
