@@ -81,7 +81,9 @@ export function Hud({ store, children }: HudProps) {
           <TipLine store={store} />
           <CentreMessage store={store} />
           <KillFeed store={store} />
+          <FpsCounter store={store} />
           <ScreenOverlay store={store} />
+          <QualityPrompt store={store} inPanel={false} />
           {children}
         </>
       )}
@@ -385,6 +387,38 @@ export const TipLine = memo(function TipLine({ store }: { store: HudStore }) {
   return <div className={`tip-line${state.html ? ' is-visible' : ''}`} data-hud="tip" role="status"><Bold text={state.html} /></div>;
 });
 
+export const FpsCounter = memo(function FpsCounter({ store }: { store: HudStore }) {
+  rendered();
+  const fps = useHud(store, 'fps');
+  return fps === null ? null : <div className="fps-counter" data-hud="fps" aria-hidden="true">{fps} FPS</div>;
+});
+
+/**
+ * The one-time offer when dynamic resolution has hit its floor. It never blocks
+ * play. With a menu open it moves inside the panel, so Tab and the panel's
+ * focus trap reach its buttons; in play a locked mouse cannot, so it says how.
+ */
+export const QualityPrompt = memo(function QualityPrompt({ store, inPanel }: { store: HudStore; inPanel: boolean }) {
+  rendered();
+  const preset = useHud(store, 'qualityPrompt');
+  const menuOpen = useHud(store, 'screen') !== null;
+  const touch = useHud(store, 'mobile').active;
+  if (preset === null || menuOpen !== inPanel) return null;
+  const name = preset.charAt(0).toUpperCase() + preset.slice(1);
+  const answer = (value: 'yes' | 'no', event: ReactMouseEvent<HTMLButtonElement>): void => {
+    event.stopPropagation();
+    store.onUiAction?.('gfxLower', value, event.nativeEvent);
+  };
+  return (
+    <div className="quality-prompt" data-hud="qualityPrompt" data-ui-block="" role="status">
+      <span>Frame rate is low. Lower graphics to <b>{name}</b>?</span>
+      <button type="button" onClick={event => answer('yes', event)}>Lower</button>
+      <button type="button" onClick={event => answer('no', event)}>Keep</button>
+      {inPanel || touch ? null : <small>Pause to answer</small>}
+    </div>
+  );
+});
+
 export const PvpScore = memo(function PvpScore({ store }: { store: HudStore }) {
   rendered();
   const model = useHud(store, 'pvp');
@@ -467,7 +501,7 @@ export const ScreenOverlay = memo(function ScreenOverlay({ store }: { store: Hud
   return (
     <div className="screen-overlay" data-hud="screen" hidden={view === null} onClick={click} onKeyDown={key} onKeyUp={key}>
       <section ref={panelRef} className="screen-panel" data-hud="panel" data-screen-kind={kind ?? undefined} role="dialog" aria-modal="true" aria-label="Game menu" aria-labelledby={SCREEN_TITLE_ID} tabIndex={-1}>
-        <div className="screen-content">{view === null ? null : <Screen view={view} pad={device} onAction={(act, value, ev) => store.onUiAction?.(act, value, ev)} />}<InstallPrompt visible={view?.kind === 'main' && mobile.active} /></div>
+        <div className="screen-content"><QualityPrompt store={store} inPanel={true} />{view === null ? null : <Screen view={view} pad={device} onAction={(act, value, ev) => store.onUiAction?.(act, value, ev)} />}<InstallPrompt visible={view?.kind === 'main' && mobile.active} /></div>
       </section>
     </div>
   );

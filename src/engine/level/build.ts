@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { surfMat, TONE, boxGeo, cylGeo, sphereGeo, coneGeo, torusGeo } from '../render/index';
+import { surfMat, cloudMat, TONE, boxGeo, cylGeo, sphereGeo, coneGeo, torusGeo } from '../render/index';
 import type { SurfKey } from '../render/palette';
 import type { Box, World } from '../physics';
 import type { Breakable, BreakableKind, Level, LevelKey } from '../types';
@@ -35,6 +35,9 @@ export interface PlaneOpts extends BuildOpts {
   heightStep?: number;
   speed?: number;
 }
+
+/** A cloud bank: its centre and a size scale. The bank lies across the line to the map centre. */
+export type CloudBank = readonly [x: number, y: number, z: number, scale: number];
 
 export interface BreakOpts {
   hp?: number;
@@ -212,6 +215,31 @@ export class LevelBuilder {
       this.level.movers.push({ mesh, radius: 2.2 * scale });
       this.level.animated.push({ mesh, update });
     }
+  }
+
+  /**
+   * Low-poly cloud banks merged into one mesh: one draw call, no fog and no
+   * shadows, so they sit against the sky dome like the sun disc does.
+   */
+  clouds(banks: readonly CloudBank[], puffs = 7): void {
+    const parts: THREE.BufferGeometry[] = [];
+    for (const [x, y, z, s] of banks) {
+      const angle = Math.atan2(z, x), tx = -Math.sin(angle), tz = Math.cos(angle);
+      for (let i = 0; i < puffs; i++) {
+        const mid = (puffs - 1) / 2, along = (i - mid) * 6.5 * s;
+        const r = (5 + 2.5 * Math.sin(1.9 * i + angle) ** 2) * s * (i === Math.round(mid) ? 1.35 : 1);
+        const puff = new THREE.IcosahedronGeometry(r, 1);
+        puff.scale(1.25, 0.62, 1);
+        puff.rotateY(Math.PI / 2 - angle); // long axis along the bank, broadside to the map
+        puff.translate(x + tx * along, y + 1.8 * s * Math.sin(2.3 * i), z + tz * along);
+        parts.push(puff);
+      }
+    }
+    const geometry = mergeGeometries(parts, false);
+    for (const part of parts) part.dispose();
+    if (!geometry) return;
+    const mesh = this.addObject(new THREE.Mesh(geometry, cloudMat()));
+    mesh.castShadow = mesh.receiveShadow = false;
   }
 
   breakable(kind: BreakableKind, x: number, y: number, z: number, w: number, h: number, d: number,

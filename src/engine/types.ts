@@ -216,6 +216,28 @@ export interface Mood {
   hemiIntensity?: number;
   hemiSky?: number;
   hemiGround?: number;
+  /** Linear fog range in metres, before the view-distance setting scales it. */
+  fogNear?: number;
+  fogFar?: number;
+  /** Draw a sun disc and glow in the sky dome. */
+  sunDisc?: boolean;
+  /**
+   * Towards the sun, any length: the disc and the shadow-casting light both use
+   * it. Keep it 30° or more above the horizon, or shadows outgrow the shadow box.
+   */
+  sunDir?: readonly [number, number, number];
+  /** Colour grade in the composite pass. */
+  grade?: Grade;
+}
+
+/** A gentle per-mood colour grade, applied after tone mapping. Neutral is 0 / 1 / 1 / 1. */
+export interface Grade {
+  /** Added to the shadows, per channel, in the grade's square-root space: black stays black. */
+  lift: readonly [number, number, number];
+  /** Multiplies the highlights, per channel. */
+  gain: readonly [number, number, number];
+  saturation: number;
+  contrast: number;
 }
 
 export interface Bounds {

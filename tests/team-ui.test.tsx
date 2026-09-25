@@ -4,6 +4,7 @@ import { flushSync } from 'react-dom';
 import type { ReactNode } from 'react';
 import { BoardPanel, PvpPanel, Screen } from '@/components/hud/Screens';
 import { createUI } from '@/engine/game/ui';
+import { Quality } from '@/engine/render/quality';
 import type { App } from '@/engine/boot';
 import type { BoardRow, LobbyModel, OnlineModel, ScreenView } from '@/engine/hud/screens';
 import type { OnlineMode, Team } from '@/engine/game/team-rules';
@@ -110,6 +111,7 @@ test('UI validates mode actions, forwards online models and compares team winner
   const selectMode = vi.fn((mode: OnlineMode) => { lobby.mode = mode; });
   const app = {
     lobby, screen: 'online', busy: false,
+    quality: new Quality(null, { mobile: false, memory: null, cores: 8, gpu: '', maxTextureSize: 16384 }),
     gs: { state: 'lobby', mode: 'ffa', over: { id: 'team:0', name: 'RED' } },
     settings: { name: 'Red', sens: 100, acogSens: 120, sniperSens: 150, invert: false, music: false, optic: 'holo', r4cOptic: 'holo' },
     ctx: { input: { usingTouch: false, clearTouch: vi.fn(), touch: { enabled: false } }, net: { id: 'red', code: 'ABCDE', isHost: true }, hud: { showScreen, key: () => 'Enter' } },

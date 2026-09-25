@@ -60,9 +60,54 @@ export function setFlash(root: THREE.Object3D, on: boolean, tone: number = TONE.
   });
 }
 
-/** Vertex-coloured, unlit, inside-out: the sky dome. One instance, never fogged. */
-export function skyMat(): THREE.MeshBasicMaterial {
-  return new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false });
+/** The sky dome's uniforms; `setMood` writes them, nothing is rebuilt. */
+export type SkyUniforms = {
+  horizon: THREE.IUniform<THREE.Color>;
+  zenith: THREE.IUniform<THREE.Color>;
+  sunDir: THREE.IUniform<THREE.Vector3>;
+  sunColor: THREE.IUniform<THREE.Color>;
+  /** 0 hides the disc and glow, 1 shows them. */
+  sunDisc: THREE.IUniform<number>;
+};
+
+/**
+ * Unlit, inside-out, never fogged: the sky dome. The horizon-to-zenith gradient
+ * and the sun disc are both per pixel, so a mood change is a uniform write.
+ */
+export function skyMat(uniforms: SkyUniforms): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    uniforms, side: THREE.BackSide, depthWrite: false, fog: false,
+    vertexShader: `
+      varying vec3 vDir;
+      void main() {
+        vDir = position;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 horizon, zenith, sunDir, sunColor;
+      uniform float sunDisc;
+      varying vec3 vDir;
+      void main() {
+        vec3 dir = normalize(vDir);
+        vec3 col = mix(horizon, zenith, pow(max(dir.y, 0.0), 0.6));
+        // A disc of about 2.5 degrees with a soft rim, a tight glow and a wide haze.
+        // Its HDR core is rolled off to white by the composite's tone mapping.
+        float d = max(dot(dir, sunDir), 0.0);
+        float disc = smoothstep(0.99905, 0.99935, d);
+        col += sunColor * sunDisc * (disc * 3.0 + pow(d, 400.0) * 0.8 + pow(d, 24.0) * 0.18 + pow(d, 4.0) * 0.05);
+        gl_FragColor = vec4(col, 1.0);
+      }
+    `,
+  });
+}
+
+let clouds: THREE.MeshLambertMaterial | undefined;
+/** Flat-shaded cloud puffs. Unfogged like the dome they sit against; the emissive keeps undersides light. */
+export function cloudMat(): THREE.MeshLambertMaterial {
+  return clouds ??= new THREE.MeshLambertMaterial({
+    color: SURF.cloud, emissive: SURF.cloud, emissiveIntensity: 0.4, flatShading: true, fog: false,
+  });
 }
 
 // Private factories keep every material constructor in this module.

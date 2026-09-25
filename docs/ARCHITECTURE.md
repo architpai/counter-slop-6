@@ -259,30 +259,54 @@ Three material families, all created and cached by `render/materials.js`. Nothin
   (smoke rings) simply use a pale grey (`#DDE4EC`) and keep their `grow` behaviour.
 - Everything is opaque. No `transparent: true` anywhere in the 3-D scene (the HUD does its own
   compositing in DOM).
+- Two scenery materials sit outside the families, both made in `materials.ts`: the sky dome's
+  `ShaderMaterial` (`skyMat`, §3.3) and the unfogged flat-shaded cloud Lambert (`cloudMat`).
 
 ### 3.3 Lighting and shadows
 
 Replaces `rendering-effects.md` §4 in full.
 
 - One `DirectionalLight`, colour `#FFF6E5`, intensity 2.2, direction `normalize(0.38, 0.82, 0.42)`
-  (kept from the spec), positioned at `shadowCenter + dir × (radius × 2)`.
+  (kept from the spec) unless the level's mood sets `sunDir` (House, Downtown and Mexico do, about
+  32–35° up, so the dome's sun disc sits in view), positioned at `shadowCenter + dir × (radius × 2)`.
 - One `HemisphereLight`, sky `#BBD9EC`, ground `#8A8474`, intensity 0.85.
 - No point lights, no ambient light, no light probes.
-- **Soft shadows**: `renderer.shadowMap.enabled = true`,
-  `renderer.shadowMap.type = THREE.PCFSoftShadowMap`, map size 2048, `bias = -0.0004`,
-  `normalBias = 0.03`. The orthographic shadow camera is fitted per level by
-  `renderer.setLevelShadow(center, radius)` — `level` reports these in `level.shadow`.
+- **Shadows** follow the quality setting (`render/quality.ts`, `SHADOW_SPEC`): off, 2048² PCF
+  redrawn every 2nd frame (Low), 2048² PCF, 2048² PCFSoft, or 4096² PCFSoft; `bias = -0.0004`,
+  `normalBias = 0.03`. `shadowMap.autoUpdate` is off and `render` requests each redraw; the shadow
+  box only moves on frames that redraw the map. The orthographic shadow camera is fitted per level
+  by `renderer.setLevelShadow(center, radius)` — `level` reports these in `level.shadow`.
 - `castShadow = true` on level geometry, characters, props, debris and the grapple hook.
   `receiveShadow = true` on level geometry only. Particles, decals, tracers, view models and the
   weapon rig cast and receive nothing.
-- **Atmospheric perspective** (the spec's distance fade, §4) is `THREE.Fog(SURF.fog, 70, 300)`.
-  The far plane stays 420.
+- **Atmospheric perspective** (the spec's distance fade, §4) is a linear `THREE.Fog` whose range
+  each level's mood sets (`fogNear`/`fogFar`, roughly 50–55 m to 180–260 m; default 50–190), so a
+  grunt at 60 m stays clear. The view-distance setting ("normal" or "long", ×1.3) scales the fog
+  range, the far plane (420 m at "normal") and the sky dome together; it never pulls the fog in.
+- **Sky**: one dome (`skyMat`, a `ShaderMaterial`) follows the camera. It draws the
+  horizon-to-zenith gradient per pixel and, when the mood sets `sunDisc`, a sun disc with glow
+  along `sunDir`. The same direction aims the shadow-casting light, so the visible sun and the
+  shadows agree; moods keep it 30° or more up so shadows fit the shadow box. A mood change writes
+  uniforms only. Clouds
+  are one merged, unfogged low-poly mesh per level (`LevelBuilder.clouds`). There is no
+  `scene.background`: the dome covers every pixel.
 
 ### 3.4 Camera and canvas
 
-Unchanged from `rendering-effects.md` §2 and §3.1: perspective, near 0.08, far 420, rotation order
-`YXZ`, pixel ratio `min(devicePixelRatio, 1.5)` fixed at start-up, canvas fills the window and
-resizes with it. `antialias: true`. `outputColorSpace = SRGBColorSpace`, `toneMapping = NoToneMapping`.
+From `rendering-effects.md` §2 and §3.1: perspective, near 0.08, far 420 (scaled by view distance),
+rotation order `YXZ`, canvas fills the window and resizes with it. The pixel ratio is
+`min(devicePixelRatio, cap)` with the cap from the quality preset (1.5 or 2), applied live.
+`antialias: false` on the canvas (anti-aliasing lives in the composite, §3.6).
+`outputColorSpace = SRGBColorSpace`, `toneMapping = NoToneMapping` (tone mapping is in the composite).
+
+The weapon rig is drawn in the world pass with a fixed 65° vertical view-model FOV
+(`VIEW_MODEL_FOV`) that blends to the world FOV as the gun comes up to the eye, so ADS and scopes
+are unchanged. `renderer.setViewFov` scales the rig group in camera space by
+tan(world FOV / 2) / tan(view FOV / 2) in x and y, which puts every rig point on the screen spot
+and depth a camera at the view FOV would give it; no second pass, no second MSAA resolve. Rig
+meshes have `renderOrder` 1000 and the first one drawn clears depth, so the gun never clips into
+walls. Muzzle and ejection points read with `getWorldPosition` are already where the player sees
+them.
 
 ### 3.5 Typography and HUD look
 
@@ -315,11 +339,17 @@ resizes with it. `antialias: true`. `outputColorSpace = SRGBColorSpace`, `toneMa
 
 The two-pass tone pipeline (`rendering-effects.md` §6.1–6.2) is replaced by:
 
-1. Render the scene into a `WebGLRenderTarget` at render resolution
-   (`RGBAFormat`, `UnsignedByteType`, `LinearSRGBColorSpace`, depth buffer, no stencil, no mips,
-   `LinearFilter`).
+1. Render the scene into a `WebGLRenderTarget` (`RGBAFormat`, `HalfFloatType`,
+   `LinearSRGBColorSpace`, depth buffer, no stencil, no mips, `LinearFilter`) sized canvas × render
+   scale × the dynamic-resolution scale, with 0, 2 or 4 MSAA samples from the quality setting.
+   Dynamic resolution resizes the target, so the clear, the MSAA resolve and the composite all
+   shrink with it; the controller moves at most every half second, so reallocation is rare. The
+   rig is part of this pass (§3.4).
 2. Draw one full-screen triangle with a `ShaderMaterial` (orthographic camera, depth test off) that
-   samples the target and applies the four feedback overlays **exactly** as
+   samples the target (through FXAA on Low), tone-maps it (identity to 0.8, then a soft roll-off
+   to white, so the flat palette keeps its values), applies the mood's grade (gain in linear light; lift
+   and contrast in a square-root space, so lift tints the shadows without raising black; then
+   saturation; `GRADE` in `palette.ts`), then the four feedback overlays **exactly** as
    `rendering-effects.md` §6.3 specifies, in that order:
    hurt vignette (with the low-health pulse term), parry flash toward the background colour,
    slow-motion desaturation `mix(col, lum * vec3(0.8,0.86,1.0), slow*0.55)`.
@@ -327,6 +357,19 @@ The two-pass tone pipeline (`rendering-effects.md` §6.1–6.2) is replaced by:
    The fragment shader ends with `#include <colorspace_fragment>` so the linear target is converted
    to sRGB for the canvas.
 3. Nothing else. No outline detection, no hatching, no jitter, no grain.
+
+Quality (`render/quality.ts`): presets Low/Medium/High/Ultra plus Custom, auto-detected once per
+device (touch, `deviceMemory`, cores, GPU renderer string, `maxTextureSize`) and checked by a
+two-second benchmark in the menu backdrop, which steps Auto down one preset if it misses 60 fps
+and a second sample at reduced resolution runs clearly faster (otherwise the miss is a refresh cap
+or a CPU limit that a lower preset would not fix). Phones and tablets always start on Low.
+Stored in the versioned `cs6_gfx` record. `boot` applies every change live
+(`Renderer.applyQuality`, `Effects.setDetail`, the frame limiter) and runs the dynamic-resolution
+controller in every state, also before the benchmark has run. The controller's signal is the rAF
+interval, so it tests its floor: if two seconds there have not bought 10 % over full scale, the
+interval is a display or browser cap, which becomes the target, and the scale returns to full.
+When it sits at its floor for about ten seconds while still missing, it offers a one-time "Lower
+quality?" prompt (inside the menu panel while one is open) and never changes the preset by itself.
 
 `§6.3 is normative and must not be reinterpreted` — it is gameplay feedback, not style.
 
@@ -727,6 +770,7 @@ All values are strings in `localStorage`, read and written **only** by `main` th
 | `cs6_name` | `recruit` + random 10–99 | player name, ≤ 14 chars |
 | `cs6_sens` | `100` | look sensitivity percent (25–250, step 5) |
 | `cs6_invert` | off (`1` = inverted) | invert vertical look |
+| `cs6_gfx` | Auto | graphics quality: versioned JSON (`{ v: 1, preset, custom, fpsCounter, auto }`), read and written by `render/quality.ts` |
 
 ---
 
@@ -1158,10 +1202,15 @@ export class Renderer {
   readonly three: THREE.WebGLRenderer;
   readonly scene: THREE.Scene;
   readonly camera: THREE.PerspectiveCamera;
-  readonly rig: THREE.Group;                  // child of camera, scale 1; each weapon root has scale 0.46
+  readonly rig: THREE.Group;                  // child of camera; each weapon root has scale 0.46
   readonly sun: THREE.DirectionalLight;
   resize(): void;                             // self-registered on window resize
+  applyQuality(values: GfxValues): void;      // live: pixel ratio, render scale, AA, shadows, view distance
+  setDynamicScale(scale: number): void;       // dynamic resolution, 0-1 share of the target
   setLevelShadow(center: THREE.Vector3, radius: number): void;
+  setMood(mood?: Mood): void;                 // sky, sun disc, light, fog range, grade
+  prepareRig(root: THREE.Object3D): void;     // shadow flags, draw order, depth clear, once on attach
+  setViewFov(fov: number): void;              // V8: scales the rig in camera space (§3.4); the player camera calls it
   render(time: number, fx: PostFX): void;     // called last, exactly once per frame
 }
 ```
@@ -1178,9 +1227,9 @@ ragdoll, respawn replacement or disposal. Keep the placement and billboard rule 
 
 1. RE §2 renderer creation, pixel ratio, resize behaviour, the HUD layer sitting above the canvas.
 2. RE §3.1 camera parameters and rotation order.
-3. RE §3.6 the weapon rig: child of the camera, scale 1; each weapon root has uniform scale 0.46,
+3. RE §3.6 the weapon rig: child of the camera, scaled in x and y only for the view-model FOV (§3.4); each weapon root has uniform scale 0.46,
    applied exactly once. Only the equipped weapon is visible, drawn in front of the world, never shadowed.
-4. RE §4 → **replaced by** this file §3.3 (sun + hemisphere + PCF soft shadows + fog).
+4. RE §4 → **replaced by** this file §3.3 (sun + hemisphere + quality-dependent PCF shadows + fog).
 5. RE §5 → **replaced by** this file §3.1–3.2 (three material families, per-instance colour,
    `setFlash` swap), but keep RE §5.4's flash *timings* and triggers.
 6. RE §6.1–6.2 → **replaced by** this file §3.6 (single scene pass into a render target).
@@ -1224,6 +1273,12 @@ export interface ParticleSpec {
 export class Effects {
   constructor(scene: THREE.Scene, world: World);
   shake: number;                       // read-modify-written by the player camera step
+  shakeFrom: THREE.Vector3;            // weighted source of directional jolts (V17)
+  shakePush: number;                   // their strength; the camera step consumes and zeroes it
+  detail: number;                      // effects-detail share, 0.1-1 (quality setting)
+
+  push(from: THREE.Vector3, amount: number): void;  // a jolt the camera tips away from
+  setDetail(scale: number): void;      // thins cosmetic particles and pool use; tracers exempt
 
   update(dt: number): void;            // scaled dt while playing, real dt otherwise
   clear(): void;                       // particles, growing pools, debris, pool counters

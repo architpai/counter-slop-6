@@ -38,7 +38,7 @@ export type HudKey =
   | 'ammo' | 'slots' | 'grenades' | 'health' | 'score' | 'wave' | 'modifier'
   | 'timer' | 'weapon' | 'boss' | 'focus' | 'crosshair' | 'scope' | 'grapple'
   | 'message' | 'tip' | 'killFeed' | 'damage' | 'hitmarker' | 'pvp' | 'board'
-  | 'screen' | 'device' | 'mobile' | 'gameplay' | 'breath' | 'focusMark';
+  | 'screen' | 'device' | 'mobile' | 'gameplay' | 'breath' | 'focusMark' | 'fps' | 'qualityPrompt';
 
 export interface AmmoState {
   magazine: string;
@@ -93,6 +93,8 @@ export interface HudState {
   gameplay: boolean;
   breath: BreathState;
   focusMark: boolean;
+  fps: number | null;
+  qualityPrompt: string | null;
 }
 
 const KILL_LIFE = 1.7;
@@ -143,6 +145,8 @@ export class HudStore implements HudView {
   device = false;
   mobile: MobileState = { active: false, enabled: false, portrait: false, interrupted: false, online: false, attached: false, aiming: false, airborne: false };
   gameplay = false;
+  fps: number | null = null;
+  qualityPrompt: string | null = null;
 
   // ---------------------------------------------------------------- plumbing
 
@@ -377,6 +381,21 @@ export class HudStore implements HudView {
     if (next === this.boss.name) return;
     this.boss = { name: next };
     this.#emit('boss');
+  }
+
+  /** Called twice a second at most, so a React leaf render is fine here. */
+  setFps(fps: number | null): void {
+    const next = fps === null || !Number.isFinite(fps) ? null : Math.round(fps);
+    if (next === this.fps) return;
+    this.fps = next;
+    this.#emit('fps');
+  }
+
+  setQualityPrompt(preset: string | null): void {
+    const next = preset === null ? null : String(preset);
+    if (next === this.qualityPrompt) return;
+    this.qualityPrompt = next;
+    this.#emit('qualityPrompt');
   }
 
   // ------------------------------------------------------------------ events

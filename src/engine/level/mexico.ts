@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { TONE, TONE_HEX, makeFigure, surfMat, unlitMat, SURF } from '../render/index';
+import { TONE, TONE_HEX, makeFigure, surfMat } from '../render/index';
+import { GRADE } from '../render/palette';
 import type { SurfKey } from '../render/palette';
 import type { BreakableKind } from '../types';
 import type { FigureParts } from '../render/figure';
@@ -32,7 +33,9 @@ export function buildMexico(b: LevelBuilder) {
   b.level.key = 'mexico';
   b.level.playerStart.set(0, 0, 16);
   b.level.bounds = { minX: -62, maxX: 62, minZ: -62, maxZ: 62 };
-  b.level.mood = { horizon: 0xf2dfbc, zenith: 0x579cc4, fog: 0xeddbba, sun: 0xffefd1, sunIntensity: 2.25, hemiIntensity: 1.05, hemiSky: 0xbddbeb, hemiGround: 0xb69d79 };
+  // The sun sits about 32° up, ahead and right of the spawn view, where the old sun sphere stood.
+  b.level.mood = { horizon: 0xf2dfbc, zenith: 0x579cc4, fog: 0xeddbba, sun: 0xffefd1, sunIntensity: 2.25, hemiIntensity: 1.05, hemiSky: 0xbddbeb, hemiGround: 0xb69d79,
+    fogNear: 55, fogFar: 260, sunDisc: true, sunDir: [70, 105, -150], grade: GRADE.mexico };
   b.box(0, -1, 0, 134, 1, 134, { mat: 'sand' });
   b.collider(0, 62, 0, 164, 6, 164, { noNav: true, noGrapple: true });
   let k = 0;
@@ -117,16 +120,6 @@ export function buildMexico(b: LevelBuilder) {
     [-30, 0, 46], [30, 0, 46], [0, 13.45, -5.8], [-8, 30.6, 44]];
   for (const p of arenaSpawns) b.marker('arenaSpawns', ...p);
 
-  const glow = (mesh: THREE.Mesh) => {
-    mesh.material = unlitMat(SURF.accent);
-    mesh.castShadow = mesh.receiveShadow = false;
-  };
-  glow(b.sphere(70, 95, -150, 14, { ...ORANGE, separate: true }));
-  for (let i = 0; i < 12; i++) {
-    const a = i * Math.PI / 6;
-    glow(b.mesh(new THREE.BoxGeometry(7, 0.9, 0.9), [70 + 21 * Math.cos(a), 95 + 21 * Math.sin(a), -150],
-      { ...ORANGE, separate: true, rotation: new THREE.Euler(0, 0, a) }));
-  }
   for (const [x, z, w, h] of [[-120, -160, 60, 30], [40, -190, 90, 36],
     [150, -120, 70, 26], [-170, 60, 50, 24], [160, 90, 80, 30], [-60, 190, 100, 34]] as const) {
     b.box(x, 0, z, w, h, 30, { ...ROCK, noCollide: true });

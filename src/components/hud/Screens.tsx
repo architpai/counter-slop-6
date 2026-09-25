@@ -7,9 +7,10 @@ import { KEYBOARD_ROWS, PAD_ROWS } from '@/engine/hud/labels';
 import { ONLINE_MODES, TEAM_NAMES, isTeam } from '@/engine/game/team-rules';
 import type { OnlineMode } from '@/engine/game/team-rules';
 import type {
-  BoardModel, BoardRow, DeadModel, LobbyModel, LobbyPlayer, MainModel, MatchOnModel, MenuModel,
+  BoardModel, BoardRow, DeadModel, GfxModel, LobbyModel, LobbyPlayer, MainModel, MatchOnModel, MenuModel,
   OnlineInfo, OnlineModel, OverModel, PauseModel, PvpModel, ScreenView, UiAction, LookModel, WeaponSettingsModel,
 } from '@/engine/hud/screens';
+import type { GfxValues, PresetChoice } from '@/engine/render/quality';
 
 /**
  * The rendering half of the menus. Models come from the engine through
@@ -167,24 +168,86 @@ function Sensitivity({ act, label, value, onAction }: {
     <output>{readout}%</output></label>;
 }
 
+const PRESET_NAMES: Record<PresetChoice, string> = {
+  auto: 'Auto', low: 'Low', medium: 'Medium', high: 'High', ultra: 'Ultra', custom: 'Custom',
+};
+/** Advanced choices, in the order shown. Values are what the `gfx` action carries. */
+const GFX_OPTIONS = {
+  fpsTarget: [['30', '30'], ['60', '60'], ['90', '90'], ['120', '120'], ['0', 'Uncapped']],
+  antialias: [['off', 'Off'], ['fxaa', 'FXAA'], ['msaa2', 'MSAA 2×'], ['msaa4', 'MSAA 4×']],
+  shadows: [['off', 'Off'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['ultra', 'Ultra']],
+  effects: [['reduced', 'Reduced'], ['full', 'Full']],
+  viewDistance: [['normal', 'Normal'], ['long', 'Long']],
+} as const satisfies Partial<Record<keyof GfxValues, readonly (readonly [string, string])[]>>;
+const GFX_LABELS: Record<keyof typeof GFX_OPTIONS, string> = {
+  fpsTarget: 'FPS target', antialias: 'Anti-aliasing', shadows: 'Shadows', effects: 'Effects', viewDistance: 'View distance',
+};
+
+/**
+ * Preset buttons, then an Advanced disclosure. Every control is controlled: a
+ * change round-trips through the engine, which redraws the menu with the new
+ * model, so the buttons, the Custom state and the inputs never disagree.
+ */
+function Graphics({ model, onAction }: { model: GfxModel; onAction: Act }) {
+  const [open, setOpen] = useState(model.choice === 'custom');
+  const values = model.values;
+  const set = (key: keyof GfxValues, value: string, ev: Event): void => onAction('gfx', `${key}:${value}`, ev);
+  return (
+    <section className="graphics-settings" aria-labelledby="graphics-title">
+      <h3 id="graphics-title">Graphics</h3>
+      <div className="preset-picker" role="group" aria-label="Graphics preset">
+        {(['auto', 'low', 'medium', 'high', 'ultra', 'custom'] as const).map(choice => <button type="button" className="screen-button" key={choice}
+          data-act="gfxPreset" data-value={choice} aria-pressed={model.choice === choice}
+          onClick={event => { if (choice === 'custom') setOpen(true); onAction('gfxPreset', choice, event.nativeEvent); }}>
+          {choice === 'auto' ? `Auto (${PRESET_NAMES[model.auto]})` : PRESET_NAMES[choice]}
+        </button>)}
+      </div>
+      <details className="graphics-advanced" open={open} onToggle={event => setOpen(event.currentTarget.open)}>
+        <summary>Advanced <span>changing one switches to Custom</span></summary>
+        <div className="graphics-grid">
+          <label className="graphics-scale">Render scale
+            <input type="range" data-act="gfx" min={50} max={100} step={5} value={Math.round(values.renderScale * 100)}
+              onChange={event => set('renderScale', event.target.value, event.nativeEvent)} />
+            <output>{Math.round(values.renderScale * 100)}%</output>
+          </label>
+          <label className="graphics-check"><input type="checkbox" data-act="gfx" checked={values.dynamicRes}
+            onChange={event => set('dynamicRes', event.target.checked ? '1' : '0', event.nativeEvent)} /> Dynamic resolution</label>
+          {(Object.keys(GFX_OPTIONS) as (keyof typeof GFX_OPTIONS)[]).map(key => <label key={key}>{GFX_LABELS[key]}
+            <select data-act="gfx" value={String(values[key])} onChange={event => set(key, event.target.value, event.nativeEvent)}>
+              {GFX_OPTIONS[key].map(([value, text]) => <option value={value} key={value}>{text}</option>)}
+            </select>
+          </label>)}
+          <label className="graphics-check"><input type="checkbox" data-act="gfxFps" checked={model.fpsCounter}
+            onChange={event => onAction('gfxFps', event.target.checked ? '1' : '0', event.nativeEvent)} /> FPS counter</label>
+          <button type="button" className="screen-button graphics-reset" data-act="gfxReset" disabled={model.choice === 'auto'}
+            onClick={event => onAction('gfxReset', null, event.nativeEvent)}>Reset to Auto</button>
+        </div>
+      </details>
+    </section>
+  );
+}
+
 function Settings({ model, onAction }: { model: SettingsModel; onAction: Act }) {
   return (
     <div className="settings" data-ui-block="" data-ui-input-block="">
-      <div className="sensitivity-settings">
-        {model.touch ? <Sensitivity act="touchSens" label="Touch look / Holo sensitivity" value={model.touchSens ?? 100} key={`touch-${model.touchSens}`} onAction={onAction} />
-          : <Sensitivity act="sens" label="Look / Holo sensitivity" value={model.sens} key={`sens-${model.sens}`} onAction={onAction} />}
-        <Sensitivity act="acogSens" label="ACOG sensitivity" value={model.acogSens} key={`acog-${model.acogSens}`} onAction={onAction} />
-        <Sensitivity act="sniperSens" label="Sniper sensitivity" value={model.sniperSens} key={`sniper-${model.sniperSens}`} onAction={onAction} />
-        <p>Scoped settings are independent of look. 100% is the standard scoped speed.</p>
+      <div className="settings-general">
+        <div className="sensitivity-settings">
+          {model.touch ? <Sensitivity act="touchSens" label="Touch look / Holo sensitivity" value={model.touchSens ?? 100} key={`touch-${model.touchSens}`} onAction={onAction} />
+            : <Sensitivity act="sens" label="Look / Holo sensitivity" value={model.sens} key={`sens-${model.sens}`} onAction={onAction} />}
+          <Sensitivity act="acogSens" label="ACOG sensitivity" value={model.acogSens} key={`acog-${model.acogSens}`} onAction={onAction} />
+          <Sensitivity act="sniperSens" label="Sniper sensitivity" value={model.sniperSens} key={`sniper-${model.sniperSens}`} onAction={onAction} />
+          <p>Scoped settings are independent of look. 100% is the standard scoped speed.</p>
+        </div>
+        {/*
+          Uncontrolled on purpose: toggling one does not make the engine redraw,
+          so a controlled box would freeze at its old value. The key remounts it
+          when the engine changes the setting behind our back -- the M key toggles
+          music with a menu open -- which is what rebuilding the HTML used to do.
+        */}
+        <label className="settings-row"><input type="checkbox" data-act="invert" key={`invert-${model.invert}`} defaultChecked={model.invert} onChange={event => onAction('invert', event.target.checked ? '1' : '0', event.nativeEvent)} /> invert vertical look</label>
+        <label className="settings-row"><input type="checkbox" data-act="music" key={`music-${model.music}`} defaultChecked={model.music} onChange={event => onAction('music', event.target.checked ? '1' : '0', event.nativeEvent)} /> music <span className="dim">(M)</span></label>
       </div>
-      {/*
-        Uncontrolled on purpose: toggling one does not make the engine redraw,
-        so a controlled box would freeze at its old value. The key remounts it
-        when the engine changes the setting behind our back -- the M key toggles
-        music with a menu open -- which is what rebuilding the HTML used to do.
-      */}
-      <label className="settings-row"><input type="checkbox" data-act="invert" key={`invert-${model.invert}`} defaultChecked={model.invert} onChange={event => onAction('invert', event.target.checked ? '1' : '0', event.nativeEvent)} /> invert vertical look</label>
-      <label className="settings-row"><input type="checkbox" data-act="music" key={`music-${model.music}`} defaultChecked={model.music} onChange={event => onAction('music', event.target.checked ? '1' : '0', event.nativeEvent)} /> music <span className="dim">(M)</span></label>
+      <Graphics model={model.gfx} onAction={onAction} />
     </div>
   );
 }

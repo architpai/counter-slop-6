@@ -294,7 +294,10 @@ export class Player implements Target {
     this.hp = Math.max(0, this.hp - amount);
     this.sinceDamage = 0;
     this.hurtFx = Math.min(1, this.hurtFx + amount / 40);
-    this.ctx.effects.shake += 0.2 + amount / 80;
+    // Same total jolt as before; with a known source, a share of it becomes a push away from it.
+    const jolt = 0.2 + amount / 80, directed = validVector(from) && this.ctx.effects.push !== undefined;
+    this.ctx.effects.shake += directed ? jolt * 0.7 : jolt;
+    if (directed) this.ctx.effects.push(from, jolt * 0.3);
     this.ctx.audio.hurt();
     this.ctx.input.rumble(0.8, 0.5, 160);
     if (validVector(from)) {

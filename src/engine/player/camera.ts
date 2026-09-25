@@ -1,5 +1,6 @@
 import { Vector3 } from 'three';
-import { clamp, damp, rand, Spring } from '../util';
+import { clamp, damp, lerp, Spring } from '../util';
+import { VIEW_MODEL_FOV } from '../render/index';
 import { EYE_HEIGHT, CROUCH_EYE } from './movement';
 import type { Player } from './index';
 
@@ -23,12 +24,40 @@ export interface CameraState {
   stepDistance: number;
   bobX: number;
   bobY: number;
+  /** Screen-shake noise clock, in noise cells. */
+  shakeT: number;
+  /** Directional jolt away from a damage source, in radians; decays per impulse. */
+  shakePitch: Spring;
+  shakeYaw: Spring;
 }
 
 /** Hip-fire vertical FOV. ADS look sensitivity scales against it. */
 export const HIP_FOV = 82;
 
 const target = new Vector3(0, 10, 0);
+const away = new Vector3();
+
+/** Noise cells per second: fast enough to read as a jolt, slow enough to stay smooth. */
+const SHAKE_HZ = 16;
+/**
+ * Scales the noise to the RMS of the white noise it replaced, `rand(-0.5, 0.5)`
+ * (0.2887). Smoothstep value noise over uniform [-1, 1] lattice values has an
+ * RMS of about 0.4976, so the overall strength is unchanged.
+ */
+const SHAKE_MATCH = 0.58;
+/** Jolt velocity per unit of directional push, in radians per second. */
+const SHAKE_KICK = 2.2;
+
+const lattice = (i: number, seed: number): number => {
+  const x = Math.sin(i * 127.1 + seed * 311.7) * 43758.5453;
+  return (x - Math.floor(x)) * 2 - 1;
+};
+
+/** Smooth 1-D value noise in [-1, 1]; each seed is an independent stream. */
+export function shakeNoise(t: number, seed: number): number {
+  const i = Math.floor(t), f = t - i;
+  return lerp(lattice(i, seed), lattice(i + 1, seed), f * f * (3 - 2 * f));
+}
 
 export function initCamera(p: Player): void {
   p.recoilPitch = new Spring(190, 17);
@@ -42,6 +71,9 @@ export function initCamera(p: Player): void {
   p.stepOffset = 0;
   p.bobPhase = p.bobAmt = p.stepDistance = 0;
   p.bobX = p.bobY = 0;
+  p.shakeT = 0;
+  p.shakePitch = new Spring(300, 22);
+  p.shakeYaw = new Spring(300, 22);
   p.ctx.camera.rotation.order = 'YXZ';
 }
 
@@ -79,11 +111,26 @@ export function updateCamera(p: Player, dt: number): void {
   }
   const shake = Math.min(effects.shake, 1.2);
   effects.shake = damp(effects.shake, 0, 7, dt);
-  camera.position.copy(p.eye).addScaledVector(p.right, p.bobX + rand(-0.5, 0.5) * shake * 0.07);
-  camera.position.y += rand(-0.5, 0.5) * shake * 0.07;
+  // A jolt from a known source tips the view away from it, then springs back.
+  if (effects.shakePush > 0) {
+    const push = Math.min(effects.shakePush, 1.2) * SHAKE_KICK;
+    away.copy(p.eye).sub(effects.shakeFrom).setY(0);
+    if (away.lengthSq() > 1e-6) {
+      away.normalize();
+      p.shakePitch.kick(-away.dot(p.forward) * push);
+      p.shakeYaw.kick(-away.dot(p.right) * push);
+    }
+    effects.shakePush = 0;
+  }
+  p.shakePitch.update(dt);
+  p.shakeYaw.update(dt);
+  p.shakeT += dt * SHAKE_HZ;
+  const noise = (seed: number): number => shakeNoise(p.shakeT, seed) * SHAKE_MATCH * shake;
+  camera.position.copy(p.eye).addScaledVector(p.right, p.bobX + noise(0) * 0.07);
+  camera.position.y += noise(1) * 0.07;
   camera.rotation.set(
-    p.pitch + p.recoilPitch.value + rand(-0.5, 0.5) * shake * 0.035,
-    p.yaw + p.recoilYaw.value + rand(-0.5, 0.5) * shake * 0.035,
+    p.pitch + p.recoilPitch.value + p.shakePitch.value + noise(2) * 0.035,
+    p.yaw + p.recoilYaw.value + p.shakeYaw.value + noise(3) * 0.035,
     p.roll + p.headshotRoll.value + Math.sin(p.bobPhase * 0.5) * 0.004 * p.bobAmt,
     'YXZ',
   );
@@ -95,6 +142,9 @@ export function updateCamera(p: Player, dt: number): void {
     camera.fov = fov;
     camera.updateProjectionMatrix();
   }
+  // The gun keeps a fixed FOV at the hip and joins the world FOV as it comes up
+  // to the eye, so sights and scopes line up exactly as before.
+  p.ctx.renderer.setViewFov?.(lerp(VIEW_MODEL_FOV, camera.fov, clamp(p.weapon.aimAmt, 0, 1)));
   p.hurtFx = damp(p.hurtFx, 0, 3, dt);
   p.flashFx = damp(p.flashFx, 0, 10, dt);
   camera.updateMatrixWorld();

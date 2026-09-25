@@ -1,3 +1,5 @@
+import type { Grade } from '../types';
+
 export const TONE = Object.freeze({ PRIMARY: 0, HOSTILE: 1, DARK: 2, ACCENT: 3, HEAL: 4, BOSS: 5 } as const);
 /** Tone ids stay 0-5 (§3.1), so they double as the index into every tone table. */
 export type ToneId = (typeof TONE)[keyof typeof TONE];
@@ -27,3 +29,20 @@ export const SMOKE_HEX = 0xdde4ec;
 // Private lighting colours and gradient levels.
 export const LIGHT = Object.freeze({ sun: 0xffefd6, sky: 0xafcbe1, ground: 0x626772, zenith: 0x5294b7 });
 export const TOON_STEPS = Object.freeze([64, 160, 255]);
+
+/**
+ * Per-mood colour grades (V4), applied after tone mapping. The numbers stay
+ * small on purpose: the flat palette must still read as itself. Lift works in
+ * the shader's square-root space, so black stays black and a dark colour moves
+ * a few levels at most.
+ */
+export const GRADE = Object.freeze({
+  neutral: { lift: [0, 0, 0], gain: [1, 1, 1], saturation: 1, contrast: 1 },
+  /** Cool morning: blue in the shadows, warm sunlit faces. */
+  downtown: { lift: [0.006, 0.012, 0.03], gain: [1.02, 1, 0.97], saturation: 1.03, contrast: 1.06 },
+  /** Low evening sun: warm throughout. */
+  house: { lift: [0.02, 0.01, 0], gain: [1.02, 0.99, 0.95], saturation: 1.03, contrast: 1.04 },
+  /** Sun-baked: warmer and a touch more saturated. */
+  mexico: { lift: [0.016, 0.008, 0], gain: [1.02, 1, 0.95], saturation: 1.08, contrast: 1.05 },
+  training: { lift: [0, 0.004, 0.012], gain: [1, 1, 1], saturation: 1, contrast: 1.03 },
+} as const satisfies Record<string, Grade>);

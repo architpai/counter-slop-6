@@ -35,6 +35,8 @@ interface Particle {
 interface Pool {
   mesh: THREE.InstancedMesh;
   capacity: number;
+  /** Slots in use: the capacity scaled by the effects detail. */
+  limit: number;
   next: number;
   generations: Uint32Array;
 }
@@ -104,7 +106,7 @@ function makePool(scene: THREE.Scene, name: string, geometry: THREE.BufferGeomet
   mesh.setColorAt(0, color.setHex(TONE_HEX[TONE.HOSTILE]));
   mesh.instanceColor?.setUsage(THREE.DynamicDrawUsage);
   scene.add(mesh);
-  return { mesh, capacity, next: 0, generations: new Uint32Array(capacity) };
+  return { mesh, capacity, limit: capacity, next: 0, generations: new Uint32Array(capacity) };
 }
 
 function blobGeometry(seed: number): THREE.ShapeGeometry {
@@ -136,8 +138,8 @@ function put(pool: Pool, index: number, matrix: THREE.Matrix4, hex: number): voi
 
 function slot(pool: Pool): number {
   const index = pool.next;
-  pool.next = (index + 1) % pool.capacity;
-  pool.mesh.count = Math.min(pool.capacity, pool.mesh.count + 1);
+  pool.next = (index + 1) % pool.limit;
+  pool.mesh.count = Math.min(pool.limit, pool.mesh.count + 1);
   pool.generations[index] = (pool.generations[index] ?? 0) + 1;
   return index;
 }
@@ -177,6 +179,12 @@ export class Effects {
   world: World;
   /** Public accumulator: recipes add to it, the player camera step decays it. */
   shake: number;
+  /** The directional part of the shake: where jolts came from (weighted) and how hard. The camera consumes both. */
+  shakeFrom: THREE.Vector3;
+  shakePush: number;
+  /** Share of cosmetic particles, decals and debris kept (the effects-detail setting). Tracers are exempt. */
+  detail: number;
+  _thin: number;
   _particles: Particle[];
   _growing: Growing[];
   _debris: Debris[];
@@ -191,6 +199,10 @@ export class Effects {
     this.scene = scene;
     this.world = world;
     this.shake = 0;
+    this.shakeFrom = new THREE.Vector3();
+    this.shakePush = 0;
+    this.detail = 1;
+    this._thin = 0;
     this._particles = [];
     this._growing = [];
     this._debris = [];
@@ -202,10 +214,34 @@ export class Effects {
     this._pools = [this._drops, this._strokes, ...this._splats, this._holes];
   }
 
+  /** Scale particle counts and decal/debris pool use; 1 is full detail. */
+  setDetail(scale: number): void {
+    this.detail = clamp(finite(scale, 1), 0.1, 1);
+    for (const pool of this._pools) {
+      pool.limit = Math.max(1, Math.floor(pool.capacity * this.detail));
+      pool.mesh.count = Math.min(pool.mesh.count, pool.limit);
+      pool.next %= pool.limit;
+    }
+  }
+
+  /** A jolt from `from`: the camera tips away from it. `shake` stays the noise accumulator. */
+  push(from: THREE.Vector3, amount: number): void {
+    if (!finiteVector(from) || !Number.isFinite(amount) || amount <= 0) return;
+    this.shakeFrom.multiplyScalar(this.shakePush).addScaledVector(from, amount).divideScalar(this.shakePush + amount);
+    this.shakePush += amount;
+  }
+
   particle(p: ParticleSpec): void {
     if (!p || !['drop', 'stroke', 'emitter'].includes(p.kind) || !finiteVector(p.pos)) return;
     const life = finite(p.life, 1), size = Math.max(0, finite(p.size, 0.05));
     if (life <= 0 || size === 0) return;
+    // Reduced detail keeps an even share of every burst. Tracers carry gameplay
+    // information and emitters only spawn drops, which are thinned themselves.
+    if (this.detail < 1 && p.kind !== 'emitter' && finite(p.fixedLen, 0) === 0) {
+      this._thin += this.detail;
+      if (this._thin < 1) return;
+      this._thin -= 1;
+    }
     this._particles.push({
       kind: p.kind, pos: p.pos.clone(), vel: finiteVector(p.vel) ? p.vel.clone()
         : p.kind === 'emitter' || finite(p.fixedLen, 0) > 0 ? null : new THREE.Vector3(),
@@ -278,7 +314,7 @@ export class Effects {
 
   _draw(p: Particle): void {
     const pool = p.kind === 'drop' ? this._drops : this._strokes;
-    if (pool.mesh.count === pool.capacity) return;
+    if (pool.mesh.count >= pool.limit) return;
     const frac = clamp(p.life / p.maxLife, 0, 1);
     transform.position.copy(p.pos);
     if (p.kind === 'drop') {
@@ -384,7 +420,7 @@ export class Effects {
     if (!mesh?.isObject3D || !finiteVector(pos) || !finiteVector(vel) || !finiteVector(angVel)) return;
     const existing = this._debris.findIndex(d => d.mesh === mesh);
     if (existing !== -1) return;
-    if (this._debris.length >= 70) this._removeDebris(0);
+    if (this._debris.length >= Math.max(10, Math.round(70 * this.detail))) this._removeDebris(0);
     this.scene.attach(mesh);
     mesh.position.copy(this.scene.worldToLocal(localPosition.copy(pos)));
     mesh.traverse(child => { if ('isMesh' in child && child.isMesh) { child.castShadow = true; child.receiveShadow = false; } });
@@ -454,6 +490,7 @@ export class Effects {
 
   clear(): void {
     this._particles.length = this._growing.length = 0;
+    this.shakePush = 0;
     while (this._debris.length) this._removeDebris(this._debris.length - 1);
     for (const pool of this._pools) {
       pool.mesh.count = pool.next = 0;

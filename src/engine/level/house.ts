@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { SURF, boxGeo, cylGeo, sphereGeo, unlitMat } from '../render/index';
+import { boxGeo, cylGeo } from '../render/index';
+import { GRADE } from '../render/palette';
 import type { BuildOpts, Gap, LevelBuilder, MarkerKind, StairOpts } from './build';
 
 /**
@@ -99,7 +100,8 @@ function markers(b: LevelBuilder, kind: MarkerKind, points: readonly Point[]) {
 }
 
 export function buildHouse(b: LevelBuilder) {
-  b.level.mood = { horizon: 0xf3caa4, zenith: 0x789ab9, fog: 0xe6cdb6, sun: 0xffdaa9, sunIntensity: 2.1, hemiIntensity: 1.05, hemiSky: 0xb4c6de, hemiGround: 0x9e907b };
+  b.level.mood = { horizon: 0xf3caa4, zenith: 0x789ab9, fog: 0xe6cdb6, sun: 0xffdaa9, sunIntensity: 2.1, hemiIntensity: 1.05, hemiSky: 0xb4c6de, hemiGround: 0x9e907b,
+    fogNear: 50, fogFar: 180, sunDisc: true, sunDir: [150, 153, 160], grade: GRADE.house };
   buildGround(b);
   buildBasement(b);
   buildFirst(b);
@@ -422,16 +424,7 @@ function buildNeighbourhood(b: LevelBuilder) {
   slab(b, 38, -3, 50, 3, 0.25, 0.25, wood);
   for (const [x, z] of [[39, -2.6], [39, 2.6], [49, -2.6], [49, 2.6]] as const) box(b, x, -1, z, 0.3, 1.5, 0.3, { ...wood, noCollide: true });
   box(b, 46, 0.25, -1.2, 3, 0.6, 1.2, { mat: 'siding', noCollide: true });   // moored boat
-  // A low evening sun and a few clouds, unlit against the dome.
-  const glow = (mesh: THREE.Mesh, color: number) => {
-    mesh.material = unlitMat(color);
-    mesh.castShadow = false;
-  };
-  glow(sphere(b, 150, 52, 160, 14, { segments: 12, separate: true, noCollide: true }), SURF.accent);
-  for (const [x, y, z, s] of [[-80, 70, 150, 1.2], [60, 78, 190, 1.4], [-160, 62, 20, 1], [120, 66, -140, 1.1]] as const) {
-    for (let i = 0; i < 5; i++) {
-      glow(mesh(b, sphereGeo((4 + i % 3) * s, 8), [x + (i - 2) * 5 * s, y + 2 * s * Math.sin(1.7 * i), z],
-        { separate: true, noCollide: true }), SURF.cloud);
-    }
-  }
+  // An evening sun, as low as the shadow box allows (the dome's disc, see the mood), and a few clouds.
+  b.clouds(([[-80, 70, 150, 1.2], [60, 78, 190, 1.4], [-160, 62, 20, 1], [120, 66, -140, 1.1]] as const)
+    .map(([x, y, z, s]) => [sc(x), sc(y), sc(z), sc(s)] as const), 5);
 }

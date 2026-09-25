@@ -67,7 +67,8 @@ try {
   await wait(() => window.__game.player.sprinting);
   await finger('touchStart', 2, fire.x, fire.y);
   await finger('touchMove', 2, fire.x + 20, fire.y - 5);
-  await wait(() => window.__game.input.down('fire') && window.__game.player.firing);
+  // The drag can land a frame after the press; faster presets make that visible, so wait for both.
+  await page.waitForFunction(yaw => window.__game.input.down('fire') && window.__game.player.firing && window.__game.player.yaw !== yaw, before.yaw);
   assert.equal(await read(() => window.__game.player.sprinting), false, 'fire still blocks sprint');
   const during = await read(() => ({ position: window.__game.player.body.pos.toArray(), mag: window.__game.player.weapon.mag, yaw: window.__game.player.yaw }));
   assert(during.mag < before.mag); assert.notDeepEqual(during.position, before.position); assert.notEqual(during.yaw, before.yaw);

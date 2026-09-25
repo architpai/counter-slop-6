@@ -55,7 +55,7 @@ What already works: the menus and HUD are clean and readable at 1440×900 and 90
 | Render scale | 0.75 × DPR ≤ 1.5 | 1.0 × DPR ≤ 1.5 | 1.0 × DPR ≤ 2 | 1.0 × DPR ≤ 2 |
 | Dynamic resolution | on (0.6–1.0) | on (0.7–1.0) | on (0.8–1.0) | off by default |
 | Anti-aliasing | FXAA | SMAA | MSAA 4× + SMAA | TAA + SMAA |
-| Shadows | 1024², PCF, update every 2nd frame | 2048² PCF | 2 cascades 2048² PCFSoft | 3 cascades 4096² PCFSoft |
+| Shadows | 2048², PCF, update every 2nd frame (1024² was too blocky over the 70 m box) | 2048² PCF | 2 cascades 2048² PCFSoft | 3 cascades 4096² PCFSoft |
 | Ambient occlusion | baked vertex AO | baked AO map | baked AO + GTAO half-res | baked AO + GTAO full-res |
 | Lighting | sun + hemisphere | baked lightmap + sun | baked lightmap + sun + dynamic lights | same + light shafts |
 | Textures | none | 512 px | 1K | 2K |
@@ -270,6 +270,7 @@ Add a screen-space AO pass on top of V7 for dynamic objects, meaning characters 
 ## Order of work (PR-sized)
 
 1. **Q — Quality system.** Presets, auto-detect, dynamic resolution and the Graphics settings UI. Low = today's look, and nothing else changes visually. The realistic tiers show today's look until R1 lands. This PR also carries the cheap V items that help every tier: V4, V6 (sky and fog), V8 (view-model FOV) and V17.
+   - **Progress (2026-09-25): built.** `render/quality.ts` (presets, `cs6_gfx` v1, detect, menu benchmark, dynamic resolution, frame limiter, one-time "Lower quality?" prompt); Settings → Graphics with Advanced; live apply of render scale, pixel-ratio cap, dynamic resolution (resizes the target; learns display and power-saving caps instead of treating them as load, judged on frame-time medians so one hitch cannot hide a cap) + FPS target (no preset caps it), AA (FXAA on Low, MSAA 2×/4×), shadows (off frees the map / 2048 PCF every 2nd frame, since 1024 made Low's near shadows blocky / 2048 PCF / 2048 PCFSoft / 4096 PCFSoft), effects detail, view distance (normal / long; no "short", which saved nothing and fogged out 60 m enemies), FPS counter. Phones always auto-detect to Low. AO, textures and bloom are not exposed yet. V4: soft-shoulder tone map and per-mood grade in the composite (lift in a square-root space, so black stays black and dark kit keeps its hue), Downtown's cool-morning mood. V6: sun disc and glow in the dome shader, merged unfogged clouds (Downtown, and House/Mexico too, whose old sun and clouds would have vanished in the tighter fog), per-map fog ranges, no attribute rebuild on `setMood`, no `scene.background`. One sun direction per map for the disc and the light; Downtown and Mexico put it about 32° up where their old sun spheres stood, so it shows from the spawn. V8: 65° view-model FOV by scaling the rig in camera space inside the world pass (no second pass). V17: smoothed value-noise shake plus a directional jolt from damage sources. `tests/tiers.shots.mjs` records the per-preset screenshot set, frame times (DPR 2, vsync off, warm-up discarded) and the fog at 60 m; sun or shade is tested from knee to head and around the feet against shadow-casting meshes, and a shade grunt outside the shadow box is flagged. Grunts past the shadow box's 35 m half-width render lit whatever stands over them until CSM (R1).
 2. **R1 — HDR chain + skies.** Tone mapping, GTAO, bloom, grade, SMAA/TAA, CSM, and Blender-rendered skies and environments.
 3. **R2 — Materials, Downtown pilot.** The material tags, box UVs, the first 8 procedural texture sets and a KTX2 pipeline, then Downtown realistic on Medium and above.
 4. **R3 — Baked lighting, Downtown.** Once it looks right, R2 and R3 for House and Mexico.
@@ -282,5 +283,5 @@ Each step keeps the existing checks green (TypeScript, vitest, smoke, stairs, mo
 
 ## Housekeeping found on the way
 - `docs/spec/rendering-effects.md` §4–6 still describes the old ink pipeline (single light, no shadows, outline/hatch composite). Update it or mark it superseded.
-- ARCHITECTURE §3.4 and §3.6 still say `antialias: true` and an `UnsignedByteType` target. G3 and G4 changed both.
+- ~~ARCHITECTURE §3.4 and §3.6 still say `antialias: true` and an `UnsignedByteType` target.~~ Fixed with step 1.
 - `tactical.glb` has 132 zero-area triangles in thin plates (goggle frame and lens, view blue tab).

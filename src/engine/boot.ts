@@ -1,5 +1,6 @@
 import { clamp, randInt, store, SKEY } from './util';
 import { Renderer } from './render/index';
+import { Benchmark, DynamicResolution, EFFECTS_SCALE, FrameLimiter, Quality, probeDevice, targetFrameMs } from './render/quality';
 import { World } from './physics';
 import { NavGrid, BOSS_CLEARANCE, BOSS_HEADROOM } from './nav';
 import { Audio } from './audio';
@@ -54,6 +55,10 @@ export interface App {
   lobby: Lobby;
   scores: Map<string, ScoreRow>;
   settings: Settings;
+  /** Graphics quality; `boot` applies every change to the renderer and effects. */
+  quality: Quality;
+  /** The player answered the "Lower quality?" prompt. */
+  answerQualityPrompt(accept: boolean): void;
   busy: boolean;
   screen: ScreenName | null;
   loadLevel(arena: boolean, key?: unknown, force?: boolean): void;
@@ -94,6 +99,9 @@ export interface GameHandle {
   effects: Effects;
   input: Input;
   world: World;
+  /** Graphics quality and the dynamic-resolution controller; tests pin the scale through these. */
+  quality: Quality;
+  dynamic: DynamicResolution;
   beginSolo(): void;
   beginTraining(): void;
   pause(): void;
@@ -184,6 +192,23 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
 
   const input = new Input(canvas);
   const effects = new Effects(scene, world);
+  const storage = (() => { try { return window.localStorage; } catch { return null; } })();
+  const quality = new Quality(storage, probeDevice(renderer.three.getContext(), window, input.usingTouch));
+  const dynamic = new DynamicResolution();
+  const limiter = new FrameLimiter();
+  let benchmark: Benchmark | null = null;
+  /** Push the quality in force into the renderer, effects and frame pacing. Live, no reload. */
+  function applyQuality(): void {
+    const values = quality.values;
+    renderer.applyQuality(values);
+    effects.setDetail(EFFECTS_SCALE[values.effects]);
+    limiter.fps = values.fpsTarget;
+    dynamic.configure(values.dynamicMin, targetFrameMs(values.fpsTarget));
+    renderer.setDynamicScale(1);
+    benchmark = quality.needsBenchmark ? new Benchmark() : null;
+    if (!quality.fpsCounter) hud.setFps(null);
+  }
+  applyQuality();
   function applyLook(): void {
     input.mouseSens = 0.0022 * settings.sens / 100;
     input.padSensX = 3.4 * settings.sens / 100;
@@ -274,7 +299,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
   applyOptic();
 
   // ---- run control
-  const app = { ctx, gs, lobby, scores, settings, busy: false, screen: null, loadLevel, applyLook, applyOptic } as unknown as App;
+  const app = { ctx, gs, lobby, scores, settings, quality, busy: false, screen: null, loadLevel, applyLook, applyOptic } as unknown as App;
   app.pickups = createPickups(ctx);
   app.breakables = createBreakables(ctx, app.pickups);
   app.addScore = game.addScore;
@@ -284,6 +309,19 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
   app.ffa = createFFA(app);
   app.ui = createUI(app);
   app.showScreen = app.ui.showScreen;
+  // One offer per session, and only an offer: the preset never changes silently.
+  let qualityOffered = false, qualityPromptT = 0;
+  app.answerQualityPrompt = accept => {
+    hud.setQualityPrompt(null);
+    if (accept) quality.acceptLower();
+  };
+  teardown.push(quality.subscribe(() => {
+    // Any change answers an open offer: its named preset may no longer be one step down.
+    hud.setQualityPrompt(null);
+    qualityPromptT = 0;
+    applyQuality();
+    if (app.screen) app.ui.redraw();
+  }));
   app.setMusic = on => {
     settings.music = on; store.set(SKEY.MUSIC, on); audio.music(on);
   };
@@ -346,7 +384,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
   // ---- handle 11 (also the debug surface)
   handle = {
     ctx, gs, player, enemies, net, remotes: ctx.remotes, lobby, scores, pickups: app.pickups.items,
-    level: ctx.level, nav: ctx.nav, hud, effects, input, world,
+    level: ctx.level, nav: ctx.nav, hud, effects, input, world, quality, dynamic,
     beginSolo: app.beginSolo, beginTraining: app.beginTraining, pause: app.pause, resume: app.resume, step: t => step(t),
     jumpToWave: n => {
       if (!Number.isInteger(n) || n < 1) return;
@@ -516,9 +554,44 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     renderer.render(gs.time, fx);
   }
 
+  let lastFrame = 0, fpsFrames = 0, fpsMs = 0;
+  /** Frame-time bookkeeping for the FPS counter, the menu benchmark and dynamic resolution. */
+  function measure(frameMs: number): void {
+    fpsFrames++; fpsMs += frameMs;
+    if (fpsMs >= 500) {
+      if (quality.fpsCounter) hud.setFps(fpsFrames * 1000 / fpsMs);
+      fpsFrames = 0; fpsMs = 0;
+    }
+    // Only the idle menu backdrop is a fair, repeatable load for the benchmark.
+    // Anywhere else it restarts, and dynamic resolution runs as usual.
+    if (benchmark && gs.state === 'start' && app.screen === 'main' && !document.hidden) {
+      const missed = benchmark.add(frameMs);
+      renderer.setDynamicScale(benchmark.scale);
+      if (missed !== null) quality.benchmarkDone(missed);
+      return;
+    }
+    benchmark?.reset();
+    const playing = gs.state === 'play' && !gs.menu;
+    if (qualityPromptT > 0 && playing && (qualityPromptT -= frameMs / 1000) <= 0) hud.setQualityPrompt(null);
+    if (!quality.values.dynamicRes) {
+      renderer.setDynamicScale(1);
+      return;
+    }
+    renderer.setDynamicScale(dynamic.update(frameMs));
+    const lower = quality.lowerPreset;
+    if (dynamic.atFloor && playing && !qualityOffered && lower !== null) {
+      qualityOffered = true;
+      qualityPromptT = 20;
+      hud.setQualityPrompt(lower);
+    }
+  }
+
   function frame(nowMs: number): void {
     if (disposed) return;
     rafId = requestAnimationFrame(frame);
+    if (!limiter.ready(nowMs)) return;
+    if (lastFrame > 0) measure(nowMs - lastFrame);
+    lastFrame = nowMs;
     step(nowMs);
   }
   rafId = requestAnimationFrame(frame);

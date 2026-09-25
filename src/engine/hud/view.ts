@@ -55,6 +55,10 @@ export interface HudView {
   setFocusMeter(show: boolean, frac: number, ready: boolean, label: string): void;
   setFocusMark(x: number | null, y?: number): void;
   setBoss(name: string | null, frac?: number): void;
+  /** Frames per second for the optional counter; null hides it. */
+  setFps(fps: number | null): void;
+  /** The one-time "Lower quality?" offer, naming the preset it would switch to; null hides it. */
+  setQualityPrompt(preset: string | null): void;
 
   hitmarker(kill: boolean, crit: boolean, blocked?: boolean): void;
   damageFrom(angle: number): void;

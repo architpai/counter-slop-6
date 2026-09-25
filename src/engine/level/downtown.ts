@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { SURF, TONE, boxGeo, cylGeo, coneGeo, torusGeo, unlitMat } from '../render/index';
+import { TONE, cylGeo, coneGeo, torusGeo } from '../render/index';
+import { GRADE } from '../render/palette';
 import type { BuildOpts, LevelBuilder, MarkerKind } from './build';
 import type { SurfKey } from '../render/palette';
 
@@ -27,6 +28,11 @@ function rails(b: LevelBuilder, y: number, segments: readonly Segment[], opts?: 
 export function buildDowntown(b: LevelBuilder) {
   const arena = b.level.arena, p = arena ? 68 : 55, ph = arena ? 30 : 18;
   const e = p - 3.8, d = p - 3;
+  // A cool, clear morning with a warm low sun: its own mood, apart from the warm House and Mexico.
+  // The sun sits about 32° up, ahead and left of the spawn view, where the old sun sphere stood.
+  b.level.mood = { horizon: 0xd4e1e8, zenith: 0x4683b8, fog: 0xc8d6df, sun: 0xffe7c9, sunIntensity: 2.1,
+    hemiIntensity: 0.95, hemiSky: 0xa6c2de, hemiGround: 0x5d6471, fogNear: 50, fogFar: arena ? 215 : 190,
+    sunDisc: true, sunDir: [-90, 115, -160], grade: GRADE.downtown };
   b.box(0, -1, 0, 2 * p + 6, 1, 2 * p + 6, { mat: 'ground' });
   for (const sign of [-1, 1]) {
     b.box(0, 0, sign * p, 2 * p + 6, ph, 6, concrete);
@@ -324,23 +330,11 @@ function buildPlaza(b: LevelBuilder) {
   b.box(26, 0, -18, 2.4, 2.6, 2.4, { tone: TONE.HEAL });
 }
 
+/**
+ * The sun is a disc in the sky dome's shader (`sunDisc` on the mood); the
+ * clouds are one merged mesh. The whole sky is two draw calls.
+ */
 function buildSky(b: LevelBuilder) {
-  // Sun and clouds sit against the sky dome, so they are unlit like it.
-  const sun: BuildOpts = { noCollide: true, separate: true };
-  const glow = (mesh: THREE.Mesh, color: number) => {
-    mesh.material = unlitMat(color);
-    mesh.castShadow = false;
-  };
-  glow(b.sphere(-90, 110, -160, 12, { ...sun, segments: 12 }), SURF.accent);
-  for (let i = 0; i < 12; i++) {
-    const angle = i * Math.PI / 6;
-    glow(b.mesh(boxGeo(6, 0.7, 0.7), [-90 + 19 * Math.cos(angle), 110 + 19 * Math.sin(angle) - 0.35, -160],
-      { ...sun, rotation: new THREE.Euler(0, 0, angle) }), SURF.accent);
-  }
-  for (const [x, y, z, s] of [[60, 70, -170, 1], [-20, 75, -190, 1.3], [140, 60, -80, 0.9],
-    [-150, 65, 40, 1.1], [30, 80, 180, 1.2], [-90, 60, 170, 0.8]] as const) {
-    for (let i = 0; i < 6; i++) {
-      glow(b.sphere(x + (i - 2.5) * 5 * s, y + 2.5 * s * Math.sin(1.7 * i), z, (4 + i % 3) * s, sun), SURF.cloud);
-    }
-  }
+  b.clouds([[63, 72, -164, 1.2], [174, 64, -63, 1], [130, 78, 111, 1.1],
+    [-58, 66, 170, 0.9], [-162, 74, 58, 1.3], [-84, 60, -158, 1]]);
 }
