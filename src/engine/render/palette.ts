@@ -1,4 +1,5 @@
 import type { Grade } from '../types';
+import type { MaterialTag } from './surfaces';
 
 export const TONE = Object.freeze({ PRIMARY: 0, HOSTILE: 1, DARK: 2, ACCENT: 3, HEAL: 4, BOSS: 5 } as const);
 /** Tone ids stay 0-5 (§3.1), so they double as the index into every tone table. */
@@ -16,6 +17,26 @@ export const SURF = Object.freeze({
   adobe: 0xe5bd92, sandstone: 0xbe845d, sand: 0xdbc59c, paving: 0xe1d8c3,
 });
 export type SurfKey = keyof typeof SURF;
+
+/**
+ * Realistic tiers (R2): the albedo each material tag averages to, sRGB. The
+ * texture set brings the detail and the tint scales its mean to this colour.
+ * Natural materials use plausible albedos (asphalt dark, grass and concrete
+ * mid-dark, sand light), so a sunlit street no longer glows like the flat
+ * palette; `null` keeps the piece's own surface colour, for paint, plaster,
+ * render, paving, fabric and the like, so a map's colour scheme survives (and
+ * for a fountain's jets, `spray`, which keep their teal at any distance, where
+ * glossy dark water would read black). Contrast
+ * inside each texture stays moderate, so enemies read against every wall.
+ */
+export const MATERIAL_COLOR = Object.freeze({
+  concrete: 0x928f88, 'cast-concrete': 0x9a978f, brick: 0x85523f, plaster: null, stucco: null, adobe: null,
+  siding: null, asphalt: 0x4e4f50, 'road-paint': null, paving: null, tile: null, wood: 0x8a6446, bark: 0x5c4c3e,
+  'painted-wood': null, planks: 0x8f6c4d, plastic: null, 'painted-metal': null, steel: 0x8e9397, 'tread-plate': 0x898d90,
+  rust: 0x7a4a33, corrugated: null, glass: 0x2c3438, sand: 0xc6ae8a, sandstone: 0xb07d5a, terracotta: 0xae6242,
+  'roof-tile': 0xa55a3b, shingles: null, grass: 0x61793f, fabric: null, foliage: 0x506f3c,
+  flowers: null, cactus: 0x5e7a4b, water: 0x3f7a78, spray: null,
+} as const satisfies Record<MaterialTag, number | null>);
 
 /** Shared finishes for the weapon-mounted sights and their aiming overlays. */
 export const OPTIC_COLOR = Object.freeze({

@@ -233,11 +233,26 @@ PINK → `boss`, RED → `hot`.
 | `hot` | `#E5484D` | rare warning surfaces |
 | `boss` | `#C56BFF` | surfaces marked PINK in the level spec |
 
-Rules: at most **12 distinct materials visible in one frame** of level geometry. Do not tint
+Rules: at most **12 distinct materials visible in one frame** of level geometry on Low. Do not tint
 per-object; pick a palette key. No external image textures, normal maps or emissive maps on
 materials. The only generated textures are the three-step toon gradient and opaque name-tag labels
-made by render. The one exception is the realistic tiers' sky (§3.3): each map's Blender-rendered
-sky images, streamed from `public/sky/<map>/`, feed the sky dome and the environment only.
+made by render. Two exceptions, both realistic tiers only and both self-made in Blender: each map's
+sky images, streamed from `public/sky/<map>/`, feed the sky dome and the environment (§3.3); and the
+level's texture sets (§3.2, material tags).
+
+**Material tags** (realistic tiers, R2). Every level primitive also carries a `material` tag
+(`BuildOpts.material`; `render/surfaces.ts` lists 34: concrete, cast-concrete, brick, plaster, stucco,
+adobe, siding, asphalt, road-paint, paving, tile, wood, bark, painted-wood, planks, plastic,
+painted-metal, steel, tread-plate, rust, corrugated, glass, sand, sandstone, terracotta, roof-tile,
+shingles, grass, fabric, foliage, flowers, cactus, water, spray); without one, its surface key's
+default applies (`DEFAULT_MATERIAL`). Low ignores the tag and draws the surface key exactly as
+before. The realistic tiers draw the tag: its texture set (`MATERIAL_SET`, 28 sets, one Blender
+script each in `tools/blender/materials/`) tinted to the tag's colour in `palette.ts`
+(`MATERIAL_COLOR`): plausible albedos for natural materials (asphalt dark, grass and concrete
+mid, sand light), or the piece's own surface colour for paint, plaster, render, paving and fabric,
+so a map's colour scheme survives. Texture contrast stays moderate so enemies read against every
+wall. Detail a texture already carries, such as the plaza joint strips, is `BuildOpts.flatOnly`:
+drawn on Low, hidden on the realistic tiers, so it does not draw a second grid over the texture's.
 
 ### 3.2 Materials
 
@@ -263,6 +278,44 @@ Three material families, all created and cached by `render/materials.js`. Nothin
   compositing in DOM).
 - Two scenery materials sit outside the families, both made in `materials.ts`: the sky dome's
   `ShaderMaterial` (`skyMat`, §3.3) and the unfogged flat-shaded cloud Lambert (`cloudMat`).
+- **Realistic level materials** (`realMat`, Medium and up): a `MeshStandardMaterial` per (tag,
+  colour), cached like the families, with the tag's texture set as albedo, tangent-space normal and
+  ORM (occlusion, roughness, metalness in one map; roughness and metalness scalars 1). Its colour is
+  the tag's colour divided by the set's mean albedo, so the texture averages to that colour. Until
+  the set streams in it wears the set's stand-ins, 1 × 1 maps of the set's mean values
+  (`standInMaps`): the untextured level already has the right colour and sheen, and swapping in the
+  real maps changes no shader program. They are flat-shaded like the surface family, so low-poly
+  trees and rocks keep their facets. One `onBeforeCompile` patch on all of them (one program) adds
+  the anti-tiling macro variation: two octaves of world-space value noise a few metres across scale
+  albedo by ±9 % and roughness by ±14 % (±12-16 % albedo on concrete, sand and grass, none on glass
+  and water), so plazas, roads, lawns and sand do not show their repeat. The same patch drops the
+  sky PMREM's diffuse term: the level's diffuse sky fill is the light probe alone, as Low's Lambert
+  gets, and the PMREM gives it specular only (the GLB characters keep both, §3.3). Their shadow
+  pass uses `levelDepthMat`, a depth material that never samples a map: three's shared one keeps the
+  last caster's `map`, and after the streamed maps are freed it would bind a freed albedo and upload
+  it again for good.
+- **Geometry and UVs.** `LevelBuilder` merges pieces into one mesh per surface key, as before R2,
+  with one geometry group per tag (`LevelSurface.materials`, in group order; `null` for the
+  flat-only group). `Renderer.setSurfaces(level.surfaces)` gives Low the surface Lambert on the whole
+  mesh, one draw call per surface key exactly as before (489, 525 and 2328 over 6 frames on
+  Downtown, House and Mexico), and the realistic tiers a material array, one draw per tag (the
+  flat-only group gets an invisible material, which three skips): a swap with no rebuild. three
+  draws each group of such a mesh on its own in every shadow cascade as well, though the level's
+  materials all cast alike, so the renderer wraps `shadowMap.render`: for that pass only, each
+  multi-tag mesh wears one of its materials and its groups merged into runs (`casterGroups`; a
+  flat-only group ends a run), one draw per cascade. Ultra's shadow draws went from 93, 122 and 368
+  to 41, 46 and 316 on Downtown, House and Mexico. Every piece
+  gets UVs at merge time by planar projection per triangle in world space (`planarUVs`), in its set's
+  tile size (metres per tile, from the bake): walls keep v vertical and u along the wall, floors and
+  slopes use u along x, each face's frame lies in its own plane (a roof or ramp is not stretched),
+  and coplanar faces share one frame, so a wall built from many boxes wears one seamless texture.
+  Boxes stay indexed (their faces share no vertices); smooth spheres, cylinders and tori share
+  vertices across faces and are split into separate triangles, which is why the level has more
+  vertices than before (Low: 37.5k, 29.4k and 68.1k on Downtown, House and Mexico, from 35.7k, 24.3k
+  and 34.5k; no measurable render cost). Normal maps use three's derivative tangent frame, so there
+  is no tangent attribute. Loose pieces (breakable props, figure accessories) come from
+  `LevelBuilder.part` and are tagged the same way. Mexico keeps its breakable props as separate meshes, as before.
+  No second UV set yet (lightmaps, R3).
 - The post passes (§3.6) are `ShaderMaterial`s from `makePostMaterial`; SMAA comes from three's
   `SMAAPass` addon, which builds its own.
 
@@ -291,7 +344,8 @@ the map's sunlit ground: bounce light, grey so interiors and eaves do not take t
 The probe keeps 60 % of the sky's colour at full brightness (`PROBE_CHROMA`): a sky-only probe
 has none of the warm bounce from sunlit walls, and at full colour shade on grey concrete read navy.
 The sky's PMREM (`env.hdr`, 1024 × 512, so a 256 cube like the room environment's) is the
-environment at full strength. The fog and clear colour are the radiance of the lowest degree of
+environment at full strength. The GLB characters take its diffuse on top of the probe, a double
+sky fill that keeps them readable in shade; the level's materials take only its specular (§3.2). The fog and clear colour are the radiance of the lowest degree of
 sky in the hue of the mood's own fog colour, its colour pushed 1.5× from grey (`HAZE_CHROMA`)
 because AgX desaturates it at that brightness: House's warm haze, Downtown's cool morning. The
 mood's `sky` names the folder; its `realistic` field sets an exposure (stops: Downtown −0.3, House
@@ -338,6 +392,31 @@ A sky that lands after the map or the look changed is freed without its PMREM be
   moods keep it 30° or more up. A mood change writes uniforms only. Clouds are one merged, unfogged
   low-poly mesh per level (`LevelBuilder.clouds`). There is no `scene.background`: the dome covers
   every pixel.
+- **Texture streaming** (`render/textures.ts`, R2): the first realistic frame on a map asks for the
+  texture sets its tags need at the Textures setting's size (Graphics → Advanced: low 512, medium 1K,
+  high 2K; Medium, High and Ultra default to them). The frame never waits: KTX2 files (Basis ETC1S,
+  mipmapped) download and transcode in `KTX2Loader`'s workers, to BC1 where the GPU has it, else
+  ETC, since ETC1S holds no more than those 4-bit formats and BC7 or ASTC would double the memory.
+  `render` then uploads one map at a time and frees its CPU copy (the GPU holds the only one; a
+  restored context streams again). Uploads are paced in time, not frames, so a map textures as fast
+  at 60 Hz or under an FPS cap as at 144 Hz: they wait 500 ms after a level load or a look change
+  (`UPLOAD_SETTLE_MS`), then come at least 24 ms apart (`UPLOAD_GAP_MS`) and at most 60 MB/s on
+  average (a 2K map about every 47 ms); an upload slower than 4 ms doubles the gap, up to 4 times,
+  for the rest of that stream. At 60 Hz a map is textured 2-3 s after it loads (Ultra Downtown
+  2.9 s, was 6.2 s). The
+  first compressed upload of a page costs ANGLE Metal about 220 ms whenever it comes, so the first
+  realistic look uploads a 4 × 4 one (`warmCompressedUploads`), at the menu. On an M4 Pro no
+  streaming frame then passes 8 ms (it was up to 230 ms). Once every wanted set is on the GPU the
+  renderer puts them on all level materials at once (uniform changes only). A new map's request
+  frees the previous map's sets it does not use at once (no level material wears them; any cached
+  material that did goes back to its stand-in), so GPU memory across a map change never passes the
+  larger map's own; the previous size of a set still wanted stays on screen until the new size is in, then is
+  freed, so no loading overlay is needed. A set shared with the previous map is not fetched
+  again. A failed set keeps its stand-in and is tried again on the next level load or setting
+  change. Low loads none and switching to it frees them all. `renderer.texturesPending` is true
+  until the level's sets are on; `textureStats` reports what is resident. Per map download: Medium
+  1.1–1.5 MB, High 3.9–5.6 MB, Ultra 15.2–21.9 MB; resident on the GPU 8–12, 32–46 and 126–185 MB,
+  with no CPU copy.
 - **Sky streaming** (`render/sky.ts`): the first realistic frame drawn on a map asks for its sky
   (so boot, which builds the menu map before it applies the saved preset, fetches nothing on Low);
   the frame never waits. `renderer.skyPending` is true until it is
@@ -672,8 +751,11 @@ interface Level {
   animated: Animated[];           // per-frame decoration
   breakables: Breakable[];        // Mexico only; id === index
   meshes: THREE.Object3D[];       // everything to remove on rebuild
+  surfaces: LevelSurface[];       // every surface-palette mesh with its material tag (§3.1)
   shadow: { center: THREE.Vector3; radius: number };   // directional-light shadow fit
 }
+
+interface LevelSurface { mesh: THREE.Mesh; surf: SurfKey; materials: readonly (MaterialTag | null)[] }  // one per group; null = flat-only
 
 interface GrappleMover { mesh: THREE.Object3D; radius: number }
 interface Animated { mesh: THREE.Object3D; update(time: number): void }

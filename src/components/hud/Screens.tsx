@@ -178,11 +178,12 @@ const GFX_OPTIONS = {
     ['msaa2smaa', 'MSAA 2× + SMAA'], ['msaa4smaa', 'MSAA 4× + SMAA']],
   shadows: [['off', 'Off'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['ultra', 'Ultra']],
   ao: [['off', 'Off'], ['half', 'Half resolution'], ['full', 'Full resolution']],
+  textures: [['low', 'Low (512)'], ['medium', 'Medium (1K)'], ['high', 'High (2K)']],
   effects: [['reduced', 'Reduced'], ['full', 'Full']],
   viewDistance: [['normal', 'Normal'], ['long', 'Long']],
 } as const satisfies Partial<Record<keyof GfxValues, readonly (readonly [string, string])[]>>;
 const GFX_LABELS: Record<keyof typeof GFX_OPTIONS, string> = {
-  fpsTarget: 'FPS target', antialias: 'Anti-aliasing', shadows: 'Shadows', ao: 'Ambient occlusion', effects: 'Effects',
+  fpsTarget: 'FPS target', antialias: 'Anti-aliasing', shadows: 'Shadows', ao: 'Ambient occlusion', textures: 'Textures', effects: 'Effects',
   viewDistance: 'View distance',
 };
 
@@ -216,7 +217,10 @@ function Graphics({ model, onAction }: { model: GfxModel; onAction: Act }) {
           <label className="graphics-check"><input type="checkbox" data-act="gfx" checked={values.dynamicRes}
             onChange={event => set('dynamicRes', event.target.checked ? '1' : '0', event.nativeEvent)} /> Dynamic resolution</label>
           {(Object.keys(GFX_OPTIONS) as (keyof typeof GFX_OPTIONS)[]).map(key => <label key={key}>{GFX_LABELS[key]}
-            <select data-act="gfx" value={String(values[key])} onChange={event => set(key, event.target.value, event.nativeEvent)}>
+            {/* The flat look (Low) has no textures to size; the setting waits for a realistic preset. */}
+            <select data-act="gfx" value={String(values[key])} disabled={key === 'textures' && values.look !== 'realistic'}
+              title={key === 'textures' && values.look !== 'realistic' ? 'Medium, High and Ultra only' : undefined}
+              onChange={event => set(key, event.target.value, event.nativeEvent)}>
               {GFX_OPTIONS[key].map(([value, text]) => <option value={value} key={value}>{text}</option>)}
             </select>
           </label>)}

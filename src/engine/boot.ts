@@ -178,6 +178,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     const level = buildLevel(scene, world, resolved, { arena });
     renderer.setLevelShadow(level.shadow.center, level.shadow.radius);
     renderer.setMood(level.mood);
+    renderer.setSurfaces(level.surfaces);
     const nav = new NavGrid(world, level.bounds, 1);
     nav.build();
     const bossNav = new NavGrid(world, level.bounds, 1, BOSS_CLEARANCE, BOSS_HEADROOM);

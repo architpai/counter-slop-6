@@ -9,7 +9,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "smoke": "node tests/smoke.mjs",
-    "check": "node tests/bugfix.check.mjs"
+    "check": "node tests/bugfix.check.mjs",
+    "textures": "node tools/textures/build.mjs"
   },
   "type": "module",
   "dependencies": {
@@ -26,6 +27,7 @@
     "@types/three": "^0.170.0",
     "@vitest/browser": "^5.0.0",
     "@vitest/browser-playwright": "^5.0.0",
+    "ktx2-encoder": "^0.6.0",
     "playwright": "^1.63.0",
     "typescript": "^7.0.2",
     "vitest": "^5.0.0"

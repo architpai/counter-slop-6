@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { SURF, TONE, TONE_HEX, TOON_STEPS } from './palette';
 import type { SurfKey } from './palette';
+import type { MaterialTag, RealMaterial, SetInfo, TextureSet } from './surfaces';
+import type { SetMaps } from './textures';
 
 const surfaces = new Map<SurfKey, THREE.MeshLambertMaterial>();
 const characters = new Map<number, THREE.MeshToonMaterial>();
@@ -127,6 +129,180 @@ export function skyMat(uniforms: SkyUniforms): THREE.ShaderMaterial {
       }
     `,
   });
+}
+
+const reals = new Map<string, THREE.MeshStandardMaterial>();
+const standIns = new Map<TextureSet, SetMaps>();
+let flatNormal: THREE.DataTexture | undefined;
+
+/** A 1 × 1 map of one colour (0..1 per channel, already in the texture's own encoding). */
+function pixel(r: number, g: number, b: number, colorSpace: THREE.ColorSpace): THREE.DataTexture {
+  const texture = new THREE.DataTexture(new Uint8Array([r, g, b].map(v => Math.round(THREE.MathUtils.clamp(v, 0, 1) * 255)).concat(255)), 1, 1);
+  texture.colorSpace = colorSpace;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+/**
+ * A set's stand-in maps: one texel each of its mean albedo, a flat normal and
+ * its mean occlusion, roughness and metalness. A material wears these until
+ * its streamed maps arrive, so the untextured map already shows the right
+ * colour and sheen, and swapping in the real maps compiles nothing (a map
+ * present or absent is part of the shader program; which texture is not).
+ */
+export function standInMaps(set: TextureSet, info: SetInfo): SetMaps {
+  let maps = standIns.get(set);
+  if (maps === undefined) {
+    const albedo = new THREE.Color().setRGB(...info.albedo, THREE.LinearSRGBColorSpace).convertLinearToSRGB();
+    flatNormal ??= pixel(0.5, 0.5, 1, THREE.NoColorSpace);
+    standIns.set(set, maps = {
+      albedo: pixel(albedo.r, albedo.g, albedo.b, THREE.SRGBColorSpace),
+      normal: flatNormal,
+      orm: pixel(info.ao, info.roughness, info.metal, THREE.NoColorSpace),
+    });
+  }
+  return maps;
+}
+
+/** Put a set's maps on a realistic material: albedo, normal, and ORM as occlusion, roughness and metalness. */
+export function wearMaps(material: THREE.MeshStandardMaterial, maps: SetMaps): void {
+  material.map = maps.albedo;
+  material.normalMap = maps.normal;
+  material.aoMap = material.roughnessMap = material.metalnessMap = maps.orm;
+}
+
+/** Every realistic level material made so far (they are cached like the flat ones). */
+export function realMaterials(): IterableIterator<THREE.MeshStandardMaterial> {
+  return reals.values();
+}
+
+/**
+ * Macro variation's strength per set: none on glass and water, whose look is
+ * their reflection; more on the big open grounds (lawn, sand, concrete yards),
+ * where a repeat would show most.
+ */
+const MACRO: Partial<Record<TextureSet, number>> = { glass: 0, water: 0, grass: 0.16, sand: 0.14, concrete: 0.12 };
+const MACRO_DEFAULT = 0.09;
+
+/**
+ * The level's shader patch, the same function on every level material so they
+ * share one program.
+ *
+ * Anti-tiling (R2): two octaves of world-space value noise, a few metres
+ * across, scale each texel's albedo by ±`macro` and its roughness by ±1.5 ×
+ * `macro`. A plaza, a road or a lawn then drifts in tone over tens of metres,
+ * so the eye stops finding the texture's repeat.
+ *
+ * Sky light: the level takes its diffuse sky fill from the light probe alone,
+ * as the flat look's Lambert does, and only the specular part of the sky's
+ * PMREM (`scene.environment`). Taking the PMREM's diffuse as well would light
+ * shade twice, lifting and greying it; the double fill is kept for the GLB
+ * characters (render/index.ts, `REAL_ENV_INTENSITY`).
+ */
+function macroVariation(this: THREE.MeshStandardMaterial, shader: THREE.WebGLProgramParametersWithUniforms): void {
+  shader.uniforms.macro = this.userData.macro as THREE.IUniform<number>;
+  shader.vertexShader = shader.vertexShader
+    .replace('#include <common>', '#include <common>\nvarying vec3 vMacroPos;')
+    .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMacroPos = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', `#include <common>
+varying vec3 vMacroPos;
+uniform float macro;
+float macroHash( vec3 p ) {
+	p = fract( p * 0.3183099 + 0.1 ) * 17.0;
+	return fract( p.x * p.y * p.z * ( p.x + p.y + p.z ) );
+}
+float macroNoise( vec3 x ) {
+	vec3 i = floor( x ), f = fract( x );
+	f = f * f * ( 3.0 - 2.0 * f );
+	return mix( mix( mix( macroHash( i ), macroHash( i + vec3( 1, 0, 0 ) ), f.x ),
+		mix( macroHash( i + vec3( 0, 1, 0 ) ), macroHash( i + vec3( 1, 1, 0 ) ), f.x ), f.y ),
+		mix( mix( macroHash( i + vec3( 0, 0, 1 ) ), macroHash( i + vec3( 1, 0, 1 ) ), f.x ),
+		mix( macroHash( i + vec3( 0, 1, 1 ) ), macroHash( i + vec3( 1, 1, 1 ) ), f.x ), f.y ), f.z );
+}`)
+    .replace('#include <map_fragment>', `#include <map_fragment>
+float macroTone = macroNoise( vMacroPos * 0.16 ) * 0.65 + macroNoise( vMacroPos * 0.57 + 7.3 ) * 0.35;
+float macroSheen = macroNoise( vMacroPos * 0.41 + 3.1 );
+diffuseColor.rgb *= 1.0 + macro * ( macroTone * 2.0 - 1.0 );`)
+    .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+roughnessFactor = clamp( roughnessFactor * ( 1.0 + 1.5 * macro * ( macroSheen * 2.0 - 1.0 ) ), 0.03, 1.0 );`)
+    .replace('#include <lights_fragment_maps>', '#include <lights_fragment_maps>\niblIrradiance = vec3( 0.0 );');
+}
+const macroKey = (): string => 'level-pbr';
+
+/**
+ * Tags laid over another piece's faces. House's door and window trim shares
+ * its reveal faces with the wall it frames (level/house.ts `wall`); once the
+ * trim is light painted wood on textured plaster, that tie flickers. Pulled a
+ * hair towards the eye, the trim wins it. Low keeps its geometry and Lambert
+ * as they were.
+ */
+const OVERLAY_TAGS: ReadonlySet<MaterialTag> = new Set(['painted-wood']);
+
+/**
+ * A realistic level material (R2): PBR with a texture set, tinted so the set's
+ * mean albedo lands on the tag's colour. It starts on the set's stand-in maps;
+ * the renderer swaps the streamed ones in. Cached per (tag, colour) key.
+ */
+export function realMat(real: RealMaterial, info: SetInfo): THREE.MeshStandardMaterial {
+  let material = reals.get(real.key);
+  if (material === undefined) {
+    const color = new THREE.Color(real.color);
+    color.setRGB(color.r / info.albedo[0], color.g / info.albedo[1], color.b / info.albedo[2], THREE.LinearSRGBColorSpace);
+    material = new THREE.MeshStandardMaterial({ color, roughness: 1, metalness: 1, flatShading: true });
+    if (OVERLAY_TAGS.has(real.tag)) Object.assign(material, { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+    material.userData.set = real.set;
+    material.userData.macro = { value: MACRO[real.set] ?? MACRO_DEFAULT };
+    material.onBeforeCompile = macroVariation;
+    material.customProgramCacheKey = macroKey;
+    wearMaps(material, standInMaps(real.set, info));
+    reals.set(real.key, material);
+  }
+  return material;
+}
+
+let levelDepth: THREE.MeshDepthMaterial | undefined;
+/**
+ * The shadow pass of the textured level. three's shared depth material takes
+ * each caster's `map` and keeps the last one: once the streamed maps are
+ * freed, the next caster without a map binds a freed albedo, and three
+ * uploads it again, for good. This one is as three's (RGBA-packed depth) but
+ * never samples a map (the level has no cut-outs), so no streamed texture
+ * reaches the shadow pass.
+ */
+export function levelDepthMat(): THREE.MeshDepthMaterial {
+  if (levelDepth === undefined) {
+    levelDepth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+    levelDepth.onBeforeCompile = shader => {
+      shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>', '');
+    };
+    levelDepth.customProgramCacheKey = () => 'level-depth';
+  }
+  return levelDepth;
+}
+
+/**
+ * A realistic level mesh's groups as the shadow pass draws them
+ * (render/index.ts, `_casters`). Every level material casts alike (opaque,
+ * front side, through `levelDepthMat`), so each run of visible groups is one
+ * draw on material 0, and a hidden (flat-only) group ends a run: a mesh of
+ * ten tags costs one draw per shadow cascade, not ten.
+ */
+export function casterGroups(groups: readonly THREE.GeometryGroup[], looks: readonly THREE.Material[]): THREE.GeometryGroup[] {
+  const runs: THREE.GeometryGroup[] = [];
+  for (const { start, count, materialIndex = 0 } of groups) {
+    if (!looks[materialIndex]?.visible) continue;
+    const last = runs.at(-1);
+    if (last && last.start + last.count === start) last.count += count;
+    else runs.push({ start, count, materialIndex: 0 });
+  }
+  return runs;
+}
+
+let hidden: THREE.MeshBasicMaterial | undefined;
+/** Not drawn and casts no shadow: a flat-only group of a level mesh on the realistic tiers. */
+export function hiddenMat(): THREE.MeshBasicMaterial {
+  return hidden ??= new THREE.MeshBasicMaterial({ visible: false });
 }
 
 let clouds: THREE.MeshLambertMaterial | undefined;

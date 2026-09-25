@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { surfMat, cloudMat, TONE, boxGeo, cylGeo, sphereGeo, coneGeo, torusGeo } from '../render/index';
+import { DEFAULT_MATERIAL, MATERIAL_SET, planarUVs, setInfo } from '../render/surfaces';
 import type { SurfKey } from '../render/palette';
+import type { MaterialTag } from '../render/surfaces';
 import type { Box, World } from '../physics';
 import type { Breakable, BreakableKind, Level, LevelKey } from '../types';
 
@@ -13,6 +15,16 @@ export interface BuildOpts {
   mat?: SurfKey;
   surface?: SurfKey;
   tone?: number;
+  /**
+   * What the piece is made of, for the realistic tiers (render/surfaces.ts).
+   * Low still draws the surface key; without a tag the key's default applies.
+   */
+  material?: MaterialTag;
+  /**
+   * Drawn on the flat look only: detail the realistic tiers' textures already
+   * carry (paving joints), which would draw a second grid over the texture's.
+   */
+  flatOnly?: boolean;
   rotation?: THREE.Euler;
   /** Keep this piece as its own object instead of merging it. */
   separate?: boolean;
@@ -50,6 +62,24 @@ export type Gap = [number, number, number?, number?];
 /** The marker lists on `Level`, all of them `THREE.Vector3[]`. */
 export type MarkerKind = 'spawns' | 'snipers' | 'pickups' | 'rings' | 'arenaSpawns';
 
+/**
+ * A piece ready to merge: texture coordinates in the material's tile size
+ * (planar per face, `planarUVs`), in the geometry's current space, and an
+ * index. Boxes keep their own; a smooth sphere or cylinder shares vertices
+ * between faces that need different coordinates, so it splits into separate
+ * triangles first. Every primitive leaves here in the same layout, so any of
+ * them can merge.
+ */
+function surfaceGeometry(geometry: THREE.BufferGeometry, material: MaterialTag): THREE.BufferGeometry {
+  const tile = setInfo(MATERIAL_SET[material]).tile;
+  if (planarUVs(geometry, tile)) return geometry;
+  const flat = geometry.toNonIndexed();
+  geometry.dispose();
+  planarUVs(flat, tile);
+  flat.setIndex([...Array(flat.getAttribute('position').count).keys()]);
+  return flat;
+}
+
 /** Duck-typed like the rest of three, so a mesh from any build still matches. */
 function isMesh(node: THREE.Object3D): node is THREE.Mesh {
   return 'isMesh' in node && node.isMesh === true;
@@ -59,7 +89,11 @@ export class LevelBuilder {
   scene: THREE.Scene;
   world: World;
   tone: typeof TONE;
-  parts: Map<SurfKey, THREE.BufferGeometry[]>;
+  /**
+   * World-space pieces waiting to merge, per surface key, then per material
+   * tag (a flat-only piece under `flat`).
+   */
+  parts: Map<SurfKey, Map<MaterialTag | 'flat', THREE.BufferGeometry[]>>;
   level: Level;
 
   constructor(scene: THREE.Scene, world: World, key: LevelKey, arena: boolean) {
@@ -72,7 +106,7 @@ export class LevelBuilder {
       key, arena, playerStart: new THREE.Vector3(0, 0, key === 'mexico' ? 16 : key === 'house' ? 21 : 42),
       bounds: { minX: -p, maxX: p, minZ: -p, maxZ: p },
       spawns: [], snipers: [], pickups: [], rings: [], arenaSpawns: [], teamSpawns: [],
-      movers: [], animated: [], breakables: [], meshes: [],
+      movers: [], animated: [], breakables: [], meshes: [], surfaces: [],
       shadow: { center: new THREE.Vector3(), radius: p * 1.15 },
     };
   }
@@ -89,17 +123,36 @@ export class LevelBuilder {
   mesh(geometry: THREE.BufferGeometry, pos: THREE.Vector3 | [number, number, number],
     opts: BuildOpts = {}): THREE.Mesh {
     const key = opts.mat ?? opts.surface ?? surfaces[opts.tone ?? TONE.PRIMARY] ?? 'block';
+    const material = opts.material ?? DEFAULT_MATERIAL[key];
     const object = new THREE.Mesh(geometry, surfMat(key));
     if (Array.isArray(pos)) object.position.fromArray(pos);
     else object.position.copy(pos);
     if (opts.rotation) object.rotation.copy(opts.rotation);
-    if (opts.separate) return this.addObject(object);
+    if (opts.separate) {
+      object.geometry = surfaceGeometry(geometry, material);
+      this.level.surfaces.push({ mesh: object, surf: key, materials: [opts.flatOnly ? null : material] });
+      return this.addObject(object);
+    }
     object.updateMatrix();
     geometry.applyMatrix4(object.matrix);
-    let group = this.parts.get(key);
-    if (group === undefined) this.parts.set(key, group = []);
-    group.push(geometry);
+    let tags = this.parts.get(key);
+    if (tags === undefined) this.parts.set(key, tags = new Map());
+    const tag = opts.flatOnly ? 'flat' : material;
+    let group = tags.get(tag);
+    if (group === undefined) tags.set(tag, group = []);
+    group.push(surfaceGeometry(geometry, material));
     return object;
+  }
+
+  /**
+   * A loose piece in the flat palette, not merged (breakable props, figure
+   * accessories): textured on the realistic tiers like the merged level.
+   */
+  part(geometry: THREE.BufferGeometry, surf: SurfKey, material: MaterialTag = DEFAULT_MATERIAL[surf]): THREE.Mesh {
+    const mesh = new THREE.Mesh(surfaceGeometry(geometry, material), surfMat(surf));
+    mesh.castShadow = mesh.receiveShadow = true;
+    this.level.surfaces.push({ mesh, surf, materials: [material] });
+    return mesh;
   }
 
   collider(x: number, y: number, z: number, w: number, h: number, d: number,
@@ -200,7 +253,7 @@ export class LevelBuilder {
     for (let i = 0; i < n; i++) {
       const geo = coneGeo(1.2 * scale, 4 * scale, 3);
       geo.rotateX(Math.PI / 2);
-      const mesh = this.mesh(geo, [0, 0, 0], { ...opts, separate: true });
+      const mesh = this.mesh(geo, [0, 0, 0], { material: 'painted-metal', ...opts, separate: true });
       const r = baseRadius + i * radiusStep, h = baseHeight + i * heightStep;
       const s = speed + 0.01 * i, phase = 2.1 * i;
       const next = new THREE.Vector3();
@@ -256,14 +309,28 @@ export class LevelBuilder {
     return prop;
   }
 
+  /**
+   * Merge the pieces, one mesh per surface key with one geometry group per
+   * material tag. Low draws each mesh whole in its surface colour, one call as
+   * before; the realistic tiers give the groups their tags' materials
+   * (render/index.ts), one call per tag. Neither look rebuilds geometry.
+   */
   finish(): Level {
-    for (const [key, parts] of this.parts) {
+    for (const [surf, tags] of this.parts) {
+      const groups = [...tags.values()], geometries = groups.flat();
       // ponytail: @types/three types mergeGeometries as non-null, but it returns null on
       // mismatched attributes, so the guard below is live despite looking dead.
-      const geometry = mergeGeometries(parts, false);
-      for (const part of parts) part.dispose();
+      const geometry = mergeGeometries(geometries, false);
       if (!geometry) throw new Error('Level geometry could not be merged.');
-      this.addObject(new THREE.Mesh(geometry, surfMat(key)));
+      let start = 0;
+      groups.forEach((group, i) => {
+        const count = group.reduce((n, part) => n + (part.index?.count ?? 0), 0);
+        geometry.addGroup(start, count, i);
+        start += count;
+      });
+      for (const part of geometries) part.dispose();
+      const mesh = this.addObject(new THREE.Mesh(geometry, surfMat(surf)));
+      this.level.surfaces.push({ mesh, surf, materials: [...tags.keys()].map(tag => (tag === 'flat' ? null : tag)) });
     }
     this.parts.clear();
     this.world.finalize();

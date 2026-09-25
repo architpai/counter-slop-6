@@ -20,6 +20,8 @@ export type ShadowQuality = 'off' | 'low' | 'medium' | 'high' | 'ultra';
 export type AmbientOcclusion = 'off' | 'half' | 'full';
 export type EffectsDetail = 'reduced' | 'full';
 export type ViewDistance = 'normal' | 'long';
+/** Texture sets at 512, 1024 or 2048 texels (render/surfaces.ts `TEXTURE_SIZE`). */
+export type TextureQuality = 'low' | 'medium' | 'high';
 /** Frames per second. 0 means uncapped. */
 export type FpsTarget = 0 | 30 | 60 | 90 | 120;
 
@@ -38,6 +40,8 @@ export interface GfxValues {
   shadows: ShadowQuality;
   ao: AmbientOcclusion;
   bloom: boolean;
+  /** Texture set size on the realistic look (render/surfaces.ts `TEXTURE_SIZE`); the flat look has none. */
+  textures: TextureQuality;
   effects: EffectsDetail;
   viewDistance: ViewDistance;
 }
@@ -48,6 +52,7 @@ export const AMBIENT_OCCLUSION: readonly AmbientOcclusion[] = ['off', 'half', 'f
 export const EFFECTS: readonly EffectsDetail[] = ['reduced', 'full'];
 export const VIEW_DISTANCES: readonly ViewDistance[] = ['normal', 'long'];
 export const FPS_TARGETS: readonly FpsTarget[] = [30, 60, 90, 120, 0];
+export const TEXTURE_QUALITIES: readonly TextureQuality[] = ['low', 'medium', 'high'];
 const LOOKS: readonly Look[] = ['lowpoly', 'realistic'];
 const PIXEL_RATIOS: readonly number[] = [1, 1.5, 2];
 
@@ -102,13 +107,13 @@ export const EFFECTS_SCALE: Readonly<Record<EffectsDetail, number>> = { reduced:
 /** docs/VISUALS.md, "Quality system (Q)": only the rows that exist today. */
 export const PRESET_VALUES: Readonly<Record<PresetName, Readonly<GfxValues>>> = Object.freeze({
   low: Object.freeze({ look: 'lowpoly', renderScale: 0.75, pixelRatio: 1.5, dynamicRes: true, dynamicMin: 0.6,
-    fpsTarget: 0, antialias: 'fxaa', shadows: 'low', ao: 'off', bloom: false, effects: 'reduced', viewDistance: 'normal' }),
+    fpsTarget: 0, antialias: 'fxaa', shadows: 'low', ao: 'off', bloom: false, textures: 'low', effects: 'reduced', viewDistance: 'normal' }),
   medium: Object.freeze({ look: 'realistic', renderScale: 1, pixelRatio: 1.5, dynamicRes: true, dynamicMin: 0.7,
-    fpsTarget: 0, antialias: 'msaa2smaa', shadows: 'medium', ao: 'off', bloom: true, effects: 'full', viewDistance: 'normal' }),
+    fpsTarget: 0, antialias: 'msaa2smaa', shadows: 'medium', ao: 'off', bloom: true, textures: 'low', effects: 'full', viewDistance: 'normal' }),
   high: Object.freeze({ look: 'realistic', renderScale: 1, pixelRatio: 2, dynamicRes: true, dynamicMin: 0.7,
-    fpsTarget: 0, antialias: 'msaa2smaa', shadows: 'high', ao: 'half', bloom: true, effects: 'full', viewDistance: 'normal' }),
+    fpsTarget: 0, antialias: 'msaa2smaa', shadows: 'high', ao: 'half', bloom: true, textures: 'medium', effects: 'full', viewDistance: 'normal' }),
   ultra: Object.freeze({ look: 'realistic', renderScale: 1, pixelRatio: 2, dynamicRes: false, dynamicMin: 0.8,
-    fpsTarget: 0, antialias: 'msaa4smaa', shadows: 'ultra', ao: 'full', bloom: true, effects: 'full', viewDistance: 'long' }),
+    fpsTarget: 0, antialias: 'msaa4smaa', shadows: 'ultra', ao: 'full', bloom: true, textures: 'high', effects: 'full', viewDistance: 'long' }),
 });
 
 // ------------------------------------------------------------------ storage
@@ -162,6 +167,7 @@ export function validValues(raw: unknown, base: Readonly<GfxValues>): GfxValues 
     shadows: oneOf(SHADOWS, value.shadows, base.shadows),
     ao: oneOf(AMBIENT_OCCLUSION, value.ao, base.ao),
     bloom: typeof value.bloom === 'boolean' ? value.bloom : base.bloom,
+    textures: oneOf(TEXTURE_QUALITIES, value.textures, base.textures),
     effects: oneOf(EFFECTS, value.effects, base.effects),
     viewDistance: oneOf(VIEW_DISTANCES, value.viewDistance, base.viewDistance),
   };

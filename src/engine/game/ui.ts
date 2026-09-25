@@ -1,7 +1,7 @@
 import { clamp, store, SKEY } from '../util';
 import { LEVELS, validKey } from '../level/index';
 import { isOnlineMode } from './team-rules';
-import { AMBIENT_OCCLUSION, ANTIALIAS, EFFECTS, FPS_TARGETS, SHADOWS, VIEW_DISTANCES, isPreset } from '../render/quality';
+import { AMBIENT_OCCLUSION, ANTIALIAS, EFFECTS, FPS_TARGETS, SHADOWS, TEXTURE_QUALITIES, VIEW_DISTANCES, isPreset } from '../render/quality';
 import type { FpsTarget, PresetChoice } from '../render/quality';
 import type { ScreenView, UiAction } from '../hud/screens';
 import type { App } from '../boot';
@@ -47,6 +47,7 @@ export function createUI(app: App): UiApi {
     else if (key === 'shadows' && listed(SHADOWS, raw)) quality.set('shadows', raw);
     else if (key === 'ao' && listed(AMBIENT_OCCLUSION, raw)) quality.set('ao', raw);
     else if (key === 'bloom') quality.set('bloom', raw === '1');
+    else if (key === 'textures' && listed(TEXTURE_QUALITIES, raw)) quality.set('textures', raw);
     else if (key === 'effects' && listed(EFFECTS, raw)) quality.set('effects', raw);
     else if (key === 'viewDistance' && listed(VIEW_DISTANCES, raw)) quality.set('viewDistance', raw);
   }

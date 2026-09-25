@@ -62,6 +62,7 @@ export function disposeLevel(scene: THREE.Scene, level: Level | null | undefined
     });
   }
   level.meshes.length = 0;
+  level.surfaces.length = 0;
   level.animated.length = 0;
   level.movers.length = 0;
 }

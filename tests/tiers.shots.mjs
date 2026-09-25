@@ -14,12 +14,14 @@
 //   overview a fixed high corner view of the whole map
 //   weapon   first person at spawn with the R4-C at the hip
 // Enemies, effects and pickups are cleared per map, and the run is paused, so shots only differ
-// by preset. Realistic presets wait for the map's sky and environment to stream in first.
+// by preset. Realistic presets wait for the map's sky and environment, and its texture sets, to
+// stream in first.
 // Dynamic resolution is pinned at full scale, so every preset is judged at its base resolution. The page renders at CS6_DPR (default 2, so the presets' pixel-ratio caps apply);
 // screenshots are saved at CSS size. On the real GPU vsync and the frame-rate limit are off, so
 // live frame times show the cost of each preset instead of the display's refresh.
 // OUTDIR/summary.json records frame times (live rAF, and a synchronous render + readback, both
-// with the gun in view, after a discarded warm-up), the fog at 60 m, and where each grunt stood.
+// with the gun in view, after a discarded warm-up), the fog at 60 m, where each grunt stood, and
+// the streamed textures: KTX2 bytes fetched for the map and GPU bytes resident.
 // Later phases rerun this script to compare before and after.
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -81,6 +83,7 @@ try {
     summary.presets[preset] = {};
     for (const map of maps) {
       // Load the map, freeze the run, pin full resolution, clear the HUD.
+      await page.evaluate(() => performance.clearResourceTimings());
       await page.evaluate(({ preset, map }) => {
         const g = window.__game;
         g.hud.onUiAction('mainMenu', null, new Event('click'));
@@ -99,10 +102,17 @@ try {
       }, { preset, map });
       assert.equal(await page.evaluate(() => window.__game.level.key), map);
       assert.equal(await page.evaluate(() => window.__game.quality.preset), preset);
-      await page.waitForFunction(() => !window.__game.ctx.renderer.skyPending, null, { timeout: 15_000 });
+      await page.waitForFunction(() => !window.__game.ctx.renderer.skyPending && !window.__game.ctx.renderer.texturesPending,
+        null, { timeout: 30_000 });
       await frames(20);
 
       const row = { shots: [] };
+      row.textures = await page.evaluate(() => {
+        const stats = window.__game.ctx.renderer.textureStats;
+        const fetched = performance.getEntriesByType('resource').filter(e => e.name.endsWith('.ktx2'));
+        return { files: fetched.length, fetchedMB: +(fetched.reduce((n, e) => n + e.encodedBodySize, 0) / 1e6).toFixed(2),
+          textures: stats.textures, residentMB: +(stats.residentBytes / 1e6).toFixed(1) };
+      });
       // How much fog a grunt at 60 m wears on this preset (linear fog).
       row.fogAt60 = await page.evaluate(() => {
         const fog = window.__game.ctx.scene.fog;
@@ -345,6 +355,7 @@ try {
       row.shots.push(await shot(`${preset}-${map}-overview`));
       summary.presets[preset][map] = row;
       console.log(preset.padEnd(7), map.padEnd(9), `frame ${row.frameMs} ms (p95 ${row.frameP95Ms})`, `render ${row.renderMs} ms`,
+        `tex ${row.textures.fetchedMB} MB fetched, ${row.textures.residentMB} MB resident`,
         row.enemies ? `grunts ${row.enemies.placed.map((p, i) => {
           // A shade slot only the second view filled is shown in brackets: [H].
           const extra = row.enemiesShade?.placed[i];

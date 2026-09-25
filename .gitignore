@@ -8,3 +8,5 @@ test-results/
 .pi/
 AGENTS.md
 CLAUDE.md
+tools/textures/.build/
+tools/blender/materials/__pycache__/

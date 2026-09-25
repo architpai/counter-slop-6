@@ -2,15 +2,18 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { GRADE, LIGHT, SURF } from './palette';
 import { Composite, RIG_DEPTH } from './postfx';
-import { skyMat } from './materials';
+import { casterGroups, hiddenMat, levelDepthMat, realMat, realMaterials, skyMat, standInMaps, surfMat, wearMaps } from './materials';
 import { ANTIALIAS_SPEC, AO_SCALE, PRESET_VALUES, SHADOW_SPEC, VIEW_SCALE } from './quality';
 import { aimShadowBox, cascadeCentre, sizeShadowBox } from './shadows';
 import { disposeSky, loadSky } from './sky';
+import { TEXTURE_SIZE, resolveMaterial, setInfo, setsFor } from './surfaces';
+import { TextureStreamer, ktx2Loader, warmCompressedUploads } from './textures';
 import type { PostFX } from './postfx';
 import type { SkyUniforms } from './materials';
 import type { GfxValues, ShadowBox } from './quality';
 import type { SkyAssets } from './sky';
-import type { Mood } from '../types';
+import type { TextureSet } from './surfaces';
+import type { LevelSurface, Mood } from '../types';
 
 export { TONE, TONE_HEX, WHITE_HEX, SMOKE_HEX, SURF } from './palette';
 export { surfMat, charMat, toneMat, unlitMat, cloudMat, setFlash } from './materials';
@@ -64,6 +67,29 @@ const SKY_RADIUS = 380;
 /** Fog range for a mood that sets none. Per-map ranges live on each level's mood. */
 const FOG_NEAR = 50;
 const FOG_FAR = 190;
+/**
+ * Streamed map uploads are spaced out in time (`_streamTextures`), so a map
+ * textures as fast on a 60 Hz screen or under an FPS cap as at 144 Hz. The
+ * download and the transcode are off the main thread; the upload is not, and
+ * when maps come faster than the browser's GPU process takes them, one upload
+ * blocks until it catches up: on an M4 Pro (ANGLE Metal, Ultra) a 1K or 2K
+ * map every 8 ms frame piled up into 25-200 ms stalls. At least
+ * `UPLOAD_GAP_MS` apart and at most `UPLOAD_BYTES_PER_MS` on average (a 2K
+ * map about every 47 ms, a 1K or 512 one every 24 ms: 60 MB/s), an upload
+ * costs 0.1-0.6 ms. An upload slower than `UPLOAD_SLOW_MS` shows the GPU
+ * process is behind anyway (a busier machine): the gaps then double, up to 4
+ * times, for the rest of that stream.
+ */
+export const UPLOAD_GAP_MS = 24;
+const UPLOAD_BYTES_PER_MS = 6e4;
+const UPLOAD_SLOW_MS = 4;
+/**
+ * The wait after a level load or a look change before the first upload. The
+ * GPU process is still busy with the new level's buffers and programs then,
+ * and an upload in that time waited 60-130 ms for it (Ultra, second and later
+ * maps of a session); half a second later none did.
+ */
+export const UPLOAD_SETTLE_MS = 500;
 /** The weapon rig's fixed vertical FOV (V8). The world keeps its own, speed kick and all. */
 export const VIEW_MODEL_FOV = 65;
 const _follow = new THREE.Vector3();
@@ -108,6 +134,8 @@ export class Renderer {
   readonly _afterRig: () => void;
   readonly _prepareRigMesh: (object: THREE.Object3D) => void;
   readonly _onResize: () => void;
+  /** A restored context lost every texture; streamed maps keep no CPU copy, so stream them again. */
+  readonly _onContextRestored: () => void;
   _shadowRadius = 1;
   /** Redraw the shadow map every Nth frame. */
   _shadowEvery = 1;
@@ -132,6 +160,32 @@ export class Renderer {
   _skyAssets: SkyAssets | null = null;
   _skyLoading: string | null = null;
   readonly _skyFailed = new Set<string>();
+  /** The current level's surface meshes; the look in force decides their materials (`_applySurfaces`). */
+  _surfaces: readonly LevelSurface[] = [];
+  /**
+   * Realistic tiers: the level meshes with one material per group, and what
+   * the shadow pass draws them with instead (materials.ts `casterGroups`):
+   * three draws every group of a multi-material mesh on its own, into every
+   * cascade, though the level's all cast alike.
+   */
+  _casters: { mesh: THREE.Mesh; material: THREE.Material[]; groups: THREE.GeometryGroup[] }[] = [];
+  /** The texture sets the current level's tags need. */
+  _surfaceSets: readonly TextureSet[] = [];
+  /**
+   * Realistic tiers: the texture sets streaming or on the level, and their KTX2
+   * loader (its transcoder workers). Both null on Low, which loads no texture.
+   */
+  _textures: TextureStreamer | null = null;
+  _ktx2: ReturnType<typeof ktx2Loader> | null = null;
+  /** The streamer has been told the current sets and size (`want`). */
+  _texturesAsked = false;
+  /** No upload before this time (`performance.now()`), and the current stream's slow-down factor (1, 2 or 4). */
+  _uploadAt = 0;
+  _uploadPace = 1;
+  /** A compressed upload has warmed the driver (`warmCompressedUploads`). */
+  _uploadsWarm = false;
+  /** The streamer's current sets are on the materials. */
+  _texturesWorn = false;
   _disposed = false;
 
   constructor(canvas: HTMLCanvasElement) {
@@ -194,8 +248,29 @@ export class Renderer {
       object.onBeforeRender = this._beforeRig;
       object.onAfterRender = this._afterRig;
     };
+    // Between the scene's draw list and its draws: the level's casters swap to their shadow groups for this pass only.
+    const shadowMap = this.three.shadowMap, drawShadows = shadowMap.render.bind(shadowMap);
+    shadowMap.render = (lights, scene, camera) => {
+      if (!shadowMap.needsUpdate || this._casters.length === 0) return drawShadows(lights, scene, camera);
+      const own = this._casters.map(({ mesh, material, groups }) => {
+        const saved = { material: mesh.material, groups: mesh.geometry.groups };
+        mesh.material = material;
+        mesh.geometry.groups = groups;
+        return saved;
+      });
+      try {
+        drawShadows(lights, scene, camera);
+      } finally {
+        this._casters.forEach(({ mesh }, i) => {
+          mesh.material = own[i]!.material;
+          mesh.geometry.groups = own[i]!.groups;
+        });
+      }
+    };
     this._onResize = () => this.resize();
     window.addEventListener('resize', this._onResize);
+    this._onContextRestored = () => this._releaseTextures();
+    canvas.addEventListener('webglcontextrestored', this._onContextRestored);
     this.applyQuality(this._quality);
     this.setLevelShadow(new THREE.Vector3(), 80);
   }
@@ -264,6 +339,7 @@ export class Renderer {
     this.setLevelShadow(this.sun.target.position, this._shadowRadius);
     this._applyFog();
     this._applyLook();
+    this._applySurfaces();
     if (q.look !== 'realistic') {
       // The flat look never shows a sky; a realistic tier streams it again.
       disposeSky(this._skyAssets);
@@ -452,6 +528,121 @@ export class Renderer {
     this.scene.environmentIntensity = ENV_INTENSITY;
   }
 
+  /** The level's surface meshes (`Level.surfaces`). Low keeps them in the flat palette; the realistic tiers texture them. */
+  setSurfaces(surfaces: readonly LevelSurface[]): void {
+    this._surfaces = surfaces;
+    this._surfaceSets = setsFor(surfaces.flatMap(s => s.materials.filter(tag => tag !== null)));
+    this._applySurfaces();
+  }
+
+  /**
+   * Give every surface mesh the look in force. Low: its flat surface material
+   * on the whole mesh, and every streamed texture is freed. Realistic: its
+   * tags' PBR materials (materials.ts `realMat`), one per geometry group,
+   * cached per tag and colour, wearing whatever they wore last if that is
+   * still loaded (a set shared with the previous map, or the previous texture
+   * size until the new one is in), else their stand-ins; flat-only groups are
+   * hidden, and the shadow pass draws each run of the visible ones as one
+   * (`_casters`). Downloads start with the next realistic frame (`render`),
+   * uploads `UPLOAD_SETTLE_MS` later, and a set that failed to load is tried
+   * again. A material swap, not a rebuild: the merged geometry serves both looks.
+   */
+  _applySurfaces(): void {
+    this._texturesAsked = false;
+    this._casters = [];
+    if (this._quality.look !== 'realistic') {
+      for (const { mesh, surf } of this._surfaces) {
+        mesh.material = surfMat(surf);
+        mesh.customDepthMaterial = undefined;
+      }
+      this._releaseTextures();
+      return;
+    }
+    if (!this._uploadsWarm) warmCompressedUploads(this.three);
+    this._uploadsWarm = true;
+    this._uploadAt = performance.now() + UPLOAD_SETTLE_MS;
+    for (const { mesh, surf, materials } of this._surfaces) {
+      const looks = materials.map(tag => {
+        if (tag === null) return hiddenMat();
+        const real = resolveMaterial(tag, surf);
+        return realMat(real, setInfo(real.set));
+      });
+      mesh.material = looks.length === 1 ? looks[0]! : looks;
+      mesh.customDepthMaterial = levelDepthMat();
+      const caster = looks.find(look => look.visible);
+      if (looks.length > 1 && caster) this._casters.push({ mesh, material: [caster], groups: casterGroups(mesh.geometry.groups, looks) });
+    }
+    this._texturesWorn = false;
+  }
+
+  /** Free every streamed texture and put the stand-ins back on the materials that wore them. */
+  _releaseTextures(): void {
+    this._textures?.clear();
+    this._dropFreedMaps();
+    this._textures = null;
+    this._ktx2?.dispose();
+    this._ktx2 = null;
+    this._texturesAsked = this._texturesWorn = false;
+  }
+
+  /** Any realistic material still wearing a freed texture goes back to its stand-in. */
+  _dropFreedMaps(): void {
+    for (const material of realMaterials()) {
+      const set = material.userData.set as TextureSet, standIn = standInMaps(set, setInfo(set));
+      if (material.map !== standIn.albedo && !(material.map && this._textures?.owns(material.map))) wearMaps(material, standIn);
+    }
+  }
+
+  /**
+   * Realistic tiers: keep the level's texture sets streaming at the size the
+   * Textures setting asks for (a new map's request frees the previous map's
+   * other sets at once), upload one map at a time, spaced out in time
+   * (`UPLOAD_GAP_MS`), and once all are on the GPU put them on every level
+   * material at once, then free the previous size. The frame never waits:
+   * until then the level wears the stand-ins, or the previous size.
+   */
+  _streamTextures(): void {
+    if (this._quality.look !== 'realistic' || this._surfaceSets.length === 0) return;
+    if (!this._textures) {
+      const ktx2 = this._ktx2 = ktx2Loader(this.three);
+      this._textures = new TextureStreamer(ktx2.load, texture => this.three.initTexture(texture));
+    }
+    const streamer = this._textures;
+    if (!this._texturesAsked) {
+      streamer.want(this._surfaceSets, TEXTURE_SIZE[this._quality.textures]);
+      this._dropFreedMaps();
+      this._texturesAsked = true;
+      this._uploadPace = 1;
+    }
+    if (this._texturesWorn) return;
+    const now = performance.now();
+    if (now >= this._uploadAt) {
+      const bytes = streamer.pump();
+      if (bytes > 0) {
+        if (performance.now() - now > UPLOAD_SLOW_MS) this._uploadPace = Math.min(4, this._uploadPace * 2);
+        this._uploadAt = now + Math.max(UPLOAD_GAP_MS, bytes / UPLOAD_BYTES_PER_MS) * this._uploadPace;
+      }
+    }
+    if (!streamer.ready) return;
+    for (const material of realMaterials()) {
+      const set = material.userData.set as TextureSet;
+      wearMaps(material, streamer.maps(set) ?? standInMaps(set, setInfo(set)));
+    }
+    streamer.prune();
+    this._dropFreedMaps();
+    this._texturesWorn = true;
+  }
+
+  /** A realistic tier's level textures are still streaming (or not yet on the materials). */
+  get texturesPending(): boolean {
+    return this._quality.look === 'realistic' && this._surfaceSets.length > 0 && !this._texturesWorn;
+  }
+
+  /** Streamed texture objects alive and their GPU bytes, for the tier report. */
+  get textureStats(): { textures: number; residentBytes: number } {
+    return { textures: this._textures?.textureCount ?? 0, residentBytes: this._textures?.residentBytes ?? 0 };
+  }
+
   /** A realistic tier wants the current map's sky and does not have it yet. */
   get skyPending(): boolean {
     const key = this._mood.sky;
@@ -510,6 +701,7 @@ export class Renderer {
   dispose(): void {
     this._disposed = true;
     window.removeEventListener('resize', this._onResize);
+    this.three.domElement.removeEventListener('webglcontextrestored', this._onContextRestored);
     this.sky.geometry.dispose();
     this.sky.material.dispose();
     this.post.dispose();
@@ -518,6 +710,7 @@ export class Renderer {
     this._roomEnv.dispose();
     disposeSky(this._skyAssets);
     this._skyAssets = null;
+    this._releaseTextures();
     this._pmrem?.dispose();
     this._pmrem = null;
     this.scene.environment = null;
@@ -531,6 +724,7 @@ export class Renderer {
   render(time: number, fx: PostFX): void {
     this._frame++;
     if (this._skyLoading === null && this.skyPending) this._requestSky();
+    this._streamTextures();
     // The shadow boxes only move on frames that redraw the maps, so a skipped
     // frame samples the old map with the matrix it was drawn with.
     const shadows = this.sun.castShadow && this._frame % this._shadowEvery === 0;

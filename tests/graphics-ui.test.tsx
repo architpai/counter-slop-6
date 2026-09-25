@@ -6,7 +6,7 @@ import { Screen } from '@/components/hud/Screens';
 import { Hud } from '@/components/hud/Hud';
 import { HudStore } from '@/engine/hud/store';
 import { createUI } from '@/engine/game/ui';
-import { AMBIENT_OCCLUSION, ANTIALIAS, PRESET_VALUES, Quality } from '@/engine/render/quality';
+import { AMBIENT_OCCLUSION, ANTIALIAS, PRESET_VALUES, Quality, TEXTURE_QUALITIES } from '@/engine/render/quality';
 import type { App } from '@/engine/boot';
 import type { PauseModel } from '@/engine/hud/screens';
 import '@/app/globals.css';
@@ -45,11 +45,16 @@ test('the Graphics section shows the presets, Auto with its pick, and the Advanc
   expect(onAction).toHaveBeenLastCalledWith('gfxPreset', 'custom', expect.any(Event));
   expect(advanced.open).toBe(true);
   const selects = [...host.querySelectorAll<HTMLSelectElement>('.graphics-grid select')];
-  expect(selects.map(select => select.value)).toEqual(['0', 'msaa2smaa', 'high', 'half', 'full', 'normal']);
+  expect(selects.map(select => select.value)).toEqual(['0', 'msaa2smaa', 'high', 'half', 'medium', 'full', 'normal']);
   // Every option the menu offers is one the engine accepts.
   expect([...selects[0]!.options].map(option => option.value)).toEqual(['30', '60', '90', '120', '0']);
   expect([...selects[1]!.options].map(option => option.value)).toEqual([...ANTIALIAS]);
   expect([...selects[3]!.options].map(option => option.value)).toEqual([...AMBIENT_OCCLUSION]);
+  expect([...selects[4]!.options].map(option => option.value)).toEqual([...TEXTURE_QUALITIES]);
+  expect(selects[4]!.disabled).toBe(false);
+  selects[4]!.value = 'high';
+  flushSync(() => selects[4]!.dispatchEvent(new Event('change', { bubbles: true })));
+  expect(onAction).toHaveBeenLastCalledWith('gfx', 'textures:high', expect.any(Event));
   const bloom = [...host.querySelectorAll<HTMLInputElement>('.graphics-grid input[type="checkbox"][data-act="gfx"]')]
     .find(input => input.parentElement?.textContent?.includes('Bloom'))!;
   expect(bloom.checked).toBe(true);
@@ -64,6 +69,9 @@ test('the Graphics section shows the presets, Auto with its pick, and the Advanc
   expect(reset.disabled).toBe(false);
   expect(presets()[5]!.getAttribute('aria-pressed')).toBe('true');
   expect(host.querySelector('input[data-act="gfxFps"]')).not.toBeNull();
+  // The flat look has no textures: the setting is there but waits for a realistic preset.
+  gfx.values = { ...PRESET_VALUES.low }; show();
+  expect(host.querySelectorAll<HTMLSelectElement>('.graphics-grid select')[4]!.disabled).toBe(true);
 });
 
 test('menu actions validate graphics values before they reach the settings', () => {
@@ -90,6 +98,10 @@ test('menu actions validate graphics values before they reach the settings', () 
   expect(quality.values.ao).toBe('full');
   act('gfx', 'bloom:0');
   expect(quality.values.bloom).toBe(false);
+  act('gfx', 'textures:huge');
+  expect(quality.values.textures).toBe(PRESET_VALUES.high.textures);
+  act('gfx', 'textures:high');
+  expect(quality.values.textures).toBe('high');
   act('gfx', 'antialias:smaa');
   expect(quality.values.antialias).toBe('smaa');
   act('gfx', 'renderScale:70');

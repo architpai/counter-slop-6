@@ -39,6 +39,8 @@ test('presets follow the plan table for the rows that exist today', () => {
     shadows: 'high', ao: 'half', bloom: true });
   expect(PRESET_VALUES.ultra).toMatchObject({ look: 'realistic', pixelRatio: 2, dynamicRes: false, antialias: 'msaa4smaa', shadows: 'ultra',
     ao: 'full', bloom: true, viewDistance: 'long' });
+  // Texture sets: 512 on Medium, 1K on High, 2K on Ultra (render/surfaces.ts TEXTURE_SIZE); Low has none to size.
+  expect(PRESETS.map(name => PRESET_VALUES[name].textures)).toEqual(['low', 'low', 'medium', 'high']);
   // Every preset is valid data: validating it against anything changes nothing.
   for (const name of PRESETS) expect(validValues(PRESET_VALUES[name], PRESET_VALUES.low)).toEqual(PRESET_VALUES[name]);
 });

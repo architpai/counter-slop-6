@@ -14,6 +14,8 @@ import type * as THREE from 'three';
 import type { Body, Box, World } from './physics';
 import type { NavGrid } from './nav';
 import type { OnlineMode, Team, TeamMatch } from './game/team-rules';
+import type { SurfKey } from './render/palette';
+import type { MaterialTag } from './render/surfaces';
 
 // Ported subsystems: real types.
 export type { Renderer } from './render/index';
@@ -287,6 +289,18 @@ export interface Breakable {
   box: Box;
 }
 
+/** One level mesh in the surface palette (render/surfaces.ts). */
+export interface LevelSurface {
+  mesh: THREE.Mesh;
+  surf: SurfKey;
+  /**
+   * What the mesh is made of: one tag per geometry group, in group order, or
+   * a single tag for a mesh without groups. Null marks a flat-only group,
+   * hidden on the realistic tiers (`BuildOpts.flatOnly`).
+   */
+  materials: readonly (MaterialTag | null)[];
+}
+
 export interface Level {
   key: LevelKey;
   arena: boolean;
@@ -312,6 +326,12 @@ export interface Level {
   breakables: Breakable[];
   /** Everything to remove on rebuild. */
   meshes: THREE.Object3D[];
+  /**
+   * Every mesh in the flat surface palette, with what it is made of: the
+   * renderer gives each the look in force (Low's surface colour, or the
+   * realistic tiers' textured material for the tag).
+   */
+  surfaces: LevelSurface[];
   /** Directional-light shadow fit. */
   shadow: { center: THREE.Vector3; radius: number };
   mood?: Mood;
