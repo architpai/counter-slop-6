@@ -14,6 +14,7 @@ import type {
 } from 'react';
 import type { DamageMark, HudStore, KillLine as KillLineState } from '@/engine/hud/store';
 import { Bold, BoardPanel, PvpPanel, Screen, SCREEN_TITLE_ID } from './Screens';
+import { InstallPrompt } from './InstallPrompt';
 import { useHud } from './useHud';
 import { OPTIC_COLOR } from '@/engine/render/palette';
 
@@ -34,6 +35,7 @@ export function Hud({ store, children }: HudProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const gameplay = useHud(store, 'gameplay');
   const device = useHud(store, 'device');
+  const mobile = useHud(store, 'mobile');
   const health = useHud(store, 'health');
   const screen = useHud(store, 'screen');
   const disposed = useSyncExternalStore(store.subscribeLifecycle, store.isDisposed, store.isDisposed);
@@ -47,6 +49,7 @@ export function Hud({ store, children }: HudProps) {
     'game-hud',
     !gameplay && 'no-gameplay',
     device && 'gamepad',
+    mobile.active && 'touch-mode',
     health.low && 'low-health',
     screen !== null && 'screen-open',
   ].filter(Boolean).join(' ');
@@ -403,6 +406,7 @@ export const ScreenOverlay = memo(function ScreenOverlay({ store }: { store: Hud
   rendered();
   const view = useHud(store, 'screen');
   const device = useHud(store, 'device');
+  const mobile = useHud(store, 'mobile');
   const panelRef = useRef<HTMLElement>(null);
 
   const click = (event: ReactMouseEvent<HTMLDivElement>): void => {
@@ -449,6 +453,7 @@ export const ScreenOverlay = memo(function ScreenOverlay({ store }: { store: Hud
     if (!panel || !content || view === null) return;
     const fit = (): void => {
       panel.style.zoom = '1';
+      if (mobile.active) return; // Touch menus scroll; never shrink their targets.
       const zoom = Math.min(1, (window.innerWidth - 24) / panel.scrollWidth, (window.innerHeight - 24) / panel.scrollHeight);
       panel.style.zoom = zoom.toFixed(3);
     };
@@ -457,12 +462,12 @@ export const ScreenOverlay = memo(function ScreenOverlay({ store }: { store: Hud
     fit();
     window.addEventListener('resize', fit);
     return () => { observer.disconnect(); window.removeEventListener('resize', fit); };
-  }, [view, device]);
+  }, [view, device, mobile.active]);
 
   return (
     <div className="screen-overlay" data-hud="screen" hidden={view === null} onClick={click} onKeyDown={key} onKeyUp={key}>
       <section ref={panelRef} className="screen-panel" data-hud="panel" data-screen-kind={kind ?? undefined} role="dialog" aria-modal="true" aria-label="Game menu" aria-labelledby={SCREEN_TITLE_ID} tabIndex={-1}>
-        <div className="screen-content">{view === null ? null : <Screen view={view} pad={device} onAction={(act, value, ev) => store.onUiAction?.(act, value, ev)} />}</div>
+        <div className="screen-content">{view === null ? null : <Screen view={view} pad={device} onAction={(act, value, ev) => store.onUiAction?.(act, value, ev)} />}<InstallPrompt visible={view?.kind === 'main' && mobile.active} /></div>
       </section>
     </div>
   );

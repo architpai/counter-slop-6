@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#111c25">
+<title>Counter Slop 6 — Mobile control study</title>
+<style>
+:root { color-scheme: dark; --ink:#edf4fa; --muted:#a5b6c3; --blue:#89b8ff; --panel:#111c25; }
+* { box-sizing:border-box; }
+body { margin:0; background:#0a1219; color:var(--ink); font:15px/1.5 'Avenir Next', 'Segoe UI', sans-serif; }
+button,input { font:inherit; } button { cursor:pointer; color:inherit; } button:focus-visible,input:focus-visible { outline:3px solid #ffcf74; outline-offset:4px; }
+button { border:1px solid #415361; background:#182833; border-radius:6px; min-height:44px; padding:8px 14px; }
+button[aria-pressed="true"] { background:#294865; border-color:var(--blue); }
+[hidden] { display:none !important; }
+header,footer { width:min(1100px,calc(100% - 48px)); margin:28px auto; }
+.eyebrow { color:var(--blue); font:11px/1.4 ui-monospace,monospace; letter-spacing:2px; text-transform:uppercase; }
+h1 { font-size:28px; letter-spacing:-1px; margin:7px 0 5px; font-weight:600; }
+.intro { margin:0; color:var(--muted); }
+.toolbar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-top:22px; }
+.segment { display:flex; gap:5px; } .tools { display:flex; gap:16px; align-items:center; } .tools label { display:flex; align-items:center; gap:8px; } input { accent-color:#89b8ff; }
+.stage { position:relative; width:min(1100px,calc(100% - 48px)); aspect-ratio:844/390; margin:0 auto; overflow:hidden; border:1px solid #475761; border-radius:16px; isolation:isolate; background:#26353b; touch-action:none; user-select:none; -webkit-user-select:none; }
+.scene { position:absolute; inset:-28px; background:url('../../public/maps/downtown.webp') center/cover; transform:translate(var(--pan-x,0px),var(--pan-y,0px)); filter:brightness(.63) saturate(.7); pointer-events:none; }
+.shade { position:absolute; inset:0; background:linear-gradient(#07141c99,transparent 30%,transparent 65%,#07141cbb); pointer-events:none; }
+.safe { position:absolute; inset:max(12px,env(safe-area-inset-top)) max(28px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(28px,env(safe-area-inset-left)); pointer-events:none; }
+.hud { position:absolute; inset:0; pointer-events:none; }
+.health { position:absolute; top:6px; left:8px; display:flex; gap:10px; align-items:center; font-size:12px; text-shadow:0 1px 3px #000; }
+.health strong { font-size:23px; } .health-track { width:74px; height:4px; background:var(--blue); }
+.wave { position:absolute; top:10px; right:66px; text-align:right; font-size:12px; text-shadow:0 1px 3px #000; } .wave b { display:block; font-size:16px; }
+.mock-label { position:absolute; top:10px; left:50%; transform:translateX(-50%); font:9px/1.4 ui-monospace,monospace; letter-spacing:1px; color:#e0ebf4c7; text-align:center; }
+#pause { position:absolute; right:0; top:0; pointer-events:auto; width:44px; padding:0; font-size:17px; background:#102330b3; }
+#look { position:absolute; inset:0; cursor:crosshair; }
+.look-guide { position:absolute; left:53%; top:38%; width:20%; height:28%; border:1px dashed #d5eaff55; border-radius:48%; display:grid; place-content:center; text-align:center; font-size:10px; letter-spacing:1px; line-height:1.8; pointer-events:none; color:#e0edfaad; }
+.look-guide span { display:block; font-size:20px; letter-spacing:6px; }
+.crosshair { position:absolute; left:50%; top:50%; width:20px; height:20px; transform:translate(-50%,-50%); color:white; pointer-events:none; }
+.crosshair:before,.crosshair:after { content:''; position:absolute; background:currentColor; }
+.crosshair:before { width:20px; height:2px; top:9px; } .crosshair:after { height:20px; width:2px; left:9px; }
+.stage.firing .crosshair { color:#ff776e; } .stage.aiming .crosshair { border:1px solid var(--blue); border-radius:50%; width:36px; height:36px; }
+.stage.aiming .crosshair:before { left:7px; top:16px; } .stage.aiming .crosshair:after { top:7px; left:16px; }
+.rope { position:absolute; left:50%; top:50%; width:23%; border-top:2px solid var(--blue); transform:rotate(-29deg); transform-origin:left; pointer-events:none; display:none; }
+.stage.attached .rope { display:block; }
+.control { position:absolute; left:var(--x); top:var(--y); transform:translate(-50%,-50%); pointer-events:auto; width:var(--size,58px); height:var(--size,58px); min-height:0; padding:0; border:1px solid #e0eff580; border-radius:50%; background:#10202b96; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; touch-action:none; box-shadow:0 2px 10px #0002; }
+.control svg { width:25px; height:25px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; pointer-events:none; }
+.control span { font-size:9px; line-height:1.2; font-weight:600; letter-spacing:.4px; pointer-events:none; }
+.control.active,.control[aria-pressed="true"] { background:#467db3b3; border-color:#c8e0ff; }
+#move { --x:11%; --y:72%; --size:112px; border-color:#d7e7ef66; background:#12263560; }
+#move:before { content:''; position:absolute; inset:19px; border:1px solid #e0eff533; border-radius:50%; }
+#knob { width:46px; height:46px; border-radius:50%; background:#e4edf333; border:1px solid #ecf5fa88; pointer-events:none; }
+.move-caption { position:absolute; top:calc(100% + 7px); width:150px; text-align:center; color:#e4edf3; font-size:9px; }
+.sprint { position:absolute; left:11%; top:43%; transform:translateX(-50%); text-align:center; font-size:9px; letter-spacing:1px; color:#deebf7bb; pointer-events:none; }
+.sprint b { display:block; font-size:22px; line-height:1; } .stage.sprinting .sprint { color:#b6ffb1; }
+#fire { --x:88%; --y:61%; --size:82px; border-width:2px; background:#22313caa; }
+#fire svg { width:32px; height:32px; } #fire span { font-size:10px; }
+#aim { --x:92%; --y:34%; } #grapple { --x:74%; --y:43%; --size:70px; color:#c7e0ff; border-color:var(--blue); background:#284e71ba; }
+#jump { --x:94%; --y:86%; } #slide { --x:82%; --y:87%; } #reload { --x:68%; --y:87%; --size:50px; }
+#fire-left { --x:8%; --y:23%; --size:68px; display:none; }
+.weapon { position:absolute; bottom:0; left:47%; transform:translateX(-50%); pointer-events:auto; min-width:158px; padding:5px 15px; border-radius:5px; text-align:left; background:#0b1b27b8; border-color:#a9c5d45c; }
+.weapon .weapon-top { display:flex; justify-content:space-between; align-items:baseline; gap:14px; } .weapon strong { font-size:13px; letter-spacing:1px; } .weapon b { font-size:20px; } .weapon small { font-size:9px; color:#c3d4e2; } .weapon .next { display:block; font-size:9px; color:#b7cbdc; }
+#feedback { position:absolute; left:50%; bottom:22%; transform:translateX(-50%); pointer-events:none; max-width:47%; padding:4px 10px; border-radius:3px; background:#0e202bbb; font-size:11px; color:#dae8f5; text-align:center; }
+.stage.claw #fire-left { display:flex; } .stage.claw #aim { --x:93%; --y:24%; } .stage.claw #grapple { --x:80%; --y:22%; } .stage.claw #fire { --x:87%; --y:62%; --size:64px; opacity:.6; }
+.stage:not(.guides) .guide { display:none; }
+.overlay { position:absolute; inset:0; z-index:10; display:grid; place-items:center; background:#0c1721ee; padding:20px; touch-action:auto; }
+.panel { width:min(440px,100%); max-height:100%; overflow:auto; padding:22px; background:#142431; border:1px solid #3e5467; border-radius:10px; }
+.panel h2 { margin:5px 0 10px; font-size:23px; } .panel p { color:#becbd6; font-size:13px; margin:8px 0 18px; } .panel button { width:100%; margin:4px 0; }
+.panel .primary { background:#315d89; border-color:#88b4e5; } .panel label { display:flex; align-items:center; gap:9px; min-height:44px; }
+#portrait { z-index:20; text-align:center; background:#0c1721; } #portrait .panel { max-width:340px; background:none; border:0; }
+.rotate-icon { display:inline-block; width:62px; height:32px; border:2px solid #b5cce2; border-radius:7px; position:relative; margin-bottom:10px; }
+.rotate-icon:after { content:'↻'; position:absolute; top:-19px; right:-28px; font-size:35px; color:var(--blue); }
+#portrait p { line-height:1.6; } #portrait .eyebrow { margin-bottom:16px; }
+footer { display:grid; grid-template-columns:1fr 1.2fr 1fr; gap:28px; font-size:12px; color:var(--muted); }
+footer h2 { margin:0 0 7px; font-size:12px; color:var(--ink); } footer p { margin:0; } .note { margin-top:8px; color:#82a8c7; }
+@media (max-width:1000px) and (orientation:landscape) and (max-height:600px), (orientation:portrait) and (max-width:700px) {
+ body { overflow:hidden; } header,footer { display:none; } .stage { position:fixed; inset:0; width:100%; height:100%; margin:0; aspect-ratio:auto; border:0; border-radius:0; }
+}
+@media (max-height:370px) and (orientation:landscape) { .control { --size:50px; } #move { --size:98px; } #fire { --size:70px; } #grapple { --size:60px; } .sprint { top:39%; } .safe { top:8px; bottom:10px; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="eyebrow">Counter Slop 6 / Mobile / Pass 01</div>
+  <h1>Two thumbs. One extra hook.</h1>
+  <p class="intro">Approved layout reference. Icons need refinement. Static backdrop, interactive buttons; no live gameplay.</p>
+  <div class="toolbar">
+    <div class="segment" aria-label="Layout preset"><button data-layout="thumbs" aria-pressed="true">Two thumbs</button><button data-layout="claw" aria-pressed="false">Claw preview</button></div>
+    <div class="tools"><label><input id="guides" type="checkbox" checked> Show guides</label><button id="preview-portrait">Portrait preview</button><button id="preview-install">Install prompt</button></div>
+  </div>
+</header>
+<main class="stage guides" id="stage" aria-label="Interactive landscape control prototype">
+  <div class="scene" aria-hidden="true"></div><div class="shade" aria-hidden="true"></div>
+  <div id="play">
+    <div id="look" aria-label="Drag to look"></div>
+    <div class="look-guide guide" aria-hidden="true"><span>↔</span>DRAG TO LOOK<br>KEEP THIS AREA CLEAR</div>
+    <div class="rope" aria-hidden="true"></div><div class="crosshair" aria-hidden="true"></div>
+    <div class="safe">
+      <div class="hud"><div class="health"><strong>100</strong><div><div class="health-track"></div>HEALTH</div></div><div class="mock-label">CONTROL PROTOTYPE<br>NOT LIVE GAMEPLAY</div><div class="wave">DOWNTOWN<b>WAVE 01</b></div></div>
+      <button id="pause" aria-label="Open prototype menu">Ⅱ</button>
+      <div class="sprint guide"><b>⌃⌃</b>PUSH UP TO SPRINT</div>
+      <button class="control" id="move" aria-label="Movement stick. Drag to move; push fully upward to sprint."><i id="knob"></i><span class="move-caption guide">LEFT THUMB · MOVE</span></button>
+      <button class="control" id="fire" aria-label="Fire. Hold and drag to aim."><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9"/><circle cx="16" cy="16" r="3"/><path d="M16 2v5m0 18v5M2 16h5m18 0h5"/></svg><span>FIRE</span></button>
+      <button class="control" id="fire-left" aria-label="Left fire button. Hold to fire."><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9"/><path d="M16 2v10m0 8v10M2 16h10m8 0h10"/></svg><span>FIRE</span></button>
+      <button class="control" id="aim" aria-label="Toggle scope" aria-pressed="false"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="10"/><path d="M16 6v7m0 6v7M6 16h7m6 0h7"/></svg><span>SCOPE</span></button>
+      <button class="control" id="grapple" aria-label="Grapple. Tap to attach or detach; hold to reel; drag to aim." aria-pressed="false"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3v16a7 7 0 0 0 14 0v-5m0 0-5 5M16 8 9 15l-5-5 7-7m-2 12L2 25"/></svg><span>GRAPPLE</span></button>
+      <button class="control" id="jump" aria-label="Jump, or launch when grappled"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="m8 15 8-9 8 9M16 7v20M7 28h18"/></svg><span id="jump-label">JUMP</span></button>
+      <button class="control" id="slide" aria-label="Crouch or slide on ground; dash in air"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="19" cy="6" r="3"/><path d="m16 12-7 4 9 3-5 8m3-15 5 6h7M4 28h24M2 22h6"/></svg><span>SLIDE / DASH</span></button>
+      <button class="control" id="reload" aria-label="Reload"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M25 12a10 10 0 1 0 0 10M25 4v8h-8"/></svg><span>RELOAD</span></button>
+      <button class="weapon" id="weapon" aria-label="Switch to next weapon"><span class="weapon-top"><strong id="weapon-name">R4-C</strong><span><b>30</b><small> / 120</small></span></span><span class="next">TAP TO SWITCH WEAPON →</span></button>
+    </div>
+    <output id="feedback" aria-live="polite">Try the controls · no physics simulated</output>
+  </div>
+  <section class="overlay" id="menu" hidden aria-label="Prototype menu"><div class="panel">
+    <div class="eyebrow">Prototype controls</div><h2>Choose your grip.</h2><p>These are the approved layout presets. A saved, customizable claw layout is planned for implementation; this reference has no editor.</p>
+    <button data-layout="thumbs" aria-pressed="true">Two thumbs</button><button data-layout="claw" aria-pressed="false">Claw preview · extra left fire</button>
+    <label><input id="menu-guides" type="checkbox" checked> Show control guides</label>
+    <button id="menu-install">Preview install message</button><button id="resume" class="primary">Continue prototype</button>
+  </div></section>
+  <section class="overlay" id="install" hidden aria-label="Install message preview"><div class="panel">
+    <div class="eyebrow">Install message / preview only</div><h2>Keep the game on your home screen.</h2><p>Install the game for a separate window and quick access. You can also keep playing in your browser.</p>
+    <button id="install-help" class="primary">How to install</button>
+    <p id="install-detail" hidden>In the real app, show the browser install prompt when available. On iPhone, use Safari → Share → Add to Home Screen. This local mock is not an installable PWA.</p>
+    <button id="dismiss-install">Continue in browser</button>
+  </div></section>
+  <section class="overlay" id="portrait" hidden aria-label="Rotate phone prompt"><div class="panel">
+    <div class="eyebrow">Landscape play only</div><div class="rotate-icon" aria-hidden="true"></div><h2>Rotate your phone<br>to play.</h2><p>Hold your phone horizontally.<br>Your controls need room to move.</p><p>Solo play pauses. An online match would continue.</p><button id="back-landscape" hidden>Back to landscape preview</button>
+  </div></section>
+  <section class="overlay" id="return" hidden aria-label="Resume after interruption"><div class="panel"><div class="eyebrow">Ready when you are</div><h2>Continue?</h2><p>Your held controls have been released.</p><button id="continue" class="primary">Tap to continue</button></div></section>
+</main>
+<footer>
+  <section><h2>01 / Normal controls</h2><p>Push the stick up to sprint. Hold Fire and drag to aim. Tap Scope to toggle. Slide becomes dash while airborne.</p></section>
+  <section><h2>02 / Grapple is the only extra</h2><p>Tap to attach or detach. Hold to reel. Drag on Grapple to keep aiming. Jump becomes Launch while attached.</p><p class="note">Layout approved. Validate thumb reach and timing in the real game; refine icons without changing the control arrangement.</p></section>
+  <section><h2>03 / Deliberately absent</h2><p>No grenade, melee/guard, focus attack, or gyro in this pass. Claw is a preset preview, not the layout editor.</p></section>
+</footer>
+<script>
+const $ = id => document.getElementById(id);
+const stage = $('stage'), contacts = new Map();
+let attached = false, panX = 0, panY = 0, portraitPreview = false, weaponIndex = 0, feedbackTimer;
+const weapons = ['R4-C', 'MP5', 'SHOTGUN', 'SNIPER', 'PISTOL'];
+function feedback(text) { clearTimeout(feedbackTimer); $('feedback').textContent = text; }
+function attachment(on) {
+  attached = on; stage.classList.toggle('attached', on);
+  $('grapple').setAttribute('aria-pressed', String(on)); $('jump-label').textContent = on ? 'LAUNCH' : 'JUMP';
+}
+function releaseAll() {
+  for (const contact of contacts.values()) clearTimeout(contact.timer);
+  contacts.clear(); document.querySelectorAll('.active').forEach(el => el.classList.remove('active'));
+  stage.classList.remove('firing', 'sprinting'); $('knob').style.transform = '';
+}
+function blocked() { return ['menu','install','portrait','return'].some(id => !$(id).hidden); }
+function overlay(id, show) {
+  if (show) releaseAll(); $(id).hidden = !show; $('play').inert = blocked();
+  if (show) $(id).querySelector('button:not([hidden])')?.focus();
+}
+function setLayout(layout) {
+  releaseAll(); stage.classList.toggle('claw', layout === 'claw');
+  document.querySelectorAll('[data-layout]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.layout === layout)));
+  feedback(layout === 'claw' ? 'Claw preview · left index fires, right thumb aims' : 'Two thumbs · hold Fire and drag to aim');
+}
+document.querySelectorAll('[data-layout]').forEach(button => button.onclick = () => setLayout(button.dataset.layout));
+for (const id of ['guides','menu-guides']) $(id).onchange = event => {
+  stage.classList.toggle('guides', event.target.checked); $('guides').checked = $('menu-guides').checked = event.target.checked;
+};
+$('pause').onclick = () => overlay('menu', true);
+$('resume').onclick = () => overlay('menu', false);
+$('continue').onclick = () => overlay('return', false);
+for (const id of ['preview-install','menu-install']) $(id).onclick = () => { overlay('menu', false); overlay('install', true); };
+$('dismiss-install').onclick = () => overlay('install', false);
+$('install-help').onclick = () => { $('install-detail').hidden = false; };
+const portrait = matchMedia('(orientation: portrait) and (max-width: 700px)');
+function orient() {
+  const wasPortrait = !$('portrait').hidden, show = portrait.matches || portraitPreview;
+  $('back-landscape').hidden = !portraitPreview || portrait.matches;
+  if (show) overlay('return', false);
+  overlay('portrait', show);
+  if (wasPortrait && !show) overlay('return', true);
+}
+portrait.addEventListener('change', orient); orient();
+$('preview-portrait').onclick = () => { portraitPreview = true; orient(); };
+$('back-landscape').onclick = () => { portraitPreview = false; orient(); };
+window.addEventListener('blur', () => { if (!blocked()) overlay('return', true); else releaseAll(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) { if (!blocked()) overlay('return', true); else releaseAll(); } });
+window.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && $('portrait').hidden) {
+    if (!$('install').hidden) overlay('install', false);
+    else if (!$('return').hidden) overlay('return', false);
+    else overlay('menu', $('menu').hidden);
+  }
+});
+function refreshHeld() {
+  const held = [...contacts.values()];
+  stage.classList.toggle('firing', held.some(c => c.id.startsWith('fire')));
+  for (const button of document.querySelectorAll('.control')) button.classList.toggle('active', held.some(c => c.id === button.id));
+}
+function moveContact(event, contact) {
+  const dx = event.clientX - contact.x, dy = event.clientY - contact.y;
+  if (contact.id === 'move') {
+    const rect = $('move').getBoundingClientRect(), radius = rect.width * .32;
+    let x = event.clientX - rect.left - rect.width / 2, y = event.clientY - rect.top - rect.height / 2;
+    const scale = Math.max(1, Math.hypot(x,y) / radius); x /= scale; y /= scale;
+    $('knob').style.transform = `translate(${x}px,${y}px)`;
+    const sprint = -y / radius > .85;
+    stage.classList.toggle('sprinting', sprint); feedback(sprint ? 'Sprint · full forward stick' : 'Move · left thumb');
+  } else if (['look','fire','grapple'].includes(contact.id)) {
+    panX = Math.max(-22,Math.min(22,panX + dx * .25)); panY = Math.max(-22,Math.min(22,panY + dy * .25));
+    stage.style.setProperty('--pan-x', `${panX}px`); stage.style.setProperty('--pan-y', `${panY}px`);
+    if (contact.id === 'look') feedback('Look · drag moves the camera, not the crosshair');
+  }
+  contact.x = event.clientX; contact.y = event.clientY;
+}
+for (const id of ['look','move','fire','fire-left','grapple','slide']) {
+  const target = $(id);
+  target.onpointerdown = event => {
+    if (blocked() || event.button !== 0 || [...contacts.values()].some(c => c.id === id)) return;
+    event.preventDefault();
+    const contact = { id, x:event.clientX, y:event.clientY, wasAttached:attached, reeled:false, timer:0 };
+    contacts.set(event.pointerId, contact); target.setPointerCapture(event.pointerId); refreshHeld();
+    if (id === 'grapple') {
+      if (!attached) attachment(true);
+      feedback('Grapple attached · hold to reel, drag to aim');
+      contact.timer = setTimeout(() => { contact.reeled = true; feedback('Reeling · Jump to launch'); }, 300);
+    } else if (id.startsWith('fire')) feedback(id === 'fire' ? 'Firing · drag this finger to aim' : 'Left fire · right thumb stays free');
+    else if (id === 'slide') feedback('Crouch / slide · air dash when airborne');
+    moveContact(event, contact);
+  };
+  target.onpointermove = event => { const contact = contacts.get(event.pointerId); if (contact) moveContact(event, contact); };
+  const end = event => {
+    const contact = contacts.get(event.pointerId); if (!contact) return;
+    clearTimeout(contact.timer); contacts.delete(event.pointerId);
+    if (contact.id === 'move') { $('knob').style.transform = ''; stage.classList.remove('sprinting'); }
+    if (contact.id === 'grapple' && event.type === 'pointerup' && contact.wasAttached && !contact.reeled) attachment(false);
+    refreshHeld(); feedback(attached ? 'Attached · Jump to launch, tap Grapple to detach' : 'Controls released');
+  };
+  target.onpointerup = target.onpointercancel = target.onlostpointercapture = end;
+}
+$('aim').onclick = () => {
+  const on = !stage.classList.contains('aiming'); stage.classList.toggle('aiming', on);
+  $('aim').setAttribute('aria-pressed', String(on)); feedback(on ? 'Scope on · tap again to lower' : 'Scope off');
+};
+$('jump').onclick = () => { const launch = attached; attachment(false); feedback(launch ? 'Launch from grapple' : 'Jump · wall jump near a wall'); };
+$('reload').onclick = () => feedback('Reload · feedback only');
+$('weapon').onclick = () => { weaponIndex = (weaponIndex + 1) % weapons.length; $('weapon-name').textContent = weapons[weaponIndex]; feedback('Selected ' + weapons[weaponIndex] + ' · ammo display is a placeholder'); };
+// Keyboard activation for the buttons whose main demonstration uses pointer holds.
+for (const id of ['move','fire','fire-left','grapple','slide']) $(id).onclick = event => {
+  if (event.detail !== 0) return;
+  if (id === 'grapple') attachment(!attached);
+  feedback(id === 'move' ? 'Drag the stick to preview movement' : id === 'grapple' ? (attached ? 'Grapple attached' : 'Grapple detached') : id + ' · pointer hold demonstration');
+};
+</script>
+</body>
+</html>

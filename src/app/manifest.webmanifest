@@ -1,0 +1,16 @@
+{
+  "id": "/",
+  "name": "Counter Slop 6",
+  "short_name": "CS6",
+  "description": "A first-person arena shooter. Tactical, allegedly.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#111c25",
+  "theme_color": "#131a26",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

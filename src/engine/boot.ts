@@ -35,6 +35,7 @@ export interface Settings {
   music: boolean;
   name: string;
   sens: number;
+  touchSens: number;
   acogSens: number;
   sniperSens: number;
   optic: RifleOptic;
@@ -95,6 +96,8 @@ export interface GameHandle {
   world: World;
   beginSolo(): void;
   beginTraining(): void;
+  pause(): void;
+  resume(): void;
   /** Debug only: restart the solo run at wave `n`. No UI reaches this. */
   jumpToWave(n: number): void;
   step(nowMs: number): void;
@@ -138,6 +141,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     music: store.getStr(SKEY.MUSIC, '1') !== '0',
     name: store.getStr(SKEY.NAME, '').trim().slice(0, 14) || `recruit${randInt(10, 99)}`,
     sens: clamp(store.getNum(SKEY.SENS, 100), 25, 250),
+    touchSens: clamp(store.getNum(SKEY.TOUCH_SENS, 100), 25, 250),
     acogSens: clamp(store.getNum(SKEY.ACOG_SENS, 120), 25, 250),
     sniperSens: clamp(store.getNum(SKEY.SNIPER_SENS, 150), 25, 250),
     optic: store.getStr(SKEY.OPTIC, 'acog') === 'holo' ? 'holo' : 'acog',
@@ -184,9 +188,12 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     input.mouseSens = 0.0022 * settings.sens / 100;
     input.padSensX = 3.4 * settings.sens / 100;
     input.padSensY = 2.6 * settings.sens / 100;
-    input.acogScale = settings.acogSens / settings.sens;
-    input.sniperScale = settings.sniperSens / settings.sens;
+    input.touchSens = 0.004 * settings.touchSens / 100;
+    const base = input.usingTouch ? settings.touchSens : settings.sens;
+    input.acogScale = settings.acogSens / base;
+    input.sniperScale = settings.sniperSens / base;
     input.invertY = settings.invert;
+    store.set(SKEY.TOUCH_SENS, settings.touchSens);
     store.set(SKEY.SENS, settings.sens); store.set(SKEY.INVERT, settings.invert);
     store.set(SKEY.ACOG_SENS, settings.acogSens); store.set(SKEY.SNIPER_SENS, settings.sniperSens);
   }
@@ -250,6 +257,9 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
   // ---- actors 10
   const enemies = ctx.enemies = new EnemyManager(ctx);
   const player = ctx.player = new Player(ctx);
+  input.touch.getGrappleMode = () => player.grapple.mode;
+  let touchInterrupted = false;
+  const portrait = () => window.innerHeight > window.innerWidth;
   player.name = settings.name;
   function applyOptic(): void {
     for (const weapon of player.weapons) {
@@ -291,8 +301,11 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     hud.setScore(0, 0); hud.setTimer(''); hud.setPvpScore(null); hud.setWave(1, 0); app.ffa.showBoard(false);
   };
   app.beginCommon = () => {
+    input.clearTouch(); touchInterrupted = false;
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    app.screen = null;
     audio.init(); audio.resume();
-    if (!input.usingGamepad) input.requestLock();
+    if (!input.usingGamepad && !input.usingTouch) input.requestLock();
     if (settings.music && !audio.musicPlaying) audio.music(true);
     hud.hideScreen(); hud.setGameplayVisible(true); gs.menu = false;
   };
@@ -307,18 +320,24 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     app.beginCommon(); gs.state = 'play';
   };
   app.pause = () => {
-    if (gs.state !== 'play' || gs.menu) return;
+    if ((gs.state !== 'play' && !(gs.mode === 'ffa' && gs.state === 'dying')) || gs.menu) return;
+    input.clearTouch(); input.touch.enabled = false;
     if (gs.mode !== 'ffa') gs.state = 'pause';
     gs.menu = true; app.showScreen(gs.mode !== 'ffa' ? 'pause' : 'menu'); audio.reelLoop(false);
   };
   app.resume = () => {
+    if (input.usingTouch && portrait()) { touchInterrupted = true; syncTouch(); return; }
+    touchInterrupted = false; input.clearTouch(); audio.init(); audio.resume();
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    app.screen = null;
     if (gs.mode === 'ffa') {
       gs.menu = false; hud.hideScreen(); hud.setGameplayVisible(true);
-      if (!input.usingGamepad) input.requestLock();
+      if (!input.usingGamepad && !input.usingTouch) input.requestLock();
     } else if (gs.mode === 'training') { app.beginCommon(); gs.state = 'play'; }
     else app.beginSolo();
   };
   app.mainMenu = () => {
+    touchInterrupted = false;
     gs.state = 'start'; gs.mode = 'solo'; gs.menu = false;
     loadLevel(false, settings.mapKey); app.resetRun(); audio.reelLoop(false); input.exitLock();
     hud.setGameplayVisible(false); app.showScreen('main');
@@ -328,7 +347,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
   handle = {
     ctx, gs, player, enemies, net, remotes: ctx.remotes, lobby, scores, pickups: app.pickups.items,
     level: ctx.level, nav: ctx.nav, hud, effects, input, world,
-    beginSolo: app.beginSolo, beginTraining: app.beginTraining, step: t => step(t),
+    beginSolo: app.beginSolo, beginTraining: app.beginTraining, pause: app.pause, resume: app.resume, step: t => step(t),
     jumpToWave: n => {
       if (!Number.isInteger(n) || n < 1) return;
       gs.mode = 'solo'; loadLevel(false, settings.mapKey); app.beginCommon(); app.resetRun(); app.solo.startWave(n); gs.state = 'play';
@@ -348,23 +367,46 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
   hud.onScreenClick = app.ui.screenClick;
   hud.onUiAction = app.ui.onUiAction;
   listen(canvas, 'click', () => {
-    if (gs.state === 'play' && !gs.menu && !input.locked && !input.usingGamepad) input.requestLock();
+    if (gs.state === 'play' && !gs.menu && !input.locked && !input.usingGamepad && !input.usingTouch) input.requestLock();
   });
   input.onLockChange = locked => {
-    if (!locked && gs.state === 'play' && !gs.menu && !input.usingGamepad) app.pause();
+    if (!locked && gs.state === 'play' && !gs.menu && !input.usingGamepad && !input.usingTouch) app.pause();
   };
   input.onDeviceChange = device => {
+    applyLook(); syncTouch();
     hud.setDevice(device === 'gamepad'); hud.setWeapon(player.weapon.name, player.weapon.hint);
-    if (app.screen && gs.state !== 'play') app.ui.redraw();
+    if (app.screen) app.ui.redraw();
   };
-  listen(window, 'pagehide', () => { if (net.active) net.leave(); });
-  let woken = false;
-  const wake = (): void => { if (woken) return; woken = true; audio.init(); audio.resume(); };
+  function interruptTouch(): void {
+    input.clearTouch();
+    if (!input.usingTouch || !game.playing() || gs.menu) return;
+    touchInterrupted = true; app.pause(); syncTouch();
+  }
+  function syncTouch(): void {
+    const active = input.usingTouch;
+    if (!active || !['play', 'pause', 'dying'].includes(gs.state)) touchInterrupted = false;
+    if (active && portrait() && game.playing() && !gs.menu) { touchInterrupted = true; app.pause(); }
+    const enabled = active && gs.state === 'play' && player.alive && !gs.menu && !touchInterrupted && !portrait() && !document.hidden;
+    if (input.touch.enabled && !enabled) input.clearTouch();
+    input.touch.enabled = enabled;
+    hud.setMobile({ active, enabled, portrait: portrait(), interrupted: touchInterrupted,
+      online: gs.mode === 'ffa', attached: player.grapple.mode === 'on', aiming: input.touch.aiming, airborne: !player.body.onGround });
+  }
+  listen(window, 'blur', interruptTouch);
+  listen(document, 'visibilitychange', () => { if (document.hidden) interruptTouch(); });
+  listen(window, 'resize', () => { input.clearTouch(); syncTouch(); });
+  listen(window, 'orientationchange', interruptTouch);
+  listen(window, 'pagehide', () => {
+    interruptTouch();
+    if (net.active) app.ffa.leave('Connection closed when the page was interrupted. Join again to play online.');
+  });
+  const wake = (): void => { audio.init(); audio.resume(); };
   listen(window, 'pointerdown', wake);
   listen(window, 'keydown', wake);
 
   // ---- 14
   hud.setDevice(input.usingGamepad);
+  syncTouch();
   hud.setWeapon(player.weapon.name, player.weapon.hint);
   hud.setGameplayVisible(false);
   app.showScreen('main');
@@ -376,13 +418,14 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
   function step(nowMs: number): void {
     const dt = Math.min(0.05, (nowMs - lastStep) / 1000);
     lastStep = nowMs;
+    syncTouch();
     input.update(dt);
 
     const { state } = gs;
     const confirm = input.pressed('jump') || input.pressed('confirm');
     if (state === 'start' || state === 'pause' || state === 'dead') {
       if (confirm || (state === 'pause' && input.pressed('pause'))) app.ui.screenClick();
-    } else if (state === 'play') {
+    } else if (state === 'play' || (state === 'dying' && gs.mode === 'ffa')) {
       if (input.pressed('pause')) { if (gs.menu) app.resume(); else { app.pause(); input.exitLock(); } }
       else if (gs.menu && confirm) app.resume();
     }
@@ -394,7 +437,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
       app.ffa.showBoard(boardLatch && !gs.menu);
     } else boardLatch = false;
 
-    if (gs.state === 'play' && !gs.menu && !input.locked && !input.usingGamepad) {
+    if (gs.state === 'play' && !gs.menu && !input.locked && !input.usingGamepad && !input.usingTouch) {
       lockTipT -= dt;
       if (lockTipT <= 0) { lockTipT = 2.5; hud.tip('click to grab the mouse', 2); }
     }
@@ -455,6 +498,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     hud.setBreath(player.breath);
     hud.setHealth(player.hp, player.maxHp);
     hud.setSpread(w.spreadPx);
+    syncTouch();
     hud.update(dt);
     if (game.isOnline()) hud.setFocusMeter(game.playing(), player.breath, false, 'GRAPPLE');
     else {

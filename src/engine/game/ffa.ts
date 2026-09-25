@@ -371,10 +371,10 @@ export function createFFA(app: App): FfaApi {
     const choice = ONLINE_MODES.find(m => m.key === mode()) ?? ONLINE_MODES[0];
     hud.message(choice.name.toUpperCase(), late ? 'you joined a match in progress' : choice.blurb, 3);
     if (teamState) sendPlayerState();
-    hud.tip(`hold ${hud.key('score')} for the scoreboard`, 5);
+    hud.tip(ctx.input.usingTouch ? 'Open Menu for the scoreboard. The match keeps running.' : `hold ${hud.key('score')} for the scoreboard`, 5);
     window.clearTimeout(timer);
     timer = window.setTimeout(() => {
-      if (gs.state === 'play' && !ctx.input.locked && !ctx.input.usingGamepad) { gs.menu = true; app.showScreen('matchOn'); }
+      if (gs.state === 'play' && !ctx.input.locked && !ctx.input.usingGamepad && !ctx.input.usingTouch) { gs.menu = true; app.showScreen('matchOn'); }
     }, 250);
   }
   function teamSpawn(rid: string | null): THREE.Vector3 {
@@ -471,7 +471,7 @@ export function createFFA(app: App): FfaApi {
       ...(gs.teamMatch ? { round: gs.teamMatch.round } : {}) });
     gs.respawnT = gs.teamMatch ? TEAM_RULES.WAVE - gs.teamMatch.elapsed % TEAM_RULES.WAVE : RESPAWN;
     gs.state = 'dying'; gs.deathT = 0;
-    gs.menu = false; hud.hideScreen();
+    if (!ctx.input.usingTouch) { gs.menu = false; hud.hideScreen(); }
     if (net.isHost && net.id !== null) tally(net.id, killer);
     const row = killer ? scores.get(killer) : null;
     hud.kill(row ? `eliminated by ${row.name}${how ? ` · ${how}${h?.crit ? ' headshot' : ''}` : ''}` : 'eliminated');

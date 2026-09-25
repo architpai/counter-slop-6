@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { ReactNode } from 'react';
+import { ControlEditor } from './ControlEditor';
 import { KEYBOARD_ROWS, PAD_ROWS } from '@/engine/hud/labels';
 import { ONLINE_MODES, TEAM_NAMES, isTeam } from '@/engine/game/team-rules';
 import type { OnlineMode } from '@/engine/game/team-rules';
@@ -81,6 +82,7 @@ function MainMenu({ onAction }: { onAction: Act }) {
 }
 
 function Prompt({ confirmKey, end, start = 'CLICK ANYWHERE' }: { confirmKey: string; end: string; start?: string }) {
+  if (confirmKey === 'Tap') return <p className="screen-prompt">TAP THE BACKGROUND {end}</p>;
   return <p className="screen-prompt">{start} (or press <span data-control="confirm">{confirmKey}</span>) {end}</p>;
 }
 
@@ -88,20 +90,38 @@ function Prompt({ confirmKey, end, start = 'CLICK ANYWHERE' }: { confirmKey: str
  * The current device comes from the store, not from guessing at a key label.
  * `ScreenOverlay` subscribes and passes it down.
  */
-export function Controls({ pad }: { pad: boolean }) {
-  const [selected, setSelected] = useState<boolean | null>(null);
-  const active = selected ?? pad;
+export function Controls({ pad, touch = false }: { pad: boolean; touch?: boolean }) {
+  const [selected, setSelected] = useState<'keyboard' | 'gamepad' | 'touch' | null>(null);
+  const [editing, setEditing] = useState(false);
+  const active = selected ?? (touch ? 'touch' : pad ? 'gamepad' : 'keyboard');
+  const rows = active === 'touch' ? [
+    '<b>Move</b> drag the left stick. Push fully forward to sprint.',
+    '<b>Look / Fire</b> drag the clear area, or hold Fire and drag to aim.',
+    '<b>Scope</b> tap to toggle. Adjust touch and scoped speed in Settings.',
+    '<b>Grapple</b> tap to hook or detach. Hold to reel, release to swing. Drag to aim.',
+    '<b>Jump / Launch</b> jump, wall jump, or launch from the attached rope.',
+    '<b>Slide / Dash</b> hold to crouch or slide. Press in the air to dash.',
+    '<b>Reload / Weapon</b> tap Reload; tap the ammo display to change gun.',
+    '<b>Menu</b> pauses solo and training. Online matches keep running.',
+  ] : active === 'gamepad' ? PAD_ROWS : KEYBOARD_ROWS;
   return (
     <div className="controls-panel" data-ui-block="">
       <div className="control-switch" role="group" aria-label="Control device">
-        <button type="button" aria-pressed={!active} onClick={() => setSelected(false)}>Mouse + keyboard</button>
-        <button type="button" aria-pressed={active} onClick={() => setSelected(true)}>Controller</button>
+        {(['keyboard', 'gamepad', 'touch'] as const).map(device => <button type="button" key={device}
+          aria-pressed={active === device} onClick={() => setSelected(device)}>
+          {device === 'keyboard' ? 'Mouse + keyboard' : device === 'gamepad' ? 'Controller' : 'Touch'}
+        </button>)}
       </div>
       <div className="screen-controls">
-        <section className="control-column current-device" data-device={active ? 'gamepad' : 'keyboard'} aria-label={active ? 'Controller controls' : 'Keyboard controls'}>
-          <ol>{(active ? PAD_ROWS : KEYBOARD_ROWS).map((row, index) => <li className="control-row" key={index}><Bold text={row} /></li>)}</ol>
+        <section className="control-column current-device" data-device={active} aria-label={`${active} controls`}>
+          <ol>{rows.map((row, index) => <li className="control-row" key={index}><Bold text={row} /></li>)}</ol>
         </section>
       </div>
+      {active === 'touch' && <>
+        <button type="button" className="screen-button" onClick={() => setEditing(true)}>Edit controls</button>
+        <p className="screen-footer">Landscape play. Two-thumb and claw layouts. Grenades, melee, focus attacks and gyro are not touch controls in this pass.</p>
+      </>}
+      {editing && <ControlEditor onClose={() => setEditing(false)} onSave={() => window.dispatchEvent(new Event('touchlayoutchange'))} />}
     </div>
   );
 }
@@ -139,7 +159,7 @@ function Weapons({ model, onAction, collapsible = false }: {
 }
 
 function Sensitivity({ act, label, value, onAction }: {
-  act: 'sens' | 'acogSens' | 'sniperSens'; label: string; value: number; onAction: Act;
+  act: 'sens' | 'touchSens' | 'acogSens' | 'sniperSens'; label: string; value: number; onAction: Act;
 }) {
   const [readout, setReadout] = useState(value);
   return <label className="settings-row">{label}<input type="range" data-act={act} min={25} max={250} step={5}
@@ -151,7 +171,8 @@ function Settings({ model, onAction }: { model: SettingsModel; onAction: Act }) 
   return (
     <div className="settings" data-ui-block="" data-ui-input-block="">
       <div className="sensitivity-settings">
-        <Sensitivity act="sens" label="Look / Holo sensitivity" value={model.sens} key={`sens-${model.sens}`} onAction={onAction} />
+        {model.touch ? <Sensitivity act="touchSens" label="Touch look / Holo sensitivity" value={model.touchSens ?? 100} key={`touch-${model.touchSens}`} onAction={onAction} />
+          : <Sensitivity act="sens" label="Look / Holo sensitivity" value={model.sens} key={`sens-${model.sens}`} onAction={onAction} />}
         <Sensitivity act="acogSens" label="ACOG sensitivity" value={model.acogSens} key={`acog-${model.acogSens}`} onAction={onAction} />
         <Sensitivity act="sniperSens" label="Sniper sensitivity" value={model.sniperSens} key={`sniper-${model.sniperSens}`} onAction={onAction} />
         <p>Scoped settings are independent of look. 100% is the standard scoped speed.</p>
@@ -269,7 +290,7 @@ function MainScreen({ model, pad, onAction }: { model: MainModel; pad: boolean; 
           </div>
           <p className="screen-footer">{count(model.best) > 0 ? `Personal best · ${count(model.best)}` : 'One more wave. One more try.'}</p>
         </> : currentPage === 'controls' ? <>
-          <Controls pad={pad} />
+          <Controls pad={pad} touch={model.touch} />
           {pad ? <p className="screen-footer">Press {model.confirmKey} to start solo</p> : null}
         </> : currentPage === 'weapons' ? <Weapons model={model} onAction={onAction} />
           : <Settings model={model} onAction={onAction} />}
@@ -359,7 +380,7 @@ function PauseOptions({ model, pad, onAction }: { model: LookModel & WeaponSetti
         aria-pressed={page === item} onClick={() => setPage(item)}>{item}</button>)}
     </nav>
     <div className="menu-page">
-      {page === 'controls' ? <Controls pad={pad} /> : page === 'settings' ? <Settings model={model} onAction={onAction} />
+      {page === 'controls' ? <Controls pad={pad} touch={model.touch} /> : page === 'settings' ? <Settings model={model} onAction={onAction} />
         : <Weapons model={model} onAction={onAction} />}
     </div>
   </>;
@@ -370,6 +391,7 @@ function PauseScreen({ model, pad, onAction }: { model: PauseModel; pad: boolean
     <>
       <Title text="PAUSED" sub={model.training ? 'training ground · no return fire' : `wave ${count(model.wave)} · score ${count(model.score)}`} />
       {model.training ? <div className="screen-actions" data-ui-block=""><Button act="training" text="RESET RANGE" sub="restore targets, ammo and starting position" onAction={onAction} /></div> : null}
+      {model.touch && <div className="screen-actions" data-ui-block=""><Button act="resume" text="RESUME" primary onAction={onAction} /></div>}
       <PauseOptions model={model} pad={pad} onAction={onAction} />
       <MainMenu onAction={onAction} />
       <Prompt confirmKey={model.confirmKey} end="TO RESUME" />
@@ -382,6 +404,7 @@ function MenuScreen({ model, pad, onAction }: { model: MenuModel; pad: boolean; 
     <>
       <Title text="MENU" sub={`${modeChoice(model.mode).name} · lobby ${model.code ?? ''}`} />
       <TeamSummary model={model} />
+      {model.touch && <div className="screen-actions" data-ui-block=""><p>The match is still running. Your player is not protected.</p><Button act="resume" text="RESUME" primary onAction={onAction} /></div>}
       <ScoreRows rows={model.rows} mode={model.mode} />
       <PauseOptions model={model} pad={pad} onAction={onAction} />
       <div className="screen-actions" data-ui-block=""><Button act="leaveMatch" text="LEAVE MATCH" onAction={onAction} /></div>

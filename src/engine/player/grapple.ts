@@ -154,7 +154,7 @@ export function updateGrapple(p: Player, dt: number): void {
       g.reticleTime = 0.08;
       hud.setGrappleTarget(target(p) ? 1 : 0);
     }
-    if (!input.pressed('grapple') || g.cooldown > 0) return;
+    if ((!input.pressed('grapple') && !input.touch.hookPressed) || g.cooldown > 0) return;
     if (p.breath < 0.1) {
       audio.winded();
       hud.tip('grapple needs a breather', 0.9);
@@ -214,7 +214,7 @@ export function updateGrapple(p: Player, dt: number): void {
   direction.copy(g.anchor).sub(p.center);
   const dist = direction.length();
   if (dist > 0) direction.divideScalar(dist);
-  const along = b.vel.dot(direction), reeling = input.down('grapple');
+  const along = b.vel.dot(direction), reeling = input.down('grapple') || input.touch.reeling;
   if (reeling) {
     g.ropeLength = Math.max(1.5, g.ropeLength - 14 * dt);
     if (along < 22) b.vel.addScaledVector(direction, 42 * dt);
@@ -237,13 +237,14 @@ export function updateGrapple(p: Player, dt: number): void {
     g.checkTime = 0;
     g.blocked = world.lineOfSight(p.eye, g.anchor) ? 0 : g.blocked + 0.15;
   }
-  if (input.pressed('grapple') || dist < 1.3 || g.blocked > 0.3 || dist > 90 || (b.onGround && g.swingTime > 0.6 && !reeling)) {
+  if (input.pressed('grapple') || input.touch.detachPressed || dist < 1.3 || g.blocked > 0.3 || dist > 90 || (b.onGround && g.swingTime > 0.6 && !reeling)) {
     detachGrapple(p, dist < 1.3);
   }
 }
 
 export function detachGrapple(p: Player, boost: boolean): void {
   const g = p.grapple;
+  p.ctx.input.touch.cancelGrapple();
   if (g.mode === 'idle') return;
   const attached = g.mode === 'on';
   g.mode = 'idle';

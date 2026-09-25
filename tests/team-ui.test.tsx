@@ -112,7 +112,7 @@ test('UI validates mode actions, forwards online models and compares team winner
     lobby, screen: 'online', busy: false,
     gs: { state: 'lobby', mode: 'ffa', over: { id: 'team:0', name: 'RED' } },
     settings: { name: 'Red', sens: 100, acogSens: 120, sniperSens: 150, invert: false, music: false, optic: 'holo', r4cOptic: 'holo' },
-    ctx: { net: { id: 'red', code: 'ABCDE', isHost: true }, hud: { showScreen, key: () => 'Enter' } },
+    ctx: { input: { usingTouch: false, clearTouch: vi.fn(), touch: { enabled: false } }, net: { id: 'red', code: 'ABCDE', isHost: true }, hud: { showScreen, key: () => 'Enter' } },
     ffa: { selectMode, boardRows: () => rows, onlineInfo: () => ({ mode: lobby.mode, teamScores: [4, 12], selfTeam: 0, status: 'Round 1' }) },
   };
   const ui = createUI(app as unknown as App);

@@ -19,14 +19,14 @@ export function createUI(app: App): UiApi {
   const { ctx, gs, lobby, settings } = app;
   const { hud, net } = ctx;
   let joinCode = '';
-  const look = () => ({ sens: settings.sens, acogSens: settings.acogSens, sniperSens: settings.sniperSens,
+  const look = () => ({ sens: settings.sens, touchSens: settings.touchSens, touch: ctx.input.usingTouch, acogSens: settings.acogSens, sniperSens: settings.sniperSens,
     invert: settings.invert, music: settings.music, confirmKey: hud.key('confirm') });
   const weapons = () => ({ optic: settings.optic, r4cOptic: settings.r4cOptic });
   function setOptic(field: 'optic' | 'r4cOptic', value: string | null): void {
     if (value !== 'acog' && value !== 'holo') return;
     settings[field] = value; app.applyOptic(); redraw();
   }
-  function sensitivity(field: 'sens' | 'acogSens' | 'sniperSens', value: string | null, fallback: number): void {
+  function sensitivity(field: 'sens' | 'touchSens' | 'acogSens' | 'sniperSens', value: string | null, fallback: number): void {
     const number = Number(value);
     settings[field] = clamp(Math.round((Number.isFinite(number) ? number : fallback) / 5) * 5, 25, 250);
     app.applyLook();
@@ -54,6 +54,7 @@ export function createUI(app: App): UiApi {
   };
 
   function showScreen(kind: ScreenName): void {
+    ctx.input.clearTouch(); ctx.input.touch.enabled = false;
     app.screen = kind;
     switch (kind) {
       case 'main': hud.showScreen({ kind, model: models.main() }); break;
@@ -70,12 +71,13 @@ export function createUI(app: App): UiApi {
 
   function screenClick(): void {
     if (gs.state === 'start') { if (app.screen === 'main') app.beginSolo(); }
-    else if (gs.state === 'play' && gs.menu) app.resume();
+    else if ((gs.state === 'play' || gs.state === 'dying') && gs.menu) app.resume();
     else if (gs.state === 'pause' || gs.state === 'dead') app.resume();
   }
 
   const actions: Record<UiAction, (value: string | null, ev: Event) => void> = {
     start: () => app.beginSolo(),
+    resume: () => app.resume(),
     training: () => app.beginTraining(),
     online: () => { lobby.status = ''; showScreen('online'); },
     back: () => { lobby.status = ''; showScreen('main'); },
@@ -102,6 +104,7 @@ export function createUI(app: App): UiApi {
     leave: () => app.ffa.leave(''),
     leaveMatch: () => app.ffa.leave(''),
     sens: value => sensitivity('sens', value, 100),
+    touchSens: value => sensitivity('touchSens', value, 100),
     acogSens: value => sensitivity('acogSens', value, 120),
     sniperSens: value => sensitivity('sniperSens', value, 150),
     optic: value => setOptic('optic', value),
