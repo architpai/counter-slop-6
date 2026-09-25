@@ -12,10 +12,12 @@ export const PRESETS = ['low', 'medium', 'high', 'ultra'] as const;
 export type PresetName = (typeof PRESETS)[number];
 /** What the player picked. `auto` resolves to a detected preset; `custom` to their own values. */
 export type PresetChoice = 'auto' | PresetName | 'custom';
-/** The two looks later phases switch between. Every preset draws today's look for now. */
+/** The two looks: Low's flat low-poly one, and the HDR pipeline (docs/VISUALS.md, R). */
 export type Look = 'lowpoly' | 'realistic';
-export type Antialias = 'off' | 'fxaa' | 'msaa2' | 'msaa4';
+export type Antialias = 'off' | 'fxaa' | 'smaa' | 'msaa2' | 'msaa4' | 'msaa2smaa' | 'msaa4smaa';
 export type ShadowQuality = 'off' | 'low' | 'medium' | 'high' | 'ultra';
+/** Screen-space GTAO at half or full resolution. */
+export type AmbientOcclusion = 'off' | 'half' | 'full';
 export type EffectsDetail = 'reduced' | 'full';
 export type ViewDistance = 'normal' | 'long';
 /** Frames per second. 0 means uncapped. */
@@ -34,30 +36,59 @@ export interface GfxValues {
   fpsTarget: FpsTarget;
   antialias: Antialias;
   shadows: ShadowQuality;
+  ao: AmbientOcclusion;
+  bloom: boolean;
   effects: EffectsDetail;
   viewDistance: ViewDistance;
 }
 
-export const ANTIALIAS: readonly Antialias[] = ['off', 'fxaa', 'msaa2', 'msaa4'];
+export const ANTIALIAS: readonly Antialias[] = ['off', 'fxaa', 'smaa', 'msaa2', 'msaa4', 'msaa2smaa', 'msaa4smaa'];
 export const SHADOWS: readonly ShadowQuality[] = ['off', 'low', 'medium', 'high', 'ultra'];
+export const AMBIENT_OCCLUSION: readonly AmbientOcclusion[] = ['off', 'half', 'full'];
 export const EFFECTS: readonly EffectsDetail[] = ['reduced', 'full'];
 export const VIEW_DISTANCES: readonly ViewDistance[] = ['normal', 'long'];
 export const FPS_TARGETS: readonly FpsTarget[] = [30, 60, 90, 120, 0];
 const LOOKS: readonly Look[] = ['lowpoly', 'realistic'];
 const PIXEL_RATIOS: readonly number[] = [1, 1.5, 2];
 
+/** MSAA samples on the scene target, and the post-process anti-aliasing, for each setting. */
+export const ANTIALIAS_SPEC: Readonly<Record<Antialias, { samples: number; fxaa: boolean; smaa: boolean }>> = {
+  off: { samples: 0, fxaa: false, smaa: false },
+  fxaa: { samples: 0, fxaa: true, smaa: false },
+  smaa: { samples: 0, fxaa: false, smaa: true },
+  msaa2: { samples: 2, fxaa: false, smaa: false },
+  msaa4: { samples: 4, fxaa: false, smaa: false },
+  msaa2smaa: { samples: 2, fxaa: false, smaa: true },
+  msaa4smaa: { samples: 4, fxaa: false, smaa: true },
+};
+/** GTAO resolution as a share of the scene target. */
+export const AO_SCALE: Readonly<Record<AmbientOcclusion, number>> = { off: 0, half: 0.5, full: 1 };
+
+/** One shadow map's box: half-width in metres, and how far ahead of the eye (flattened) its centre sits. */
+export interface ShadowBox {
+  extent: number;
+  ahead: number;
+}
 /**
- * Shadow map size, filter and update rate for each shadow setting. Low keeps
- * 2048 (the plan's table said 1024): over the 70 m follow box, 1024 doubles the
- * texel and turns near shadows into blocks, and Low must keep today's look. It
- * saves on the filter and the every-other-frame redraw instead.
+ * Shadow map size, filter, update rate and boxes for each shadow setting.
+ *
+ * Low keeps the phase-1 box: 2048 (the plan's table said 1024, but over the
+ * 70 m follow box 1024 doubles the texel and turns near shadows into blocks),
+ * centred on the eye, every other frame; `boxes` null means that box.
+ * Medium is one box pushed ahead of the eye, so a grunt 60 m ahead and 30 m to
+ * the side is still inside it; its 4.4 cm texels need the soft (bilinear)
+ * filter, which costs no more than PCF, or near shadow edges step. High and Ultra are cascades (render/shadows.ts):
+ * a sharp box near the eye inside wider ones, all fixed in size so they do not
+ * swim. Each box is `size`² texels; Ultra's three 2048 maps cost less memory
+ * than one 4096 and put 0.8 cm texels at the player's feet.
  */
-export const SHADOW_SPEC: Readonly<Record<ShadowQuality, { size: number; soft: boolean; every: number } | null>> = {
+export const SHADOW_SPEC: Readonly<Record<ShadowQuality,
+  { size: number; soft: boolean; every: number; boxes: readonly ShadowBox[] | null } | null>> = {
   off: null,
-  low: { size: 2048, soft: false, every: 2 },
-  medium: { size: 2048, soft: false, every: 1 },
-  high: { size: 2048, soft: true, every: 1 },
-  ultra: { size: 4096, soft: true, every: 1 },
+  low: { size: 2048, soft: false, every: 2, boxes: null },
+  medium: { size: 2048, soft: true, every: 1, boxes: [{ extent: 45, ahead: 28 }] },
+  high: { size: 2048, soft: true, every: 1, boxes: [{ extent: 14, ahead: 8 }, { extent: 45, ahead: 28 }] },
+  ultra: { size: 2048, soft: true, every: 1, boxes: [{ extent: 8, ahead: 4 }, { extent: 22, ahead: 12 }, { extent: 60, ahead: 36 }] },
 };
 /**
  * Scales the camera far plane and the map's fog range. There is no "short":
@@ -71,13 +102,13 @@ export const EFFECTS_SCALE: Readonly<Record<EffectsDetail, number>> = { reduced:
 /** docs/VISUALS.md, "Quality system (Q)": only the rows that exist today. */
 export const PRESET_VALUES: Readonly<Record<PresetName, Readonly<GfxValues>>> = Object.freeze({
   low: Object.freeze({ look: 'lowpoly', renderScale: 0.75, pixelRatio: 1.5, dynamicRes: true, dynamicMin: 0.6,
-    fpsTarget: 0, antialias: 'fxaa', shadows: 'low', effects: 'reduced', viewDistance: 'normal' }),
+    fpsTarget: 0, antialias: 'fxaa', shadows: 'low', ao: 'off', bloom: false, effects: 'reduced', viewDistance: 'normal' }),
   medium: Object.freeze({ look: 'realistic', renderScale: 1, pixelRatio: 1.5, dynamicRes: true, dynamicMin: 0.7,
-    fpsTarget: 0, antialias: 'msaa2', shadows: 'medium', effects: 'full', viewDistance: 'normal' }),
-  high: Object.freeze({ look: 'realistic', renderScale: 1, pixelRatio: 2, dynamicRes: true, dynamicMin: 0.8,
-    fpsTarget: 0, antialias: 'msaa4', shadows: 'high', effects: 'full', viewDistance: 'normal' }),
+    fpsTarget: 0, antialias: 'msaa2smaa', shadows: 'medium', ao: 'off', bloom: true, effects: 'full', viewDistance: 'normal' }),
+  high: Object.freeze({ look: 'realistic', renderScale: 1, pixelRatio: 2, dynamicRes: true, dynamicMin: 0.7,
+    fpsTarget: 0, antialias: 'msaa2smaa', shadows: 'high', ao: 'half', bloom: true, effects: 'full', viewDistance: 'normal' }),
   ultra: Object.freeze({ look: 'realistic', renderScale: 1, pixelRatio: 2, dynamicRes: false, dynamicMin: 0.8,
-    fpsTarget: 0, antialias: 'msaa4', shadows: 'ultra', effects: 'full', viewDistance: 'long' }),
+    fpsTarget: 0, antialias: 'msaa4smaa', shadows: 'ultra', ao: 'full', bloom: true, effects: 'full', viewDistance: 'long' }),
 });
 
 // ------------------------------------------------------------------ storage
@@ -129,6 +160,8 @@ export function validValues(raw: unknown, base: Readonly<GfxValues>): GfxValues 
     fpsTarget: oneOf(FPS_TARGETS, value.fpsTarget, base.fpsTarget),
     antialias: oneOf(ANTIALIAS, value.antialias, base.antialias),
     shadows: oneOf(SHADOWS, value.shadows, base.shadows),
+    ao: oneOf(AMBIENT_OCCLUSION, value.ao, base.ao),
+    bloom: typeof value.bloom === 'boolean' ? value.bloom : base.bloom,
     effects: oneOf(EFFECTS, value.effects, base.effects),
     viewDistance: oneOf(VIEW_DISTANCES, value.viewDistance, base.viewDistance),
   };
@@ -482,6 +515,10 @@ export class FrameLimiter {
  * miss if resolution is the cause: the run then draws a second, shorter
  * sample at `PROBE_SCALE`, and a frame time that does not drop with the pixel
  * count is a refresh cap or a CPU limit, which a lower preset would not fix.
+ * "Drops" means by `GPU_BOUND`: on the realistic look the shadow maps, SMAA
+ * and the final passes do not shrink with the scale, so a GPU-bound frame at
+ * half the pixels only falls to about 0.75 of full, while a cap or a CPU
+ * limit stays at 1 within noise.
  */
 export class Benchmark {
   #elapsed = 0;
@@ -503,7 +540,7 @@ export class Benchmark {
     this.#samples.push(frameMs);
     if (this.#elapsed < warmup + duration) return null;
     const ms = median(this.#samples);
-    if (this.#fullMs !== null) return ms < this.#fullMs * 0.8;
+    if (this.#fullMs !== null) return ms < this.#fullMs * GPU_BOUND;
     if (ms <= this.targetMs * 1.2) return false;
     this.#fullMs = ms;
     this.#elapsed = 0;
@@ -520,6 +557,8 @@ export class Benchmark {
 
 /** Half the pixels of full scale. */
 const PROBE_SCALE = 0.7;
+/** The probe's share of the full-scale frame time below which the miss is the GPU's (see `Benchmark`). */
+const GPU_BOUND = 0.9;
 
 export function median(values: readonly number[]): number {
   if (values.length === 0) return 0;

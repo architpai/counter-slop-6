@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { TONE, TONE_HEX, makeFigure, surfMat } from '../render/index';
-import { GRADE } from '../render/palette';
+import { GRADE, REAL_GRADE } from '../render/palette';
 import type { SurfKey } from '../render/palette';
 import type { BreakableKind } from '../types';
 import type { FigureParts } from '../render/figure';
@@ -35,7 +35,7 @@ export function buildMexico(b: LevelBuilder) {
   b.level.bounds = { minX: -62, maxX: 62, minZ: -62, maxZ: 62 };
   // The sun sits about 32° up, ahead and right of the spawn view, where the old sun sphere stood.
   b.level.mood = { horizon: 0xf2dfbc, zenith: 0x579cc4, fog: 0xeddbba, sun: 0xffefd1, sunIntensity: 2.25, hemiIntensity: 1.05, hemiSky: 0xbddbeb, hemiGround: 0xb69d79,
-    fogNear: 55, fogFar: 260, sunDisc: true, sunDir: [70, 105, -150], grade: GRADE.mexico };
+    fogNear: 55, fogFar: 260, sunDisc: true, sunDir: [70, 105, -150], grade: GRADE.mexico, sky: 'mexico', realistic: { exposure: -0.15, grade: REAL_GRADE.mexico } };
   b.box(0, -1, 0, 134, 1, 134, { mat: 'sand' });
   b.collider(0, 62, 0, 164, 6, 164, { noNav: true, noGrapple: true });
   let k = 0;

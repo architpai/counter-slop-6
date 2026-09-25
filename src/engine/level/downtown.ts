@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { TONE, cylGeo, coneGeo, torusGeo } from '../render/index';
-import { GRADE } from '../render/palette';
+import { GRADE, REAL_GRADE } from '../render/palette';
 import type { BuildOpts, LevelBuilder, MarkerKind } from './build';
 import type { SurfKey } from '../render/palette';
 
@@ -32,7 +32,7 @@ export function buildDowntown(b: LevelBuilder) {
   // The sun sits about 32° up, ahead and left of the spawn view, where the old sun sphere stood.
   b.level.mood = { horizon: 0xd4e1e8, zenith: 0x4683b8, fog: 0xc8d6df, sun: 0xffe7c9, sunIntensity: 2.1,
     hemiIntensity: 0.95, hemiSky: 0xa6c2de, hemiGround: 0x5d6471, fogNear: 50, fogFar: arena ? 215 : 190,
-    sunDisc: true, sunDir: [-90, 115, -160], grade: GRADE.downtown };
+    sunDisc: true, sunDir: [-90, 115, -160], grade: GRADE.downtown, sky: 'downtown', realistic: { exposure: -0.3, grade: REAL_GRADE.downtown } };
   b.box(0, -1, 0, 2 * p + 6, 1, 2 * p + 6, { mat: 'ground' });
   for (const sign of [-1, 1]) {
     b.box(0, 0, sign * p, 2 * p + 6, ph, 6, concrete);

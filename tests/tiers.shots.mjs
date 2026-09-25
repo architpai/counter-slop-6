@@ -2,18 +2,20 @@
 //   node tests/tiers.shots.mjs URL OUTDIR
 // Environment: CS6_PRESETS=low,high  CS6_MAPS=downtown  CS6_GL=swiftshader  CS6_SIZE=1440x900  CS6_DPR=2
 //
-// Each preset × map gets four views, all deterministic:
+// Each preset × map gets four views (five on House), all deterministic:
 //   spawn    the player's start view (no gun, no HUD)
 //   enemies  grunts at 10, 30 and 60 m, one sunlit and one shadowed at each range where the map
 //            allows it; the corridor is searched from the level geometry, and the AI is frozen.
 //            Sun or shade is rays from knee, hip, chest, head and the ground at the feet against
 //            the meshes that cast shadows (all clear or all blocked); knee to head must be in view.
-//            The log marks a shade grunt outside the shadow box (it renders lit) as 'h'
+//            The log marks a shade grunt outside every shadow map (it renders lit) as 'h'.
+//            Where the best corridor misses a shade range that another one fills (House at
+//            60 m), that corridor is a second view, enemies-shade, logged in brackets: '[H]'.
 //   overview a fixed high corner view of the whole map
 //   weapon   first person at spawn with the R4-C at the hip
 // Enemies, effects and pickups are cleared per map, and the run is paused, so shots only differ
-// by preset. Dynamic resolution is pinned at full scale, so every preset is judged at its base
-// resolution. The page renders at CS6_DPR (default 2, so the presets' pixel-ratio caps apply);
+// by preset. Realistic presets wait for the map's sky and environment to stream in first.
+// Dynamic resolution is pinned at full scale, so every preset is judged at its base resolution. The page renders at CS6_DPR (default 2, so the presets' pixel-ratio caps apply);
 // screenshots are saved at CSS size. On the real GPU vsync and the frame-rate limit are off, so
 // live frame times show the cost of each preset instead of the display's refresh.
 // OUTDIR/summary.json records frame times (live rAF, and a synchronous render + readback, both
@@ -97,6 +99,7 @@ try {
       }, { preset, map });
       assert.equal(await page.evaluate(() => window.__game.level.key), map);
       assert.equal(await page.evaluate(() => window.__game.quality.preset), preset);
+      await page.waitForFunction(() => !window.__game.ctx.renderer.skyPending, null, { timeout: 15_000 });
       await frames(20);
 
       const row = { shots: [] };
@@ -148,10 +151,13 @@ try {
         // Sun or shade is decided by the meshes the shadow map draws, not by colliders: tree
         // canopies and awnings cast shadows but have no collider, invisible walls the reverse.
         const shown = o => { for (let n = o; n; n = n.parent) if (!n.visible) return false; return true; };
+        // The grapple drones fly on the level clock, which differs per preset; their small, moving
+        // shadows would make the corridor search pick a different view from run to run.
+        const movers = new Set(g.level.movers.map(m => m.mesh));
         const casters = [];
         let meshProto = null;
         g.ctx.scene.traverse(o => {
-          if (!o.isMesh || !o.castShadow || !shown(o)) return;
+          if (!o.isMesh || !o.castShadow || !shown(o) || movers.has(o)) return;
           casters.push(o);
           if (!o.isInstancedMesh && !o.isSkinnedMesh && !meshProto) meshProto = Object.getPrototypeOf(o);
         });
@@ -188,14 +194,6 @@ try {
           const points = [...BODY.map(h => new V(x, y + h, z)), ...FEET.map(([fx, fz]) => new V(x + fx, y + 0.05, z + fz))];
           const blocked = points.filter(point => meshHit(point, sun, 150)).length;
           return blocked === points.length ? 'shadow' : blocked === 0 ? 'sun' : null;
-        };
-        // The shadow box is centred on the eye and square in the light's view (three's lookAt
-        // frame along the sun); a spot outside it renders lit whatever stands over it.
-        const shadowReach = g.ctx.renderer.sun.shadow.camera.right;
-        const boxX = new V(0, 1, 0).cross(sun).normalize(), boxY = sun.clone().cross(boxX);
-        const inBox = (eye, [x, y, z]) => {
-          const offset = new V(x, y, z).sub(eye);
-          return Math.abs(offset.dot(boxX)) <= shadowReach && Math.abs(offset.dot(boxY)) <= shadowReach;
         };
         const ground = (x, z) => {
           const hit = world.raycast(new V(x, 2.2, z), down, 5);
@@ -248,15 +246,15 @@ try {
               taken.push({ angle, half });
               if (found.sun && found.shadow) break;
             }
-            // Today's single shadow box follows the eye; outside it a shaded grunt renders lit.
-            placed.push({ range, sun: found.sun ?? null, shadow: found.shadow ?? null,
-              shadowDrawn: found.shadow ? inBox(eye, found.shadow) : null });
+            placed.push({ range, sun: found.sun ?? null, shadow: found.shadow ?? null });
           }
           return { eye, dir, placed, score: placed.reduce((n, p) => n + (p.sun ? 1 : 0) + (p.shadow ? 1 : 0), 0) };
         };
         // Score the first 40 open corridors and keep the one that fills the most slots; ties go
-        // to the earlier (hand-picked, then nearest) corridor.
+        // to the earlier (hand-picked, then nearest) corridor. When it misses a shade slot that
+        // another corridor fills, that corridor becomes a second view, so every range is tested.
         let best = null, tried = 0;
+        const plans = [];
         for (const c of eyes) {
           const y = ground(c.x, c.z);
           if (y === null) continue;
@@ -269,34 +267,71 @@ try {
             seen(new V(c.x - c.dz * off, y + h, c.z + c.dx * off), dir, 15)));
           if (!near) continue;
           const result = plan({ ...c, y });
+          plans.push(result);
           if (!best || result.score > best.score) best = result;
           if (best.score === 6 || ++tried >= 40) break;
         }
         if (!best) return null;
-        const { eye, dir, placed } = best;
+        const shade = plans.find(p => p.placed.some((slot, i) => slot.shadow && !best.placed[i].shadow)) ?? null;
+        const view = p => p && { eye: p.eye.toArray(), dir: p.dir.toArray(), placed: p.placed };
+        return { best: view(best), shade: view(shade) };
+      }, PREFERRED[map] ?? []);
+      /** Spawn a view's grunts facing the eye and put the camera there. */
+      const stage = view => page.evaluate(({ eye, dir, placed }) => {
+        const g = window.__game, V = g.player.body.pos.constructor;
         g.enemies.clear(); g.effects.clear();
         for (const p of placed) {
           for (const spot of [p.sun, p.shadow]) {
             if (!spot) continue;
             const [x, y, z] = spot, e = g.enemies.spawn('grunt', new V(x, y, z));
             e.state = 'hunt'; e.root.scale.setScalar(e.stats.scale);
-            e.yaw = e.root.rotation.y = Math.atan2(eye.x - x, eye.z - z);
+            e.yaw = e.root.rotation.y = Math.atan2(eye[0] - x, eye[2] - z);
             e.root.updateMatrixWorld(true);
           }
         }
         g.effects.clear();
         const camera = g.ctx.camera;
-        camera.position.copy(eye);
-        camera.rotation.set(-0.03, Math.atan2(-dir.x, -dir.z), 0, 'YXZ');
+        camera.position.fromArray(eye);
+        camera.rotation.set(-0.03, Math.atan2(-dir[0], -dir[2]), 0, 'YXZ');
         camera.fov = 82; camera.updateProjectionMatrix(); camera.updateMatrixWorld();
-        return { eye: eye.toArray(), dir: dir.toArray(), placed };
-      }, PREFERRED[map] ?? []);
-      if (row.enemies) {
+      }, view);
+      // Is each shade grunt inside a shadow map the renderer drew for this view? Every shadow
+      // light's box is tested (Low's box on the eye, Medium's box ahead, the cascades); outside
+      // all of them a grunt renders lit whatever stands over it.
+      const drawn = async view => {
+        const inside = await page.evaluate(placed => {
+          const r = window.__game.ctx.renderer, V = window.__game.player.body.pos.constructor;
+          const lights = [r.sun, ...(r.cascades ?? [])].filter(light => light.castShadow);
+          const inBox = ([x, y, z]) => [0.45, 1.3, 1.65].every(h => lights.some(light => {
+            const camera = light.shadow.camera;
+            camera.updateMatrixWorld();
+            const p = new V(x, y + h, z).applyMatrix4(camera.matrixWorldInverse).applyMatrix4(camera.projectionMatrix);
+            return Math.abs(p.x) <= 1 && Math.abs(p.y) <= 1 && Math.abs(p.z) <= 1;
+          }));
+          return placed.map(p => (p.shadow ? inBox(p.shadow) : null));
+        }, view.placed);
+        view.placed.forEach((p, i) => { p.shadowDrawn = inside[i]; });
+      };
+      const views = row.enemies;
+      if (views) {
+        row.enemies = views.best;
+        await stage(views.best);
         row.shots.push(await shot(`${preset}-${map}-enemies`));
-        for (const p of row.enemies.placed) {
-          for (const light of ['sun', 'shadow']) if (!p[light]) warn(`${preset} ${map}: no ${light} spot for the ${p.range} m grunt`);
-          if (p.shadowDrawn === false) warn(`${preset} ${map}: the ${p.range} m shade grunt is outside the shadow box and renders lit`);
+        await drawn(views.best);
+        if (views.shade) {
+          row.enemiesShade = views.shade;
+          await stage(views.shade);
+          row.shots.push(await shot(`${preset}-${map}-enemies-shade`));
+          await drawn(views.shade);
         }
+        row.enemies.placed.forEach((p, i) => {
+          const extra = views.shade?.placed[i];
+          if (!p.sun) warn(`${preset} ${map}: no sun spot for the ${p.range} m grunt`);
+          if (!p.shadow && !extra?.shadow) warn(`${preset} ${map}: no shadow spot for the ${p.range} m grunt`);
+          for (const slot of [p, extra]) {
+            if (slot?.shadowDrawn === false) warn(`${preset} ${map}: the ${p.range} m shade grunt is outside every shadow map and renders lit`);
+          }
+        });
       } else warn(`${preset} ${map}: no clear 64 m corridor for the enemy view`);
 
       // Overview from a fixed high corner.
@@ -310,7 +345,12 @@ try {
       row.shots.push(await shot(`${preset}-${map}-overview`));
       summary.presets[preset][map] = row;
       console.log(preset.padEnd(7), map.padEnd(9), `frame ${row.frameMs} ms (p95 ${row.frameP95Ms})`, `render ${row.renderMs} ms`,
-        row.enemies ? `grunts ${row.enemies.placed.map(p => `${p.range}m:${p.sun ? 'S' : '-'}${p.shadow ? (p.shadowDrawn ? 'H' : 'h') : '-'}`).join(' ')}` : 'no corridor');
+        row.enemies ? `grunts ${row.enemies.placed.map((p, i) => {
+          // A shade slot only the second view filled is shown in brackets: [H].
+          const extra = row.enemiesShade?.placed[i];
+          const shade = p.shadow ? (p.shadowDrawn ? 'H' : 'h') : extra?.shadow ? (extra.shadowDrawn ? '[H]' : '[h]') : '-';
+          return `${p.range}m:${p.sun ? 'S' : '-'}${shade}`;
+        }).join(' ')}` : 'no corridor');
     }
   }
   summary.warnings = warnings;

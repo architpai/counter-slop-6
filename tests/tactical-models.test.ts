@@ -138,6 +138,7 @@ test('expired debris keeps the shared tactical geometry', () => {
   figure.dispose();
 });
 
+// It draws the whole cast twice under software GL: about 7 s alone, 14 s beside the other render tests.
 test('render the tactical cast and exercise each animation rig', async () => {
   await page.viewport(1440, 900);
   const canvas = document.createElement('canvas');
@@ -218,4 +219,4 @@ test('render the tactical cast and exercise each animation rig', async () => {
     renderer.dispose();
     canvas.remove();
   }
-});
+}, 30_000);

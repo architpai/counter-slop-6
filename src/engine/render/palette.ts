@@ -46,3 +46,19 @@ export const GRADE = Object.freeze({
   mexico: { lift: [0.016, 0.008, 0], gain: [1.02, 1, 0.95], saturation: 1.08, contrast: 1.05 },
   training: { lift: [0, 0.004, 0.012], gain: [1, 1, 1], saturation: 1, contrast: 1.03 },
 } as const satisfies Record<string, Grade>);
+
+/**
+ * Grades for the realistic look (R1), applied after AgX. The physical skies
+ * are all clear daylight at 30-55 degrees of sun, so each map's mood (a cool
+ * morning, a warm afternoon, a sun-baked plaza) comes from here, the mood's
+ * exposure and the fog haze (render/index.ts). Saturation stays close to 1:
+ * the sky-lit shade is already blue, and more of it turned grey concrete navy
+ * and dark paint black. Downtown takes no warm gain, as its sun is warm
+ * already; a stronger warm gain than House's turns its lawn to straw.
+ */
+export const REAL_GRADE = Object.freeze({
+  downtown: { lift: [0.004, 0.008, 0.016], gain: [1, 1, 1], saturation: 1.04, contrast: 1.08 },
+  house: { lift: [0.02, 0.01, 0], gain: [1.06, 1, 0.9], saturation: 1.05, contrast: 1.06 },
+  mexico: { lift: [0.018, 0.008, 0], gain: [1.1, 1.01, 0.85], saturation: 1.05, contrast: 1.06 },
+  training: { lift: [0, 0.004, 0.012], gain: [1, 1, 1], saturation: 1.04, contrast: 1.06 },
+} as const satisfies Record<string, Grade>);

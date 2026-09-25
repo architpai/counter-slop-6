@@ -6,7 +6,7 @@ import { Screen } from '@/components/hud/Screens';
 import { Hud } from '@/components/hud/Hud';
 import { HudStore } from '@/engine/hud/store';
 import { createUI } from '@/engine/game/ui';
-import { PRESET_VALUES, Quality } from '@/engine/render/quality';
+import { AMBIENT_OCCLUSION, ANTIALIAS, PRESET_VALUES, Quality } from '@/engine/render/quality';
 import type { App } from '@/engine/boot';
 import type { PauseModel } from '@/engine/hud/screens';
 import '@/app/globals.css';
@@ -45,9 +45,16 @@ test('the Graphics section shows the presets, Auto with its pick, and the Advanc
   expect(onAction).toHaveBeenLastCalledWith('gfxPreset', 'custom', expect.any(Event));
   expect(advanced.open).toBe(true);
   const selects = [...host.querySelectorAll<HTMLSelectElement>('.graphics-grid select')];
-  expect(selects.map(select => select.value)).toEqual(['0', 'msaa4', 'high', 'full', 'normal']);
+  expect(selects.map(select => select.value)).toEqual(['0', 'msaa2smaa', 'high', 'half', 'full', 'normal']);
   // Every option the menu offers is one the engine accepts.
   expect([...selects[0]!.options].map(option => option.value)).toEqual(['30', '60', '90', '120', '0']);
+  expect([...selects[1]!.options].map(option => option.value)).toEqual([...ANTIALIAS]);
+  expect([...selects[3]!.options].map(option => option.value)).toEqual([...AMBIENT_OCCLUSION]);
+  const bloom = [...host.querySelectorAll<HTMLInputElement>('.graphics-grid input[type="checkbox"][data-act="gfx"]')]
+    .find(input => input.parentElement?.textContent?.includes('Bloom'))!;
+  expect(bloom.checked).toBe(true);
+  flushSync(() => bloom.click());
+  expect(onAction).toHaveBeenLastCalledWith('gfx', 'bloom:0', expect.any(Event));
   selects[2]!.value = 'off';
   flushSync(() => selects[2]!.dispatchEvent(new Event('change', { bubbles: true })));
   expect(onAction).toHaveBeenLastCalledWith('gfx', 'shadows:off', expect.any(Event));
@@ -77,6 +84,14 @@ test('menu actions validate graphics values before they reach the settings', () 
   act('gfx', 'shadows:off');
   expect(quality.choice).toBe('custom');
   expect(quality.values.shadows).toBe('off');
+  act('gfx', 'ao:quarter');
+  expect(quality.values.ao).toBe(PRESET_VALUES.high.ao);
+  act('gfx', 'ao:full');
+  expect(quality.values.ao).toBe('full');
+  act('gfx', 'bloom:0');
+  expect(quality.values.bloom).toBe(false);
+  act('gfx', 'antialias:smaa');
+  expect(quality.values.antialias).toBe('smaa');
   act('gfx', 'renderScale:70');
   expect(quality.values.renderScale).toBe(0.7);
   act('gfx', 'fpsTarget:0');

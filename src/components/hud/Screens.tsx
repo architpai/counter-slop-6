@@ -174,13 +174,16 @@ const PRESET_NAMES: Record<PresetChoice, string> = {
 /** Advanced choices, in the order shown. Values are what the `gfx` action carries. */
 const GFX_OPTIONS = {
   fpsTarget: [['30', '30'], ['60', '60'], ['90', '90'], ['120', '120'], ['0', 'Uncapped']],
-  antialias: [['off', 'Off'], ['fxaa', 'FXAA'], ['msaa2', 'MSAA 2×'], ['msaa4', 'MSAA 4×']],
+  antialias: [['off', 'Off'], ['fxaa', 'FXAA'], ['smaa', 'SMAA'], ['msaa2', 'MSAA 2×'], ['msaa4', 'MSAA 4×'],
+    ['msaa2smaa', 'MSAA 2× + SMAA'], ['msaa4smaa', 'MSAA 4× + SMAA']],
   shadows: [['off', 'Off'], ['low', 'Low'], ['medium', 'Medium'], ['high', 'High'], ['ultra', 'Ultra']],
+  ao: [['off', 'Off'], ['half', 'Half resolution'], ['full', 'Full resolution']],
   effects: [['reduced', 'Reduced'], ['full', 'Full']],
   viewDistance: [['normal', 'Normal'], ['long', 'Long']],
 } as const satisfies Partial<Record<keyof GfxValues, readonly (readonly [string, string])[]>>;
 const GFX_LABELS: Record<keyof typeof GFX_OPTIONS, string> = {
-  fpsTarget: 'FPS target', antialias: 'Anti-aliasing', shadows: 'Shadows', effects: 'Effects', viewDistance: 'View distance',
+  fpsTarget: 'FPS target', antialias: 'Anti-aliasing', shadows: 'Shadows', ao: 'Ambient occlusion', effects: 'Effects',
+  viewDistance: 'View distance',
 };
 
 /**
@@ -217,6 +220,8 @@ function Graphics({ model, onAction }: { model: GfxModel; onAction: Act }) {
               {GFX_OPTIONS[key].map(([value, text]) => <option value={value} key={value}>{text}</option>)}
             </select>
           </label>)}
+          <label className="graphics-check"><input type="checkbox" data-act="gfx" checked={values.bloom}
+            onChange={event => set('bloom', event.target.checked ? '1' : '0', event.nativeEvent)} /> Bloom</label>
           <label className="graphics-check"><input type="checkbox" data-act="gfxFps" checked={model.fpsCounter}
             onChange={event => onAction('gfxFps', event.target.checked ? '1' : '0', event.nativeEvent)} /> FPS counter</label>
           <button type="button" className="screen-button graphics-reset" data-act="gfxReset" disabled={model.choice === 'auto'}

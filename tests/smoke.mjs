@@ -203,7 +203,8 @@ const gfx = await page.evaluate(async () => {
   const read = () => ({
     samples: r.post.target.samples, fxaa: 'FXAA' in r.post.triangle.material.defines, cast: r.sun.castShadow,
     map: r.sun.shadow.mapSize.x, soft: three.shadowMap.type === 2, every: r._shadowEvery,
-    far: r.camera.far, fogFar: g.ctx.scene.fog.far,
+    look: r.post.config.look, smaa: r.post.config.smaa, ao: r.post.config.ao, bloom: r.post.config.bloom,
+    shadowMaps: 1 + r.cascades.length, far: r.camera.far, fogFar: g.ctx.scene.fog.far,
   });
   const presets = {};
   for (const preset of ['low', 'medium', 'high', 'ultra']) {
@@ -219,7 +220,7 @@ const gfx = await page.evaluate(async () => {
   const hip = { scale: r.rig.scale.x, expected: tan(r.camera.fov) / tan(65), aim: g.player.weapon.aimAmt };
   r.setViewFov(r.camera.fov);
   const ads = r.rig.scale.x;
-  // A grunt drawn on High (PCFSoft), cleared, then High -> Medium (PCF) while no enemy is in the scene.
+  // A grunt drawn on High (PCFSoft), cleared, then High -> Low (PCF) while no enemy is in the scene.
   const programs = enemy => {
     const materials = new Set();
     enemy.root.traverse(o => { if (o.isMesh) for (const m of [o.material].flat()) materials.add(m); });
@@ -239,7 +240,7 @@ const gfx = await page.evaluate(async () => {
   const before = programs(first);
   g.enemies.clear();
   await frames(2);
-  act('gfxPreset', 'medium');
+  act('gfxPreset', 'low');
   await frames(2);
   const second = place();
   await frames(4);
@@ -247,7 +248,7 @@ const gfx = await page.evaluate(async () => {
   const shared = after.filter(a => before.some(b => b.material === a.material));
   // An open "Lower quality?" offer is answered by any change, so it cannot apply a stale target.
   g.hud.setQualityPrompt('high');
-  act('gfxPreset', 'low');
+  act('gfxPreset', 'medium');
   const promptAfterChange = g.hud.qualityPrompt;
   g.enemies.clear();
   act('gfxReset', null);
@@ -304,10 +305,10 @@ check(hudWork.frames > 0 && hudWork.renders < Math.max(5, hudWork.frames / 5),
   `HUD React work stays far below frame count (${hudWork.renders} renders / ${hudWork.frames} frames)`);
 {
   const expected = {
-    low: { samples: 0, fxaa: true, cast: true, map: 2048, soft: false, every: 2 },
-    medium: { samples: 2, fxaa: false, cast: true, map: 2048, soft: false, every: 1 },
-    high: { samples: 4, fxaa: false, cast: true, map: 2048, soft: true, every: 1 },
-    ultra: { samples: 4, fxaa: false, cast: true, map: 4096, soft: true, every: 1 },
+    low: { look: 'lowpoly', samples: 0, fxaa: true, smaa: false, ao: 0, bloom: false, cast: true, map: 2048, soft: false, every: 2, shadowMaps: 1 },
+    medium: { look: 'realistic', samples: 2, fxaa: false, smaa: true, ao: 0, bloom: true, cast: true, map: 2048, soft: true, every: 1, shadowMaps: 1 },
+    high: { look: 'realistic', samples: 2, fxaa: false, smaa: true, ao: 0.5, bloom: true, cast: true, map: 2048, soft: true, every: 1, shadowMaps: 2 },
+    ultra: { look: 'realistic', samples: 4, fxaa: false, smaa: true, ao: 1, bloom: true, cast: true, map: 2048, soft: true, every: 1, shadowMaps: 3 },
   };
   for (const [preset, want] of Object.entries(expected)) {
     const got = gfx.presets[preset];

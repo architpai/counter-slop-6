@@ -1,8 +1,8 @@
 import { expect, test } from 'vitest';
 import * as THREE from 'three';
 import {
-  Benchmark, DynamicResolution, FrameLimiter, GFX_KEY, GFX_VERSION, PRESETS, PRESET_VALUES, Quality,
-  deviceKey, detectPreset, gpuClass, parseStore, targetFrameMs, validValues,
+  ANTIALIAS, ANTIALIAS_SPEC, AO_SCALE, Benchmark, DynamicResolution, FrameLimiter, GFX_KEY, GFX_VERSION, PRESETS, PRESET_VALUES,
+  Quality, SHADOW_SPEC, deviceKey, detectPreset, gpuClass, parseStore, targetFrameMs, validValues,
 } from '@/engine/render/quality';
 import type { DeviceInfo } from '@/engine/render/quality';
 import { shakeNoise } from '@/engine/player/camera';
@@ -25,29 +25,66 @@ const rtx = desktop('ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 Direct3D11 vs_5_0 ps
 
 test('presets follow the plan table for the rows that exist today', () => {
   expect(PRESETS).toEqual(['low', 'medium', 'high', 'ultra']);
+  // Low is the phase-1 look, untouched by the realistic pipeline.
   expect(PRESET_VALUES.low).toMatchObject({ look: 'lowpoly', renderScale: 0.75, pixelRatio: 1.5, dynamicRes: true, dynamicMin: 0.6,
-    antialias: 'fxaa', shadows: 'low', effects: 'reduced' });
+    antialias: 'fxaa', shadows: 'low', ao: 'off', bloom: false, effects: 'reduced' });
   // The table has no FPS or view-distance row: no preset caps the frame rate or pulls the fog in.
   for (const name of PRESETS) expect(PRESET_VALUES[name].fpsTarget).toBe(0);
   for (const name of ['low', 'medium', 'high'] as const) expect(PRESET_VALUES[name].viewDistance).toBe('normal');
   expect(PRESET_VALUES.medium).toMatchObject({ look: 'realistic', renderScale: 1, pixelRatio: 1.5, dynamicRes: true, dynamicMin: 0.7,
-    antialias: 'msaa2', shadows: 'medium' });
-  expect(PRESET_VALUES.high).toMatchObject({ look: 'realistic', pixelRatio: 2, dynamicRes: true, dynamicMin: 0.8, antialias: 'msaa4', shadows: 'high' });
-  expect(PRESET_VALUES.ultra).toMatchObject({ look: 'realistic', pixelRatio: 2, dynamicRes: false, shadows: 'ultra', viewDistance: 'long' });
+    antialias: 'msaa2smaa', shadows: 'medium', ao: 'off', bloom: true });
+  // High keeps MSAA at 2x: 4x cost a millisecond at DPR 2 that SMAA already covers (render ms budget, VISUALS.md).
+  // High's floor is 0.7: its shadow cascades and full-size SMAA do not scale, so 0.8 bought only 15 %.
+  expect(PRESET_VALUES.high).toMatchObject({ look: 'realistic', pixelRatio: 2, dynamicRes: true, dynamicMin: 0.7, antialias: 'msaa2smaa',
+    shadows: 'high', ao: 'half', bloom: true });
+  expect(PRESET_VALUES.ultra).toMatchObject({ look: 'realistic', pixelRatio: 2, dynamicRes: false, antialias: 'msaa4smaa', shadows: 'ultra',
+    ao: 'full', bloom: true, viewDistance: 'long' });
   // Every preset is valid data: validating it against anything changes nothing.
   for (const name of PRESETS) expect(validValues(PRESET_VALUES[name], PRESET_VALUES.low)).toEqual(PRESET_VALUES[name]);
+});
+
+test('every anti-aliasing, AO and shadow setting maps to something the renderer does', () => {
+  for (const aa of ANTIALIAS) {
+    const spec = ANTIALIAS_SPEC[aa];
+    expect([0, 2, 4]).toContain(spec.samples);
+    // FXAA and SMAA never stack; each option is a distinct combination.
+    expect(spec.fxaa && spec.smaa).toBe(false);
+  }
+  const combos = new Set(ANTIALIAS.map(aa => JSON.stringify(ANTIALIAS_SPEC[aa])));
+  expect(combos.size).toBe(ANTIALIAS.length);
+  expect(AO_SCALE).toEqual({ off: 0, half: 0.5, full: 1 });
+  // Low keeps the eye-centred box; Medium one box ahead; High and Ultra cascade 2 and 3.
+  expect(SHADOW_SPEC.low?.boxes).toBeNull();
+  expect(SHADOW_SPEC.medium?.boxes).toHaveLength(1);
+  expect(SHADOW_SPEC.high?.boxes).toHaveLength(2);
+  expect(SHADOW_SPEC.ultra?.boxes).toHaveLength(3);
+  // Every realistic tier filters softly; Low keeps the phase-1 PCF.
+  expect([SHADOW_SPEC.low?.soft, SHADOW_SPEC.medium?.soft, SHADOW_SPEC.high?.soft, SHADOW_SPEC.ultra?.soft]).toEqual([false, true, true, true]);
+  for (const quality of ['medium', 'high', 'ultra'] as const) {
+    const boxes = SHADOW_SPEC[quality]!.boxes!;
+    // Cascades grow outwards, and the widest covers a grunt 60 m ahead and 30 m to the side.
+    for (let i = 1; i < boxes.length; i++) expect(boxes[i]!.extent).toBeGreaterThan(boxes[i - 1]!.extent);
+    const last = boxes.at(-1)!;
+    expect(Math.hypot(60 - last.ahead, 30)).toBeLessThan(last.extent);
+  }
 });
 
 test('stored values are validated field by field', () => {
   const base = PRESET_VALUES.high;
   expect(validValues(null, base)).toEqual(base);
-  const mixed = validValues({ renderScale: 0.72, shadows: 'extreme', fpsTarget: 90, antialias: 'fxaa', dynamicMin: 0.1, look: 'toon' }, base);
+  const mixed = validValues({ renderScale: 0.72, shadows: 'extreme', fpsTarget: 90, antialias: 'fxaa', dynamicMin: 0.1, look: 'toon',
+    ao: 'quarter', bloom: 'yes' }, base);
   expect(mixed.renderScale).toBeCloseTo(0.7);
   expect(mixed.shadows).toBe(base.shadows);
   expect(mixed.fpsTarget).toBe(90);
   expect(mixed.antialias).toBe('fxaa');
   expect(mixed.dynamicMin).toBe(0.5);
   expect(mixed.look).toBe(base.look);
+  expect(mixed.ao).toBe(base.ao);
+  expect(mixed.bloom).toBe(base.bloom);
+  // A record saved before AO and bloom existed keeps its values and takes the new ones from the base.
+  const { ao: _ao, bloom: _bloom, ...old } = PRESET_VALUES.medium;
+  expect(validValues({ ...old, shadows: 'off' }, base)).toEqual({ ...PRESET_VALUES.medium, shadows: 'off', ao: base.ao, bloom: base.bloom });
   expect(validValues({ renderScale: Number.NaN, pixelRatio: 3, fpsTarget: 45, viewDistance: 'short' }, base))
     .toMatchObject({ renderScale: base.renderScale, pixelRatio: base.pixelRatio, fpsTarget: base.fpsTarget, viewDistance: base.viewDistance });
 });
@@ -354,6 +391,10 @@ test('the benchmark skips its warm-up and judges the median', () => {
   bench.reset();
   expect(bench.add(900)).toBeNull();
   expect(finish(gpu(6, 24))).toBe(true);
+  // So does a realistic frame whose shadows and full-size post passes do not scale: at the probe's
+  // half pixel count it only falls to 0.83 of full (16 + 8 x 0.49 against 24 ms).
+  bench.reset();
+  expect(finish(gpu(16, 8))).toBe(true);
   // A 30 Hz rAF cap or a CPU limit misses at any resolution, so it does not.
   bench.reset();
   expect(finish(() => 33.333)).toBe(false);

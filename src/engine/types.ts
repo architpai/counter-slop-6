@@ -228,6 +228,18 @@ export interface Mood {
   sunDir?: readonly [number, number, number];
   /** Colour grade in the composite pass. */
   grade?: Grade;
+  /**
+   * Realistic tiers: the folder under `public/sky/` with this map's Blender sky
+   * (tools/blender/sky.py), rendered for `sunDir`. It replaces the gradient,
+   * the sun and hemisphere colours and the fog colour on those tiers.
+   */
+  sky?: string;
+  /** The realistic tiers' own exposure and grade (the Blender skies are all clear daylight). */
+  realistic?: {
+    /** Exposure in stops on top of the default (render/index.ts REAL_EXPOSURE), per map mood. */
+    exposure?: number;
+    grade?: Grade;
+  };
 }
 
 /** A gentle per-mood colour grade, applied after tone mapping. Neutral is 0 / 1 / 1 / 1. */

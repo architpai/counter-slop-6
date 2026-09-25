@@ -234,8 +234,10 @@ PINK → `boss`, RED → `hot`.
 | `boss` | `#C56BFF` | surfaces marked PINK in the level spec |
 
 Rules: at most **12 distinct materials visible in one frame** of level geometry. Do not tint
-per-object; pick a palette key. No external image textures, normal maps or emissive maps. The only
-generated textures are the three-step toon gradient and opaque name-tag labels made by render.
+per-object; pick a palette key. No external image textures, normal maps or emissive maps on
+materials. The only generated textures are the three-step toon gradient and opaque name-tag labels
+made by render. The one exception is the realistic tiers' sky (§3.3): each map's Blender-rendered
+sky images, streamed from `public/sky/<map>/`, feed the sky dome and the environment only.
 
 ### 3.2 Materials
 
@@ -261,21 +263,63 @@ Three material families, all created and cached by `render/materials.js`. Nothin
   compositing in DOM).
 - Two scenery materials sit outside the families, both made in `materials.ts`: the sky dome's
   `ShaderMaterial` (`skyMat`, §3.3) and the unfogged flat-shaded cloud Lambert (`cloudMat`).
+- The post passes (§3.6) are `ShaderMaterial`s from `makePostMaterial`; SMAA comes from three's
+  `SMAAPass` addon, which builds its own.
 
 ### 3.3 Lighting and shadows
 
-Replaces `rendering-effects.md` §4 in full.
+Replaces `rendering-effects.md` §4 in full. There are two looks (`quality.ts`, `Look`): Low's flat
+low-poly look (`lowpoly`) and the HDR pipeline of the realistic tiers (`realistic`, Medium and up).
+
+**Low (and a realistic tier whose sky has not streamed in yet):**
 
 - One `DirectionalLight`, colour `#FFF6E5`, intensity 2.2, direction `normalize(0.38, 0.82, 0.42)`
-  (kept from the spec) unless the level's mood sets `sunDir` (House, Downtown and Mexico do, about
-  32–35° up, so the dome's sun disc sits in view), positioned at `shadowCenter + dir × (radius × 2)`.
-- One `HemisphereLight`, sky `#BBD9EC`, ground `#8A8474`, intensity 0.85.
-- No point lights, no ambient light, no light probes.
-- **Shadows** follow the quality setting (`render/quality.ts`, `SHADOW_SPEC`): off, 2048² PCF
-  redrawn every 2nd frame (Low), 2048² PCF, 2048² PCFSoft, or 4096² PCFSoft; `bias = -0.0004`,
-  `normalBias = 0.03`. `shadowMap.autoUpdate` is off and `render` requests each redraw; the shadow
-  box only moves on frames that redraw the map. The orthographic shadow camera is fitted per level
-  by `renderer.setLevelShadow(center, radius)` — `level` reports these in `level.shadow`.
+  (kept from the spec, `SUN_DIR`) unless the level's mood sets `sunDir` (House, Downtown and Mexico
+  do, about 32–35° up, so the dome's sun disc sits in view), positioned at
+  `shadowCenter + dir × (radius × 2)`.
+- One `HemisphereLight`, sky `#BBD9EC`, ground `#8A8474`, intensity 0.85, and a `RoomEnvironment`
+  PMREM at 0.35 so GLB metal does not read black.
+- No point lights, no ambient light.
+
+**Realistic tiers**, once the map's sky is in: every light comes from the map's Blender sky
+(`tools/blender/sky.py`, rendered with the physical Multiple Scattering sky for the mood's
+`sunDir`). `sky.json` holds the sun's irradiance, the sky's irradiance as 9 SH coefficients, the
+horizon colour and the background scale, all in one unit: a white horizontal surface in full sun
+has radiance 1. The sun light takes the sun's colour and intensity (about 5); a `LightProbe` with
+the SH replaces the hemisphere light (its lower half is a neutral grey floor as bright as 30 % of
+the map's sunlit ground: bounce light, grey so interiors and eaves do not take the lawn's green).
+The probe keeps 60 % of the sky's colour at full brightness (`PROBE_CHROMA`): a sky-only probe
+has none of the warm bounce from sunlit walls, and at full colour shade on grey concrete read navy.
+The sky's PMREM (`env.hdr`, 1024 × 512, so a 256 cube like the room environment's) is the
+environment at full strength. The fog and clear colour are the radiance of the lowest degree of
+sky in the hue of the mood's own fog colour, its colour pushed 1.5× from grey (`HAZE_CHROMA`)
+because AgX desaturates it at that brightness: House's warm haze, Downtown's cool morning. The
+mood's `sky` names the folder; its `realistic` field sets an exposure (stops: Downtown −0.3, House
+−0.5, Mexico −0.15) and a grade for this look. Low never fetches a sky, and switching to it frees a
+loaded one. The sky streams from the first realistic frame on the map and lands without a hitch:
+the realistic look keeps the hemisphere light and the probe in the scene (the one not in use at
+0), so the light counts in every lit program stay the same; the environment keeps its cube size;
+one `PMREMGenerator` lives with the renderer on realistic tiers, compiled for the room environment
+and, when the sky is asked for, for the equirect step; and `sky.webp` is decoded before it lands.
+A sky that lands after the map or the look changed is freed without its PMREM being made.
+
+- **Shadows** follow the quality setting (`render/quality.ts`, `SHADOW_SPEC`): off; Low's 2048² PCF
+  box centred on the eye (half-width 35 m), redrawn every 2nd frame; Medium's one 2048² PCFSoft box
+  pushed 28 m ahead of the eye (half-width 45 m); High's 2 and Ultra's 3 cascades, 2048² PCFSoft each
+  (half-widths 14/45 m and 8/22/60 m, each pushed ahead of the eye). `bias = -0.0004`; `normalBias`
+  0.03 on Low's box, 0.9 of a texel on the others. Every box has a fixed size and snaps to its
+  own texel grid in the light's frame (`render/shadows.ts`), so shadows do not swim as the viewer
+  moves or turns, and the sprint FOV kick does not resize them. A cascade is a dark, shadow-only
+  `DirectionalLight`; `shadows.ts` patches three's `lights_fragment_begin` once so that a scene
+  with more than one shadow-casting directional light takes each fragment's shadow from the
+  sharpest box holding it (blending over the outer eighth into the next, fading to lit over the
+  outer 1/24 of the last, about 2 m, so the far end of the shadows is a clean edge rather than a
+  smear) and applies the sun once. With one shadow light the chunk runs unchanged. Every
+  realistic tier filters with PCFSoft (the same cost as PCF; Medium's 4.4 cm texels step without
+  it).
+  `shadowMap.autoUpdate` is off and `render` requests each redraw; the boxes only move on frames
+  that redraw the maps. The depth range is fitted per level by
+  `renderer.setLevelShadow(center, radius)` — `level` reports these in `level.shadow`.
 - `castShadow = true` on level geometry, characters, props, debris and the grapple hook.
   `receiveShadow = true` on level geometry only. Particles, decals, tracers, view models and the
   weapon rig cast and receive nothing.
@@ -283,13 +327,22 @@ Replaces `rendering-effects.md` §4 in full.
   each level's mood sets (`fogNear`/`fogFar`, roughly 50–55 m to 180–260 m; default 50–190), so a
   grunt at 60 m stays clear. The view-distance setting ("normal" or "long", ×1.3) scales the fog
   range, the far plane (420 m at "normal") and the sky dome together; it never pulls the fog in.
-- **Sky**: one dome (`skyMat`, a `ShaderMaterial`) follows the camera. It draws the
+- **Sky**: one dome (`skyMat`, a `ShaderMaterial`) follows the camera. On Low it draws the
   horizon-to-zenith gradient per pixel and, when the mood sets `sunDisc`, a sun disc with glow
-  along `sunDir`. The same direction aims the shadow-casting light, so the visible sun and the
-  shadows agree; moods keep it 30° or more up so shadows fit the shadow box. A mood change writes
-  uniforms only. Clouds
-  are one merged, unfogged low-poly mesh per level (`LevelBuilder.clouds`). There is no
-  `scene.background`: the dome covers every pixel.
+  along `sunDir`. With `SKY_MAP` defined (realistic, sky loaded) it draws `sky.webp` (an sRGB
+  equirect in three's layout, times the background scale) and a small HDR sun disc that blooms.
+  Overhead the image gets ×1.6 brightness and ×1.3 saturation, ramping in over the lowest 25°
+  (physical sky radiance tone-maps to a dull slate); the lowest 10° fade into the hazed fog
+  colour, so the sky meets the fogged ground without a seam. The lighting stays physical.
+  The same direction aims the shadow-casting lights, so the visible sun and the shadows agree;
+  moods keep it 30° or more up. A mood change writes uniforms only. Clouds are one merged, unfogged
+  low-poly mesh per level (`LevelBuilder.clouds`). There is no `scene.background`: the dome covers
+  every pixel.
+- **Sky streaming** (`render/sky.ts`): the first realistic frame drawn on a map asks for its sky
+  (so boot, which builds the menu map before it applies the saved preset, fetches nothing on Low);
+  the frame never waits. `renderer.skyPending` is true until it is
+  in (or failed; a failure keeps the Low-style lights). Only the latest map's sky is kept. Each
+  map's three files total under 0.4 MB.
 
 ### 3.4 Camera and canvas
 
@@ -305,7 +358,9 @@ are unchanged. `renderer.setViewFov` scales the rig group in camera space by
 tan(world FOV / 2) / tan(view FOV / 2) in x and y, which puts every rig point on the screen spot
 and depth a camera at the view FOV would give it; no second pass, no second MSAA resolve. Rig
 meshes have `renderOrder` 1000 and the first one drawn clears depth, so the gun never clips into
-walls. Muzzle and ejection points read with `getWorldPosition` are already where the player sees
+walls. While AO reads the depth buffer (§3.6) the world's depth must survive, so instead each rig
+mesh draws with `gl.depthRange(0, RIG_DEPTH)` (0.01; world depth only gets that low within 8 cm of
+the eye) and restores it after; the AO passes treat that slice as "not the world". Muzzle and ejection points read with `getWorldPosition` are already where the player sees
 them.
 
 ### 3.5 Typography and HUD look
@@ -341,28 +396,56 @@ The two-pass tone pipeline (`rendering-effects.md` §6.1–6.2) is replaced by:
 
 1. Render the scene into a `WebGLRenderTarget` (`RGBAFormat`, `HalfFloatType`,
    `LinearSRGBColorSpace`, depth buffer, no stencil, no mips, `LinearFilter`) sized canvas × render
-   scale × the dynamic-resolution scale, with 0, 2 or 4 MSAA samples from the quality setting.
-   Dynamic resolution resizes the target, so the clear, the MSAA resolve and the composite all
-   shrink with it; the controller moves at most every half second, so reallocation is rare. The
-   rig is part of this pass (§3.4).
-2. Draw one full-screen triangle with a `ShaderMaterial` (orthographic camera, depth test off) that
-   samples the target (through FXAA on Low), tone-maps it (identity to 0.8, then a soft roll-off
-   to white, so the flat palette keeps its values), applies the mood's grade (gain in linear light; lift
-   and contrast in a square-root space, so lift tints the shadows without raising black; then
-   saturation; `GRADE` in `palette.ts`), then the four feedback overlays **exactly** as
-   `rendering-effects.md` §6.3 specifies, in that order:
-   hurt vignette (with the low-health pulse term), parry flash toward the background colour,
-   slow-motion desaturation `mix(col, lum * vec3(0.8,0.86,1.0), slow*0.55)`.
-   The "sketch modulation" `scr` becomes a constant `1.0` (no texture).
-   The fragment shader ends with `#include <colorspace_fragment>` so the linear target is converted
-   to sRGB for the canvas.
-3. Nothing else. No outline detection, no hatching, no jitter, no grain.
+   scale, with 0, 2 or 4 MSAA samples from the quality setting and, while AO is on, a 32-bit float
+   `DepthTexture` (resolved with the colour). Dynamic resolution never reallocates: the scene,
+   GTAO and bloom draw into the lower-left share of their targets (`target.viewport`, and a
+   scissor for the clear), each pass reads its source through a `uvScale` and clamps its taps to
+   the last texel drawn, and the look pass scales the frame back up into the full-size 8-bit
+   target (Low without SMAA: straight to the canvas), so SMAA, the sharpen and the feedback run at
+   full size. A step is a few uniform and viewport writes. Targets reallocate only on a window,
+   pixel-ratio or render-scale change; a pass switched off frees its targets (AO also its depth
+   texture), and a frame allocates nothing. The rig is part of this pass (§3.4).
+2. The passes after it (`render/postfx.ts`, `Composite`), each switched by its quality setting:
+   - **GTAO** (Ambient occlusion: half or full resolution): ground-truth AO after XeGTAO, 2 slices ×
+     4 steps × 2 sides within 1.1 m, normals from depth, a 4 × 4 ordered noise that a depth-aware
+     4 × 4 blur removes, squared. Applied as `mix(1, ao, 0.8 × ambient)` with a depth-aware
+     upsample, so a wall's dark does not bleed onto the enemy in front of it; the rig and the sky
+     get none. `ambient` is the scene target's alpha: every opaque lit material writes the share of
+     its light that is not direct light there (a patched `opaque_fragment` chunk), so AO darkens
+     ambient light only and a sunlit wall or grunt keeps its brightness.
+   - **Bloom** (on/off): a soft threshold at exposed brightness 1.1 into half resolution, then a
+     dual-filter chain down to 1/32 and back up, added at 0.05.
+   - **Look pass.** Low: one full-screen triangle (orthographic camera, depth test off) that samples
+     the target (through FXAA on Low), multiplies AO and adds bloom when on, tone-maps it (identity
+     to 0.8, then a soft roll-off to white, so the flat palette keeps its values), applies the
+     mood's grade (gain in linear light; lift and contrast in a square-root space, so lift tints
+     the shadows without raising black; then saturation; `GRADE` in `palette.ts`), then the four
+     feedback overlays **exactly** as `rendering-effects.md` §6.3 specifies, in that order: hurt
+     vignette (with the low-health pulse term), parry flash toward the background colour,
+     slow-motion desaturation `mix(col, lum * vec3(0.8,0.86,1.0), slow*0.55)`. The "sketch
+     modulation" `scr` becomes a constant `1.0` (no texture). It ends with
+     `#include <colorspace_fragment>` for the canvas, or encodes sRGB itself when SMAA follows.
+     Realistic: AO, bloom, the exposure (`1.2 × 2^mood.realistic.exposure`), **AgX** (with a mild
+     punchy contrast; a colour that leaves the sRGB gamut moves towards grey at the same luminance
+     until its smallest channel is 8 % of it, instead of being cut at 0), the mood's realistic
+     grade (`REAL_GRADE`, saturation 1.04–1.05, its contrast an S-curve that keeps black at black),
+     sRGB with half a level of dither, into an 8-bit target.
+   - **SMAA** (three's `SMAAPass`, anti-aliasing "SMAA" or "MSAA n× + SMAA") on the sRGB frame.
+   - **Realistic final pass**: a light contrast-adaptive sharpen (AMD CAS, 0.35, its result kept
+     inside the neighbours' range so hard edges get no halo), or FXAA when that is the
+     anti-aliasing setting, then back to linear and the same four feedback overlays, last, to the
+     canvas.
+3. Nothing else. No outline detection, no hatching, no jitter, no grain. No TAA.
+
+Low is exactly the phase-1 single pass; AO, bloom and SMAA also work on the flat look when a player
+turns them on in Custom.
 
 Quality (`render/quality.ts`): presets Low/Medium/High/Ultra plus Custom, auto-detected once per
 device (touch, `deviceMemory`, cores, GPU renderer string, `maxTextureSize`) and checked by a
 two-second benchmark in the menu backdrop, which steps Auto down one preset if it misses 60 fps
-and a second sample at reduced resolution runs clearly faster (otherwise the miss is a refresh cap
-or a CPU limit that a lower preset would not fix). Phones and tablets always start on Low.
+and a second sample at half the pixels runs faster than 0.9 of full (otherwise the miss is a
+refresh cap or a CPU limit that a lower preset would not fix; the realistic look's shadow maps and
+full-size SMAA and final passes do not scale, so a GPU-bound frame only falls to about 0.75). Phones and tablets always start on Low.
 Stored in the versioned `cs6_gfx` record. `boot` applies every change live
 (`Renderer.applyQuality`, `Effects.setDetail`, the frame limiter) and runs the dynamic-resolution
 controller in every state, also before the benchmark has run. The controller's signal is the rAF
@@ -403,7 +486,7 @@ layers. There is no path back: `weapons` never imports `player`, `enemies` never
 | `physics` | `three`, `util` |
 | `nav` | `three`, `util`, `physics` (types/constants only) |
 | `level` | `three`, `three/addons/utils/BufferGeometryUtils.js`, `util`, `render`, `physics` |
-| `render` | `three`, `three/addons/utils/BufferGeometryUtils.js`, `util` |
+| `render` | `three`, `three/addons` (BufferGeometryUtils, RoomEnvironment, GLTFLoader, RGBELoader, SMAAPass), `util` |
 | `effects` | `three`, `util`, `render` |
 | `audio` | `util`, `audio.tunes.js` |
 | `hud` | `util` |
@@ -1133,8 +1216,8 @@ export interface BuildOpts { mat?: string; noCollide?: boolean; noNav?: boolean;
 ### 6.6 `render`
 
 **Files:** `src/render/index.js` (public), `palette.js`, `materials.js`, `prims.js`, `figure.js`,
-`postfx.js`
-**Imports:** `three`, `three/addons/utils/BufferGeometryUtils.js`, `util`
+`postfx.js`, `quality.ts`, `shadows.ts` (cascades), `sky.ts` (sky streaming), `tactical.ts`
+**Imports:** `three`, `three/addons` (BufferGeometryUtils, RoomEnvironment, GLTFLoader, RGBELoader, SMAAPass), `util`
 **Responsibility:** the renderer, scene, camera, lights, shadows, the full-screen composite pass,
 the whole material/palette system, low-poly primitive factories, and the **shared humanoid /
 blob / flyer figure builder** used by both `enemies` and `players`.
@@ -1205,10 +1288,13 @@ export class Renderer {
   readonly rig: THREE.Group;                  // child of camera; each weapon root has scale 0.46
   readonly sun: THREE.DirectionalLight;
   resize(): void;                             // self-registered on window resize
-  applyQuality(values: GfxValues): void;      // live: pixel ratio, render scale, AA, shadows, view distance
-  setDynamicScale(scale: number): void;       // dynamic resolution, 0-1 share of the target
+  readonly cascades: THREE.DirectionalLight[]; // dark shadow-only lights for cascades 1+ (High, Ultra)
+  readonly probe: THREE.LightProbe;           // realistic tiers: the sky's SH irradiance
+  readonly skyPending: boolean;               // a realistic tier is still streaming the map's sky
+  applyQuality(values: GfxValues): void;      // live: look, pixel ratio, render scale, AA, AO, bloom, shadows, view distance
+  setDynamicScale(scale: number): void;       // dynamic resolution: the drawn 0-1 share of each target
   setLevelShadow(center: THREE.Vector3, radius: number): void;
-  setMood(mood?: Mood): void;                 // sky, sun disc, light, fog range, grade
+  setMood(mood?: Mood): void;                 // sky, sun disc, light, fog range, grade, exposure; streams the sky
   prepareRig(root: THREE.Object3D): void;     // shadow flags, draw order, depth clear, once on attach
   setViewFov(fov: number): void;              // V8: scales the rig in camera space (§3.4); the player camera calls it
   render(time: number, fx: PostFX): void;     // called last, exactly once per frame

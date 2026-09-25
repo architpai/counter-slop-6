@@ -68,11 +68,22 @@ export type SkyUniforms = {
   sunColor: THREE.IUniform<THREE.Color>;
   /** 0 hides the disc and glow, 1 shows them. */
   sunDisc: THREE.IUniform<number>;
+  /** Realistic tiers: the map's Blender sky, an sRGB equirect, and the radiance its white stands for. */
+  skyMap: THREE.IUniform<THREE.Texture | null>;
+  skyScale: THREE.IUniform<number>;
+  /** Realistic tiers: the sky's brightness and saturation above the horizon haze (1 is physical). */
+  skyGain: THREE.IUniform<number>;
+  skySaturation: THREE.IUniform<number>;
 };
 
 /**
  * Unlit, inside-out, never fogged: the sky dome. The horizon-to-zenith gradient
  * and the sun disc are both per pixel, so a mood change is a uniform write.
+ * With `SKY_MAP` defined (realistic tiers, once the map's sky has streamed in)
+ * the gradient becomes the Blender sky image in three's equirect layout, and
+ * the sun is a bright disc only: the image already holds its glow. The image
+ * fades into `horizon` (the fog colour) over the lowest 10 degrees, so the sky
+ * meets the fogged ground without a seam and wears the mood's haze there.
  */
 export function skyMat(uniforms: SkyUniforms): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
@@ -87,15 +98,31 @@ export function skyMat(uniforms: SkyUniforms): THREE.ShaderMaterial {
     fragmentShader: `
       uniform vec3 horizon, zenith, sunDir, sunColor;
       uniform float sunDisc;
+      #ifdef SKY_MAP
+      uniform sampler2D skyMap;
+      uniform float skyScale, skyGain, skySaturation;
+      #endif
       varying vec3 vDir;
       void main() {
         vec3 dir = normalize(vDir);
-        vec3 col = mix(horizon, zenith, pow(max(dir.y, 0.0), 0.6));
         // A disc of about 2.5 degrees with a soft rim, a tight glow and a wide haze.
         // Its HDR core is rolled off to white by the composite's tone mapping.
         float d = max(dot(dir, sunDir), 0.0);
         float disc = smoothstep(0.99905, 0.99935, d);
+        #ifdef SKY_MAP
+        // A sun of about 1.2 degrees, bright enough to bloom; the image holds the halo.
+        vec2 uv = vec2(atan(dir.z, dir.x) * 0.15915494 + 0.5, asin(clamp(dir.y, -1.0, 1.0)) * 0.31830989 + 0.5);
+        vec3 sky = texture2D(skyMap, uv).rgb * skyScale;
+        // Physical sky radiance tone-maps to a dull slate; a photo of a clear day shows a
+        // deeper, brighter blue overhead. That lift grows over the lowest 25 degrees.
+        float up = smoothstep(0.0, 0.42, dir.y);
+        sky = mix(vec3(dot(sky, vec3(0.2126, 0.7152, 0.0722))), sky, mix(1.0, skySaturation, up)) * mix(1.0, skyGain, up);
+        vec3 col = mix(horizon, max(sky, 0.0), smoothstep(0.0, 0.17, dir.y));
+        col += sunColor * sunDisc * smoothstep(0.99992, 0.99996, d) * 40.0;
+        #else
+        vec3 col = mix(horizon, zenith, pow(max(dir.y, 0.0), 0.6));
         col += sunColor * sunDisc * (disc * 3.0 + pow(d, 400.0) * 0.8 + pow(d, 24.0) * 0.18 + pow(d, 4.0) * 0.05);
+        #endif
         gl_FragColor = vec4(col, 1.0);
       }
     `,
