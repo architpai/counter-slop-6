@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { GRADE, LIGHT, SURF } from './palette';
 import { Composite, RIG_DEPTH } from './postfx';
 import {
@@ -8,14 +10,16 @@ import {
 } from './materials';
 import { BAKE_FILE, LIGHTMAP_SIZE, bakeFor, bakedTriangles, layoutLightmap, lightmapCharts, wearLightmapUVs } from './lightmap';
 import { ANTIALIAS_SPEC, AO_SCALE, PRESET_VALUES, SHADOW_SPEC, VIEW_SCALE } from './quality';
+import { GpuFences, MatchClock } from './pacing';
 import { aimShadowBox, cascadeCentre, sizeShadowBox } from './shadows';
 import { disposeSky, loadSky } from './sky';
 import { TEXTURE_SIZE, resolveMaterial, setInfo, setsFor } from './surfaces';
 import { BakeStreamer, TextureStreamer, fetchGrid, ktx2Loader, lightmapLoader, warmCompressedUploads } from './textures';
+import { WeaponAssets, weaponTextureSize } from './weapons';
 import type { PostFX } from './postfx';
 import type { SkyUniforms } from './materials';
 import type { GfxValues, ShadowBox } from './quality';
-import type { SkyAssets } from './sky';
+import type { SkyAssets, SkySource } from './sky';
 import type { TextureSet } from './surfaces';
 import type { BakedLight, LoadBake } from './textures';
 import type { BakeInfo } from './lightmap';
@@ -71,6 +75,8 @@ const PROBE_CHROMA = 0.6;
 export const SUN_DIR = new THREE.Vector3(0.38, 0.82, 0.42).normalize();
 /** Far plane and sky-dome radius in metres at the "normal" view distance; both scale with it. */
 const FAR = 420;
+/** The camera's near plane: the view model is kept beyond it wherever it is in view (weapons/models.ts, `REAL_AIM_DEPTH`). */
+export const NEAR = 0.08;
 const SKY_RADIUS = 380;
 /** Fog range for a mood that sets none. Per-map ranges live on each level's mood. */
 const FOG_NEAR = 50;
@@ -116,6 +122,27 @@ const _tint = new THREE.Color();
 const _haze = new THREE.Color();
 const _grey = new THREE.Vector3();
 const luminance = (c: THREE.Color): number => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+
+/**
+ * A caster drawn with the view models' warm-up, so the shadow pass's depth
+ * program for the characters (three's own, front-faced) is linked at the menu
+ * too, not with a wave's first spawn in a cascade.
+ */
+const SHADOW_PROBE = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());
+SHADOW_PROBE.castShadow = true;
+
+/**
+ * A root whose shader work is held off a match's frames (`Renderer._compiles`,
+ * `_warmups`); `valid` is false once it was freed. `inMatch`: its warm-up draw
+ * may also run in a live match once its quiet start is over.
+ */
+interface Warmup {
+  root: THREE.Object3D;
+  done: () => void;
+  valid: () => boolean;
+  inMatch: boolean;
+  drawn: boolean;
+}
 
 export class Renderer {
   readonly three: THREE.WebGLRenderer;
@@ -222,6 +249,38 @@ export class Renderer {
   /** The bake on the materials (its map's name), and when it started fading in (`performance.now()`). */
   _bakeWorn: string | null = null;
   _bakeFade = 0;
+  /**
+   * Realistic tiers: the Blender weapons and arms (R4), streamed in the
+   * upload slots at the Textures size; the view models listen for them.
+   * Empty on Low.
+   */
+  readonly weapons: WeaponAssets;
+  /** One fence a frame, so boot keeps the GPU at most `MAX_FRAMES_IN_FLIGHT` frames behind (render/pacing.ts). */
+  readonly _fences: GpuFences;
+  /** Whether a match is live and in its quiet start, as boot says every frame (`setLive`). */
+  readonly _match = new MatchClock();
+  /**
+   * Shader work kept off a match's frames. `_compiles`: roots whose programs
+   * compile off the frame (`compileAsync`), not in a match's quiet start.
+   * `_warmups`: roots then drawn once where nobody sees it, never in a
+   * match's quiet start, and in a live match only the weapons' template; on
+   * ANGLE Metal a program's first draw can stall its frame even once
+   * compiled (the Blender weapons' about 0.4 s, 10-11 ms once compiled).
+   */
+  _compiles: Warmup[] = [];
+  _warmups: Warmup[] = [];
+  /** Roots whose programs compile for every look put in force (`prewarm`); the rig's view models always do. */
+  readonly _prewarmed = new Set<THREE.Object3D>();
+  /** The rig's and the prewarmed roots' programs are queued for the look in force. */
+  _programsWarm = false;
+  /** A downloaded sky being put on a step a frame (`_landSky`): its background uploaded, then its environment made. */
+  _skyLanding: { key: string; source: SkySource; uploaded: boolean; env: THREE.WebGLRenderTarget | null } | null = null;
+  /**
+   * The dome's material with the streamed sky (`SKY_MAP`) on a 1 x 1 stand-in,
+   * compiled and drawn once at the menu (`_warmPrograms`), so the sky landing
+   * later links no program.
+   */
+  readonly _skyProbe: THREE.Mesh;
   _disposed = false;
 
   constructor(canvas: HTMLCanvasElement) {
@@ -247,10 +306,15 @@ export class Renderer {
       skyMap: { value: null }, skyScale: { value: 1 }, skyGain: { value: SKY_GAIN }, skySaturation: { value: SKY_SATURATION },
     };
     this.sky = new THREE.Mesh(new THREE.SphereGeometry(SKY_RADIUS, 24, 12), skyMat(this._sky));
+    const standIn = new THREE.DataTexture(new Uint8Array(4), 1, 1);
+    standIn.needsUpdate = true;
+    const probe = skyMat({ ...this._sky, skyMap: { value: standIn } });
+    probe.defines.SKY_MAP = '';
+    this._skyProbe = new THREE.Mesh(new THREE.PlaneGeometry(), probe);
     this.sky.frustumCulled = false;
     this.sky.renderOrder = -1;
     this.scene.add(this.sky);
-    this.camera = new THREE.PerspectiveCamera(80, 1, 0.08, FAR);
+    this.camera = new THREE.PerspectiveCamera(80, 1, NEAR, FAR);
     this.camera.rotation.order = 'YXZ';
     this.scene.add(this.camera);
     this.rig = new THREE.Group();
@@ -267,6 +331,7 @@ export class Renderer {
     this.scene.add(this.sun, this.sun.target, this.hemi, this.probe);
     this.post = new Composite();
     const gl = this.three.getContext();
+    this._fences = new GpuFences(gl as WebGL2RenderingContext);
     this._beforeRig = () => {
       if (this._rigDepthRange) gl.depthRange(0, RIG_DEPTH);
       else if (!this._rigDepthCleared) {
@@ -303,9 +368,23 @@ export class Renderer {
         });
       }
     };
+    this.weapons = new WeaponAssets({
+      model: url => new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(url),
+      texture: (url, anisotropy) => (this._ktx2 ??= ktx2Loader(this.three)).load(url, anisotropy),
+      upload: texture => this.three.initTexture(texture),
+      // A template that Low or a lost context freed meanwhile is neither compiled nor drawn.
+      compile: root => this._hold(this._compiles, root, () => this.weapons.holds(root)),
+      // A glb that lands after Start is drawn once the match's quiet start is over, not held to the next menu.
+      warm: root => this._hold(this._warmups, root, () => this.weapons.holds(root), true),
+    });
     this._onResize = () => this.resize();
     window.addEventListener('resize', this._onResize);
-    this._onContextRestored = () => this._releaseTextures();
+    this._onContextRestored = () => {
+      this.weapons.clear();
+      this._releaseTextures();
+      this._fences.clear();
+      this._programsWarm = false;
+    };
     canvas.addEventListener('webglcontextrestored', this._onContextRestored);
     this.applyQuality(this._quality);
     this.setLevelShadow(new THREE.Vector3(), 80);
@@ -331,10 +410,12 @@ export class Renderer {
    * ratio, render scale, the look, the post chain, shadows and view distance
    * take effect on the next frame; a shadow-filter or cascade-count change
    * recompiles the lit materials once. A realistic look streams the map's sky
-   * from its first frame.
+   * from its first frame. The view models' programs compile again for the new
+   * look before the next match shows them (`_warmPrograms`).
    */
   applyQuality(q: Readonly<GfxValues>): void {
     this._quality = q;
+    this._programsWarm = false;
     this.three.setPixelRatio(Math.min(window.devicePixelRatio || 1, q.pixelRatio));
     const aa = ANTIALIAS_SPEC[q.antialias], ao = AO_SCALE[q.ao];
     this.post.configure({ look: q.look, samples: Math.min(aa.samples, this.three.capabilities.maxSamples),
@@ -375,11 +456,19 @@ export class Renderer {
     this.setLevelShadow(this.sun.target.position, this._shadowRadius);
     this._applyFog();
     this._applyLook();
+    // Low frees the weapons (the flat guns come back) before the texture loader they share goes.
+    if (q.look !== 'realistic') this.weapons.want(null);
     this._applySurfaces();
     if (q.look !== 'realistic') {
       // The flat look never shows a sky; a realistic tier streams it again.
       disposeSky(this._skyAssets);
       this._skyAssets = null;
+      if (this._skyLanding) {
+        this._skyLanding.env?.dispose();
+        disposeSky(this._skyLanding.source);
+        this._skyLanding = null;
+        this._skyLoading = null;
+      }
       this._pmrem?.dispose();
       this._pmrem = null;
     }
@@ -583,18 +672,20 @@ export class Renderer {
    * cached per tag and colour, wearing whatever they wore last if that is
    * still loaded (a set shared with the previous map, or the previous texture
    * size until the new one is in), else their stand-ins; flat-only groups are
-   * hidden, and the shadow pass draws each run of the visible ones as one
-   * (`_casters`). Downloads start with the next realistic frame (`render`),
-   * uploads `UPLOAD_SETTLE_MS` later, and a set that failed to load is tried
-   * again. A material swap, not a rebuild: the merged geometry serves both looks.
+   * hidden, the drones cast no shadow, and the shadow pass draws each run of
+   * the visible ones as one (`_casters`). Downloads start with the next
+   * realistic frame (`render`), uploads `UPLOAD_SETTLE_MS` later, and a set
+   * that failed to load is tried again. A material swap, not a rebuild: the
+   * merged geometry serves both looks.
    */
   _applySurfaces(): void {
     this._texturesAsked = this._bakeAsked = false;
     this._casters = [];
     if (this._quality.look !== 'realistic') {
-      for (const { mesh, surf } of this._surfaces) {
+      for (const { mesh, surf, moving } of this._surfaces) {
         mesh.material = surfMat(surf);
         mesh.customDepthMaterial = undefined;
+        if (moving) mesh.castShadow = true;
       }
       this._releaseTextures();
       return;
@@ -604,7 +695,10 @@ export class Renderer {
     this._uploadAt = performance.now() + UPLOAD_SETTLE_MS;
     // Until the first realistic frame checks it (`_checkBake`), a level with a bake in the manifest wears baked materials.
     const baked = this._bakeChecked === this._surfaces ? this._bake !== null : this._level !== null && bakeFor(this._level) !== null;
-    for (const { mesh, surf, materials, static: fixed } of this._surfaces) {
+    for (const { mesh, surf, materials, static: fixed, moving } of this._surfaces) {
+      // 30-40 m up, a drone's shadow in the sharp cascades is a hard grey wedge on the ground by the
+      // player, the drone itself a speck near the sun: it read as a stray plane in front of the gun.
+      if (moving) mesh.castShadow = false;
       const looks = materials.map(tag => {
         if (tag === null) return hiddenMat();
         const real = resolveMaterial(tag, surf);
@@ -719,7 +813,7 @@ export class Renderer {
     }
     const now = performance.now();
     if (!bakes.ready) {
-      if (now >= this._uploadAt) {
+      if (now >= this._uploadAt && !this._match.quiet(now)) {
         const bytes = bakes.pump();
         if (bytes > 0) this._uploadAt = now + Math.max(UPLOAD_GAP_MS, bytes / UPLOAD_BYTES_PER_MS) * this._uploadPace;
       }
@@ -768,7 +862,7 @@ export class Renderer {
   _streamTextures(): void {
     if (this._quality.look !== 'realistic' || this._surfaceSets.length === 0) return;
     if (!this._textures) {
-      const ktx2 = this._ktx2 = ktx2Loader(this.three);
+      const ktx2 = (this._ktx2 ??= ktx2Loader(this.three));
       this._textures = new TextureStreamer(ktx2.load, texture => this.three.initTexture(texture));
     }
     const streamer = this._textures;
@@ -780,7 +874,7 @@ export class Renderer {
     }
     if (this._texturesWorn) return;
     const now = performance.now();
-    if (now >= this._uploadAt) {
+    if (now >= this._uploadAt && !this._match.quiet(now)) {
       const bytes = streamer.pump();
       if (bytes > 0) {
         if (performance.now() - now > UPLOAD_SLOW_MS) this._uploadPace = Math.min(4, this._uploadPace * 2);
@@ -795,6 +889,160 @@ export class Renderer {
     streamer.prune();
     this._dropFreedMaps();
     this._texturesWorn = true;
+  }
+
+  /**
+   * Realistic tiers: keep the weapons streaming at the Textures size (from the
+   * first realistic frame, so the menu never waits and Low never fetches), as
+   * long as a view model wants them. They download at once and upload in the
+   * level's slots, paced and backed off like its maps, once the level's bake
+   * and texture sets are on (the level is what a map load or look change shows
+   * first), never in a match's quiet start. Their programs compiled and were
+   * drawn once when the glb landed (render/weapons.ts; at the menu, or past
+   * the quiet start of a match begun before it landed), so the view models'
+   * swap once all are in compiles nothing, in a match too.
+   */
+  _streamWeapons(): void {
+    const size = weaponTextureSize(this._quality);
+    if (size === null || !this.weapons.wanted) return;
+    this.weapons.want(size);
+    const now = performance.now();
+    if (!this.weapons.pending || this.bakePending || this.texturesPending || now < this._uploadAt || this._match.quiet(now)) return;
+    const bytes = this.weapons.pump();
+    if (bytes > 0) {
+      if (performance.now() - now > UPLOAD_SLOW_MS) this._uploadPace = Math.min(4, this._uploadPace * 2);
+      this._uploadAt = now + Math.max(UPLOAD_GAP_MS, bytes / UPLOAD_BYTES_PER_MS) * this._uploadPace;
+    }
+  }
+
+  /** Queue `root` for a held compile or warm-up draw; resolves once it is done, or dropped as freed. */
+  _hold(list: Warmup[], root: THREE.Object3D, valid: () => boolean, inMatch = false): Promise<void> {
+    return new Promise<void>(done => { list.push({ root, done, valid, inMatch, drawn: false }); });
+  }
+
+  /**
+   * Once per look, while no match is live: compile the programs of every
+   * view model in the rig (the flat and the Blender guns alike, hidden or
+   * not) and of the prewarmed roots, then draw the rig once where nobody sees
+   * it, and on the realistic tiers the dome with a streamed sky (`_skyProbe`).
+   * A match then starts without linking or first-drawing any of them.
+   */
+  _warmPrograms(): void {
+    if (this._programsWarm || this._match.live) return;
+    this._programsWarm = true;
+    for (const root of this._prewarmed) void this._hold(this._compiles, root, () => this._prewarmed.has(root));
+    void this._hold(this._compiles, this.rig, () => true).then(() => this._hold(this._warmups, this.rig, () => true));
+    void this._hold(this._warmups, SHADOW_PROBE, () => true);
+    const probe = this._skyProbe;
+    if (this._quality.look === 'realistic') void this._hold(this._compiles, probe, () => true).then(() => this._hold(this._warmups, probe, () => true));
+  }
+
+  /**
+   * The held compiles, outside a match's quiet start: for the post target
+   * (linear output), as the world pass draws them, with the scene's lights
+   * and fog. The programs link off the frame; `done` follows once they have.
+   */
+  _runCompiles(): void {
+    if (this._compiles.length === 0 || this._match.quiet(performance.now())) return;
+    const target = this.three.getRenderTarget();
+    this.three.setRenderTarget(this.post.target);
+    for (const { root, done, valid } of this._compiles.splice(0)) {
+      if (!valid()) {
+        done();
+        continue;
+      }
+      // three's `compileAsync`, except that a material freed while its program links (Low, a lost
+      // context) counts as done: three's own poll throws on it.
+      const materials = [...this.three.compile(root, this.camera, this.scene)];
+      const linked = () => this._disposed || materials.every(material =>
+        (this.three.properties.get(material) as { currentProgram?: { isReady(): boolean } }).currentProgram?.isReady() !== false);
+      const poll = () => { if (linked()) done(); else setTimeout(poll, 10); };
+      poll();
+    }
+    this.three.setRenderTarget(target);
+  }
+
+  /**
+   * The held warm-up draws, in one extra render of the scene with its lights,
+   * into the frame's target, which the frame then clears. With no match live,
+   * all of them, with the shadow maps; in a live match past its quiet start,
+   * one `inMatch` root a frame (the weapons' template, when the glb lands
+   * after Start), without them: the rig, whose every view model it shows,
+   * and the shadow caster wait for a menu. A detached root joins the scene
+   * below a pixel and never culled; the rig draws with every view model in it
+   * shown. The next frame their callers hear of it (the weapons are announced
+   * ready); a root freed meanwhile (Low, a lost context) is dropped, never
+   * drawn, even once a new one is wanted.
+   */
+  _drawWarmups(): void {
+    for (const warm of this._warmups.filter(w => w.drawn || !w.valid())) {
+      this._warmups.splice(this._warmups.indexOf(warm), 1);
+      warm.done();
+    }
+    const live = this._match.live;
+    const list = live ? this._warmups.filter(w => w.inMatch).slice(0, 1) : this._warmups;
+    if (list.length === 0 || this._match.quiet(performance.now())) return;
+    const shown: THREE.Object3D[] = [];
+    for (const { root } of list) {
+      if (root === this.rig) {
+        root.traverse(node => { if (!node.visible) shown.push(node); });
+        continue;
+      }
+      root.scale.setScalar(1e-5);
+      root.position.copy(this.camera.position);
+      root.traverse(node => { node.frustumCulled = false; });
+      this.scene.add(root);
+    }
+    for (const node of shown) node.visible = true;
+    // At a menu with the shadow maps, so the casters' depth programs link too; the frame then keeps these maps.
+    if (!live) this.three.shadowMap.needsUpdate ||= this.sun.castShadow;
+    this.three.setRenderTarget(this.post.target);
+    this.three.render(this.scene, this.camera);
+    for (const node of shown) node.visible = false;
+    this._rigDepthCleared = false;
+    for (const warm of list) {
+      warm.drawn = true;
+      if (warm.root === this.rig) continue;
+      this.scene.remove(warm.root);
+      warm.root.scale.setScalar(1);
+      warm.root.position.set(0, 0, 0);
+      warm.root.traverse(node => { node.frustumCulled = true; });
+    }
+  }
+
+  /** Boot, every frame: a match is live (being played, no menu over it). Its first seconds stay quiet (render/pacing.ts). */
+  setLive(live: boolean): void {
+    this._match.set(live, performance.now());
+  }
+
+  /**
+   * Something is streaming in (a sky, the level's bake or sets, the weapons)
+   * and the GPU has `MAX_FRAMES_IN_FLIGHT` frames queued: boot skips this
+   * one, so the next upload waits behind no more (render/pacing.ts). With
+   * nothing to upload no frame is skipped.
+   */
+  get gpuBehind(): boolean {
+    return this.streaming && this._fences.behind(performance.now());
+  }
+
+  /** A realistic tier's sky, level bake or sets, or weapons are still to download, upload or put on. */
+  get streaming(): boolean {
+    return this.skyPending || this._skyLanding !== null || this.bakePending || this.texturesPending || this.weapons.pending;
+  }
+
+  /**
+   * Compile `root`'s programs (the characters' template) for every look put
+   * in force, while no match is live, so no match links them in its first
+   * frames. Nothing is drawn: its geometry uploads with its first use.
+   */
+  prewarm(root: THREE.Object3D): void {
+    this._prewarmed.add(root);
+    this._programsWarm = false;
+  }
+
+  /** A realistic tier's weapons (or a new size of them) are still streaming. */
+  get weaponsPending(): boolean {
+    return this.weapons.pending;
   }
 
   /** A realistic tier's level textures are still streaming (or not yet on the materials). */
@@ -817,8 +1065,8 @@ export class Renderer {
    * Stream the current map's sky, once. `render` asks, so nothing is fetched
    * until a realistic frame is actually drawn (boot builds the menu map before
    * it applies the saved preset). The frame never waits for it: the realistic
-   * look runs on the mood's lights until it lands, then `_applyLook` swaps it
-   * in. Only the latest map's sky is kept.
+   * look runs on the mood's lights until it lands (`_landSky`), then
+   * `_applyLook` swaps it in. Only the latest map's sky is kept.
    */
   _requestSky(): void {
     const key = this._mood.sky;
@@ -831,24 +1079,61 @@ export class Renderer {
     this._generator().compileEquirectangularShader();
     this.three.setRenderTarget(target);
     loadSky(key).then(source => {
-      if (this._skyLoading === key) this._skyLoading = null;
-      // The map or the look changed while this one streamed: drop it, and fetch the new map's if still missing.
-      if (this._disposed || this._mood.sky !== key || this._quality.look !== 'realistic') {
-        disposeSky(source);
-        if (!this._disposed) this._requestSky();
-        return;
-      }
-      const env = this._generator().fromEquirectangular(source.hdr);
-      source.hdr.dispose();
-      disposeSky(this._skyAssets);
-      this._skyAssets = { key, data: source.data, env, background: source.background };
-      this._applyLook();
+      this._skyLanding = { key, source, uploaded: false, env: null };
+      // The frames put it on (`_landSky`); a disposed renderer has none, so it is freed here.
+      if (this._disposed) this._landSky();
     }, (error: unknown) => {
       if (this._skyLoading === key) this._skyLoading = null;
       // Keep the gradient dome and the mood's lights; do not retry every frame.
       this._skyFailed.add(key);
       console.warn(`sky ${key}: ${error instanceof Error ? error.message : String(error)}`);
     });
+  }
+
+  /**
+   * Put the downloaded sky on, one step a frame in the upload slots (never in
+   * a match's quiet start, render/pacing.ts), so no frame pays for all of it:
+   * the background image's upload (8 MB), then the PMREM environment (the
+   * HDR's upload and the prefilter's draws), then the look, uniform writes
+   * only (the dome's `SKY_MAP` program was compiled and drawn at the menu,
+   * `_skyProbe`). A sky for a map or a look no longer in force is dropped,
+   * and the current map's fetched if still missing.
+   */
+  _landSky(): void {
+    const landing = this._skyLanding;
+    if (!landing) return;
+    const { key, source } = landing;
+    if (this._disposed || this._mood.sky !== key || this._quality.look !== 'realistic') {
+      this._skyLanding = null;
+      if (this._skyLoading === key) this._skyLoading = null;
+      landing.env?.dispose();
+      disposeSky(source);
+      if (!this._disposed) this._requestSky();
+      return;
+    }
+    const now = performance.now();
+    if (now < this._uploadAt || this._match.quiet(now)) return;
+    const pace = (image: { width: number; height: number }, texel: number) => {
+      this._uploadAt = now + Math.max(UPLOAD_GAP_MS, image.width * image.height * texel / UPLOAD_BYTES_PER_MS) * this._uploadPace;
+    };
+    if (!landing.uploaded) {
+      this.three.initTexture(source.background);
+      landing.uploaded = true;
+      pace(source.background.image as ImageBitmap, 4);
+      return;
+    }
+    if (!landing.env) {
+      landing.env = this._generator().fromEquirectangular(source.hdr);
+      source.hdr.dispose();
+      // Half-float RGBA.
+      pace(source.hdr.image, 8);
+      return;
+    }
+    this._skyLanding = null;
+    if (this._skyLoading === key) this._skyLoading = null;
+    disposeSky(this._skyAssets);
+    this._skyAssets = { key, data: source.data, env: landing.env, background: source.background };
+    this._applyLook();
   }
 
   _generator(): THREE.PMREMGenerator {
@@ -868,13 +1153,20 @@ export class Renderer {
     this.three.domElement.removeEventListener('webglcontextrestored', this._onContextRestored);
     this.sky.geometry.dispose();
     this.sky.material.dispose();
+    const probe = this._skyProbe.material as THREE.ShaderMaterial;
+    this._skyProbe.geometry.dispose();
+    (probe.uniforms.skyMap!.value as THREE.Texture).dispose();
+    probe.dispose();
     this.post.dispose();
     this._setBoxes(null, this.sun.shadow.mapSize.x);
     this.sun.shadow.map?.dispose();
     this._roomEnv.dispose();
     disposeSky(this._skyAssets);
     this._skyAssets = null;
+    this._landSky();
+    this.weapons.clear();
     this._releaseTextures();
+    this._fences.clear();
     this._pmrem?.dispose();
     this._pmrem = null;
     this.scene.environment = null;
@@ -887,9 +1179,13 @@ export class Renderer {
 
   render(time: number, fx: PostFX): void {
     this._frame++;
+    this._landSky();
     if (this._skyLoading === null && this.skyPending) this._requestSky();
     this._streamBake();
     this._streamTextures();
+    this._streamWeapons();
+    this._warmPrograms();
+    this._runCompiles();
     // The shadow boxes only move on frames that redraw the maps, so a skipped
     // frame samples the old map with the matrix it was drawn with.
     const shadows = this.sun.castShadow && this._frame % this._shadowEvery === 0;
@@ -901,10 +1197,12 @@ export class Renderer {
     this.three.shadowMap.needsUpdate = shadows;
     this._rigDepthCleared = false;
     this.sky.position.copy(this.camera.position);
+    this._drawWarmups();
     this.three.setRenderTarget(this.post.target);
     this.three.clear();
     this.three.render(this.scene, this.camera);
     this.post.draw(this.three, time, fx, this.camera);
+    this._fences.mark(performance.now());
   }
 }
 

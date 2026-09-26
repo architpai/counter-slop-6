@@ -17,15 +17,28 @@
 //            60 m), that corridor is a second view, enemies-shade, logged in brackets: '[H]'.
 //   overview a fixed high corner view of the whole map
 //   weapon   first person at spawn with the R4-C at the hip
+//   weapon-<kind>, weapon-<kind>-ads  every gun slot at the hip and at full aim, and the knife's
+//            guard, weapon-knife; on the realistic presets these are the Blender weapons (R4). A scoped
+//            gun (R4-C, MP5, sniper) hides its model at full aim and the HUD draws the optic instead:
+//            its -ads shot shows the model anyway, so the optic's axis can be seen on the screen
+//            centre, and weapon-<kind>-scope is what the player sees there, the HUD's optic overlay
+//            (the rest of the HUD stays hidden)
 // Enemies, effects and pickups are cleared per map, and the run is paused, so shots only differ
-// by preset. Realistic presets wait for the map's sky and environment, its texture sets and its
-// bake (lightmap or AO map, and probe grid) to stream in first.
+// by preset. Realistic presets wait for the map's sky and environment, its texture sets, its
+// bake (lightmap or AO map, and probe grid) and the first-person weapons to stream in first.
 // Dynamic resolution is pinned at full scale, so every preset is judged at its base resolution. The page renders at CS6_DPR (default 2, so the presets' pixel-ratio caps apply);
 // screenshots are saved at CSS size. On the real GPU vsync and the frame-rate limit are off, so
 // live frame times show the cost of each preset instead of the display's refresh.
-// OUTDIR/summary.json records frame times (live rAF, and a synchronous render + readback, both
-// with the gun in view, after a discarded warm-up), the fog at 60 m, where each grunt stood, and
-// the streamed textures: KTX2 bytes fetched for the map and GPU bytes resident, and the same for the bake.
+// OUTDIR/summary.json records frame times (live frames, the gaps between the frames the game
+// rendered, with the animation frames it skipped counted apart, and a synchronous render + readback,
+// both with the gun in view, after a discarded warm-up), the fog at 60 m, where each grunt stood, and
+// the streamed textures: KTX2 bytes fetched for the map and GPU bytes resident, the same for the bake,
+// and the weapons' download (glb and maps, fetched once per session, so counted on the first map of
+// each preset whose size is new) and GPU bytes; and the frames that stalled while they streamed in
+// (streamStalls: gaps between rendered frames, warned past STREAM_STALL, and rafWorstMs, the worst
+// gap between animation frames over the same span). While something streams the game skips an
+// animation frame when the GPU is `MAX_FRAMES_IN_FLIGHT` behind (render/pacing.ts): a run of skips
+// is one long rendered gap. With nothing streaming none is skipped (skippedFrames in the timing).
 // Later phases rerun this script to compare before and after.
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -65,12 +78,22 @@ const frames = n => page.evaluate(n => new Promise(resolve => {
   requestAnimationFrame(tick);
 }), n);
 const shot = async name => { await frames(3); await page.screenshot({ path: `${out}/${name}.png`, scale: 'css' }); return `${name}.png`; };
+/**
+ * Streaming is paced so a map's uploads never stall the game (render/index.ts, `UPLOAD_GAP_MS`):
+ * more than `frames` frames over `ms` while a map's textures, bake and weapons stream in is warned.
+ */
+const STREAM_STALL = { ms: 100, frames: 3 };
 const warnings = [];
 const warn = message => { warnings.push(message); console.warn(`WARN ${message}`); };
 
 try {
   await page.goto(url);
   await page.waitForFunction(() => window.__game?.live === 1);
+  // Every frame the game renders is timed while `__renders` is a list (the synchronous renders below are not).
+  await page.evaluate(() => {
+    const renderer = window.__game.ctx.renderer, render = renderer.render;
+    renderer.render = function (...args) { window.__renders?.push(performance.now()); return render.apply(this, args); };
+  });
   const gpu = await page.evaluate(() => window.__game.quality.device.gpu);
   const summary = { url, gpu, viewport: { width, height, dpr }, presets: {} };
 
@@ -86,8 +109,16 @@ try {
   for (const preset of presets) {
     summary.presets[preset] = {};
     for (const map of maps) {
-      // Load the map, freeze the run, pin full resolution, clear the HUD.
-      await page.evaluate(() => performance.clearResourceTimings());
+      // Load the map, freeze the run, pin full resolution, clear the HUD. Every frame gap is kept from
+      // here until the map's textures, bake and weapons are all in (STREAM_STALL below).
+      await page.evaluate(() => {
+        performance.clearResourceTimings();
+        window.__renders = [];
+        const gaps = window.__streamGaps = [];
+        let last = performance.now();
+        const tick = now => { gaps.push([last, now - last]); last = now; if (window.__streamGaps === gaps) requestAnimationFrame(tick); };
+        requestAnimationFrame(tick);
+      });
       await page.evaluate(({ preset, map }) => {
         const g = window.__game;
         g.hud.onUiAction('mainMenu', null, new Event('click'));
@@ -115,19 +146,36 @@ try {
       await page.waitForFunction(() => {
         const r = window.__game.ctx.renderer;
         // The bake fades in over BAKE_FADE_MS once it is on the GPU; shoot the final look.
-        return !r.skyPending && !r.texturesPending && !r.bakePending && !r.bakeFading;
+        return !r.skyPending && !r.texturesPending && !r.bakePending && !r.bakeFading && !r.weaponsPending;
       }, null, { timeout: 30_000 });
       await frames(20);
 
       const row = { shots: [] };
+      // Frames that stalled while the map's assets streamed in, past the load's own first frames
+      // (the level build, and the first realistic frame's programs).
+      row.streamStalls = await page.evaluate(({ skip, over }) => {
+        // The same start for both: the rAF gaps from the first rendered frame kept.
+        const renders = window.__renders, from = renders[skip] ?? Infinity;
+        const rendered = renders.slice(1).map((at, i) => at - renders[i]).slice(skip);
+        const raf = window.__streamGaps.filter(([at]) => at >= from).map(([, ms]) => ms);
+        window.__streamGaps = window.__renders = null;
+        return { frames: rendered.length, over: rendered.filter(ms => ms > over).length, worstMs: Math.round(Math.max(0, ...rendered)),
+          rafWorstMs: Math.round(Math.max(0, ...raf)) };
+      }, { skip: 3, over: STREAM_STALL.ms });
+      if (row.streamStalls.over > STREAM_STALL.frames) {
+        warn(`${preset} ${map}: ${row.streamStalls.over} frames over ${STREAM_STALL.ms} ms while its assets streamed (worst ${row.streamStalls.worstMs} ms)`);
+      }
       row.textures = await page.evaluate(() => {
         const stats = window.__game.ctx.renderer.textureStats, bake = window.__game.ctx.renderer.bakeStats;
         const resources = performance.getEntriesByType('resource');
         const fetched = resources.filter(e => e.name.includes('/textures/') && e.name.endsWith('.ktx2'));
         const baked = resources.filter(e => e.name.includes('/maps/') && /\.(ktx2|bin)$/.test(e.name));
+        const weapons = resources.filter(e => e.name.includes('/weapons/') || e.name.endsWith('/models/weapons.glb'));
         const mb = list => +(list.reduce((n, e) => n + e.encodedBodySize, 0) / 1e6).toFixed(2);
+        const arms = window.__game.ctx.renderer.weapons.stats;
         return { files: fetched.length, fetchedMB: mb(fetched), textures: stats.textures, residentMB: +(stats.residentBytes / 1e6).toFixed(1),
-          bakeFile: bake.file, bakeMB: mb(baked), bakeResidentMB: +(bake.residentBytes / 1e6).toFixed(1) };
+          bakeFile: bake.file, bakeMB: mb(baked), bakeResidentMB: +(bake.residentBytes / 1e6).toFixed(1),
+          weaponsMB: mb(weapons), weaponsResidentMB: +(arms.residentBytes / 1e6).toFixed(1) };
       });
       // How much fog a grunt at 60 m wears on this preset (linear fog).
       row.fogAt60 = await page.evaluate(() => {
@@ -142,31 +190,74 @@ try {
       // renders with a 1-pixel readback (GPU cost). Each block runs once to warm up (shader
       // compiles, target allocation) and is discarded; the second run is recorded.
       const timing = () => page.evaluate(() => new Promise(resolve => {
-        const g = window.__game, times = [];
-        let last = 0;
-        const tick = now => {
-          if (last) times.push(now - last);
-          last = now;
-          if (times.length < 120) { requestAnimationFrame(tick); return; }
+        const g = window.__game, renders = window.__renders = [];
+        let rafs = 0;
+        const tick = () => {
+          if (++rafs < 121) { requestAnimationFrame(tick); return; }
+          window.__renders = null;
+          const times = renders.slice(1).map((at, i) => at - renders[i]);
           const renderer = g.ctx.renderer, context = renderer.three.getContext(), pixel = new Uint8Array(4);
           const fx = { hurt: 0, flash: 0, slow: 0, lowHp: 0 };
           const once = () => { renderer.render(g.gs.time, fx); context.readPixels(0, 0, 1, 1, context.RGBA, context.UNSIGNED_BYTE, pixel); };
           for (let i = 0; i < 10; i++) once();
-          const renders = [];
+          const synced = [];
           for (let i = 0; i < 60; i++) {
             const start = performance.now();
             once();
-            renders.push(performance.now() - start);
+            synced.push(performance.now() - start);
           }
           const at = (list, q) => [...list].sort((a, b) => a - b)[Math.floor((list.length - 1) * q)];
           const mean = times.reduce((sum, t) => sum + t, 0) / times.length;
-          resolve({ frameMs: +mean.toFixed(2), frameP95Ms: +at(times, 0.95).toFixed(2), renderMs: +at(renders, 0.5).toFixed(2) });
+          resolve({ frameMs: +mean.toFixed(2), frameP95Ms: +at(times, 0.95).toFixed(2), skippedFrames: rafs - renders.length,
+            renderMs: +at(synced, 0.5).toFixed(2) });
         };
         requestAnimationFrame(tick);
       }));
       await timing();
       Object.assign(row, await timing());
-      await page.evaluate(() => { window.__game.ctx.renderer.rig.visible = false; });
+      // Every gun slot at the hip and aimed, then the knife's guard. Aim and melee are held through a
+      // wrapped `input.down`; the player steps by hand, as the run is paused.
+      for (const kind of await page.evaluate(() => window.__game.player.weapons.map(w => w.kind))) {
+        const slot = await page.evaluate(kind => window.__game.player.weapons.findIndex(w => w.kind === kind), kind);
+        for (const aim of [false, true]) {
+          const scoped = await page.evaluate(({ slot, aim }) => {
+            const g = window.__game, down = g.input.down;
+            g.player.switchTo(slot, true);
+            g.input.down = action => (aim && action === 'aim') || down.call(g.input, action);
+            try { for (let i = 0; i < 70; i++) g.player.update(1 / 60); } finally { g.input.down = down; }
+            g.effects.clear();
+            const w = g.player.weapon, scoped = aim && w.scope && !w.root.visible;
+            w.root.visible = true;
+            return scoped;
+          }, { slot, aim });
+          const name = `${preset}-${map}-weapon-${kind === 'rifle' ? 'mp5' : kind}`;
+          row.shots.push(await shot(`${name}${aim ? '-ads' : ''}`));
+          if (scoped) {
+            // As the player sees it: the model hidden and the HUD's optic overlay, alone.
+            await page.evaluate(() => { window.__game.player.weapon.root.visible = false; });
+            const overlay = await page.addStyleTag({ content: '.no-gameplay .scope.is-visible { display: block; transition: none; }' });
+            row.shots.push(await shot(`${name}-scope`));
+            await overlay.evaluate(tag => tag.remove());
+          }
+        }
+      }
+      // The paused player animates the gun only, so the knife's guard (melee held) is stepped here.
+      await page.evaluate(() => {
+        const g = window.__game, p = g.player;
+        const guard = { ...p.weaponState(), fire: false, firePressed: false, aim: true, meleePressed: false };
+        for (let i = 0; i < 40; i++) p.melee.animate(guard, 1 / 60);
+        p.weapon.root.visible = false;
+      });
+      row.shots.push(await shot(`${preset}-${map}-weapon-knife`));
+      await page.evaluate(() => {
+        const g = window.__game, p = g.player, rest = { ...p.weaponState(), aim: false };
+        for (let i = 0; i < 40; i++) p.melee.animate(rest, 1 / 60);
+        for (let i = 0; i < 40; i++) g.player.update(1 / 60);
+        g.player.switchTo(0, true);
+        for (let i = 0; i < 60; i++) g.player.update(1 / 60);
+        g.effects.clear();
+        g.ctx.renderer.rig.visible = false;
+      });
       row.shots.push(await shot(`${preset}-${map}-spawn`));
 
       // Enemy readability: find a clear 64 m corridor at ground level, then place grunts.
@@ -372,7 +463,7 @@ try {
       summary.presets[preset][map] = row;
       console.log(preset.padEnd(7), map.padEnd(14), `frame ${row.frameMs} ms (p95 ${row.frameP95Ms})`, `render ${row.renderMs} ms`,
         `tex ${row.textures.fetchedMB} MB fetched, ${row.textures.residentMB} MB resident`,
-        `bake ${row.textures.bakeFile ?? '-'} ${row.textures.bakeMB} MB`,
+        `bake ${row.textures.bakeFile ?? '-'} ${row.textures.bakeMB} MB`, `weapons ${row.textures.weaponsMB} MB`,
         row.enemies ? `grunts ${row.enemies.placed.map((p, i) => {
           // A shade slot only the second view filled is shown in brackets: [H].
           const extra = row.enemiesShade?.placed[i];

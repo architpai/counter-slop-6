@@ -1,10 +1,13 @@
 import * as THREE from 'three';
 import { TONE, TONE_HEX, toneMat, unlitMat, charMat, boxGeo, cylGeo, sphereGeo, torusGeo, starGeo } from '../render/index';
-import type { GunKind, Triple } from './stats';
+import type { GunKind, ScopeKind, Triple } from './stats';
 import { tacticalPart } from '../render/tactical';
 import { OPTIC_COLOR } from '../render/palette';
+import type { WeaponAssets } from '../render/weapons';
 
 const PRIMARY = TONE.PRIMARY, DARK = TONE.DARK, SIGHT = TONE.HOSTILE;
+/** The flat models are built in their own units at this scale; the Blender models are in metres. */
+export const LOW_SCALE = 0.46;
 
 /** The rest pose `remember()` stashes on a part the animators move. */
 export interface RestPose {
@@ -32,6 +35,24 @@ export interface ModelParts {
   slide?: THREE.Object3D;
   acog?: THREE.Object3D;
   holo?: THREE.Object3D;
+  /** Blender models: pulled while the trigger is held. */
+  trigger?: THREE.Object3D;
+}
+
+/** A Blender model's own motion and pose (docs/VISUALS.md, R4). */
+export interface RealLook {
+  /** Keyframed clips by name (`reload`, `reload-empty`, `equip`, `cycle`, `shell`, `slash`), bound to this model's nodes. */
+  clips: ReadonlyMap<string, THREE.AnimationClip>;
+  mixer: THREE.AnimationMixer;
+  /** Camera-space hip pose: slimmer than the flat guns, the Blender ones sit a little closer (visual only). */
+  restPos: Triple;
+  restRot: Triple;
+  /**
+   * Where the eye sits along the gun at full aim, whatever the sight: metres
+   * forward of the model's origin (negative: behind it), where a real gun of
+   * this length puts it. Null keeps `GunStats.eyeDistance` behind the sight.
+   */
+  eye: number | null;
 }
 
 /** What a `ViewModel` needs from any view model. */
@@ -39,13 +60,19 @@ export interface WeaponModel {
   root: THREE.Group;
   parts: ModelParts;
   /** Gun: the barrel end. Melee: the knife tip. */
-  muzzle: THREE.Group;
+  muzzle: THREE.Object3D;
   bloodSmears: THREE.Mesh[];
+  /** Scales the procedural part offsets: 1 on the flat models (their own units), `LOW_SCALE` on the Blender models (metres). */
+  unit: number;
+  /** The Blender model's clips and hip pose; absent on the flat look. */
+  real?: RealLook;
 }
 
 export interface GunModel extends WeaponModel {
-  eject: THREE.Group;
+  eject: THREE.Object3D;
   flash: THREE.Group;
+  /** Blender models: the aim point in root space per optic, `iron` for open sights. The flat models aim from `GunStats.sight`. */
+  sights?: Partial<Record<ScopeKind | 'iron', THREE.Vector3>>;
 }
 
 function group(parent: THREE.Object3D | null, name: string, position: Triple = [0, 0, 0]) {
@@ -275,7 +302,7 @@ export function makeGunModel(kind: GunKind): GunModel {
   }
   const muzzle = group(root, 'muzzle', muzzlePos);
   const eject = group(root, 'eject', ejectPos);
-  return { root, parts: { ...parts, leftHand }, muzzle, eject, flash: flash(muzzle), bloodSmears: result.bloodSmears };
+  return { root, parts: { ...parts, leftHand }, muzzle, eject, flash: flash(muzzle), bloodSmears: result.bloodSmears, unit: 1 };
 }
 
 export function makeMeleeModel(): WeaponModel {
@@ -288,6 +315,12 @@ export function makeMeleeModel(): WeaponModel {
   hand(root, 'striking-right-hand', [0, -0.005, 0.01], [0.5, -0.5, 1]);
   const leftHand = hand(root, 'supporting-left-hand', [-0.05, -0.035, 0.12], [-0.4, -0.7, 1]);
   const muzzle = group(root, 'tip', [0, 0, -0.47]);
+  smearsOn(root, bloodSmears);
+  return { root, parts: { leftHand }, muzzle, bloodSmears, unit: 1 };
+}
+
+/** The blade's blood smears, in the flat knife's units along its blade; each shows once blood passes its threshold. */
+function smearsOn(parent: THREE.Object3D, bloodSmears: THREE.Mesh[]): void {
   const smears: [number, number, number, number][] = [[-0.15, 0.12, 0, 1], [-0.29, 0.11, 0.18, -1], [-0.42, 0.08, 0.40, 1], [-0.22, 0.10, 0.58, -1], [-0.10, 0.08, 0.74, 1], [-0.36, 0.09, 0.88, -1]];
   smears.forEach(([center, length, threshold, side], i) => {
     const bottom = -0.92 * 0.0168, top: Triple[] = [], vertices: number[] = [];
@@ -305,10 +338,127 @@ export function makeMeleeModel(): WeaponModel {
     }
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-    const smear = mesh(root, `blood-smear-${i}`, twoSided(geometry), toneMat(SIGHT), [side * 0.0067, 0, center]);
+    const smear = mesh(parent, `blood-smear-${i}`, twoSided(geometry), toneMat(SIGHT), [side * 0.0067, 0, center]);
     smear.userData.threshold = threshold;
     smear.visible = false;
     bloodSmears.push(smear);
   });
-  return { root, parts: { leftHand }, muzzle, bloodSmears };
+}
+
+// ---------------------------------------------------------------- Blender models (R4)
+
+/** The Blender model of each gun kind; the revolver is not issued and keeps its flat model on every tier. */
+export const REAL_GUN: Readonly<Partial<Record<GunKind, string>>> = { r4c: 'r4c', rifle: 'mp5', shotgun: 'shotgun', sniper: 'sniper', pistol: 'pistol' };
+
+/**
+ * Camera-space hip pose of each Blender model, `[position, rotation]`, and
+ * where its eye sits along it at full aim (`RealLook.eye`). They have real
+ * proportions, a third as thick as the flat guns, so they sit a little closer
+ * and turn a touch towards the centre to fill the corner the way the flat
+ * ones do. The flat guns aim from a fixed distance behind the sight (the
+ * shotgun's bead 0.52 m out, the pistol's post 0.30 m, the scoped guns' optic
+ * 0.34-0.42 m); with real lengths that put the shotgun's receiver behind the
+ * eye, the pistol's hands over the screen, and the scoped guns' butt pads
+ * 10-30 cm in front of the eye, a black block square to it on every aim-in.
+ * So each eye sits where a shooter's does: a cheek weld on the long guns
+ * (the shotgun's front sight 0.72 m out; much further and the eye looks down
+ * the stock's comb), the stock behind and under the eye, the optic's
+ * eyepiece 7-9 cm ahead; the pistol held out in both hands, its post about
+ * 0.55 m out, where the hands leave the slide and frame in view. Visual
+ * only: aim direction, spread and recoil are unchanged.
+ */
+const REAL_REST: Readonly<Record<string, readonly [Triple, Triple, number | null]>> = {
+  r4c: [[0.15, -0.13, -0.29], [-0.06, 0.04, 0], -0.13],
+  mp5: [[0.15, -0.13, -0.31], [-0.06, 0.04, 0], -0.15],
+  shotgun: [[0.14, -0.12, -0.25], [-0.06, 0.04, 0], -0.17],
+  sniper: [[0.15, -0.13, -0.26], [-0.06, 0.04, 0], -0.23],
+  pistol: [[0.12, -0.095, -0.33], [-0.04, 0.05, 0], -0.43],
+  knife: [[0.20, -0.18, -0.28], [0.35, 0.10, -0.45], null],
+};
+
+/**
+ * How much further out a Blender model is drawn at full aim (in step with the
+ * aim), scaled about the eye: it looks exactly the same, but no part the eye
+ * sees is nearer than the camera's near plane (0.08 m). At a cheek weld the
+ * shotgun's stock runs 6-9 cm under the eye; the plane cut it open, showing
+ * a black block (the receiver's hidden back face, through the cut stock)
+ * under a flat shelf (the cut's edge) below the sights. Visual only: the
+ * muzzle and ejection effects leave from where the unscaled gun would put
+ * them (`ViewModel._socket`).
+ */
+export const REAL_AIM_DEPTH = 1.5;
+
+/** Moving parts of the Blender models, by the flat models' names for them. */
+const REAL_PARTS = [['mag', 'magazine'], ['bolt', 'bolt'], ['slide', 'slide'], ['foreEnd', 'fore-end'], ['trigger', 'trigger']] as const;
+
+/** A Blender model's instance under a `<name>-viewmodel` root, hidden until equipped, with its mixer and hip pose. */
+function realRoot(assets: WeaponAssets, model: string, name: string): { root: THREE.Group; node: THREE.Object3D; real: RealLook } | null {
+  const node = assets.instance(model);
+  if (!node) return null;
+  const root = group(null, `${name}-viewmodel`);
+  root.add(node);
+  root.visible = false;
+  const [restPos, restRot, eye] = REAL_REST[model] ?? [[0.2, -0.17, -0.36], [0, 0, 0], null];
+  return { root, node, real: { clips: assets.clips(model), mixer: new THREE.AnimationMixer(node), restPos: [...restPos], restRot: [...restRot], eye } };
+}
+
+function socket(node: THREE.Object3D, name: string, model: string): THREE.Object3D {
+  const found = node.getObjectByName(name);
+  if (!found) throw new Error(`weapons.glb: ${model} has no ${name}`);
+  return found;
+}
+
+/**
+ * The realistic tiers' model of a gun (R4): the Blender gun and gloved hands
+ * from `weapons.glb`, its optics hung on its `optic-mount`, the muzzle and
+ * ejection sockets where the model's barrel and port are, and the aim points
+ * of its sights. Null for a kind without one, or until the assets are in.
+ */
+export function makeRealGunModel(kind: GunKind, assets: WeaponAssets): GunModel | null {
+  const model = REAL_GUN[kind];
+  const made = model ? realRoot(assets, model, kind) : null;
+  if (!model || !made) return null;
+  const { root, node, real } = made;
+  const parts: Partial<ModelParts> = {};
+  for (const [key, name] of REAL_PARTS) {
+    const part = node.getObjectByName(name);
+    if (part) parts[key] = remember(part);
+  }
+  const leftHand = remember(socket(node, 'left-hand', model));
+  const muzzle = socket(node, 'muzzle', model), eject = socket(node, 'eject', model);
+  const mount = node.getObjectByName('optic-mount');
+  const sights: NonNullable<GunModel['sights']> = {};
+  for (const optic of mount ? (['acog', 'holo'] as const) : []) {
+    const scope = assets.instance(optic);
+    if (!scope) continue;
+    // The glb keeps the optics apart for their bake; on the gun each sits on the mount.
+    scope.position.set(0, 0, 0);
+    mount?.add(scope);
+    parts[optic] = scope;
+  }
+  if (parts.holo) parts.holo.visible = false;
+  root.updateMatrixWorld(true);
+  const aim = (point: THREE.Object3D | undefined) => point?.getWorldPosition(new THREE.Vector3());
+  sights.acog = aim(parts.acog?.getObjectByName('sight'));
+  sights.holo = aim(parts.holo?.getObjectByName('sight'));
+  sights[kind === 'sniper' ? 'sniper' : 'iron'] = aim(node.getObjectByName('sight'));
+  // The flash stars are sized in the flat model's units.
+  const flashMount = group(muzzle, 'flash-mount');
+  flashMount.scale.setScalar(LOW_SCALE);
+  return { root, parts: { ...parts, leftHand }, muzzle, eject, flash: flash(flashMount), bloodSmears: [], unit: LOW_SCALE, sights, real };
+}
+
+/** The realistic tiers' knife (R4): the Blender blade and gloved hands, and the flat knife's blood smears laid along the blade. */
+export function makeRealMeleeModel(assets: WeaponAssets): WeaponModel | null {
+  const made = realRoot(assets, 'knife', 'melee');
+  if (!made) return null;
+  const { root, node, real } = made;
+  const leftHand = remember(socket(node, 'left-hand', 'knife'));
+  const muzzle = socket(node, 'tip', 'knife');
+  const bloodSmears: THREE.Mesh[] = [];
+  // The smears are laid out in the flat knife's units; `smears` sits where its blade would.
+  const smears = group(socket(node, 'smears', 'knife'), 'blood');
+  smears.scale.setScalar(LOW_SCALE);
+  smearsOn(smears, bloodSmears);
+  return { root, parts: { leftHand }, muzzle, bloodSmears, unit: LOW_SCALE, real };
 }

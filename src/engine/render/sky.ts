@@ -67,10 +67,13 @@ export async function loadSky(key: string): Promise<SkySource> {
       return response.json() as Promise<unknown>;
     }).then(parseSkyData),
     new RGBELoader().setDataType(THREE.HalfFloatType).loadAsync(skyUrl(key, 'env.hdr')),
-    new THREE.TextureLoader().loadAsync(skyUrl(key, 'sky.webp')),
+    // An ImageBitmap, decoded (and flipped for three's equirect layout) off the main thread: an image
+    // element's upload converted its pixels on it, 19 ms in the frame the sky landed; this one takes 2-3.
+    new THREE.ImageBitmapLoader().setOptions({ imageOrientation: 'flipY', premultiplyAlpha: 'none' }).loadAsync(skyUrl(key, 'sky.webp'))
+      .then(bitmap => new THREE.Texture(bitmap)),
   ]);
-  // Decoded now, off the main thread, not by the upload in the frame the sky lands (12 ms).
-  await (background.image as HTMLImageElement).decode();
+  background.flipY = false;
+  background.needsUpdate = true;
   background.colorSpace = THREE.SRGBColorSpace;
   // Magnified everywhere on screen, and mipmaps would seam where the longitude wraps.
   background.generateMipmaps = false;
@@ -83,4 +86,5 @@ export function disposeSky(sky: SkyAssets | SkySource | null): void {
   if ('env' in sky) sky.env.dispose();
   else sky.hdr.dispose();
   sky.background.dispose();
+  (sky.background.image as Partial<ImageBitmap> | null)?.close?.();
 }

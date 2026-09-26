@@ -280,6 +280,24 @@ test('the shadow pass draws each run of visible groups once, skipping the hidden
   expect(casterGroups(groups, [hidden, hidden, hidden])).toEqual([]);
 });
 
+test('the drones cast no shadow on the realistic tiers, and do again on Low', () => {
+  const canvas = document.createElement('canvas');
+  document.body.append(canvas);
+  const renderer = new Renderer(canvas);
+  cleanup.push(() => { renderer.dispose(); canvas.remove(); });
+  const level = build('downtown');
+  const drones = level.surfaces.filter(s => s.moving), rest = level.surfaces.filter(s => !s.moving);
+  expect(drones.map(s => s.mesh)).toEqual(level.movers.map(m => m.mesh));
+  renderer.setSurfaces(level.surfaces);
+  const casting = (list: typeof drones) => list.map(s => s.mesh.castShadow);
+  const before = casting(rest);
+  for (const [preset, cast] of [['medium', false], ['low', true], ['ultra', false], ['low', true]] as const) {
+    renderer.applyQuality(PRESET_VALUES[preset]);
+    expect(casting(drones), preset).toEqual(drones.map(() => cast));
+    expect(casting(rest), preset).toEqual(before);
+  }
+});
+
 test('each tier streams its own size, and every file is where the URL says, within the per-map budget', async () => {
   expect(TEXTURE_SIZE[PRESET_VALUES.medium.textures]).toBe(512);
   expect(TEXTURE_SIZE[PRESET_VALUES.high.textures]).toBe(1024);
@@ -526,4 +544,6 @@ test('the renderer textures the level on realistic tiers, frees it all on Low, a
     expect(material.map).toBe(standInMaps(set, setInfo(set)).albedo);
   }
 
-}, 60_000);
+// About 33 s alone: the uploads are paced in wall-clock time, and the full suite's parallel files
+// slow each render, which took it past 60 s (at phase 4's commit too).
+}, 120_000);

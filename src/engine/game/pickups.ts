@@ -12,32 +12,40 @@ export interface PickupsApi {
   clear(): void;
 }
 
+/** A pickup's model: an ammo can, a med cross, or on Mexico a taco. */
+function pickupModel(kind: 'ammo' | 'health', levelKey: string): THREE.Group {
+  const mesh = new THREE.Group();
+  const add = (geometry: THREE.BufferGeometry, material: THREE.Material, x = 0, y = 0, z = 0): void => {
+    const part = new THREE.Mesh(geometry, material);
+    part.position.set(x, y, z); mesh.add(part);
+  };
+  if (kind === 'ammo') {
+    add(new THREE.CylinderGeometry(0.23, 0.23, 0.5, 8), surfMat('metal'));
+    add(new THREE.CylinderGeometry(0.17, 0.17, 0.07, 8), surfMat('dark'), 0, 0.285);
+    add(new THREE.BoxGeometry(0.24, 0.2, 0.03), unlitMat(TONE_HEX[TONE.PRIMARY]), 0, 0, 0.22);
+  } else if (levelKey === 'mexico') {
+    const shell = new THREE.CylinderGeometry(0.42, 0.42, 0.2, 8, 1, false, 0, Math.PI);
+    shell.rotateX(Math.PI / 2);
+    add(shell, surfMat('accent'));
+    add(new THREE.BoxGeometry(0.65, 0.12, 0.16), surfMat('foliage'), 0, 0.08);
+    add(new THREE.BoxGeometry(0.55, 0.08, 0.19), surfMat('hot'), 0, 0.13);
+  } else {
+    const mat = unlitMat(TONE_HEX[TONE.HEAL]);
+    add(new THREE.BoxGeometry(0.6, 0.2, 0.2), mat);
+    add(new THREE.BoxGeometry(0.2, 0.6, 0.2), mat);
+  }
+  return mesh;
+}
+
 export function createPickups(ctx: Ctx): PickupsApi {
   const items: Pickup[] = [];
   let nextId = 1, arenaClock = 0;
+  // A wave's first drops link no programs: every pickup's (the ammo can, the med cross, Mexico's taco) compile at the menu.
+  ctx.renderer.prewarm?.(new THREE.Group().add(pickupModel('ammo', 'downtown'), pickupModel('health', 'downtown'), pickupModel('health', 'mexico')));
   function spawn(kind: string, pos: THREE.Vector3, id?: number): Pickup | null {
     if (!['ammo', 'health'].includes(kind) || (id != null && items.some(p => p.id === id))) return null;
     const pickupKind = kind === 'health' ? 'health' : 'ammo';
-    const mesh = new THREE.Group();
-    const add = (geometry: THREE.BufferGeometry, material: THREE.Material, x = 0, y = 0, z = 0): void => {
-      const part = new THREE.Mesh(geometry, material);
-      part.position.set(x, y, z); mesh.add(part);
-    };
-    if (pickupKind === 'ammo') {
-      add(new THREE.CylinderGeometry(0.23, 0.23, 0.5, 8), surfMat('metal'));
-      add(new THREE.CylinderGeometry(0.17, 0.17, 0.07, 8), surfMat('dark'), 0, 0.285);
-      add(new THREE.BoxGeometry(0.24, 0.2, 0.03), unlitMat(TONE_HEX[TONE.PRIMARY]), 0, 0, 0.22);
-    } else if (ctx.level.key === 'mexico') {
-      const shell = new THREE.CylinderGeometry(0.42, 0.42, 0.2, 8, 1, false, 0, Math.PI);
-      shell.rotateX(Math.PI / 2);
-      add(shell, surfMat('accent'));
-      add(new THREE.BoxGeometry(0.65, 0.12, 0.16), surfMat('foliage'), 0, 0.08);
-      add(new THREE.BoxGeometry(0.55, 0.08, 0.19), surfMat('hot'), 0, 0.13);
-    } else {
-      const mat = unlitMat(TONE_HEX[TONE.HEAL]);
-      add(new THREE.BoxGeometry(0.6, 0.2, 0.2), mat);
-      add(new THREE.BoxGeometry(0.2, 0.6, 0.2), mat);
-    }
+    const mesh = pickupModel(pickupKind, ctx.level.key);
     mesh.position.copy(pos); mesh.position.y += 0.6;
     const p: Pickup = { id: id ?? nextId++, kind: pickupKind, mesh, baseY: mesh.position.y, phase: rand(0, 6), life: 45 };
     nextId = Math.max(nextId, p.id + 1);

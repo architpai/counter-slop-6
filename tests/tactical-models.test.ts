@@ -219,4 +219,5 @@ test('render the tactical cast and exercise each animation rig', async () => {
     renderer.dispose();
     canvas.remove();
   }
-}, 30_000);
+// About 10 s alone; the full parallel suite slows its renders about threefold.
+}, 60_000);

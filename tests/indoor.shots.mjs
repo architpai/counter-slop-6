@@ -69,10 +69,20 @@ try {
         for (let i = 0; i < 90; i++) g.player.update(1 / 60);
       }, { preset, map: view.map });
       await page.waitForFunction(() => {
-        const r = window.__game.ctx.renderer;
-        // The bake fades in over BAKE_FADE_MS once it is on the GPU; shoot the final look.
-        return !r.skyPending && !r.texturesPending && !r.bakePending && !r.bakeFading;
+        const g = window.__game, r = g.ctx.renderer, w = g.player.weapon;
+        // The bake fades in over BAKE_FADE_MS once it is on the GPU; shoot the final look, with the
+        // Blender gun on (R4) where the preset is realistic.
+        const worn = r.weapons.size === null || (r.weapons.ready && w._real !== null && w._model === w._real);
+        return !r.skyPending && !r.texturesPending && !r.bakePending && !r.bakeFading && (worn || !r.weaponsPending);
       }, null, { timeout: 30_000 });
+      // A realistic preset measures the Blender gun, never the flat one it falls back to if the weapons fail.
+      const gun = await page.evaluate(() => {
+        const g = window.__game, r = g.ctx.renderer, w = g.player.weapon;
+        return { realistic: g.quality.values.look === 'realistic', ready: r.weapons.ready, worn: w._real !== null && w._model === w._real };
+      });
+      if (gun.realistic && !(gun.ready && gun.worn)) {
+        throw new Error(`${preset} ${view.name}: the Blender weapons are not worn (weapons ${gun.ready ? 'ready' : 'not ready'}); a weapons load failure?`);
+      }
       const spots = await page.evaluate(({ eye, grunts }) => {
         const g = window.__game, V = g.player.body.pos.constructor;
         g.enemies.clear();

@@ -276,7 +276,8 @@ Three material families, all created and cached by `render/materials.js`. Nothin
 - Instanced pools (`effects`) use `InstancedMesh` + `setColorAt` for per-instance colour. Particles are always unlit; "outline" particles
   (smoke rings) simply use a pale grey (`#DDE4EC`) and keep their `grow` behaviour.
 - Everything is opaque. No `transparent: true` anywhere in the 3-D scene (the HUD does its own
-  compositing in DOM).
+  compositing in DOM), except the window of the Blender holographic sight on the realistic tiers
+  (`weaponMaterial('holo-glass')`, drawn last in the rig).
 - Two scenery materials sit outside the families, both made in `materials.ts`: the sky dome's
   `ShaderMaterial` (`skyMat`, §3.3) and the unfogged flat-shaded cloud Lambert (`cloudMat`).
 - **Realistic level materials** (`realMat`, Medium and up): a `MeshStandardMaterial` per (tag,
@@ -324,7 +325,18 @@ Three material families, all created and cached by `render/materials.js`. Nothin
   diffuse sky light from the bake instead of the probe (below); if the first realistic frame finds
   the geometry changed since the bake, they go back to the plain variant. Loose pieces (Mexico's props, the
   drones) keep the plain variant, lit by the probe grid. `gridLit(material)` puts the probe grid on
-  a moving thing's material: the GLB's (`tactical.ts`) and every `charMat` (view model, figures).
+  a moving thing's material: the GLB's (`tactical.ts`) and every `charMat` (view model, figures);
+  `gridLit(material, true)` (the Blender weapons) adds the `GRID_VIEW_MODEL` define, which keeps
+  60 % of the open sky's light as its floor (`probeGridViewFloor`) where characters keep 75 %, so
+  the gun darkens further indoors and the darkest room's gun still reads (luma ≥ 10).
+- **Realistic weapon materials** (R4, `weaponMaterial(name)`, owned and freed by
+  `render/weapons.ts`): one per glTF material name of `weapons.glb`. A texture set's name (`r4c`,
+  `hands`, ...) is a `gridLit` `MeshStandardMaterial` wearing that set's albedo, normal and ORM
+  (`wearMaps`) once they are in, and one-texel stand-ins until then (so its program never changes); an optic shell (`optic-acog-body`, `optic-acog-rim`,
+  `optic-holo-body`, `optic-holo-base`) wears the optics set tinted with its `OPTIC_COLOR`, so the
+  model and the aiming overlay match; `lens` is dark glass (`MeshPhysicalMaterial`) whose coating
+  tints its reflection green-gold, on domed lenses, `holo-glass` the see-through
+  window, `reticle` unlit in the reticle colour.
 - The post passes (§3.6) are `ShaderMaterial`s from `makePostMaterial`; SMAA comes from three's
   `SMAAPass` addon, which builds its own.
 
@@ -365,8 +377,13 @@ loaded one. The sky streams from the first realistic frame on the map and lands 
 the realistic look keeps the hemisphere light and the probe in the scene (the one not in use at
 0), so the light counts in every lit program stay the same; the environment keeps its cube size;
 one `PMREMGenerator` lives with the renderer on realistic tiers, compiled for the room environment
-and, when the sky is asked for, for the equirect step; and `sky.webp` is decoded before it lands.
-A sky that lands after the map or the look changed is freed without its PMREM being made.
+and, when the sky is asked for, for the equirect step; the dome's streamed-sky program (`SKY_MAP`)
+is compiled and drawn once at the menu on a 1 × 1 stand-in (`_skyProbe`, with the menu warm-up
+described under texture streaming below); and `sky.webp` arrives as an `ImageBitmap`, decoded and flipped off the main
+thread (its upload costs 3 ms; an image element's cost 19). A downloaded sky goes on a step a
+frame in the upload slots, never in a match's quiet start: the background's upload, then the
+PMREM environment (3–4 ms), then the look. A sky that lands after the map or the look changed is
+freed, with whatever of it was already made.
 
 - **Shadows** follow the quality setting (`render/quality.ts`, `SHADOW_SPEC`): off; Low's 2048² PCF
   box centred on the eye (half-width 35 m), redrawn every 2nd frame; Medium's one 2048² PCFSoft box
@@ -385,7 +402,10 @@ A sky that lands after the map or the look changed is freed without its PMREM be
   `shadowMap.autoUpdate` is off and `render` requests each redraw; the boxes only move on frames
   that redraw the maps. The depth range is fitted per level by
   `renderer.setLevelShadow(center, radius)` — `level` reports these in `level.shadow`.
-- `castShadow = true` on level geometry, characters, props, debris and the grapple hook.
+- `castShadow = true` on level geometry, characters, props, debris and the grapple hook. The
+  drones cast none on the realistic tiers (`LevelSurface.moving`): 30–40 m up, a drone's shadow in
+  the sharp cascades was a hard grey wedge on the ground by the player, the drone itself a speck
+  near the sun.
   `receiveShadow = true` on level geometry only. Particles, decals, tracers, view models and the
   weapon rig cast and receive nothing.
 - **Atmospheric perspective** (the spec's distance fade, §4) is a linear `THREE.Fog` whose range
@@ -417,7 +437,28 @@ A sky that lands after the map or the look changed is freed without its PMREM be
   2.9 s, was 6.2 s). The
   first compressed upload of a page costs ANGLE Metal about 220 ms whenever it comes, so the first
   realistic look uploads a 4 × 4 one (`warmCompressedUploads`), at the menu. On an M4 Pro no
-  streaming frame then passes 8 ms (it was up to 230 ms). Once every wanted set is on the GPU the
+  streaming frame then passes 8 ms (it was up to 230 ms). With vsync off (as
+  `tests/tiers.shots.mjs` runs) the page queued 54–73 frames ahead of the GPU and each upload
+  waited behind them (240–340 ms frames while a map streamed on Ultra); `render/pacing.ts` puts a
+  fence after every frame and, while something streams (`renderer.streaming`: the sky, the level's
+  bake or sets, the weapons), boot skips a frame while 6 are unfinished (`renderer.gpuBehind`), so
+  no upload waits behind more. A skipped frame costs a display interval (the browser sends the next
+  animation frame about 18 ms later), so with nothing to upload none is skipped. With vsync on the
+  browser keeps its own queue shorter (1 frame on the M4 Pro, up to 5 under SwiftShader), so
+  nothing is skipped.
+  A match's first 3 s (`MATCH_QUIET_MS`, from `renderer.setLive`, which boot calls every frame;
+  an online match stays live under its menu, since it plays on) take no upload, no sky step and no
+  program compile, so the first frames a player moves in are even; what streams on meanwhile
+  resumes after it. Nothing a match shows links a program in it:
+  once per look, while no match is live, the renderer compiles off the frame the programs of every
+  view model in the rig, of the prewarmed templates (the characters', the pickups') and, on the
+  realistic tiers, the dome's streamed sky, then draws the rig, the sky stand-in and a shadow
+  caster once into the frame's target (`_warmPrograms`, `_runCompiles`, `_drawWarmups`): on ANGLE
+  Metal a program's first draw can stall its frame even once it is compiled. The Blender weapons'
+  template joins that queue as soon as its glb lands (`render/weapons.ts`; its materials wear
+  one-texel stand-in maps, so the programs are final before the maps are in). It is the one
+  warm-up that also draws in a live match, past its quiet start, one a frame (the glb landed after
+  Start); the rig's and the shadow caster's wait for a menu. Once every wanted set is on the GPU the
   renderer puts them on all level materials at once (uniform changes only). A new map's request
   frees the previous map's sets it does not use at once (no level material wears them; any cached
   material that did goes back to its stand-in), so GPU memory across a map change never passes the
@@ -450,9 +491,10 @@ A sky that lands after the map or the look changed is freed without its PMREM be
   the face), so it reads as light sand about a stop under sunlit sand. Faces with no texels (never seen, or backdrop beyond the bounds or above 50 m) keep
   the probe. `probes.bin` is the map's probe grid: an ambient cube per 1.5–4 m cell and the cell's
   share of sun, one sRGB 3D texture sampled per fragment by everything `gridLit` (characters, view
-  model, figures, loose props): its light replaces the probe's, the environment's diffuse and
+  model on either look, figures, loose props): its light replaces the probe's, the environment's diffuse and
   reflections dim with it, a mesh that receives no shadows (the view model) loses the sun where the
-  cell cannot see it (down to 30 %), and characters keep at least 75 % of the open sky's ambient. The
+  cell cannot see it (down to 30 %), and characters keep at least 75 % of the open sky's ambient
+  (the Blender view model 60 %). The
   bake streams ahead of the level's texture sets in the same paced upload slots (it is on about
   0.6 s after a level starts) and fades in, eased, over 1.5 s; its KTX2 loader (a second
   transcoder) is made on the first download and kept while the look stays realistic, so a map
@@ -485,7 +527,13 @@ meshes have `renderOrder` 1000 and the first one drawn clears depth, so the gun 
 walls. While AO reads the depth buffer (§3.6) the world's depth must survive, so instead each rig
 mesh draws with `gl.depthRange(0, RIG_DEPTH)` (0.01; world depth only gets that low within 8 cm of
 the eye) and restores it after; the AO passes treat that slice as "not the world". Muzzle and ejection points read with `getWorldPosition` are already where the player sees
-them.
+them. On the realistic tiers the Blender view models (R4) sit at their own hip pose
+(`REAL_REST` in `weapons/models.ts`, visual only) and eye place at full aim, and read their muzzle, ejection port and sight
+from the model's sockets. At full aim a Blender gun is drawn `REAL_AIM_DEPTH` (1.5) times further
+out, scaled about the eye in step with the aim, so it looks the same but nothing the eye sees is
+nearer than the camera's 0.08 m near plane (`NEAR`; the shotgun's stock, 6–9 cm under a cheek
+weld, was cut open by it; `tests/weapon-assets.test.ts` checks that no triangle of a gun or hand
+crosses the plane in view from the hip to full aim); its effects leave from the unscaled sockets (`ViewModel._socket`).
 
 ### 3.5 Typography and HUD look
 
@@ -1343,8 +1391,9 @@ export interface BuildOpts { mat?: string; noCollide?: boolean; noNav?: boolean;
 ### 6.6 `render`
 
 **Files:** `src/render/index.js` (public), `palette.js`, `materials.js`, `prims.js`, `figure.js`,
-`postfx.js`, `quality.ts`, `shadows.ts` (cascades), `sky.ts` (sky streaming), `tactical.ts`
-**Imports:** `three`, `three/addons` (BufferGeometryUtils, RoomEnvironment, GLTFLoader, RGBELoader, SMAAPass), `util`
+`postfx.js`, `quality.ts`, `shadows.ts` (cascades), `sky.ts` (sky streaming), `tactical.ts`,
+`weapons.ts` (the realistic tiers' first-person weapons and arms, R4, and `weapon-assets.json`)
+**Imports:** `three`, `three/addons` (BufferGeometryUtils, RoomEnvironment, GLTFLoader, meshopt decoder, RGBELoader, SMAAPass), `util`
 **Responsibility:** the renderer, scene, camera, lights, shadows, the full-screen composite pass,
 the whole material/palette system, low-poly primitive factories, and the **shared humanoid /
 blob / flyer figure builder** used by both `enemies` and `players`.
@@ -1412,12 +1461,18 @@ export class Renderer {
   readonly three: THREE.WebGLRenderer;
   readonly scene: THREE.Scene;
   readonly camera: THREE.PerspectiveCamera;
-  readonly rig: THREE.Group;                  // child of camera; each weapon root has scale 0.46
+  readonly rig: THREE.Group;                  // child of camera; a flat weapon root has scale 0.46, a Blender one 1 (metres)
   readonly sun: THREE.DirectionalLight;
   resize(): void;                             // self-registered on window resize
   readonly cascades: THREE.DirectionalLight[]; // dark shadow-only lights for cascades 1+ (High, Ultra)
   readonly probe: THREE.LightProbe;           // realistic tiers: the sky's SH irradiance
   readonly skyPending: boolean;               // a realistic tier is still streaming the map's sky
+  readonly weapons: WeaponAssets;             // R4: streams weapons.glb and its maps on realistic tiers (downloads at once, uploads once the level's bake and texture sets are on); compiles and warms (one hidden draw of the live template) their programs as soon as the glb is in; the view models subscribe
+  readonly weaponsPending: boolean;           // a realistic tier is still streaming the weapons (or a new size of them)
+  readonly streaming: boolean;                // a realistic tier's sky, level bake or sets, or weapons are still to come in
+  readonly gpuBehind: boolean;                // streaming, with 6 frames unfinished on the GPU (vsync off): boot skips this one (render/pacing.ts)
+  setLive(live: boolean): void;               // boot, every frame: a match is being played (no menu over it, or online); its first 3 s stay quiet
+  prewarm(root: THREE.Object3D): void;        // compile a template's programs (the characters', a pickup's) for every look, at the menu
   applyQuality(values: GfxValues): void;      // live: look, pixel ratio, render scale, AA, AO, bloom, shadows, view distance
   setDynamicScale(scale: number): void;       // dynamic resolution: the drawn 0-1 share of each target
   setLevelShadow(center: THREE.Vector3, radius: number): void;
@@ -1440,8 +1495,8 @@ ragdoll, respawn replacement or disposal. Keep the placement and billboard rule 
 
 1. RE §2 renderer creation, pixel ratio, resize behaviour, the HUD layer sitting above the canvas.
 2. RE §3.1 camera parameters and rotation order.
-3. RE §3.6 the weapon rig: child of the camera, scaled in x and y only for the view-model FOV (§3.4); each weapon root has uniform scale 0.46,
-   applied exactly once. Only the equipped weapon is visible, drawn in front of the world, never shadowed.
+3. RE §3.6 the weapon rig: child of the camera, scaled in x and y only for the view-model FOV (§3.4); each flat weapon root has uniform scale 0.46,
+   applied exactly once (the Blender models of the realistic tiers are in metres, scale 1). Only the equipped weapon is visible, drawn in front of the world, never shadowed.
 4. RE §4 → **replaced by** this file §3.3 (sun + hemisphere + quality-dependent PCF shadows + fog).
 5. RE §5 → **replaced by** this file §3.1–3.2 (three material families, per-instance colour,
    `setFlash` swap), but keep RE §5.4's flash *timings* and triggers.
@@ -1923,6 +1978,36 @@ export class Katana implements Weapon {
 
 export function makeLoadout(ctx: Ctx, player: Player): Weapon[];  // [rifle, shotgun, sniper, katana]
 ```
+
+**Two looks of every view model (R4).** Each weapon keeps its flat model (`makeGunModel`,
+`makeMeleeModel`: the code-built guns and hands, Low's look, built in their own units at scale
+0.46) for its whole life. On the realistic tiers, once `renderer.weapons` has `weapons.glb` and its
+maps in, every view model (`ViewModel._syncLook`, on the assets' subscription) builds its Blender
+model (`makeRealGunModel`, `makeRealMeleeModel`: an instance of the glb's model, its optics on the
+`optic-mount`, the knife's blood smears laid along its blade) and swaps to it; when the assets go
+(Low) it swaps back and drops it. `root` is the model in use, so the swap changes what draws the
+weapon and nothing of its state; the springs, sway, aim and visibility carry over, the root moved
+from the old model's hip and aim poses to the new one's, so even a paused game shows it posed. A
+Blender model brings:
+- its hip pose (`RealLook.restPos`/`restRot`) and its aim point per optic (`GunModel.sights`: the
+  sight socket that full aim puts on the camera axis, with the eye at the model's own place along
+  the gun, `RealLook.eye`, whatever the optic: a cheek weld on the long guns, the butt behind the
+  eye (the shotgun's front sight 0.72 m out, an optic's eyepiece 6-9 cm), the pistol's post
+  0.55 m out; the flat models keep `GunStats.sight` and `eyeDistance`);
+- `unit` 0.46 instead of 1, which scales the procedural part offsets (slide recoil, the flat
+  reload's magazine drop), because its parts are in metres;
+- muzzle and ejection sockets where its barrel and port are (the flash stars hang there at the
+  flat model's scale);
+- a trigger (`ModelParts.trigger`) that turns back while fire is held;
+- keyframed clips (`reload`, `reload-empty`, `equip`, `cycle`, `shell`, `slash`, `slash-back`,
+  `guard`) and an `AnimationMixer`. `_want(clip, t)` asks for one at the progress of the game's
+  own timer (the reload's, the pump or bolt cycle's, the draw's, the knife's guard blend), and
+  `_applyClip` holds it there after the
+  procedural pose, so a clip always spans exactly the gameplay duration in `stats.ts`. Clips move
+  the model's `pivot` and parts; the root keeps the sway, bob, recoil springs and rack kick.
+  Where a model has no clip for an action, the procedural motion runs as on the flat look.
+  Stopping a clip (the action ends, is interrupted, or the gun is holstered) puts its nodes back
+  at rest. Gameplay (timings, ammo, rays, damage) is identical on both looks.
 
 **Events emitted:** `ctx.game.onShot(end)` for every ray; `ctx.game.hitPlayer`,
 `ctx.game.breakHit`, `ctx.game.cutRopes`, `ctx.game.breakablesInArc`; `ctx.enemies.damage`;

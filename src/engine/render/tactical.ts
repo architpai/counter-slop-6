@@ -45,9 +45,11 @@ export function loadTacticalModels(): Promise<void> {
     }
     // One GPU buffer set per part, shared by every instance: disposers skip it.
     // Their ambient light comes from the map's probe grid on the realistic tiers (render/materials.ts `gridLit`).
+    // Shadowed like the instances (`tacticalPart`), so the template compiles their programs (`tacticalTemplate`).
     gltf.scene.traverse(object => {
       if (!(object instanceof Mesh)) return;
       object.geometry.userData.shared = true;
+      object.castShadow = object.receiveShadow = true;
       for (const material of Array.isArray(object.material) ? object.material : [object.material]) gridLit(material);
     });
     source = gltf.scene;
@@ -55,6 +57,11 @@ export function loadTacticalModels(): Promise<void> {
     loading = null;
     throw error;
   });
+}
+
+/** Every part's template, for the renderer to compile the characters' programs ahead of a match (`Renderer.prewarm`); null until loaded. Never drawn. */
+export function tacticalTemplate(): Object3D | null {
+  return source;
 }
 
 /** Rigid garment sections fit the existing animated pivots. Geometry and materials stay

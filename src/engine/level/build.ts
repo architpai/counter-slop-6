@@ -132,7 +132,7 @@ export class LevelBuilder {
     if (opts.rotation) object.rotation.copy(opts.rotation);
     if (opts.separate) {
       object.geometry = surfaceGeometry(geometry, material);
-      this.level.surfaces.push({ mesh: object, surf: key, materials: [opts.flatOnly ? null : material], static: !opts.moving });
+      this.level.surfaces.push({ mesh: object, surf: key, materials: [opts.flatOnly ? null : material], static: !opts.moving, moving: opts.moving });
       return this.addObject(object);
     }
     object.updateMatrix();

@@ -1,0 +1,267 @@
+{
+ "version": 1,
+ "glb": 1158788,
+ "sets": {
+  "hands": {
+   "maxSize": 2048,
+   "bytes": {
+    "512": [
+     36772,
+     57759,
+     46225
+    ],
+    "1024": [
+     94594,
+     176645,
+     134197
+    ],
+    "2048": [
+     226680,
+     652728,
+     419692
+    ]
+   }
+  },
+  "optics": {
+   "maxSize": 1024,
+   "bytes": {
+    "512": [
+     53827,
+     30606,
+     59418
+    ],
+    "1024": [
+     132523,
+     84648,
+     160723
+    ]
+   }
+  },
+  "r4c": {
+   "maxSize": 2048,
+   "bytes": {
+    "512": [
+     62273,
+     65057,
+     61385
+    ],
+    "1024": [
+     157966,
+     189046,
+     167144
+    ],
+    "2048": [
+     436439,
+     518387,
+     508737
+    ]
+   }
+  },
+  "mp5": {
+   "maxSize": 2048,
+   "bytes": {
+    "512": [
+     61656,
+     67029,
+     63258
+    ],
+    "1024": [
+     155050,
+     188866,
+     175261
+    ],
+    "2048": [
+     423605,
+     514921,
+     530106
+    ]
+   }
+  },
+  "shotgun": {
+   "maxSize": 2048,
+   "bytes": {
+    "512": [
+     57707,
+     58892,
+     61114
+    ],
+    "1024": [
+     145033,
+     172700,
+     164762
+    ],
+    "2048": [
+     382202,
+     481109,
+     487683
+    ]
+   }
+  },
+  "sniper": {
+   "maxSize": 2048,
+   "bytes": {
+    "512": [
+     66366,
+     55846,
+     63769
+    ],
+    "1024": [
+     172915,
+     160371,
+     172182
+    ],
+    "2048": [
+     485684,
+     422168,
+     517884
+    ]
+   }
+  },
+  "pistol": {
+   "maxSize": 1024,
+   "bytes": {
+    "512": [
+     40149,
+     45081,
+     47586
+    ],
+    "1024": [
+     106379,
+     135107,
+     125404
+    ]
+   }
+  },
+  "knife": {
+   "maxSize": 1024,
+   "bytes": {
+    "512": [
+     40967,
+     51379,
+     51777
+    ],
+    "1024": [
+     105039,
+     151174,
+     137909
+    ]
+   }
+  }
+ },
+ "models": {
+  "acog": {
+   "set": "optics",
+   "triangles": {
+    "acog-tube": 1834,
+    "acog-ocular": 392,
+    "acog-ocular-rim": 504,
+    "acog-objective": 672,
+    "acog-lens": 896,
+    "acog-fibre": 12
+   },
+   "total": 4310
+  },
+  "holo": {
+   "set": "optics",
+   "triangles": {
+    "holo-base": 2164,
+    "holo-frame-top": 432,
+    "holo-glass": 12,
+    "holo-dot": 304
+   },
+   "total": 2912
+  },
+  "r4c": {
+   "set": "r4c",
+   "triangles": {
+    "magazine": 1140,
+    "charging-handle": 376,
+    "trigger": 296,
+    "right-hand": 4492,
+    "left-hand": 4492,
+    "body": 9430
+   },
+   "total": 20226
+  },
+  "mp5": {
+   "set": "mp5",
+   "triangles": {
+    "magazine": 1392,
+    "cocking-handle": 412,
+    "trigger": 296,
+    "right-hand": 4492,
+    "left-hand": 4492,
+    "body": 8464
+   },
+   "total": 19548
+  },
+  "shotgun": {
+   "set": "shotgun",
+   "triangles": {
+    "fibre": 60,
+    "fore-end": 4632,
+    "trigger": 296,
+    "right-hand": 4492,
+    "left-hand": 4492,
+    "shell": 280,
+    "body": 8148
+   },
+   "total": 22400
+  },
+  "sniper": {
+   "set": "sniper",
+   "triangles": {
+    "lens": 896,
+    "bolt": 464,
+    "magazine": 376,
+    "trigger": 80,
+    "right-hand": 4492,
+    "left-hand": 4492,
+    "body": 10792
+   },
+   "total": 21592
+  },
+  "pistol": {
+   "set": "pistol",
+   "triangles": {
+    "slide": 3568,
+    "magazine": 192,
+    "trigger": 296,
+    "right-hand": 4492,
+    "left-hand": 4492,
+    "body": 2452
+   },
+   "total": 15492
+  },
+  "knife": {
+   "set": "knife",
+   "triangles": {
+    "right-hand": 4492,
+    "left-hand": 4492,
+    "body": 3962
+   },
+   "total": 12946
+  }
+ },
+ "clips": {
+  "r4c.reload": 2.2,
+  "r4c.reload-empty": 2.2,
+  "r4c.equip": 0.42,
+  "mp5.reload": 1.65,
+  "mp5.reload-empty": 1.65,
+  "mp5.equip": 0.22,
+  "shotgun.cycle": 0.45,
+  "shotgun.shell": 0.45,
+  "shotgun.equip": 0.45,
+  "sniper.cycle": 0.85,
+  "sniper.reload": 2.1,
+  "sniper.reload-empty": 2.1,
+  "sniper.equip": 0.6,
+  "pistol.reload": 1,
+  "pistol.reload-empty": 1,
+  "pistol.equip": 0.2,
+  "knife.slash": 0.27,
+  "knife.slash-back": 0.27,
+  "knife.guard": 0.1
+ }
+}

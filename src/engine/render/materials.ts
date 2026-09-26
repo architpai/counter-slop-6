@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { SURF, TONE, TONE_HEX, TOON_STEPS } from './palette';
+import { OPTIC_COLOR, SURF, TONE, TONE_HEX, TOON_STEPS } from './palette';
 import type { SurfKey } from './palette';
 import type { MaterialTag, RealMaterial, SetInfo, TextureSet } from './surfaces';
 import type { SetMaps } from './textures';
@@ -163,7 +163,9 @@ export const BAKE_UNIFORMS = {
  * `probeGridFloor` keeps at least that share of the open sky's light on them,
  * so an enemy in the darkest room still reads (VISUALS.md, readability), and
  * `probeGridSunFloor` that share of the sun on the view model indoors, so the
- * gun stays a gun and not a silhouette.
+ * gun stays a gun and not a silhouette. The Blender view model (V18) keeps
+ * only `probeGridViewFloor` of the open sky's light, so it darkens further
+ * indoors while the darkest room's gun stays readable.
  */
 export const GRID_UNIFORMS = {
   probeGrid: { value: null as THREE.Data3DTexture | null },
@@ -174,6 +176,7 @@ export const GRID_UNIFORMS = {
   probeGridScale: { value: 1 },
   probeGridFloor: { value: 0.75 },
   probeGridSunFloor: { value: 0.3 },
+  probeGridViewFloor: { value: 0.6 },
 };
 
 let standInLight: THREE.DataTexture | undefined;
@@ -201,7 +204,7 @@ GRID_UNIFORMS.probeGrid.value = standInGrid();
 const GRID_GLSL = `
 uniform sampler3D probeGrid;
 uniform vec3 probeGridMin, probeGridCells;
-uniform float probeGridCell, probeGridScale, probeGridMix, probeGridFloor, probeGridSunFloor;
+uniform float probeGridCell, probeGridScale, probeGridMix, probeGridFloor, probeGridSunFloor, probeGridViewFloor;
 varying vec3 vGridPos;
 vec4 gridFace( vec3 f, float face ) {
 	return texture( probeGrid, vec3( f.x / probeGridCells.x, f.z / probeGridCells.z, ( face * probeGridCells.y + f.y ) / ( 6.0 * probeGridCells.y ) ) );
@@ -233,7 +236,11 @@ if ( probeGridMix > 0.0 ) {
 		reflectedLight.directSpecular *= gridSun;
 	}
 	float open = max( dot( irradiance, ${LUMA_GLSL} ), 1e-4 );
+	#ifdef GRID_VIEW_MODEL
+	gridLight = max( gridLight, irradiance * probeGridViewFloor );
+	#else
 	gridLight = max( gridLight, irradiance * probeGridFloor );
+	#endif
 	float gridShade = mix( 1.0, clamp( dot( gridLight, ${LUMA_GLSL} ) / open, 0.0, 1.0 ), probeGridMix );
 	irradiance = mix( irradiance, gridLight, probeGridMix );
 	#if defined( STANDARD )
@@ -260,10 +267,12 @@ const gridKey = (): string => 'probe-grid';
  * Light a moving thing's material from the probe grid (R3): characters (the
  * GLB's materials), the view model and figures (\`charMat\`). One patch for
  * every look: on Low \`probeGridMix\` is 0 and the shader takes its old path.
+ * \`viewModel\` (the Blender weapons, R4) takes the view model's lower floor.
  */
-export function gridLit<T extends THREE.Material>(material: T): T {
+export function gridLit<T extends THREE.Material>(material: T, viewModel = false): T {
   if (gridded.has(material)) return material;
   gridded.add(material);
+  if (viewModel) material.defines = { ...material.defines, GRID_VIEW_MODEL: '' };
   material.onBeforeCompile = withGrid;
   material.customProgramCacheKey = gridKey;
   return material;
@@ -448,6 +457,52 @@ export function realMat(real: RealMaterial, info: SetInfo, baked = false): THREE
     reals.set(key, material);
   }
   return material;
+}
+
+/**
+ * The Blender weapons' glass, holographic window and reticle (R4). Lenses are
+ * dark glass whose coating tints what they mirror green-gold (the domed
+ * lenses catch the sky across them); the holo's window lets most light
+ * through; reticles are unlit, like the flat look's.
+ */
+const WEAPON_GLASS = { color: 0x05080a, roughness: 0.04, metalness: 0, ior: 1.75, specularIntensity: 1, specularColor: 0xb8e0a0, envMapIntensity: 2.2 };
+const HOLO_GLASS = { color: 0x9fbac4, roughness: 0.04, metalness: 0, transparent: true, opacity: 0.16, depthWrite: false };
+const OPTIC_TINT: Readonly<Record<string, string>> = {
+  'optic-acog-body': OPTIC_COLOR.acogBody, 'optic-acog-rim': OPTIC_COLOR.acogRim,
+  'optic-holo-body': OPTIC_COLOR.holoBody, 'optic-holo-base': OPTIC_COLOR.holoBase,
+};
+
+let weaponStandIn: SetMaps | undefined;
+/**
+ * The maps a weapon material wears until its set's are in: one texel each.
+ * With every map already present, the programs are final from the start, so
+ * they compile and draw once while the glb alone is in (render/weapons.ts)
+ * and the streamed maps then swap in without a compile. Never seen: the view
+ * models wait for the real maps.
+ */
+function weaponStandIns(): SetMaps {
+  flatNormal ??= pixel(0.5, 0.5, 1, THREE.NoColorSpace);
+  return weaponStandIn ??= { albedo: pixel(0.5, 0.5, 0.5, THREE.SRGBColorSpace), normal: flatNormal, orm: pixel(1, 0.6, 0, THREE.NoColorSpace) };
+}
+
+/**
+ * A material for one glTF material name of `weapons.glb` (R4; render/weapons.ts
+ * owns and frees it). A texture set's name, or an optic shell (`optic-acog-body`,
+ * `optic-acog-rim`, `optic-holo-body`, `optic-holo-base`: the optics set tinted
+ * with its `OPTIC_COLOR`, so the model matches the aiming overlay), is PBR
+ * lit by the probe grid, and wears stand-in maps (`weaponStandIns`) until its
+ * set's are in (`wearMaps`). `lens`, `holo-glass` and `reticle` need no maps.
+ * `set` is the texture set it wears, null for none.
+ */
+export function weaponMaterial(name: string): { material: THREE.Material; set: string | null } {
+  if (name === 'lens') return { material: gridLit(new THREE.MeshPhysicalMaterial(WEAPON_GLASS), true), set: null };
+  if (name === 'holo-glass') return { material: new THREE.MeshStandardMaterial(HOLO_GLASS), set: null };
+  if (name === 'reticle') return { material: new THREE.MeshBasicMaterial({ color: OPTIC_COLOR.reticle }), set: null };
+  const tint = OPTIC_TINT[name];
+  const material = gridLit(new THREE.MeshStandardMaterial({ color: tint ?? 0xffffff, roughness: 1, metalness: 1 }), true);
+  material.name = name;
+  wearMaps(material, weaponStandIns());
+  return { material, set: tint !== undefined ? 'optics' : name };
 }
 
 let levelDepth: THREE.MeshDepthMaterial | undefined;

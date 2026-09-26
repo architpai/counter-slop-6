@@ -305,6 +305,8 @@ export interface LevelSurface {
    * movers and breakable props do not, and take the probe grid like characters.
    */
   static: boolean;
+  /** A piece the level moves (the drones, `BuildOpts.moving`): it casts no shadow on the realistic tiers. */
+  moving?: boolean;
 }
 
 export interface Level {

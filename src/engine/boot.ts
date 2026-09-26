@@ -8,6 +8,7 @@ import { Net } from './net';
 import { Input } from './input';
 import { Effects } from './effects';
 import { buildLevel, disposeLevel, validKey } from './level/index';
+import { tacticalTemplate } from './render/tactical';
 import { EnemyManager } from './enemies/index';
 import { Player } from './player/index';
 import { makeGameState } from './game/state';
@@ -285,6 +286,9 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
   // ---- actors 10
   const enemies = ctx.enemies = new EnemyManager(ctx);
   const player = ctx.player = new Player(ctx);
+  // The characters' programs compile at the menu, not with a wave's first spawns.
+  const characters = tacticalTemplate();
+  if (characters) renderer.prewarm(characters);
   input.touch.getGrappleMode = () => player.grapple.mode;
   let touchInterrupted = false;
   const portrait = () => window.innerHeight > window.innerWidth;
@@ -557,6 +561,8 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
 
     fx.hurt = player.hurtFx; fx.flash = player.flashFx; fx.slow = scale < 1 ? 1 : 0;
     fx.lowHp = player.alive && player.hp < 30 ? 1 - player.hp / 30 : 0;
+    // An online match plays on under its menu (`app.pause`): still live for the renderer.
+    renderer.setLive(game.playing() && (!gs.menu || gs.mode === 'ffa'));
     renderer.render(gs.time, fx);
   }
 
@@ -595,7 +601,8 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
   function frame(nowMs: number): void {
     if (disposed) return;
     rafId = requestAnimationFrame(frame);
-    if (!limiter.ready(nowMs)) return;
+    // Streaming with the GPU `MAX_FRAMES_IN_FLIGHT` frames behind: queueing more only makes every upload wait longer (render/pacing.ts).
+    if (renderer.gpuBehind || !limiter.ready(nowMs)) return;
     if (lastFrame > 0) measure(nowMs - lastFrame);
     lastFrame = nowMs;
     step(nowMs);

@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import * as THREE from 'three';
 import { Renderer } from '@/engine/render/index';
+import { MATCH_QUIET_MS } from '@/engine/render/pacing';
 import { Composite, RIG_DEPTH } from '@/engine/render/postfx';
 import { PRESETS, PRESET_VALUES } from '@/engine/render/quality';
 import { aimShadowBox, cascadeCentre, sizeShadowBox } from '@/engine/render/shadows';
@@ -185,18 +186,27 @@ test('a reduced dynamic scale shows only this frame: nothing beyond the drawn co
   expect(gl.getError()).toBe(gl.NO_ERROR);
 });
 
-test('the rig draws into its own depth slice while AO reads depth, and nothing else does', () => {
+test('the rig draws into its own depth slice while AO reads depth, and nothing else does', async () => {
   const renderer = makeRenderer();
   const gl = renderer.three.getContext(), range = vi.spyOn(gl, 'depthRange');
   const gun = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.4), new THREE.MeshBasicMaterial());
   gun.position.set(0.2, -0.2, -0.5);
   renderer.rig.add(gun);
   renderer.prepareRig(gun);
+  // Each look's first frames also compile and draw the view models once (`_warmPrograms`): a frame after those.
+  const settled = async (): Promise<void> => {
+    for (let i = 0; i < 100 && (i < 2 || renderer._compiles.length + renderer._warmups.length > 0); i++) {
+      renderer.render(0, fx);
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    range.mockClear();
+    renderer.render(0, fx);
+  };
   renderer.applyQuality(PRESET_VALUES.low);
-  renderer.render(0, fx);
+  await settled();
   expect(range).not.toHaveBeenCalled();
   renderer.applyQuality(PRESET_VALUES.high);
-  renderer.render(0, fx);
+  await settled();
   expect(range.mock.calls).toEqual([[0, RIG_DEPTH], [0, 1]]);
 });
 
@@ -245,6 +255,16 @@ function fakeSky(key: string): { sky: SkySource; freed: () => boolean } {
 }
 
 const settle = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 0));
+/** Render until a landed sky is on: it goes on a step a frame, in the upload slots (`_landSky`). */
+async function land(renderer: Renderer): Promise<number> {
+  let frames = 0;
+  for (const start = performance.now(); renderer._skyLanding && performance.now() - start < 5000; frames++) {
+    renderer.render(0, fx);
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+  expect(renderer._skyLanding).toBeNull();
+  return frames;
+}
 const moods: Record<'downtown' | 'house' | 'mexico', Mood> = {
   downtown: { sky: 'downtown', fog: 0xc8d6df, hemiIntensity: 0.95, sunDir: [-90, 115, -160], realistic: { exposure: -0.3 } },
   house: { sky: 'house', fog: 0xe6cdb6, hemiIntensity: 1.05, sunDir: [150, 153, 160] },
@@ -276,14 +296,18 @@ test('a streamed sky swaps in with uniform writes only, and Low puts the mood ba
 
   const source = await actual.loadSky('downtown');
   const hdrFreed = vi.spyOn(source.hdr, 'dispose');
+  const uploads = vi.spyOn(renderer.three, 'initTexture');
   held.shift()!.resolve(source);
   await settle();
+  // Its background's upload, its environment and its look each take a frame of their own.
+  expect(await land(renderer)).toBeGreaterThanOrEqual(3);
+  expect(uploads).toHaveBeenCalledWith(source.background);
   const sky = renderer._skyAssets!;
   expect([sky.key, sky.data, sky.background]).toEqual(['downtown', source.data, source.background]);
   expect(sky.env.texture.mapping).toBe(THREE.CubeUVReflectionMapping);
   expect(hdrFreed).toHaveBeenCalled();
-  // The sky's lights replace the mood's: same light set, and the PMREM shaders were compiled
-  // with the request, so only the dome's sky-image variant is new.
+  // The sky's lights replace the mood's: same light set, the PMREM shaders were compiled with the
+  // request, and the dome's sky-image variant at the menu (`_skyProbe`), so no program is new.
   expect([renderer.hemi.visible, renderer.hemi.intensity]).toEqual([true, 0]);
   expect(renderer.sun.intensity).toBeCloseTo(Math.max(...sky.data.sun), 5);
   expect(renderer.probe.sh.coefficients[0]!.lengthSq()).toBeGreaterThan(0);
@@ -299,7 +323,7 @@ test('a streamed sky swaps in with uniform writes only, and Low puts the mood ba
   // Cool morning haze: the mood's hue survives.
   expect(fog.b).toBeGreaterThan(fog.r);
   renderer.render(0, fx);
-  expect(renderer.three.info.programs!.filter(program => !programs.has(program))).toHaveLength(1);
+  expect(renderer.three.info.programs!.filter(program => !programs.has(program))).toHaveLength(0);
 
   // Low frees the sky and the PMREM generator, and restores the mood's light, fog and environment, at exposure 1.
   renderer.applyQuality(PRESET_VALUES.low);
@@ -320,7 +344,10 @@ test('a sky that lands after the map, the look or the renderer changed is freed'
   const held = holdSkies();
   const renderer = makeRenderer();
   // What `render` does first each frame, without drawing (and compiling) anything.
-  const frame = (): void => { if (renderer._skyLoading === null && renderer.skyPending) renderer._requestSky(); };
+  const frame = (): void => {
+    renderer._landSky();
+    if (renderer._skyLoading === null && renderer.skyPending) renderer._requestSky();
+  };
   renderer.applyQuality(PRESET_VALUES.medium);
   renderer.setMood(moods.house);
   frame();
@@ -331,6 +358,7 @@ test('a sky that lands after the map, the look or the renderer changed is freed'
   const house = fakeSky('house');
   held.shift()!.resolve(house.sky);
   await settle();
+  frame();
   // Dropped, and the current map's sky requested in its place.
   expect(house.freed()).toBe(true);
   expect(renderer._skyAssets).toBeNull();
@@ -340,6 +368,7 @@ test('a sky that lands after the map, the look or the renderer changed is freed'
   const mexico = fakeSky('mexico');
   held.shift()!.resolve(mexico.sky);
   await settle();
+  frame();
   expect(mexico.freed()).toBe(true);
   expect(renderer._skyAssets).toBeNull();
   frame();
@@ -354,6 +383,51 @@ test('a sky that lands after the map, the look or the renderer changed is freed'
   await settle();
   expect(late.freed()).toBe(true);
   expect(renderer._skyAssets).toBeNull();
+});
+
+test('a sky that lands in a match waits out its quiet start, then goes on a step a frame', async () => {
+  const held = holdSkies();
+  const renderer = makeRenderer();
+  renderer.applyQuality(PRESET_VALUES.medium);
+  renderer.setMood(moods.house);
+  renderer.render(0, fx);
+  renderer.setLive(true);
+  const house = fakeSky('house');
+  held.shift()!.resolve(house.sky);
+  await settle();
+  const uploads = vi.spyOn(renderer.three, 'initTexture');
+  for (let i = 0; i < 5; i++) {
+    renderer._uploadAt = 0;
+    renderer.render(0, fx);
+  }
+  expect(renderer._skyLanding?.uploaded).toBe(false);
+  expect(uploads).not.toHaveBeenCalledWith(house.sky.background);
+  // Past the quiet start: the background, then the environment, then the look, one frame each.
+  renderer._match.set(false, 0);
+  renderer._match.set(true, performance.now() - MATCH_QUIET_MS);
+  const steps: string[] = [];
+  for (let i = 0; i < 3; i++) {
+    renderer._uploadAt = 0;
+    renderer.render(0, fx);
+    const landing = renderer._skyLanding;
+    steps.push(landing === null ? 'on' : landing.env ? 'environment' : landing.uploaded ? 'background' : 'waiting');
+  }
+  expect(steps).toEqual(['background', 'environment', 'on']);
+  expect(renderer._skyAssets?.key).toBe('house');
+  // A switch to Low halfway through frees what was made so far.
+  renderer.setMood(moods.mexico);
+  renderer.render(0, fx);
+  const mexico = fakeSky('mexico');
+  held.shift()!.resolve(mexico.sky);
+  await settle();
+  renderer._uploadAt = 0;
+  renderer.render(0, fx);
+  renderer._uploadAt = 0;
+  renderer.render(0, fx);
+  const env = renderer._skyLanding!.env!;
+  const envFreed = vi.spyOn(env, 'dispose');
+  renderer.applyQuality(PRESET_VALUES.low);
+  expect([mexico.freed(), envFreed.mock.calls.length > 0, renderer._skyLanding]).toEqual([true, true, null]);
 });
 
 test('opaque lit materials write the share of their light that AO may darken into alpha', () => {

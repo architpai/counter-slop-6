@@ -11,3 +11,5 @@ CLAUDE.md
 tools/textures/.build/
 tools/blender/materials/__pycache__/
 tools/lightmaps/.build/
+tools/weapons/.build/
+tools/blender/weapons/__pycache__/
