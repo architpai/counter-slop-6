@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { TONE, TONE_HEX, toneMat, unlitMat, charMat, boxGeo, cylGeo, sphereGeo, torusGeo, starGeo } from '../render/index';
+import { TONE, toneMat, unlitMat, charMat, boxGeo, cylGeo, sphereGeo, torusGeo, starGeo } from '../render/index';
+import { cells, flashMaterial, lowFlashMaterial, FX_MANIFEST } from '../render/fx';
 import type { GunKind, ScopeKind, Triple } from './stats';
 import { tacticalPart } from '../render/tactical';
 import { OPTIC_COLOR } from '../render/palette';
@@ -71,6 +72,10 @@ export interface WeaponModel {
 export interface GunModel extends WeaponModel {
   eject: THREE.Object3D;
   flash: THREE.Group;
+  /** The flash's bright core, shown on a shot's first frame only (V5). */
+  flashCore: THREE.Object3D;
+  /** A Blender gun's flash picks one of the atlas's flashes for each shot (R5); the flat stars have one look. */
+  pickFlash: (() => void) | null;
   /** Blender models: the aim point in root space per optic, `iron` for open sights. The flat models aim from `GunStats.sight`. */
   sights?: Partial<Record<ScopeKind | 'iron', THREE.Vector3>>;
 }
@@ -132,14 +137,66 @@ function twoSided(geometry: THREE.BufferGeometry): THREE.BufferGeometry {
   return geo;
 }
 
-function flash(parent: THREE.Object3D) {
+/** The flat guns' flash (V5): three additive stars, and a small hot core beside them for a shot's first frame. */
+function flash(parent: THREE.Object3D): { flash: THREE.Group; flashCore: THREE.Object3D; pickFlash: null } {
   const node = group(parent, 'muzzle-flash');
-  const material = unlitMat(TONE_HEX[TONE.ACCENT]);
+  const material = lowFlashMaterial();
   mesh(node, 'flash-star-front', twoSided(starGeo(7, 0.16, 0.06)), material);
   mesh(node, 'flash-star-side', twoSided(starGeo(5, 0.11, 0.04)), material, [0, 0, 0], [0, Math.PI / 2, 0]);
   mesh(node, 'flash-star-top', twoSided(starGeo(5, 0.10, 0.04)), material, [0, 0, 0], [Math.PI / 2, 0, 0]);
   node.visible = false;
-  return node;
+  node.userData.scale = null;
+  const core = mesh(parent, 'muzzle-flash-core', twoSided(starGeo(8, 0.07, 0.045)), material);
+  core.visible = false;
+  return { flash: node, flashCore: core, pickFlash: null };
+}
+
+/** A quad's UVs set to atlas cell `cell` of the fire atlas. */
+function toCell(geometry: THREE.BufferGeometry, cell: number): void {
+  const { cols, rows } = FX_MANIFEST.fire;
+  const uv = geometry.getAttribute('uv') as THREE.BufferAttribute, base = geometry.userData.uv as Float32Array;
+  const u0 = (cell % cols) / cols, v0 = Math.floor(cell / cols) / rows;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, u0 + base[2 * i]! / cols, v0 + base[2 * i + 1]! / rows);
+  uv.needsUpdate = true;
+}
+
+/** A plane `w` x `h` whose UVs can move to any cell of the fire atlas (`toCell`). */
+function cellPlane(w: number, h: number): THREE.PlaneGeometry {
+  const geometry = new THREE.PlaneGeometry(w, h);
+  geometry.userData.uv = Float32Array.from(geometry.getAttribute('uv').array);
+  return geometry;
+}
+
+/**
+ * The Blender guns' flash (R5, V5), in metres at the muzzle, the barrel along
+ * -z: the fire atlas's flash seen down the barrel on a quad across it, its
+ * side view on two crossed quads along it (the plume leaves the cell's left
+ * edge, so they sit ahead of the muzzle), and the one-frame glow core. Each
+ * shot picks one of the four variants for the front and each side.
+ */
+function realFlash(muzzle: THREE.Object3D, scale: number): { flash: THREE.Group; flashCore: THREE.Object3D; pickFlash: () => void } {
+  const node = group(muzzle, 'muzzle-flash');
+  node.userData.scale = scale;
+  const material = flashMaterial();
+  const front = mesh(node, 'flash-front', cellPlane(0.22, 0.22), material);
+  const sides = [0, Math.PI / 2].map(roll => {
+    const geometry = cellPlane(0.26, 0.26);
+    geometry.rotateY(Math.PI / 2);
+    geometry.translate(0, 0, -0.26 * 0.45);
+    geometry.rotateZ(roll);
+    return mesh(node, `flash-side-${roll ? 'b' : 'a'}`, geometry, material);
+  });
+  node.visible = false;
+  const core = mesh(muzzle, 'muzzle-flash-core', cellPlane(0.09, 0.09), material);
+  toCell(core.geometry, cells('fire', 'glow')[0]);
+  core.visible = false;
+  const [frontFirst, frontCount] = cells('fire', 'flashFront'), [sideFirst, sideCount] = cells('fire', 'flashSide');
+  const pickFlash = () => {
+    toCell(front.geometry, frontFirst + Math.floor(Math.random() * frontCount));
+    for (const side of sides) toCell(side.geometry, sideFirst + Math.floor(Math.random() * sideCount));
+  };
+  pickFlash();
+  return { flash: node, flashCore: core, pickFlash };
 }
 
 /** A model under construction: the required parts are not all built yet. */
@@ -302,7 +359,7 @@ export function makeGunModel(kind: GunKind): GunModel {
   }
   const muzzle = group(root, 'muzzle', muzzlePos);
   const eject = group(root, 'eject', ejectPos);
-  return { root, parts: { ...parts, leftHand }, muzzle, eject, flash: flash(muzzle), bloodSmears: result.bloodSmears, unit: 1 };
+  return { root, parts: { ...parts, leftHand }, muzzle, eject, ...flash(muzzle), bloodSmears: result.bloodSmears, unit: 1 };
 }
 
 export function makeMeleeModel(): WeaponModel {
@@ -388,6 +445,13 @@ const REAL_REST: Readonly<Record<string, readonly [Triple, Triple, number | null
  */
 export const REAL_AIM_DEPTH = 1.5;
 
+/**
+ * Each Blender gun's flash size (R5): a suppressor-less rifle's is about a
+ * hand across, the MP5's and the pistol's smaller, the shotgun's and the
+ * sniper's big. The flat guns scale theirs by `GunStats.flashScale`.
+ */
+const REAL_FLASH: Readonly<Partial<Record<GunKind, number>>> = { r4c: 1.1, rifle: 0.85, pistol: 0.8, shotgun: 1.6, sniper: 1.45 };
+
 /** Moving parts of the Blender models, by the flat models' names for them. */
 const REAL_PARTS = [['mag', 'magazine'], ['bolt', 'bolt'], ['slide', 'slide'], ['foreEnd', 'fore-end'], ['trigger', 'trigger']] as const;
 
@@ -442,10 +506,7 @@ export function makeRealGunModel(kind: GunKind, assets: WeaponAssets): GunModel 
   sights.acog = aim(parts.acog?.getObjectByName('sight'));
   sights.holo = aim(parts.holo?.getObjectByName('sight'));
   sights[kind === 'sniper' ? 'sniper' : 'iron'] = aim(node.getObjectByName('sight'));
-  // The flash stars are sized in the flat model's units.
-  const flashMount = group(muzzle, 'flash-mount');
-  flashMount.scale.setScalar(LOW_SCALE);
-  return { root, parts: { ...parts, leftHand }, muzzle, eject, flash: flash(flashMount), bloodSmears: [], unit: LOW_SCALE, sights, real };
+  return { root, parts: { ...parts, leftHand }, muzzle, eject, ...realFlash(muzzle, REAL_FLASH[kind] ?? 1), bloodSmears: [], unit: LOW_SCALE, sights, real };
 }
 
 /** The realistic tiers' knife (R4): the Blender blade and gloved hands, and the flat knife's blood smears laid along the blade. */

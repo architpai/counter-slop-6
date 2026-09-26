@@ -10,6 +10,7 @@ import type {
   BoardModel, BoardRow, DeadModel, GfxModel, LobbyModel, LobbyPlayer, MainModel, MatchOnModel, MenuModel,
   OnlineInfo, OnlineModel, OverModel, PauseModel, PvpModel, ScreenView, UiAction, LookModel, WeaponSettingsModel,
 } from '@/engine/hud/screens';
+import { ANTIALIAS_SPEC } from '@/engine/render/quality';
 import type { GfxValues, PresetChoice } from '@/engine/render/quality';
 
 /**
@@ -227,6 +228,13 @@ function Graphics({ model, onAction }: { model: GfxModel; onAction: Act }) {
           </label>)}
           <label className="graphics-check"><input type="checkbox" data-act="gfx" checked={values.bloom}
             onChange={event => set('bloom', event.target.checked ? '1' : '0', event.nativeEvent)} /> Bloom</label>
+          {/* The flat look keeps its flat particles; soft ones need the realistic look, and with MSAA a GPU that resolves its depth. */}
+          <label className="graphics-check" title={values.look !== 'realistic' ? 'Medium, High and Ultra only'
+            : model.msaaSoft === false && ANTIALIAS_SPEC[values.antialias].samples > 0 ? 'Not with MSAA on this GPU; smoke is dithered'
+              : 'Smoke and fire fade softly where they meet walls and floors; off, smoke is dithered'}>
+            <input type="checkbox" data-act="gfx" checked={values.softParticles}
+              disabled={values.look !== 'realistic' || (model.msaaSoft === false && ANTIALIAS_SPEC[values.antialias].samples > 0)}
+              onChange={event => set('softParticles', event.target.checked ? '1' : '0', event.nativeEvent)} /> Soft particles</label>
           <label className="graphics-check"><input type="checkbox" data-act="gfxFps" checked={model.fpsCounter}
             onChange={event => onAction('gfxFps', event.target.checked ? '1' : '0', event.nativeEvent)} /> FPS counter</label>
           <button type="button" className="screen-button graphics-reset" data-act="gfxReset" disabled={model.choice === 'auto'}

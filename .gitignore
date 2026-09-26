@@ -13,3 +13,5 @@ tools/blender/materials/__pycache__/
 tools/lightmaps/.build/
 tools/weapons/.build/
 tools/blender/weapons/__pycache__/
+tools/effects/.build/
+tools/blender/effects/__pycache__/

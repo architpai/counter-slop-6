@@ -72,6 +72,22 @@ test('the Graphics section shows the presets, Auto with its pick, and the Advanc
   // The flat look has no textures: the setting is there but waits for a realistic preset.
   gfx.values = { ...PRESET_VALUES.low }; show();
   expect(host.querySelectorAll<HTMLSelectElement>('.graphics-grid select')[4]!.disabled).toBe(true);
+  // Soft particles need the realistic look; on the flat look the box is greyed out and says why.
+  const soft = () => [...host.querySelectorAll<HTMLInputElement>('.graphics-grid input[type="checkbox"][data-act="gfx"]')]
+    .find(input => input.parentElement?.textContent?.includes('Soft particles'))!;
+  expect(soft().disabled).toBe(true);
+  expect(soft().parentElement!.title).toBe('Medium, High and Ultra only');
+  // They read the scene's depth, with or without MSAA.
+  for (const antialias of ['msaa4smaa', 'off', 'fxaa', 'smaa'] as const) {
+    gfx.values = { ...PRESET_VALUES.ultra, antialias }; show();
+    expect(soft().disabled, antialias).toBe(false);
+  }
+  // A GPU that renders MSAA straight into textures (WEBGL_multisampled_render_to_texture) keeps no MSAA depth to read.
+  Object.assign(gfx, { values: { ...PRESET_VALUES.ultra }, msaaSoft: false }); show();
+  expect(soft().disabled).toBe(true);
+  expect(soft().parentElement!.title).toBe('Not with MSAA on this GPU; smoke is dithered');
+  gfx.values = { ...PRESET_VALUES.ultra, antialias: 'fxaa' }; show();
+  expect(soft().disabled).toBe(false);
 });
 
 test('menu actions validate graphics values before they reach the settings', () => {

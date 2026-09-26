@@ -383,8 +383,11 @@ export class RemotePlayer implements Target {
     const thick = kind === 'r4c' ? 0.024 : kind === 'shotgun' ? 0.014 : kind === 'sniper' ? 0.03 : 0.02;
     for (let i = 0; i < ends.length; i += 3) {
       endpoint.set(num(ends[i]), num(ends[i + 1]), num(ends[i + 2]));
-      this._ctx.effects.tracer(muzzle, endpoint, TONE.PRIMARY, thick, 0.06);
+      this._ctx.effects.bulletTracer(muzzle, endpoint, thick, 0.06);
     }
+    // Seen side-on: the realistic tiers' flipbook flash and light, the flat look's strokes.
+    endpoint.set(num(ends[0]), num(ends[1]), num(ends[2])).sub(muzzle);
+    if (endpoint.lengthSq() > 1e-6) this._ctx.effects.muzzleFlash(muzzle, endpoint.normalize(), kind === 'shotgun' || kind === 'sniper' ? 1.4 : 1);
     this.flash();
     this._ctx.audio.remoteShot(kind === 'r4c' || kind === 'shotgun' || kind === 'sniper' || kind === 'pistol' ? kind : 'rifle', muzzle);
   }

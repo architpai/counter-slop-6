@@ -28,7 +28,7 @@ function setup() {
   const noop = () => {};
   const ctx = { scene, camera, renderer: { rig }, input, hud, audio: new Audio(), world: new World(),
     level: { playerStart: new Vector3(), movers: [], rings: [] },
-    effects: { shake: 0, tracer: noop, strokeBurst: noop, smoke: noop, shell: noop, blood: noop, sparks: noop,
+    effects: { shake: 0, tracer: noop, bulletTracer: noop, strokeBurst: noop, smoke: noop, muzzleSmoke: noop, muzzleLight: noop, muzzleFlash: noop, shell: noop, blood: noop, sparks: noop,
       debris: noop, fountain: noop, bloodPool: noop },
     game: { raycastPlayers: () => null, playersInArc: () => [], breakablesInArc: () => [], cutRopes: () => false,
       hitPlayer: noop, breakHit: noop, hitstop: noop, addScore: noop, onShot: noop, onPlayerDeath: noop },

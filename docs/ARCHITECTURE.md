@@ -273,11 +273,31 @@ Three material families, all created and cached by `render/materials.js`. Nothin
 - **Hit flash** (`rendering-effects.md` §5.4) is a material swap, not a shader uniform:
   `setFlash(root, on, tone)` swaps every mesh under `root` to a cached unlit material of that tone
   and back. Timings unchanged (enemy 0.07 s, remote player 0.08 s, lit bomber every frame).
-- Instanced pools (`effects`) use `InstancedMesh` + `setColorAt` for per-instance colour. Particles are always unlit; "outline" particles
-  (smoke rings) simply use a pale grey (`#DDE4EC`) and keep their `grow` behaviour.
-- Everything is opaque. No `transparent: true` anywhere in the 3-D scene (the HUD does its own
-  compositing in DOM), except the window of the Blender holographic sight on the realistic tiers
-  (`weaponMaterial('holo-glass')`, drawn last in the rig).
+- Instanced pools (`effects`) use `InstancedMesh` + `setColorAt` for per-instance colour. The flat
+  look's particles are always unlit; "outline" particles (smoke rings) simply use a pale grey
+  (`#DDE4EC`) and keep their `grow` behaviour. Its hole discs and blood splats wear
+  `flatDecalMaterial` (unlit, pulled towards the eye by a polygon offset, so they never flicker).
+- **The effects family** (R5, `render/fx.ts`, each made once and cached like the rest):
+  `tracerMaterial` (every tier: camera-facing ribbons with premultiplied alpha, so one draw holds
+  the player's additive glow and the enemies' solid red), `lowFlashMaterial` (the flat guns' flash
+  stars, additive), `boltMaterial(tone)` (enemy projectiles, unlit, a little over white), and on the
+  realistic tiers `spriteMaterial` (`fire` and `fire-soft`: the fire atlas, additive, a billboard
+  pulled towards the eye by half its size so a figure it swells round is behind all of it; `soft`:
+  the lit atlas, premultiplied, faded against the scene's depth in the soft-particle layer, with no
+  depth test; `dither`: the lit atlas behind a moving noise dither in the scene pass), `decalMaterial` (bullet holes and scorch
+  marks: a `MeshStandardMaterial` with the decal atlas's albedo, alpha and normal map, lit by the
+  sun, its shadow maps and the probe grid, polygon-offset, not written to depth),
+  `splatMaterial` (blood, lit the same way), `shellMaterial` (brass; the shotshell's red hull in
+  vertex colours), `flashMaterial` (the Blender guns' flash quads, additive, HDR) and
+  `hazardSmokeMaterial` (an enemy's smoke grenade: alpha-hashed, a clone per grenade for its
+  opacity). The streamed atlases go on them as uniforms (`wearFx`), so no program changes when they
+  land. The blended two-sided ones (tracers, sprites, flashes) set `forceSinglePass`: three would
+  draw each twice a frame, back faces then front, and re-key its program before each.
+- Everything else is opaque. The exceptions: those effect materials, the window of the Blender
+  holographic sight on the realistic tiers (`weaponMaterial('holo-glass')`, drawn last in the
+  rig), and the moderator's ban ring (a thin ring on the ground). The hazard smoke grenade's cloud,
+  once the scene's one blended volume, is alpha-hashed on Low (the opaque pass, no sorting) and
+  drawn as lit smoke sprites on the realistic tiers.
 - Two scenery materials sit outside the families, both made in `materials.ts`: the sky dome's
   `ShaderMaterial` (`skyMat`, §3.3) and the unfogged flat-shaded cloud Lambert (`cloudMat`).
 - **Realistic level materials** (`realMat`, Medium and up): a `MeshStandardMaterial` per (tag,
@@ -523,10 +543,13 @@ The weapon rig is drawn in the world pass with a fixed 65° vertical view-model 
 are unchanged. `renderer.setViewFov` scales the rig group in camera space by
 tan(world FOV / 2) / tan(view FOV / 2) in x and y, which puts every rig point on the screen spot
 and depth a camera at the view FOV would give it; no second pass, no second MSAA resolve. Rig
-meshes have `renderOrder` 1000 and the first one drawn clears depth, so the gun never clips into
-walls. While AO reads the depth buffer (§3.6) the world's depth must survive, so instead each rig
-mesh draws with `gl.depthRange(0, RIG_DEPTH)` (0.01; world depth only gets that low within 8 cm of
-the eye) and restores it after; the AO passes treat that slice as "not the world". Muzzle and ejection points read with `getWorldPosition` are already where the player sees
+meshes have `renderOrder` 1000 and each draws with `gl.depthRange(0, RIG_DEPTH)` (0.01; world depth
+only gets that low within 8 cm of the eye) and restores it after, so the gun never clips into walls
+and the world's depth survives it on every tier: AO and the soft particles read it (§3.6; they treat
+that slice as "not the world"), and the transparent world effects, which three draws after every
+opaque mesh, rig included, still test against the walls. (Up to R4 the first rig mesh cleared depth
+on the tiers without AO; with R5's transparent tracers, decals and fire that let them show through
+walls.) Muzzle and ejection points read with `getWorldPosition` are already where the player sees
 them. On the realistic tiers the Blender view models (R4) sit at their own hip pose
 (`REAL_REST` in `weapons/models.ts`, visual only) and eye place at full aim, and read their muzzle, ejection port and sight
 from the model's sockets. At full aim a Blender gun is drawn `REAL_AIM_DEPTH` (1.5) times further
@@ -568,8 +591,8 @@ The two-pass tone pipeline (`rendering-effects.md` §6.1–6.2) is replaced by:
 
 1. Render the scene into a `WebGLRenderTarget` (`RGBAFormat`, `HalfFloatType`,
    `LinearSRGBColorSpace`, depth buffer, no stencil, no mips, `LinearFilter`) sized canvas × render
-   scale, with 0, 2 or 4 MSAA samples from the quality setting and, while AO is on, a 32-bit float
-   `DepthTexture` (resolved with the colour). Dynamic resolution never reallocates: the scene,
+   scale, with 0, 2 or 4 MSAA samples from the quality setting and, while AO or the soft particles
+   are on, a 32-bit float `DepthTexture` (resolved with the colour when MSAA is on). Dynamic resolution never reallocates: the scene,
    GTAO and bloom draw into the lower-left share of their targets (`target.viewport`, and a
    scissor for the clear), each pass reads its source through a `uvScale` and clamps its taps to
    the last texel drawn, and the look pass scales the frame back up into the full-size 8-bit
@@ -577,6 +600,23 @@ The two-pass tone pipeline (`rendering-effects.md` §6.1–6.2) is replaced by:
    full size. A step is a few uniform and viewport writes. Targets reallocate only on a window,
    pixel-ratio or render-scale change; a pass switched off frees its targets (AO also its depth
    texture), and a frame allocates nothing. The rig is part of this pass (§3.4).
+   **Soft particles** (R5, Graphics → Soft particles; High and Ultra): when the realistic effects
+   have anything in `Renderer.fxScene` (smoke, dust, fire), that small scene is drawn after the
+   scene into a layer of its own (`Composite.drawSoft`: a single-sampled half-float target,
+   premultiplied, cleared to clear; at half the scene target's size from 1400 rows up, a texel per
+   CSS pixel at DPR 2, else full size). Each sprite reads the scene's depth at its pixel and fades
+   out where it meets a surface (over 0.3 of its size) or lies behind it, rig included (the rig
+   keeps its depth slice, as always), so the layer needs no depth test and no depth buffer. The
+   bloom prefilter and the tone pass lay the layer over the scene colour (`withSoft`: colour × (1 −
+   coverage) + layer) that frame only. Drawn into the multisampled scene target instead, as first
+   built, the pass cost about 1 ms on Ultra for a single puff (the MSAA samples reloaded and the
+   whole frame resolved again); the layer costs about 0.2 ms. Nothing in the scene: no layer drawn
+   or read. Without MSAA the depth texture is the scene target's own, which the layer, drawing
+   elsewhere, reads as well. A GPU with `WEBGL_multisampled_render_to_texture` (mobile) renders
+   MSAA straight into the textures with no resolve and need not keep that pass's depth
+   (`Renderer.msaaDepthReadable`): with MSAA on there, and with the setting off (Medium), the smoke
+   draws in the scene pass behind a dither instead (interleaved gradient noise moved every frame and
+   per puff; nothing under a tenth drawn), needing no sort.
 2. The passes after it (`render/postfx.ts`, `Composite`), each switched by its quality setting:
    - **GTAO** (Ambient occlusion: half or full resolution): ground-truth AO after XeGTAO, 2 slices ×
      4 steps × 2 sides within 1.1 m, normals from depth, a 4 × 4 ordered noise that a depth-aware
@@ -816,10 +856,24 @@ interface BoxData {
   noGrapple?: boolean;    // grapple ray passes
   tag?: any;              // free label, read by nobody
   breakable?: Breakable;  // back-reference set by level for prop colliders
+  material?: MaterialTag; // R5: what the collider's piece is made of (level/build.ts writes it)
+  surf?: SurfKey;         // and its flat-palette key; a bullet's impact and hole follow both
+  overlays?: SurfaceOverlay[]; // R5: thin pieces with no collider laid on its faces (a path on the lawn)
 }
 interface Box { min: THREE.Vector3; max: THREE.Vector3; data: BoxData; id: number }
 interface RayHit { dist: number; point: THREE.Vector3; normal: THREE.Vector3; box: Box }
 ```
+
+`LevelBuilder` tags every collider it makes with a mesh (`box`, `cylinder`) with that piece's
+material tag and surface key; at `finish` a bare collider (a `collider()` call standing for pieces
+drawn without one: House's stair ramps and furniture, roof colliders) takes the tag of the visible
+piece whose box it overlaps most. Boxes nothing visible stands for (the invisible map shell) stay
+untagged and read as concrete (`render/impacts.ts`, `surfaceOf`). A thin visible piece with no
+collider of its own (`noCollide`, at most 25 cm thick) whose inner side lies within 6 cm into or 12
+cm off a collider's face goes on that collider's `overlays` (`_listOverlays`): House's path and
+streets on the lawn, road paint, bands on walls. `Effects.bulletImpact` asks `surfaceAt` which piece
+the eye sees at the hit (the outermost overlay over that spot, else the collider) and moves the hit
+out to its face, so its recipe and hole are that piece's. Gameplay never reads these fields.
 
 `Body` is a class declared by `physics` (section 6.3). Its fields are the authoritative list in
 `physics-nav.md` §3.1.
@@ -1392,7 +1446,10 @@ export interface BuildOpts { mat?: string; noCollide?: boolean; noNav?: boolean;
 
 **Files:** `src/render/index.js` (public), `palette.js`, `materials.js`, `prims.js`, `figure.js`,
 `postfx.js`, `quality.ts`, `shadows.ts` (cascades), `sky.ts` (sky streaming), `tactical.ts`,
-`weapons.ts` (the realistic tiers' first-person weapons and arms, R4, and `weapon-assets.json`)
+`weapons.ts` (the realistic tiers' first-person weapons and arms, R4, and `weapon-assets.json`),
+`fx.ts` (R5: the effect atlases' manifest `fx-assets.json` and streamer `FxAssets`, the effect
+materials, flipbook timing, `FX_UNIFORMS`), `impacts.ts` (R5: material tag → surface family →
+impact recipe)
 **Imports:** `three`, `three/addons` (BufferGeometryUtils, RoomEnvironment, GLTFLoader, meshopt decoder, RGBELoader, SMAAPass), `util`
 **Responsibility:** the renderer, scene, camera, lights, shadows, the full-screen composite pass,
 the whole material/palette system, low-poly primitive factories, and the **shared humanoid /
@@ -1469,7 +1526,12 @@ export class Renderer {
   readonly skyPending: boolean;               // a realistic tier is still streaming the map's sky
   readonly weapons: WeaponAssets;             // R4: streams weapons.glb and its maps on realistic tiers (downloads at once, uploads once the level's bake and texture sets are on); compiles and warms (one hidden draw of the live template) their programs as soon as the glb is in; the view models subscribe
   readonly weaponsPending: boolean;           // a realistic tier is still streaming the weapons (or a new size of them)
-  readonly streaming: boolean;                // a realistic tier's sky, level bake or sets, or weapons are still to come in
+  readonly fx: FxAssets;                      // R5: streams the effect atlases on realistic tiers while the effects listen; uploads once the level's bake and sets are on; frees them on Low
+  readonly fxScene: THREE.Scene;              // R5: the soft particles, drawn after the scene into their own layer when soft particles are on and it holds something
+  readonly msaaDepthReadable: boolean;        // R5: false with WEBGL_multisampled_render_to_texture (no soft particles with MSAA there)
+  readonly fxLights: THREE.PointLight[];      // R5: FX_LIGHTS pooled point lights, always in the scene on realistic tiers (dark until an effect takes one); none on Low
+  fxContext(): RealContext | null;            // R5: where the realistic effects draw, once the atlases are in; null on Low
+  readonly streaming: boolean;                // a realistic tier's sky, level bake or sets, weapons or effect atlases are still to come in
   readonly gpuBehind: boolean;                // streaming, with 6 frames unfinished on the GPU (vsync off): boot skips this one (render/pacing.ts)
   setLive(live: boolean): void;               // boot, every frame: a match is being played (no menu over it, or online); its first 3 s stay quiet
   prewarm(root: THREE.Object3D): void;        // compile a template's programs (the characters', a pickup's) for every look, at the menu
@@ -1520,10 +1582,25 @@ ragdoll, respawn replacement or disposal. Keep the placement and billboard rule 
 
 ### 6.7 `effects`
 
-**File:** `src/effects.js`
+**Files:** `src/effects.ts`, `effects-real.ts` (R5: the realistic tiers' pools and recipes)
 **Imports:** `three`, `util`, `render`
-**Responsibility:** all particles, decals, blood pools, rigid debris, tracers, explosions, and the
-shared screen-shake accumulator. Pools are instanced meshes owned by this module.
+**Responsibility:** all particles, decals, blood pools, rigid debris, tracers, explosions, casings,
+the pooled lights' use, and the shared screen-shake accumulator. Pools are instanced meshes owned
+by this module.
+
+Two sets of recipes (docs/VISUALS.md, R5, V5, V10, V11). The flat look keeps its eight instanced
+pools and recipes, with the cheap fixes: tracers are ribbons in one more pool (`effects:tracers`,
+every tier), the flash is additive and a size per gun, holes and sparks take the hit surface's
+colour, decals are polygon-offset. While a realistic look is in force and its atlases are in,
+`boot` hands the renderer's `fxContext()` to `setRealistic`, and the recipes go to `RealEffects`
+(`effects-real.ts`): flipbook sprites (a fire pool, additive; a lit pool of smoke, dust, chips,
+splinters, shards and shockwave rings, soft or dithered), lit decals (bullet holes by surface
+family, scorch marks), bouncing casings and the pooled lights. Every pool is a fixed size scaled by
+the effects detail, the oldest slot reused when full; `setRealistic(null)` (Low, or the atlases
+freed) disposes them all, and a change of soft particles builds them again. A hazard's smoke cloud
+handle (`smokeCloud`) reports `live` false once the `RealEffects` that made it is cleared or freed,
+and the hazard asks for a new one; cloud stamps are their own counter, so stopping a cloud trims
+only its puffs.
 
 ```ts
 export interface ParticleSpec {
@@ -1556,13 +1633,20 @@ export class Effects {
   strokeBurst(pos: THREE.Vector3, tone: number, n?: number, speed?: number,
               o?: { life?: number; size?: number; gravity?: number; drag?: number; stretch?: number }): void;
   tracer(from: THREE.Vector3, to: THREE.Vector3, tone?: number, thick?: number, life?: number): void;
-  bulletImpact(point: THREE.Vector3, normal: THREE.Vector3, tone?: number): void;
+  bulletTracer(from: THREE.Vector3, to: THREE.Vector3, thick?: number, life?: number): void;  // a bullet's: warm white on realistic tiers
+  bulletImpact(point: THREE.Vector3, normal: THREE.Vector3, surface?: BoxData | null, from?: THREE.Vector3 | null): void;  // recipe from the collider's tag
+  muzzleFlash(pos: THREE.Vector3, dir: THREE.Vector3, scale?: number): void;   // enemies, remote players: side-on flash
+  muzzleLight(pos: THREE.Vector3, scale?: number): void;                       // the player's shot: 50 ms of pooled light (realistic)
+  muzzleSmoke(pos: THREE.Vector3, dir: THREE.Vector3, wisp: boolean, amount?: number): void;  // per shot; a wisp after a burst (realistic)
+  smokeCloud(pos: THREE.Vector3, radius: number, duration: number): { stop(): void } | null;  // hazard smoke, realistic tiers
+  setRealistic(context: RealContext | null): void;
+  readonly realistic: boolean;
   blood(pos: THREE.Vector3, dir: THREE.Vector3, amount?: number, o?: { tone?: number }): void;
   drip(pos: THREE.Vector3, amount?: number): void;
   fountain(pos: THREE.Vector3, dir: THREE.Vector3, dur?: number, tone?: number): void;
-  shell(pos: THREE.Vector3, vel: THREE.Vector3, tone?: number, size?: number): void;
+  shell(pos: THREE.Vector3, vel: THREE.Vector3, tone?: number, size?: number, kind?: ShellKind | null): void;  // realistic: a bouncing casing
   smoke(pos: THREE.Vector3, dir: THREE.Vector3, n?: number): void;
-  explosion(pos: THREE.Vector3, radius?: number, tone?: number): void;
+  explosion(pos: THREE.Vector3, radius?: number, tone?: number, scorch?: boolean): void;  // realistic: a scorch (a dark blast's by default; charges, payloads) or the tone's splat
   boom(pos: THREE.Vector3, radius?: number): void;
   bloodPool(pos: THREE.Vector3, size?: number, tone?: number): void;
   decal(point: THREE.Vector3, normal: THREE.Vector3, tone: number, size: number,
@@ -1596,7 +1680,9 @@ it from then on; the caller must not remove it.
 10. RE §7.10 `clear()` (does **not** reset shake).
 11. RE §8.1–8.13 every recipe with every constant.
 12. RE §10 the tracer geometry rules (callers pass end points; the katana arc and enemy swing arcs
-    are drawn by their owners through `tracer`).
+    are drawn by their owners through `tracer`). Since R5 they draw as ribbons in `effects:tracers`
+    (no longer fixed-length strokes), faded over their life; the hostile tone's are a quarter
+    thinner and mostly solid.
 13. RE §11 the death/dismemberment recipes (`enemies`/`players` call them; the parameter tables
     live here).
 14. RE §14 the shake accumulator contract.

@@ -8,6 +8,7 @@ import type { Falloff, GunKind, GunStats, RifleOptic, ScopeKind, Triple } from '
 import { LOW_SCALE, REAL_AIM_DEPTH, makeGunModel, makeRealGunModel, restPose } from './models';
 import type { GunModel, ModelParts, WeaponModel } from './models';
 import type { WeaponAssets } from '../render/weapons';
+import type { ShellKind } from '../effects-real';
 import type { Ctx, Enemy, HitInfo, Player, WeaponState } from '../types';
 import type { Weapon } from './index';
 
@@ -15,6 +16,15 @@ import type { Weapon } from './index';
 const gripPoint = new Vector3();
 /** Radians a Blender model's trigger turns at a full pull. */
 const TRIGGER_TRAVEL = 0.3;
+/**
+ * The flash's size at the hip against full aim (V5): the hip flash used to
+ * cover about a quarter of the screen, as the muzzle sits close to the eye there.
+ */
+const HIP_FLASH = 0.7;
+/** A realistic tier's casing for each gun (effects-real.ts `SHELL_SIZE`); the MP5 fires 9 mm like the pistol. */
+const SHELL_KIND: Readonly<Partial<Record<GunKind, ShellKind>>> = { r4c: 'rifle', rifle: 'pistol', pistol: 'pistol', sniper: 'sniper', shotgun: 'shotgun' };
+/** Shots in a row, at least, before the powder smoke of a burst wisps off the barrel once it ends (R5). */
+const WISP_AFTER = 3;
 
 /** Duck-typed like the rest of three: meshes, lines and points all carry geometry. */
 function hasGeometry(node: Object3D): node is Object3D & { geometry: BufferGeometry } {
@@ -329,6 +339,9 @@ export interface Gun {
   _reloadEmpty: boolean;
   /** How far the Blender model's trigger is pulled, 0-1. */
   _triggerPull: number;
+  /** Shots in the current burst, and seconds since the last shot (the wisp of smoke when a burst ends). */
+  _burst: number;
+  _sinceShot: number;
 }
 
 export class Gun extends ViewModel<GunModel> implements Weapon {
@@ -386,7 +399,7 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
 
   /** A model was put on: it shows the optic in use and no flash, whatever the other model showed. */
   _wore(): void {
-    for (const model of [this._low, this._real]) if (model) model.flash.visible = false;
+    for (const model of [this._low, this._real]) if (model) model.flash.visible = model.flashCore.visible = false;
     this.setOptic(this.optic);
   }
 
@@ -420,11 +433,12 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
     this.mag = this.magSize;
     this.reserve = this._stats.startingReserve;
     this.reloading = false;
-    this._fireT = this._reloadTime = this._flashT = this._pumpT = this._fireBuffer = 0;
+    this._fireT = this._reloadTime = this._flashT = this._pumpT = this._fireBuffer = this._burst = 0;
+    this._sinceShot = Infinity;
     this._pumped = this._racked = this._needPump = this._reloadEmpty = false;
     this._triggerPull = 0;
     this._spread = this._stats.hipSpread;
-    this._model.flash.visible = false;
+    this._model.flash.visible = this._model.flashCore.visible = false;
     this._resetPose();
   }
 
@@ -469,9 +483,20 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
     this._pose(st, dt);
     // Carry the residual so the rate of fire is frame-rate independent; clamp so idling banks no burst.
     this._fireT = Math.max(this._fireT - dt, -dt);
+    // The core shows on a shot's first frame only.
+    this._model.flashCore.visible = false;
     if (this._flashT > 0) {
       this._flashT -= dt;
       if (this._flashT <= 0) this._model.flash.visible = false;
+    }
+    this._sinceShot += dt;
+    if (this._burst > 0 && this._sinceShot > this._stats.fireInterval + 0.1) {
+      // A burst (or a single heavy shot) is over: a thin wisp rises off the barrel on the realistic tiers.
+      if (this._burst >= WISP_AFTER || !this._stats.automatic) {
+        this._socket(this._model.muzzle, this._muzzle);
+        this._ctx.effects.muzzleSmoke(this._muzzle, this._player.forward, true, Math.min(3, this._burst / 6 + (this.kind === 'shotgun' ? 2 : 0)));
+      }
+      this._burst = 0;
     }
     const stats = this._stats;
     const base = st.aim ? stats.adsSpread : stats.hipSpread;
@@ -524,15 +549,25 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
       this._player.aimDir(spreadNow, this._dir);
       if (this._ray(this._dir)) hits++;
     }
-    const flash = this._model.flash;
-    flash.visible = true;
+    const flash = this._model.flash, core = this._model.flashCore;
+    flash.visible = core.visible = true;
     this._flashT = 0.045;
     if (this._model.parts.slide) this._model.parts.slide.position.z = restPose(this._model.parts.slide).restPos.z + 0.07 * this._model.unit;
+    // Each gun's own size (a Blender gun's is its model's), smaller at the hip, with a bright core on the first frame (V5).
+    const size = ((flash.userData.scale as number | null) ?? s.flashScale) * (HIP_FLASH + (1 - HIP_FLASH) * this.aimAmt);
     flash.rotation.z = rand(0, TAU);
-    flash.scale.setScalar(s.flashScale * rand(0.8, 1.4));
-    effects.strokeBurst(this._muzzle, TONE.ACCENT, 4 + s.pellets, 6 * s.flashScale,
-      { life: 0.08, size: 0.03, gravity: 0, drag: 8 });
-    effects.smoke(this._muzzle, this._player.forward, this.kind === 'shotgun' ? 5 : s.automatic ? 1 : 2);
+    flash.scale.setScalar(size * rand(0.85, 1.15));
+    core.scale.setScalar(size);
+    this._model.pickFlash?.();
+    // The flat look's sparks at the muzzle, fewer and slower than they were: they flew across the view as long bars.
+    if (!effects.realistic) {
+      effects.strokeBurst(this._muzzle, TONE.ACCENT, 2 + Math.ceil(s.pellets / 2), 3 * s.flashScale,
+        { life: 0.07, size: 0.022, gravity: 0, drag: 8 });
+    }
+    effects.muzzleLight(this._muzzle, s.flashScale);
+    effects.muzzleSmoke(this._muzzle, this._player.forward, false, this.kind === 'shotgun' ? 5 : s.automatic ? 1 : 2);
+    this._burst++;
+    this._sinceShot = 0;
     if (s.casing && s.reloadType !== 'shells') this._ejectShell();
     if (s.cycleDuration) {
       this._pumpT = s.cycleDuration + 0.12;
@@ -583,14 +618,14 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
         { point, dir, part: enemy.part, source: this.kind, crit: enemy.part === 'head' });
     } else if (wall) {
       point = wall.point;
-      effects.bulletImpact(point, wall.normal, TONE.PRIMARY);
+      effects.bulletImpact(point, wall.normal, wall.box.data, dir);
       if (rand() < 0.25) audio.ricochet(point);
       hit = false;
     } else {
       point = eye.clone().addScaledVector(dir, 300);
       hit = false;
     }
-    effects.tracer(this._muzzle, point, TONE.PRIMARY, s.tracerThickness, 0.05);
+    effects.bulletTracer(this._muzzle, point, s.tracerThickness, 0.05);
     game.onShot(point);
     return hit;
   }
@@ -603,10 +638,22 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
   _ejectShell(spread = 1) {
     if (!this._stats.casing) return;
     this._socket(this._model.eject, this._eject);
-    this._velocity.copy(this._player.right).multiplyScalar(rand(1.5, 2.5) * spread)
-      .addScaledVector(this._player.forward, rand(-0.5, 0.5));
-    this._velocity.y += rand(1.5, 2.8);
-    this._ctx.effects.shell(this._eject, this._velocity, this._stats.casing[1], this._stats.casing[0]);
+    const effects = this._ctx.effects;
+    if (effects.realistic) {
+      // The realistic casings are solid and depth-tested, so the gun hides one that leaves sideways
+      // under it: they leave up and a little forward instead, arcing over the upper right of the view.
+      this._velocity.copy(this._player.right).multiplyScalar(rand(0.9, 1.4) * spread)
+        .addScaledVector(this._player.forward, rand(0.3, 0.8));
+      this._velocity.y += rand(2.6, 3.4);
+    } else {
+      this._velocity.copy(this._player.right).multiplyScalar(rand(1.5, 2.5) * spread)
+        .addScaledVector(this._player.forward, rand(-0.5, 0.5));
+      this._velocity.y += rand(1.5, 2.8);
+    }
+    // A casing on the realistic tiers leaves with the player's own motion, or a runner would outpace his brass.
+    const body = (this._player as Partial<Player>).body?.vel;
+    if (body) this._velocity.add(body);
+    effects.shell(this._eject, this._velocity, this._stats.casing[1], this._stats.casing[0], SHELL_KIND[this.kind] ?? null);
   }
 
   _cycle(dt: number) {

@@ -16,6 +16,7 @@ import { disposeSky, loadSky } from './sky';
 import { TEXTURE_SIZE, resolveMaterial, setInfo, setsFor } from './surfaces';
 import { BakeStreamer, TextureStreamer, fetchGrid, ktx2Loader, lightmapLoader, warmCompressedUploads } from './textures';
 import { WeaponAssets, weaponTextureSize } from './weapons';
+import { FX_UNIFORMS, FxAssets, fxTemplate, fxTextureSize } from './fx';
 import type { PostFX } from './postfx';
 import type { SkyUniforms } from './materials';
 import type { GfxValues, ShadowBox } from './quality';
@@ -110,6 +111,14 @@ export const UPLOAD_SETTLE_MS = 500;
  * short fade reads as the room dimming at spawn.
  */
 export const BAKE_FADE_MS = 1500;
+/**
+ * Point lights the realistic tiers' shots and blasts share (R5): always in
+ * the scene there, at zero until an effect takes one, since a light count is
+ * part of every lit program and a change would recompile them all mid-match.
+ * One: every lit fragment pays for each light, lit or not (0.1 ms a light on
+ * Ultra at 2880 x 1800), and a blast takes it from a shot. Low has none.
+ */
+export const FX_LIGHTS = 1;
 /** The weapon rig's fixed vertical FOV (V8). The world keeps its own, speed kick and all. */
 export const VIEW_MODEL_FOV = 65;
 const _follow = new THREE.Vector3();
@@ -121,6 +130,8 @@ const _size = new THREE.Vector2();
 const _tint = new THREE.Color();
 const _haze = new THREE.Color();
 const _grey = new THREE.Vector3();
+const _irradiance = new THREE.Vector3();
+const _up = new THREE.Vector3(0, 1, 0);
 const luminance = (c: THREE.Color): number => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
 
 /**
@@ -164,13 +175,6 @@ export class Renderer {
   /** Dark shadow-only lights for cascades 1+ (cascade 0 is `sun`); empty on Low and Medium. */
   readonly cascades: THREE.DirectionalLight[] = [];
   readonly _sky: SkyUniforms;
-  /** Reset before every frame; the first rig mesh drawn clears the depth buffer. */
-  _rigDepthCleared = false;
-  /**
-   * While AO reads the depth texture the rig cannot clear depth (the world's
-   * would be lost), so it draws into [0, RIG_DEPTH] of the depth range instead.
-   */
-  _rigDepthRange = false;
   readonly _beforeRig: () => void;
   readonly _afterRig: () => void;
   readonly _prepareRigMesh: (object: THREE.Object3D) => void;
@@ -281,6 +285,21 @@ export class Renderer {
    * later links no program.
    */
   readonly _skyProbe: THREE.Mesh;
+  /**
+   * Realistic tiers: the effect atlases (R5, render/fx.ts), streamed in the
+   * upload slots at the Textures size; the effects listen for them. Empty on Low.
+   */
+  readonly fx: FxAssets;
+  /**
+   * The soft particles' pass (R5): drawn after the scene into their own layer
+   * (postfx.ts `drawSoft`), reading the scene's depth, so smoke and fire can
+   * fade where they meet it. Only while soft particles are on and something is in it.
+   */
+  readonly fxScene = new THREE.Scene();
+  /** The pooled point lights of shots and blasts (`FX_LIGHTS`, realistic tiers); empty on Low. */
+  readonly fxLights: THREE.PointLight[] = [];
+  /** Soft particles are in force: a realistic look with them on, and a depth texture to read (`msaaDepthReadable`). */
+  _softFx = false;
   _disposed = false;
 
   constructor(canvas: HTMLCanvasElement) {
@@ -332,16 +351,11 @@ export class Renderer {
     this.post = new Composite();
     const gl = this.three.getContext();
     this._fences = new GpuFences(gl as WebGL2RenderingContext);
-    this._beforeRig = () => {
-      if (this._rigDepthRange) gl.depthRange(0, RIG_DEPTH);
-      else if (!this._rigDepthCleared) {
-        this.three.clearDepth();
-        this._rigDepthCleared = true;
-      }
-    };
-    this._afterRig = () => {
-      if (this._rigDepthRange) gl.depthRange(0, 1);
-    };
+    // The rig draws into [0, RIG_DEPTH] of the depth range, so it always wins the depth test and the
+    // world's depth survives it: AO and the soft particles read that depth, and the transparent world
+    // effects (tracers, decals, smoke), which three draws after every opaque mesh, test against it.
+    this._beforeRig = () => gl.depthRange(0, RIG_DEPTH);
+    this._afterRig = () => gl.depthRange(0, 1);
     this._prepareRigMesh = object => {
       if (!isMesh(object)) return;
       object.castShadow = object.receiveShadow = false;
@@ -377,10 +391,15 @@ export class Renderer {
       // A glb that lands after Start is drawn once the match's quiet start is over, not held to the next menu.
       warm: root => this._hold(this._warmups, root, () => this.weapons.holds(root), true),
     });
+    this.fx = new FxAssets({
+      texture: (url, anisotropy) => (this._ktx2 ??= ktx2Loader(this.three)).load(url, anisotropy),
+      upload: texture => this.three.initTexture(texture),
+    });
     this._onResize = () => this.resize();
     window.addEventListener('resize', this._onResize);
     this._onContextRestored = () => {
       this.weapons.clear();
+      this.fx.clear();
       this._releaseTextures();
       this._fences.clear();
       this._programsWarm = false;
@@ -417,10 +436,11 @@ export class Renderer {
     this._quality = q;
     this._programsWarm = false;
     this.three.setPixelRatio(Math.min(window.devicePixelRatio || 1, q.pixelRatio));
-    const aa = ANTIALIAS_SPEC[q.antialias], ao = AO_SCALE[q.ao];
-    this.post.configure({ look: q.look, samples: Math.min(aa.samples, this.three.capabilities.maxSamples),
-      fxaa: aa.fxaa, smaa: aa.smaa, ao, bloom: q.bloom });
-    this._rigDepthRange = ao > 0;
+    const aa = ANTIALIAS_SPEC[q.antialias], ao = AO_SCALE[q.ao], samples = Math.min(aa.samples, this.three.capabilities.maxSamples);
+    // The soft particles read the scene's depth texture: with MSAA, the resolve's copy, which some GPUs do not make.
+    this._softFx = q.look === 'realistic' && q.softParticles && (samples === 0 || this.msaaDepthReadable);
+    this.post.configure({ look: q.look, samples, fxaa: aa.fxaa, smaa: aa.smaa, ao, depth: this._softFx, bloom: q.bloom });
+    this._setFxLights(q.look === 'realistic' ? FX_LIGHTS : 0);
     const shadow = SHADOW_SPEC[q.shadows];
     this.sun.castShadow = shadow !== null;
     this._setBoxes(shadow?.boxes ?? null, shadow?.size ?? this.sun.shadow.mapSize.x);
@@ -456,8 +476,11 @@ export class Renderer {
     this.setLevelShadow(this.sun.target.position, this._shadowRadius);
     this._applyFog();
     this._applyLook();
-    // Low frees the weapons (the flat guns come back) before the texture loader they share goes.
-    if (q.look !== 'realistic') this.weapons.want(null);
+    // Low frees the weapons (the flat guns come back) and the effect atlases before the texture loader they share goes.
+    if (q.look !== 'realistic') {
+      this.weapons.want(null);
+      this.fx.want(null);
+    }
     this._applySurfaces();
     if (q.look !== 'realistic') {
       // The flat look never shows a sky; a realistic tier streams it again.
@@ -473,6 +496,38 @@ export class Renderer {
       this._pmrem = null;
     }
     this.resize();
+  }
+
+  /**
+   * The multisampled scene target leaves a depth texture to read (soft
+   * particles). With WEBGL_multisampled_render_to_texture (mobile GPUs) three
+   * draws it straight into its textures with no resolve, and a tiled GPU need
+   * not keep the depth of such a pass: with MSAA the smoke dithers there.
+   */
+  get msaaDepthReadable(): boolean {
+    return !this.three.extensions.has('WEBGL_multisampled_render_to_texture');
+  }
+
+  /** Keep `count` pooled point lights in the scene (`FX_LIGHTS`), dark until an effect lights one. */
+  _setFxLights(count: number): void {
+    while (this.fxLights.length > count) {
+      const light = this.fxLights.pop()!;
+      this.scene.remove(light);
+      light.dispose();
+    }
+    while (this.fxLights.length < count) {
+      const light = new THREE.PointLight(0xffb266, 0, 6, 2);
+      light.castShadow = false;
+      light.name = 'fx-light';
+      this.scene.add(light);
+      this.fxLights.push(light);
+    }
+  }
+
+  /** Where the realistic effects draw (effects.ts `setRealistic`), once their atlases are in; null on Low or before. */
+  fxContext(): { scene: THREE.Scene; late: THREE.Scene; camera: THREE.Camera; lights: readonly THREE.PointLight[]; soft: boolean } | null {
+    return this._quality.look === 'realistic' && this.fx.ready
+      ? { scene: this.scene, late: this.fxScene, camera: this.camera, lights: this.fxLights, soft: this._softFx } : null;
   }
 
   /**
@@ -915,6 +970,53 @@ export class Renderer {
     }
   }
 
+  /**
+   * Realistic tiers: keep the effect atlases streaming at the Textures size
+   * (from the first realistic frame, while the effects listen; Low never fetches), uploaded in the
+   * level's slots once its bake and sets are on, never in a match's quiet
+   * start. Their programs were compiled and drawn at the menu (`_warmPrograms`).
+   */
+  _streamFx(): void {
+    const size = fxTextureSize(this._quality);
+    if (size === null || !this.fx.wanted) return;
+    this.fx.want(size);
+    const now = performance.now();
+    if (!this.fx.pending || this.bakePending || this.texturesPending || now < this._uploadAt || this._match.quiet(now)) return;
+    const bytes = this.fx.pump();
+    if (bytes > 0) {
+      if (performance.now() - now > UPLOAD_SLOW_MS) this._uploadPace = Math.min(4, this._uploadPace * 2);
+      this._uploadAt = now + Math.max(UPLOAD_GAP_MS, bytes / UPLOAD_BYTES_PER_MS) * this._uploadPace;
+    }
+  }
+
+  /**
+   * The effect materials' shared uniforms for this frame (render/fx.ts
+   * `FX_UNIFORMS`): the scene's depth and range for the soft particles, a
+   * pixel's size for the tracers, the frame for the dithered smoke's noise, and the sky's and sun's light for the lit
+   * sprites where the probe grid is not in.
+   */
+  _updateFx(): void {
+    const u = FX_UNIFORMS, target = this.post.target;
+    u.fxDepth.value = this.post.depthTexture;
+    u.fxDepthSize.value.copy(this.post.softSize);
+    u.fxNear.value = this.camera.near;
+    u.fxFar.value = this.camera.far;
+    u.fxPixel.value = 2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov) / 2) / Math.max(1, target.viewport.w);
+    u.fxFrame.value = this._frame % 64;
+    const ambient = u.fxAmbient.value;
+    ambient.setRGB(0, 0, 0);
+    if (this.probe.visible) {
+      this.probe.sh.getIrradianceAt(_up, _irradiance).multiplyScalar(this.probe.intensity);
+      ambient.setRGB(_irradiance.x, _irradiance.y, _irradiance.z);
+    }
+    if (this.hemi.intensity > 0) {
+      ambient.r += (0.6 * this.hemi.color.r + 0.4 * this.hemi.groundColor.r) * this.hemi.intensity;
+      ambient.g += (0.6 * this.hemi.color.g + 0.4 * this.hemi.groundColor.g) * this.hemi.intensity;
+      ambient.b += (0.6 * this.hemi.color.b + 0.4 * this.hemi.groundColor.b) * this.hemi.intensity;
+    }
+    u.fxSun.value.copy(this.sun.color).multiplyScalar(this.sun.intensity);
+  }
+
   /** Queue `root` for a held compile or warm-up draw; resolves once it is done, or dropped as freed. */
   _hold(list: Warmup[], root: THREE.Object3D, valid: () => boolean, inMatch = false): Promise<void> {
     return new Promise<void>(done => { list.push({ root, done, valid, inMatch, drawn: false }); });
@@ -935,6 +1037,9 @@ export class Renderer {
     void this._hold(this._warmups, SHADOW_PROBE, () => true);
     const probe = this._skyProbe;
     if (this._quality.look === 'realistic') void this._hold(this._compiles, probe, () => true).then(() => this._hold(this._warmups, probe, () => true));
+    // The effects' programs (R5): tracers and flat decals on every look, the realistic sprites, decals, casings and flashes too.
+    const fx = fxTemplate(this._quality.look, this._softFx);
+    void this._hold(this._compiles, fx, () => true).then(() => this._hold(this._warmups, fx, () => true));
   }
 
   /**
@@ -999,7 +1104,6 @@ export class Renderer {
     this.three.setRenderTarget(this.post.target);
     this.three.render(this.scene, this.camera);
     for (const node of shown) node.visible = false;
-    this._rigDepthCleared = false;
     for (const warm of list) {
       warm.drawn = true;
       if (warm.root === this.rig) continue;
@@ -1027,7 +1131,7 @@ export class Renderer {
 
   /** A realistic tier's sky, level bake or sets, or weapons are still to download, upload or put on. */
   get streaming(): boolean {
-    return this.skyPending || this._skyLanding !== null || this.bakePending || this.texturesPending || this.weapons.pending;
+    return this.skyPending || this._skyLanding !== null || this.bakePending || this.texturesPending || this.weapons.pending || this.fx.pending;
   }
 
   /**
@@ -1165,6 +1269,8 @@ export class Renderer {
     this._skyAssets = null;
     this._landSky();
     this.weapons.clear();
+    this.fx.clear();
+    this._setFxLights(0);
     this._releaseTextures();
     this._fences.clear();
     this._pmrem?.dispose();
@@ -1183,6 +1289,7 @@ export class Renderer {
     if (this._skyLoading === null && this.skyPending) this._requestSky();
     this._streamBake();
     this._streamTextures();
+    this._streamFx();
     this._streamWeapons();
     this._warmPrograms();
     this._runCompiles();
@@ -1195,12 +1302,17 @@ export class Renderer {
       else this._aimShadow(_eye);
     }
     this.three.shadowMap.needsUpdate = shadows;
-    this._rigDepthCleared = false;
     this.sky.position.copy(this.camera.position);
     this._drawWarmups();
+    this._updateFx();
     this.three.setRenderTarget(this.post.target);
     this.three.clear();
     this.three.render(this.scene, this.camera);
+    if (this._softFx && this.fxScene.children.some(child => child.visible)) {
+      // Into their own layer, reading the depth the scene's render left (postfx.ts `drawSoft`).
+      this.fxScene.fog = this.scene.fog;
+      this.post.drawSoft(this.three, this.fxScene, this.camera);
+    }
     this.post.draw(this.three, time, fx, this.camera);
     this._fences.mark(performance.now());
   }

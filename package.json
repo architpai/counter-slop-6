@@ -12,7 +12,8 @@
     "check": "node tests/bugfix.check.mjs",
     "textures": "node tools/textures/build.mjs",
     "lightmaps": "node tools/lightmaps/build.mjs",
-    "weapons": "node tools/weapons/build.mjs"
+    "weapons": "node tools/weapons/build.mjs",
+    "effects": "node tools/effects/build.mjs"
   },
   "type": "module",
   "dependencies": {

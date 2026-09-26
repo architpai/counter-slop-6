@@ -34,7 +34,7 @@
 // both with the gun in view, after a discarded warm-up), the fog at 60 m, where each grunt stood, and
 // the streamed textures: KTX2 bytes fetched for the map and GPU bytes resident, the same for the bake,
 // and the weapons' download (glb and maps, fetched once per session, so counted on the first map of
-// each preset whose size is new) and GPU bytes; and the frames that stalled while they streamed in
+// each preset whose size is new) and GPU bytes, the same for the effect atlases (R5); and the frames that stalled while they streamed in
 // (streamStalls: gaps between rendered frames, warned past STREAM_STALL, and rafWorstMs, the worst
 // gap between animation frames over the same span). While something streams the game skips an
 // animation frame when the GPU is `MAX_FRAMES_IN_FLIGHT` behind (render/pacing.ts): a run of skips
@@ -173,9 +173,12 @@ try {
         const weapons = resources.filter(e => e.name.includes('/weapons/') || e.name.endsWith('/models/weapons.glb'));
         const mb = list => +(list.reduce((n, e) => n + e.encodedBodySize, 0) / 1e6).toFixed(2);
         const arms = window.__game.ctx.renderer.weapons.stats;
+        const effects = resources.filter(e => e.name.includes('/fx/') && e.name.endsWith('.ktx2'));
+        const atlases = window.__game.ctx.renderer.fx?.stats ?? { residentBytes: 0 };
         return { files: fetched.length, fetchedMB: mb(fetched), textures: stats.textures, residentMB: +(stats.residentBytes / 1e6).toFixed(1),
           bakeFile: bake.file, bakeMB: mb(baked), bakeResidentMB: +(bake.residentBytes / 1e6).toFixed(1),
-          weaponsMB: mb(weapons), weaponsResidentMB: +(arms.residentBytes / 1e6).toFixed(1) };
+          weaponsMB: mb(weapons), weaponsResidentMB: +(arms.residentBytes / 1e6).toFixed(1),
+          effectsMB: mb(effects), effectsResidentMB: +(atlases.residentBytes / 1e6).toFixed(1) };
       });
       // How much fog a grunt at 60 m wears on this preset (linear fog).
       row.fogAt60 = await page.evaluate(() => {

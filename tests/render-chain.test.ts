@@ -44,12 +44,12 @@ function passes(renderer: Renderer): string[] {
 const bloom = ['post:bloom-prefilter', ...Array(4).fill('post:bloom-down'), ...Array(4).fill('post:bloom-up')];
 const expected: Record<PresetName, { config: Omit<PostConfig, 'samples'>; samples: number; chain: string[]; lights: number; soft: boolean }> = {
   // Low: the phase-1 single pass (FXAA, soft shoulder, grade, feedback), one shadow box.
-  low: { config: { look: 'lowpoly', fxaa: true, smaa: false, ao: 0, bloom: false }, samples: 0, chain: ['post:composite'], lights: 1, soft: false },
-  medium: { config: { look: 'realistic', fxaa: false, smaa: true, ao: 0, bloom: true }, samples: 2,
+  low: { config: { look: 'lowpoly', fxaa: true, smaa: false, ao: 0, depth: false, bloom: false }, samples: 0, chain: ['post:composite'], lights: 1, soft: false },
+  medium: { config: { look: 'realistic', fxaa: false, smaa: true, ao: 0, depth: false, bloom: true }, samples: 2,
     chain: [...bloom, 'post:agx', 'smaa', 'post:final'], lights: 1, soft: true },
-  high: { config: { look: 'realistic', fxaa: false, smaa: true, ao: 0.5, bloom: true }, samples: 2,
+  high: { config: { look: 'realistic', fxaa: false, smaa: true, ao: 0.5, depth: true, bloom: true }, samples: 2,
     chain: ['post:gtao', 'post:ao-blur', ...bloom, 'post:agx', 'smaa', 'post:final'], lights: 2, soft: true },
-  ultra: { config: { look: 'realistic', fxaa: false, smaa: true, ao: 1, bloom: true }, samples: 4,
+  ultra: { config: { look: 'realistic', fxaa: false, smaa: true, ao: 1, depth: true, bloom: true }, samples: 4,
     chain: ['post:gtao', 'post:ao-blur', ...bloom, 'post:agx', 'smaa', 'post:final'], lights: 3, soft: true },
 };
 
@@ -71,9 +71,8 @@ test('each preset reaches the renderer: passes, tone mapping, MSAA, AO depth, ca
     // composite (Low), AgX in its own pass (realistic).
     expect(passes(renderer), name).toEqual(want.chain);
     expect(renderer.post.target.samples).toBe(Math.min(want.samples, maxSamples));
-    // AO reads the depth texture, so the rig moves into its own depth slice instead of clearing depth.
-    expect(renderer.post.target.depthTexture !== null).toBe(want.config.ao > 0);
-    expect(renderer._rigDepthRange).toBe(want.config.ao > 0);
+    // AO and the soft particles (High, Ultra) read the depth texture.
+    expect(renderer.post.target.depthTexture !== null).toBe(want.config.ao > 0 || want.config.depth);
     // One shadow light per box; cascades beyond the sun are dark and shadow-only.
     const lights = [renderer.sun, ...renderer.cascades];
     expect(lights).toHaveLength(want.lights);
@@ -100,6 +99,45 @@ test('each preset reaches the renderer: passes, tone mapping, MSAA, AO depth, ca
   // It compiles every preset's programs: about 5 s alone, three times that beside the other GPU tests.
 }, 60_000);
 
+test('soft particles draw into their own layer; a GPU that renders MSAA straight into textures dithers with MSAA on', () => {
+  const renderer = makeRenderer();
+  renderer.applyQuality(PRESET_VALUES.ultra);
+  expect([renderer.msaaDepthReadable, renderer._softFx]).toEqual([true, true]);
+  // Something soft in view: the scene target is drawn once, the layer once, and the passes lay it over.
+  const puff = new THREE.Mesh(new THREE.PlaneGeometry(), new THREE.MeshBasicMaterial({ transparent: true, depthTest: false }));
+  puff.position.set(0, 1.6, -3);
+  renderer.fxScene.add(puff);
+  renderer.camera.position.set(0, 1.6, 0);
+  const targets: (THREE.WebGLRenderTarget | null)[] = [];
+  const setTarget = renderer.three.setRenderTarget.bind(renderer.three);
+  const spy = vi.spyOn(renderer.three, 'setRenderTarget').mockImplementation((target, ...rest) => { targets.push(target as THREE.WebGLRenderTarget | null); setTarget(target, ...rest); });
+  const on: number[] = [];
+  puff.onBeforeRender = () => { on.push(renderer.post._softUniforms.softOn.value); };
+  renderer.render(0, fx);
+  spy.mockRestore();
+  expect(targets).toContain(renderer.post._soft);
+  expect(on).toEqual([0]);
+  // Its frame only: the next frame without anything soft lays nothing over.
+  expect(renderer.post._softUniforms.softOn.value).toBe(0);
+  expect('SOFT' in renderer.post._tone.defines && 'SOFT' in renderer.post._prefilter.defines).toBe(true);
+  expect(renderer.three.getContext().getError()).toBe(renderer.three.getContext().NO_ERROR);
+  // Without MSAA it reads the target's own depth texture, which it does not draw into.
+  renderer.applyQuality({ ...PRESET_VALUES.ultra, antialias: 'fxaa' });
+  expect(renderer._softFx).toBe(true);
+  // With WEBGL_multisampled_render_to_texture three attaches the depth texture to the multisampled
+  // framebuffer itself, and a tiled GPU need not keep it: with MSAA on, the smoke dithers.
+  const has = renderer.three.extensions.has.bind(renderer.three.extensions);
+  const ext = vi.spyOn(renderer.three.extensions, 'has').mockImplementation(name => name === 'WEBGL_multisampled_render_to_texture' || has(name));
+  renderer.applyQuality(PRESET_VALUES.ultra);
+  expect([renderer.msaaDepthReadable, renderer._softFx]).toEqual([false, false]);
+  expect('SOFT' in renderer.post._tone.defines).toBe(false);
+  renderer.applyQuality({ ...PRESET_VALUES.ultra, antialias: 'smaa' });
+  expect(renderer._softFx).toBe(true);
+  ext.mockRestore();
+  puff.geometry.dispose();
+  // It compiles the realistic presets' post passes: a few seconds alone, more beside the other GPU tests.
+}, 60_000);
+
 test('dynamic resolution only moves viewports, a pass switched off frees its targets, and dispose frees them all', () => {
   const three = new THREE.WebGLRenderer({ canvas: document.createElement('canvas') });
   cleanup.push(() => { three.dispose(); three.forceContextLoss(); });
@@ -108,7 +146,7 @@ test('dynamic resolution only moves viewports, a pass switched off frees its tar
   camera.position.z = 3;
   const before = three.info.memory.textures;
   const post = new Composite();
-  post.configure({ look: 'realistic', samples: 4, fxaa: false, smaa: true, ao: 1, bloom: true });
+  post.configure({ look: 'realistic', samples: 4, fxaa: false, smaa: true, ao: 1, depth: false, bloom: true });
   const frame = (): void => {
     three.setRenderTarget(post.target);
     three.clear();
@@ -168,9 +206,9 @@ test('a reduced dynamic scale shows only this frame: nothing beyond the drawn co
     return pixels;
   };
   const configs: PostConfig[] = [
-    { look: 'realistic', samples: 4, fxaa: false, smaa: true, ao: 0.5, bloom: true },
-    { look: 'lowpoly', samples: 0, fxaa: true, smaa: false, ao: 0, bloom: false },
-    { look: 'lowpoly', samples: 0, fxaa: false, smaa: true, ao: 1, bloom: true },
+    { look: 'realistic', samples: 4, fxaa: false, smaa: true, ao: 0.5, depth: false, bloom: true },
+    { look: 'lowpoly', samples: 0, fxaa: true, smaa: false, ao: 0, depth: false, bloom: false },
+    { look: 'lowpoly', samples: 0, fxaa: false, smaa: true, ao: 1, depth: false, bloom: true },
   ];
   for (const config of configs) {
     post.configure(config);
@@ -184,15 +222,24 @@ test('a reduced dynamic scale shows only this frame: nothing beyond the drawn co
     expect(differ, `${config.look}, smaa ${config.smaa}`).toBe(0);
   }
   expect(gl.getError()).toBe(gl.NO_ERROR);
-});
+  // Under 1 s alone; beside the other GPU test files it waits its turn for the GPU (9 s at 23af3f9), so it gets the time they do.
+}, 60_000);
 
-test('the rig draws into its own depth slice while AO reads depth, and nothing else does', async () => {
+test('the rig draws into its own depth slice on every tier, so a transparent effect behind a wall stays hidden', async () => {
   const renderer = makeRenderer();
   const gl = renderer.three.getContext(), range = vi.spyOn(gl, 'depthRange');
   const gun = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.4), new THREE.MeshBasicMaterial());
   gun.position.set(0.2, -0.2, -0.5);
   renderer.rig.add(gun);
   renderer.prepareRig(gun);
+  // An opaque wall, and a bright transparent plane (a tracer, a decal, fire) behind it.
+  const wall = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), new THREE.MeshBasicMaterial({ color: 0x808080 }));
+  wall.position.z = -3;
+  const behind = new THREE.Mesh(new THREE.PlaneGeometry(20, 20),
+    new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  behind.position.z = -5;
+  renderer.scene.add(wall, behind);
+  renderer.camera.position.set(0, 0, 0);
   // Each look's first frames also compile and draw the view models once (`_warmPrograms`): a frame after those.
   const settled = async (): Promise<void> => {
     for (let i = 0; i < 100 && (i < 2 || renderer._compiles.length + renderer._warmups.length > 0); i++) {
@@ -202,13 +249,22 @@ test('the rig draws into its own depth slice while AO reads depth, and nothing e
     range.mockClear();
     renderer.render(0, fx);
   };
-  renderer.applyQuality(PRESET_VALUES.low);
-  await settled();
-  expect(range).not.toHaveBeenCalled();
-  renderer.applyQuality(PRESET_VALUES.high);
-  await settled();
-  expect(range.mock.calls).toEqual([[0, RIG_DEPTH], [0, 1]]);
-});
+  const centre = (): number[] => {
+    const pixel = new Uint8Array(4);
+    gl.readPixels(gl.drawingBufferWidth >> 1, gl.drawingBufferHeight >> 1, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+    return [...pixel];
+  };
+  for (const name of PRESETS) {
+    renderer.applyQuality(PRESET_VALUES[name]);
+    behind.visible = false;
+    await settled();
+    const wallOnly = centre();
+    behind.visible = true;
+    await settled();
+    expect(centre(), name).toEqual(wallOnly);
+    expect(range.mock.calls, name).toEqual([[0, RIG_DEPTH], [0, 1]]);
+  }
+}, 60_000);
 
 test('shadow boxes stay on their texel grid, so moving the viewer never swims the shadows', () => {
   const light = new THREE.DirectionalLight();

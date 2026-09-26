@@ -16,6 +16,7 @@ import type { NavGrid } from './nav';
 import type { OnlineMode, Team, TeamMatch } from './game/team-rules';
 import type { SurfKey } from './render/palette';
 import type { MaterialTag } from './render/surfaces';
+import type { SurfaceOverlay } from './render/impacts';
 
 // Ported subsystems: real types.
 export type { Renderer } from './render/index';
@@ -192,6 +193,15 @@ export interface BoxData {
   tag?: unknown;
   /** Back-reference set by `level` for prop colliders. */
   breakable?: Breakable;
+  /**
+   * What the collider's piece is made of and its flat-palette key, written by
+   * the level builder (R5): a bullet's impact and hole follow them
+   * (render/impacts.ts). Absent on boxes nothing visible stands for.
+   */
+  material?: MaterialTag;
+  surf?: SurfKey;
+  /** Visible pieces with no collider laid on this one's faces (a path on the lawn): a hit under one shows it. */
+  overlays?: SurfaceOverlay[];
 }
 
 export interface RayHit {

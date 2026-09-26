@@ -41,8 +41,9 @@ const ctx = {
   input: { rumble: record('rumble') },
   audio: Object.fromEntries(['shot', 'mp5Fire', 'pistolFire', 'shotgunFire', 'sniperFire', 'revolver', 'reload', 'shellCue', 'cylinder',
     'empty', 'pump', 'ricochet', 'katanaSwing', 'katanaHit'].map(name => [name, record(name)])),
-  effects: { shake: 0, ...Object.fromEntries(['strokeBurst', 'smoke', 'shell', 'bulletImpact'].map(name => [name, record(name)])),
-    tracer: (a: Vector3, b: Vector3, ...args: unknown[]) => calls.push({ name: 'tracer', args: [a.clone(), b.clone(), ...args] }) },
+  effects: { shake: 0, realistic: false, ...Object.fromEntries(['strokeBurst', 'muzzleSmoke', 'muzzleLight', 'shell', 'bulletImpact'].map(name => [name, record(name)])),
+    tracer: (a: Vector3, b: Vector3, ...args: unknown[]) => calls.push({ name: 'tracer', args: [a.clone(), b.clone(), ...args] }),
+    bulletTracer: (a: Vector3, b: Vector3, ...args: unknown[]) => calls.push({ name: 'tracer', args: [a.clone(), b.clone(), ...args] }) },
   enemies: {
     raycast: ((() => null) as () => EnemyHit | null),
     inArc: ((() => []) as () => { enemy: Foe; dist: number }[]),
@@ -190,6 +191,76 @@ test('rifle magazine reload and firing', () => {
   const frozenPose = rifle.root.position.clone();
   rifle.animate(fire, 0.2);
   assert(rifle.mag === 29 && rifle.root.position.equals(frozenPose) && !rifle.root.visible, 'Holstered state does not advance or fire');
+});
+
+test('casings leave sideways on the flat look, up over the gun on the realistic tiers', () => {
+  draw(rifle);
+  const effects = ctx.effects as { realistic: boolean };
+  const shells = (realistic: boolean) => {
+    effects.realistic = realistic;
+    const out: Vector3[] = [];
+    for (let i = 0; i < 12; i++) {
+      calls.length = 0;
+      rifle.resetAmmo();
+      rifle.animate(fire, 0.1);
+      // The gun passes its own scratch vector: copied before the next shot writes it.
+      for (const call of named('shell')) out.push(vec(call.args[1]).clone());
+    }
+    effects.realistic = false;
+    return out;
+  };
+  const flat = shells(false), real = shells(true);
+  expect(flat.length).toBeGreaterThan(0);
+  expect(real.length).toBe(flat.length);
+  // Flat: mostly to the right. Realistic: mostly up (clearing the gun that hides it), a little forward.
+  for (const v of flat) expect(v.x).toBeGreaterThan(v.y * 0.5);
+  for (const v of real) {
+    expect(v.y).toBeGreaterThan(v.x * 1.8);
+    expect(v.dot(player.forward)).toBeGreaterThan(0);
+  }
+});
+
+test('the muzzle flash is smaller at the hip, its core shows one frame, and a burst leaves one wisp of smoke', () => {
+  const held = { ...neutral, fire: true };
+  const model = (rifle as unknown as { _model: { flash: { visible: boolean; scale: Vector3 }; flashCore: { visible: boolean; scale: Vector3 } } })._model;
+  // The flash's size at the hip and at full aim (V5: the hip flash covered about a quarter of the screen).
+  draw(rifle); rifle.resetAmmo();
+  rifle.animate(fire, 0);
+  expect(rifle.aimAmt).toBe(0);
+  const hip = model.flashCore.scale.x;
+  step(rifle, 0.5);
+  step(rifle, 2, { ...neutral, aim: true });
+  expect(rifle.aimAmt).toBeCloseTo(1, 5);
+  rifle.animate({ ...fire, aim: true }, 0);
+  const aimed = model.flashCore.scale.x;
+  expect(hip / aimed).toBeCloseTo(0.7, 5);
+  // The flash's random size stays about the core's.
+  expect(model.flash.scale.x / aimed).toBeGreaterThanOrEqual(0.85 - 1e-9);
+  expect(model.flash.scale.x / aimed).toBeLessThanOrEqual(1.15 + 1e-9);
+  // The bright core shows on the shot's own frame only; the flash itself lasts 45 ms.
+  expect([model.flash.visible, model.flashCore.visible]).toEqual([true, true]);
+  rifle.animate({ ...neutral, aim: true }, 0.01);
+  expect([model.flash.visible, model.flashCore.visible]).toEqual([true, false]);
+  step(rifle, 0.05, { ...neutral, aim: true });
+  expect(model.flash.visible).toBe(false);
+  step(rifle, 0.5);
+  const wisps = () => named('muzzleSmoke').filter(call => call.args[2] === true).length;
+  // One shot of an automatic: a puff per shot and no wisp.
+  rifle.resetAmmo(); calls.length = 0;
+  rifle.animate(fire, 0);
+  step(rifle, 0.5);
+  expect([named('muzzleSmoke').length, wisps()]).toEqual([1, 0]);
+  // A burst of three or more: once it ends, one wisp rises off the barrel, and no more after it.
+  rifle.resetAmmo(); calls.length = 0;
+  for (let i = 0; i < 3; i++) rifle.animate(held, i === 0 ? 0 : GUN_STATS.rifle.fireInterval);
+  expect(rifle.magSize - rifle.mag).toBe(3);
+  expect(wisps()).toBe(0);
+  step(rifle, 1);
+  expect(wisps()).toBe(1);
+  const wisp = must(named('muzzleSmoke').find(call => call.args[2] === true), 'wisp');
+  // At the muzzle (the gun was still settling from its recoil then).
+  expect(vec(wisp.args[0]).distanceTo(must(rifle.root.getObjectByName('muzzle'), 'muzzle').getWorldPosition(new Vector3()))).toBeLessThan(0.05);
+  rifle.resetAmmo(); rifle.unequip();
 });
 
 test('R4-C holds automatic fire at 80 ms and reloads at 2.2 seconds', () => {

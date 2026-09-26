@@ -40,6 +40,8 @@ export interface GfxModel {
   auto: PresetName;
   values: GfxValues;
   fpsCounter: boolean;
+  /** False: this GPU draws no soft particles with MSAA on (render/index.ts `msaaDepthReadable`); the smoke dithers. */
+  msaaSoft?: boolean;
 }
 export interface LookModel {
   sens: number; acogSens: number; sniperSens: number; touchSens?: number; touch?: boolean;

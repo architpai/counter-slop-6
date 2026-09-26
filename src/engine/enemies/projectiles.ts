@@ -1,7 +1,8 @@
-import { Mesh, Vector3 } from 'three';
+import { BoxGeometry, Mesh, Vector3 } from 'three';
 import { clamp, alignSegment } from '../util';
 import { seeThrough } from '../physics';
-import { boxGeo, unlitMat, TONE, TONE_HEX } from '../render/index';
+import { TONE } from '../render/index';
+import { boltMaterial } from '../render/fx';
 import type { Projectile, Target } from '../types';
 import type { EnemyManager, EnemyRecord } from './index';
 
@@ -12,6 +13,14 @@ export interface ProjectileRecord extends Projectile {
 }
 
 const MAX = 240;
+/**
+ * The bolts' drawn width over their `thickness` (V5): a third thinner than
+ * before, now that they glow. Hit tests use their own radii, not this.
+ */
+const BOLT_WIDTH = 0.65;
+/** One unit box for every bolt (each projectile used to make its own and never free it). */
+const BOLT = new BoxGeometry(1, 1, 1);
+BOLT.userData.shared = true;
 const half = new Vector3(), a = new Vector3(), b = new Vector3(), seg = new Vector3(), sample = new Vector3();
 const closest = new Vector3(), dir = new Vector3(), away = new Vector3();
 // `hitsTarget` needs a scratch of its own: `segmentHits` writes through `sample`,
@@ -23,7 +32,7 @@ function draw(p: ProjectileRecord): void {
   if (speed < 1e-5) { p.mesh.visible = false; return; }
   const len = p.blast ? p.thickness : clamp(speed * 0.02, 0.35, 0.9);
   half.copy(p.vel).multiplyScalar(len / speed / 2);
-  alignSegment(p.mesh, a.subVectors(p.pos, half), b.addVectors(p.pos, half), p.thickness);
+  alignSegment(p.mesh, a.subVectors(p.pos, half), b.addVectors(p.pos, half), p.thickness * BOLT_WIDTH);
 }
 
 export function spawnProjectile(m: EnemyManager, pos: Vector3, direction: Vector3, speed: number, damage: number,
@@ -32,7 +41,7 @@ export function spawnProjectile(m: EnemyManager, pos: Vector3, direction: Vector
   const p: ProjectileRecord = {
     id: id ?? m.ids++, pos: pos.clone(), prev: pos.clone(), vel: direction.clone().normalize().multiplyScalar(speed),
     damage, owner, life: 4, deflected: false, tone, thickness, origin: pos.clone(), blast,
-    mesh: new Mesh(boxGeo(1, 1, 1), unlitMat(TONE_HEX[tone] ?? TONE_HEX[TONE.HOSTILE])),
+    mesh: new Mesh(BOLT, boltMaterial(tone)),
   };
   p.mesh.name = 'projectile';
   m.ctx.scene.add(p.mesh);
@@ -79,7 +88,7 @@ export function deflect(m: EnemyManager, p: ProjectileRecord, perfect: boolean):
   // the guards below are there for the type.
   const player = m.ctx.player;
   p.deflected = true; p.tone = TONE.PRIMARY; p.damage *= perfect ? 3.5 : 2.2; p.life = 3;
-  p.mesh.material = unlitMat(TONE_HEX[TONE.PRIMARY]);
+  p.mesh.material = boltMaterial(TONE.PRIMARY);
   let target: EnemyRecord | null = perfect && p.owner?.alive ? p.owner : null;
   if (!target && player) target = m.nearestVisible(player.eye, player.forward, Math.cos(0.7), 70) || (p.owner?.alive ? p.owner : null);
   const speed = p.vel.length() * 1.6;
@@ -116,7 +125,7 @@ export function updateProjectiles(m: EnemyManager, dt: number): void {
     const wall = world.raycast(p.prev, dir.copy(seg).divideScalar(len), len, seeThrough);
     if (wall) {
       if (p.blast) burst(m, p, wall.point);
-      else { effects.bulletImpact(wall.point, wall.normal, p.tone); if (Math.random() < 0.5) audio.bulletImpact(wall.point); }
+      else { effects.bulletImpact(wall.point, wall.normal, wall.box.data, dir); if (Math.random() < 0.5) audio.bulletImpact(wall.point); }
       removeProjectile(m, i); continue;
     }
     let consumed = false;

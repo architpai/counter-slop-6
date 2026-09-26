@@ -198,6 +198,9 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
   const effects = new Effects(scene, world);
   const storage = (() => { try { return window.localStorage; } catch { return null; } })();
   const quality = new Quality(storage, probeDevice(renderer.three.getContext(), window, input.usingTouch));
+  /** The realistic effects while a realistic look is in force and their atlases are in (R5); the flat ones otherwise. */
+  const syncEffects = (): void => effects.setRealistic(renderer.fxContext());
+  teardown.push(renderer.fx.subscribe(syncEffects));
   const dynamic = new DynamicResolution();
   const limiter = new FrameLimiter();
   let benchmark: Benchmark | null = null;
@@ -206,6 +209,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     const values = quality.values;
     renderer.applyQuality(values);
     effects.setDetail(EFFECTS_SCALE[values.effects]);
+    syncEffects();
     limiter.fps = values.fpsTarget;
     dynamic.configure(values.dynamicMin, targetFrameMs(values.fpsTarget));
     renderer.setDynamicScale(1);
@@ -629,6 +633,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     audio.dispose();
     enemies.clear();
     effects.clear();
+    effects.setRealistic(null);
     app.pickups.clear();
     disposeLevel(scene, ctx.level);
     world.clear();

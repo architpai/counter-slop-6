@@ -201,7 +201,7 @@ export function standInGrid(): THREE.Data3DTexture {
 GRID_UNIFORMS.probeGrid.value = standInGrid();
 
 /** The probe grid lookup: the ambient cube at a world point, trilinear, seen by a world normal. */
-const GRID_GLSL = `
+export const GRID_GLSL = `
 uniform sampler3D probeGrid;
 uniform vec3 probeGridMin, probeGridCells;
 uniform float probeGridCell, probeGridScale, probeGridMix, probeGridFloor, probeGridSunFloor, probeGridViewFloor;
@@ -250,12 +250,17 @@ if ( probeGridMix > 0.0 ) {
 }
 #endif`;
 
-/** Add the probe grid to a lit shader (Lambert, Toon or Standard). */
-function withGrid(shader: THREE.WebGLProgramParametersWithUniforms): void {
+/** Add the probe grid to a lit shader (Lambert, Toon or Standard); an instanced one (R5's decals and shells) too. */
+export function withGrid(shader: THREE.WebGLProgramParametersWithUniforms): void {
   Object.assign(shader.uniforms, GRID_UNIFORMS);
   shader.vertexShader = shader.vertexShader
     .replace('#include <common>', '#include <common>\nvarying vec3 vGridPos;')
-    .replace('#include <project_vertex>', '#include <project_vertex>\nvGridPos = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
+    .replace('#include <project_vertex>', `#include <project_vertex>
+#ifdef USE_INSTANCING
+vGridPos = ( modelMatrix * instanceMatrix * vec4( transformed, 1.0 ) ).xyz;
+#else
+vGridPos = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;
+#endif`);
   shader.fragmentShader = shader.fragmentShader
     .replace('#include <common>', `#include <common>${GRID_GLSL}`)
     .replace('#include <lights_fragment_maps>', `#include <lights_fragment_maps>${GRID_APPLY}`);

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { surfMat, cloudMat, TONE, boxGeo, cylGeo, sphereGeo, coneGeo, torusGeo } from '../render/index';
 import { DEFAULT_MATERIAL, MATERIAL_SET, planarUVs, setInfo } from '../render/surfaces';
+import { OVERLAY_GAP, OVERLAY_SUNK, OVERLAY_THICK } from '../render/impacts';
 import type { SurfKey } from '../render/palette';
 import type { MaterialTag } from '../render/surfaces';
 import type { Box, World } from '../physics';
@@ -96,6 +97,12 @@ export class LevelBuilder {
    * tag (a flat-only piece under `flat`).
    */
   parts: Map<SurfKey, Map<MaterialTag | 'flat', THREE.BufferGeometry[]>>;
+  /**
+   * Every visible piece's world box, tag and surface key, so `finish` can say
+   * what a bare collider (a `collider()` call with no mesh of its own) stands
+   * for: the piece it overlaps most.
+   */
+  pieces: { min: THREE.Vector3; max: THREE.Vector3; material: MaterialTag; surf: SurfKey; overlay: boolean }[];
   level: Level;
 
   constructor(scene: THREE.Scene, world: World, key: LevelKey, arena: boolean) {
@@ -103,6 +110,7 @@ export class LevelBuilder {
     this.world = world;
     this.tone = TONE;
     this.parts = new Map();
+    this.pieces = [];
     const p = key === 'mexico' ? 62 : key === 'house' ? 39 : arena ? 68 : 55;
     this.level = {
       key, arena, playerStart: new THREE.Vector3(0, 0, key === 'mexico' ? 16 : key === 'house' ? 21 : 42),
@@ -130,6 +138,7 @@ export class LevelBuilder {
     if (Array.isArray(pos)) object.position.fromArray(pos);
     else object.position.copy(pos);
     if (opts.rotation) object.rotation.copy(opts.rotation);
+    if (!opts.flatOnly && !opts.moving) this._piece(geometry, object, material, key, !!opts.noCollide);
     if (opts.separate) {
       object.geometry = surfaceGeometry(geometry, material);
       this.level.surfaces.push({ mesh: object, surf: key, materials: [opts.flatOnly ? null : material], static: !opts.moving, moving: opts.moving });
@@ -144,6 +153,24 @@ export class LevelBuilder {
     if (group === undefined) tags.set(tag, group = []);
     group.push(surfaceGeometry(geometry, material));
     return object;
+  }
+
+  /** Record a piece's world box: its geometry as `object` (not yet applied) places it. `overlay`: it has no collider of its own. */
+  _piece(geometry: THREE.BufferGeometry, object: THREE.Object3D, material: MaterialTag, surf: SurfKey, overlay: boolean): void {
+    geometry.computeBoundingBox();
+    const box = geometry.boundingBox;
+    if (!box) return;
+    object.updateMatrix();
+    const world = box.clone().applyMatrix4(object.matrix);
+    this.pieces.push({ min: world.min, max: world.max, material, surf, overlay });
+  }
+
+  /** The tag and key of a piece's collider, for `impactFor` (render/impacts.ts). */
+  _tagBox(box: Box, opts: BuildOpts): Box {
+    const surf = opts.mat ?? opts.surface ?? surfaces[opts.tone ?? TONE.PRIMARY] ?? 'block';
+    box.data.material = opts.material ?? DEFAULT_MATERIAL[surf];
+    box.data.surf = surf;
+    return box;
   }
 
   /**
@@ -169,7 +196,7 @@ export class LevelBuilder {
   box(x: number, y: number, z: number, w: number, h: number, d: number,
     opts: BuildOpts = {}): Box | null {
     this.mesh(boxGeo(w, h, d), [x, y + h / 2, z], opts);
-    return opts.noCollide ? null : this.collider(x, y, z, w, h, d, opts);
+    return opts.noCollide ? null : this._tagBox(this.collider(x, y, z, w, h, d, opts), opts);
   }
 
   slab(x1: number, z1: number, x2: number, z2: number, top: number, thickness: number,
@@ -231,7 +258,7 @@ export class LevelBuilder {
   cylinder(x: number, y: number, z: number, r: number, h: number,
     opts: BuildOpts = {}): Box | null {
     this.mesh(cylGeo(r, h, opts.segments ?? 8, 'y'), [x, y + h / 2, z], opts);
-    return opts.noCollide ? null : this.collider(x, y, z, 1.6 * r, h, 1.6 * r, opts);
+    return opts.noCollide ? null : this._tagBox(this.collider(x, y, z, 1.6 * r, h, 1.6 * r, opts), opts);
   }
 
   sphere(x: number, y: number, z: number, r: number, opts: BuildOpts = {}): THREE.Mesh {
@@ -335,7 +362,60 @@ export class LevelBuilder {
       this.level.surfaces.push({ mesh, surf, materials: [...tags.keys()].map(tag => (tag === 'flat' ? null : tag)), static: true });
     }
     this.parts.clear();
+    this._listOverlays();
+    this._tagBareColliders();
     this.world.finalize();
     return this.level;
+  }
+
+  /**
+   * A thin piece with no collider of its own laid on a collider's face (a
+   * path on the lawn, paint on a road, a band on a wall) goes on that
+   * collider's `overlays`, so a bullet hitting there shows the piece's
+   * surface and leaves its hole on top (render/impacts.ts `surfaceAt`).
+   */
+  _listOverlays(): void {
+    const axes = ['x', 'y', 'z'] as const;
+    const near = (gap: number) => gap >= -OVERLAY_SUNK && gap <= OVERLAY_GAP;
+    const overlays = this.pieces.filter(piece => piece.overlay && axes.some(axis => piece.max[axis] - piece.min[axis] <= OVERLAY_THICK));
+    for (const box of this.world.boxes) {
+      if (box.data.noShoot) continue;
+      for (const piece of overlays) {
+        // Overlapping the box across all three axes, padded by the gap: then lying on one of its faces.
+        if (piece.max.x < box.min.x - OVERLAY_GAP || piece.min.x > box.max.x + OVERLAY_GAP
+          || piece.max.y < box.min.y - OVERLAY_GAP || piece.min.y > box.max.y + OVERLAY_GAP
+          || piece.max.z < box.min.z - OVERLAY_GAP || piece.min.z > box.max.z + OVERLAY_GAP) continue;
+        const on = axes.some(axis => piece.max[axis] - piece.min[axis] <= OVERLAY_THICK
+          && axes.every(a => a === axis || (piece.max[a] > box.min[a] && piece.min[a] < box.max[a]))
+          && (near(piece.min[axis] - box.max[axis]) || near(box.min[axis] - piece.max[axis])));
+        if (on) (box.data.overlays ??= []).push({ min: piece.min, max: piece.max, material: piece.material, surf: piece.surf });
+      }
+    }
+  }
+
+  /**
+   * A collider made without a mesh (a stair ramp, a furniture block, a roof
+   * over merged pieces) takes the tag of the visible piece it overlaps most,
+   * by volume (a flat piece counts by area). Boxes nothing overlaps (the
+   * invisible map shell) stay untagged and read as concrete.
+   */
+  _tagBareColliders(): void {
+    const pad = 0.02;
+    for (const box of this.world.boxes) {
+      if (box.data.material !== undefined || box.data.breakable) continue;
+      let best = 0;
+      for (const piece of this.pieces) {
+        const dx = Math.min(box.max.x, piece.max.x + pad) - Math.max(box.min.x, piece.min.x - pad);
+        const dy = Math.min(box.max.y, piece.max.y + pad) - Math.max(box.min.y, piece.min.y - pad);
+        const dz = Math.min(box.max.z, piece.max.z + pad) - Math.max(box.min.z, piece.min.z - pad);
+        if (dx <= 0 || dy <= 0 || dz <= 0) continue;
+        const overlap = dx * dy * dz;
+        if (overlap <= best) continue;
+        best = overlap;
+        box.data.material = piece.material;
+        box.data.surf = piece.surf;
+      }
+    }
+    this.pieces = [];
   }
 }

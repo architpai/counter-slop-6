@@ -449,7 +449,7 @@ export class EnemyManager {
       }
     }
     if (e.type === 'flyer' && e.mutated && e.payload) {
-      effects.explosion(e.center, 3, TONE.ACCENT); this.blastEnemies(e.center, 3, 60, e);
+      effects.explosion(e.center, 3, TONE.ACCENT, true); this.blastEnemies(e.center, 3, 60, e);
     }
     e.body.vel.set(0, 0, 0);
     if (e.laser) { e.laser.removeFromParent(); e.laser = null; }

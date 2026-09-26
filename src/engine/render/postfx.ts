@@ -22,6 +22,12 @@ export interface PostConfig {
   smaa: boolean;
   /** GTAO resolution as a share of the scene target: 0 (off), 0.5 or 1. */
   ao: number;
+  /**
+   * Soft particles (R5): keep the scene's depth texture without AO (AO needs
+   * it anyway), for the particles' layer to read (`drawSoft`), and composite
+   * that layer over the scene in the bloom and tone passes.
+   */
+  depth: boolean;
   bloom: boolean;
 }
 
@@ -42,6 +48,13 @@ const BLOOM_KNEE = 0.5;
 const BLOOM_STRENGTH = 0.05;
 /** Half, quarter … 1/32 resolution. */
 const BLOOM_LEVELS = 5;
+/**
+ * The soft particles' layer is drawn at half the scene target's size from
+ * this many rows up (a high-DPI frame: still a texel per CSS pixel), at its
+ * full size below. Smoke and fire are soft; the layer's clear and reads cost
+ * a quarter as much.
+ */
+const SOFT_HALF_FROM = 1400;
 /** Contrast-adaptive sharpen after SMAA: 0 none, 1 the most CAS gives. */
 const SHARPEN = 0.35;
 
@@ -60,6 +73,20 @@ THREE.ShaderChunk.opaque_fragment = OPAQUE_CHUNK + /* glsl */`
 	gl_FragColor.a = 1.0 - clamp( dot( reflectedLight.directDiffuse + reflectedLight.directSpecular, vec3( 0.2126, 0.7152, 0.0722 ) )
 		/ max( dot( outgoingLight, vec3( 0.2126, 0.7152, 0.0722 ) ), 1e-6 ), 0.0, 1.0 );
 #endif
+`;
+
+/**
+ * The soft particles' layer over the scene colour (`Composite.drawSoft`): a
+ * premultiplied colour and coverage, laid over as blending would have.
+ */
+const SOFT_GLSL = `
+  uniform sampler2D soft;
+  uniform float softOn;
+  vec3 withSoft(vec3 col, vec2 uv) {
+    if (softOn < 0.5) return col;
+    vec4 s = texture2D(soft, uv);
+    return col * (1.0 - s.a) + s.rgb;
+  }
 `;
 
 /** Shared by every pass: one triangle over the whole target (or its viewport). */
@@ -193,7 +220,9 @@ type CompositeUniforms = FeedbackUniforms & GradeUniforms & AoLookupUniforms & B
   /** One target texel in UV, for FXAA. */
   texel: U<THREE.Vector2>;
 };
-type ToneUniforms = GradeUniforms & AoLookupUniforms & BloomUniforms & RegionUniforms & {
+/** The soft particles' layer (premultiplied) and whether this frame drew one. */
+type SoftUniforms = { soft: U<THREE.Texture>; softOn: U<number> };
+type ToneUniforms = GradeUniforms & AoLookupUniforms & BloomUniforms & RegionUniforms & SoftUniforms & {
   image: U<THREE.Texture>;
   exposure: U<number>;
 };
@@ -221,7 +250,8 @@ const floatTarget = (format: THREE.PixelFormat, filter: THREE.MagnificationTextu
  *
  * Low (the flat look) is one pass, as before: FXAA, the soft-shoulder tone map,
  * the grade and the feedback, straight to the canvas. The realistic look is a
- * chain: GTAO from the depth buffer, threshold bloom at half resolution, AgX
+ * chain: GTAO from the depth buffer, the soft particles' layer laid over the
+ * scene (`drawSoft`), threshold bloom at half resolution, AgX
  * tone mapping with the per-map exposure and grade, SMAA, a light
  * contrast-adaptive sharpen, then the feedback last. Each stage switches on
  * with its quality setting, and AO, bloom and SMAA work on either look.
@@ -241,7 +271,7 @@ export class Composite {
   readonly camera: THREE.OrthographicCamera;
   readonly triangle: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;
   /** The config in force; read by the renderer and the tests. */
-  config: PostConfig = { look: 'lowpoly', samples: 4, fxaa: false, smaa: false, ao: 0, bloom: false };
+  config: PostConfig = { look: 'lowpoly', samples: 4, fxaa: false, smaa: false, ao: 0, depth: false, bloom: false };
   readonly _low: THREE.ShaderMaterial;
   readonly _tone: THREE.ShaderMaterial;
   readonly _final: THREE.ShaderMaterial;
@@ -254,13 +284,22 @@ export class Composite {
   readonly _finalUniforms: FinalUniforms;
   readonly _gtaoUniforms: GtaoUniforms;
   readonly _blurUniforms: BlurUniforms;
-  readonly _prefilterUniforms: BloomPassUniforms & { exposure: U<number> };
+  readonly _prefilterUniforms: BloomPassUniforms & SoftUniforms & { exposure: U<number> };
   readonly _downUniforms: BloomPassUniforms;
   readonly _upUniforms: BloomPassUniforms;
   /** Raw GTAO, then its denoised copy; r is visibility, g the view depth in metres. */
   readonly _aoRaw = floatTarget(THREE.RGFormat, THREE.NearestFilter);
   readonly _aoBlur = floatTarget(THREE.RGFormat, THREE.NearestFilter);
   readonly _bloom: THREE.WebGLRenderTarget[] = Array.from({ length: BLOOM_LEVELS }, () => floatTarget(THREE.RGBAFormat, THREE.LinearFilter));
+  /**
+   * The soft particles' layer (R5), premultiplied, at the scene target's size
+   * and drawn share; allocated while soft particles are on (`depth`).
+   */
+  readonly _soft = floatTarget(THREE.RGBAFormat, THREE.LinearFilter);
+  /** The layer's size against the scene target's (`SOFT_HALF_FROM`). */
+  _softScale = 1;
+  readonly _softSizeOut = new THREE.Vector2();
+  readonly _softUniforms: SoftUniforms = { soft: { value: this._soft.texture }, softOn: { value: 0 } };
   /** Tone-mapped, sRGB-encoded frames for SMAA and the final pass. */
   readonly _ldr = ldrTarget();
   readonly _ldr2 = ldrTarget();
@@ -365,7 +404,7 @@ export class Composite {
       }
     `);
 
-    this._toneUniforms = { ...grade, ...aoLookup, ...bloom, ...region, image: { value: this.target.texture }, exposure: { value: 1 } };
+    this._toneUniforms = { ...grade, ...aoLookup, ...bloom, ...region, ...this._softUniforms, image: { value: this.target.texture }, exposure: { value: 1 } };
     this._tone = makePostMaterial(this._toneUniforms, VERTEX, `
       #include <packing>
       uniform sampler2D image;
@@ -381,6 +420,9 @@ export class Composite {
       uniform sampler2D bloom;
       uniform float bloomStrength;
       uniform vec2 bloomMax;
+      #endif
+      #ifdef SOFT
+      ${SOFT_GLSL}
       #endif
 
       // AgX (Troy Sobotka's, in the common minimal fit): a log encoding over
@@ -416,6 +458,9 @@ export class Composite {
         vec3 col = scene.rgb;
         #ifdef AO
         col *= occlusion(uv, scene.a);
+        #endif
+        #ifdef SOFT
+        col = withSoft(col, uv);
         #endif
         #ifdef BLOOM
         col += texture2D(bloom, min(uv, bloomMax)).rgb * bloomStrength;
@@ -577,14 +622,19 @@ export class Composite {
       }
     `);
 
-    this._prefilterUniforms = { ...region, image: { value: this.target.texture }, texel: { value: new THREE.Vector2(1, 1) }, exposure: { value: 1 } };
+    this._prefilterUniforms = { ...region, ...this._softUniforms, image: { value: this.target.texture }, texel: { value: new THREE.Vector2(1, 1) }, exposure: { value: 1 } };
     this._prefilter = makePostMaterial(this._prefilterUniforms, VERTEX, `
       uniform sampler2D image;
       uniform vec2 texel;
       uniform float exposure;
       varying vec2 vUv;
       ${REGION_GLSL}
+      #ifdef SOFT
+      ${SOFT_GLSL}
+      vec3 tap(vec2 uv) { uv = min(uv, uvMax); return withSoft(texture2D(image, uv).rgb, uv); }
+      #else
       vec3 tap(vec2 uv) { return texture2D(image, min(uv, uvMax)).rgb; }
+      #endif
       // A 4 x 4 box down to half resolution, then a soft threshold on the exposed brightness.
       void main() {
         vec2 uv = vUv * uvScale;
@@ -644,7 +694,7 @@ export class Composite {
   dispose(): void {
     this.target.dispose();
     this._depth?.dispose();
-    for (const target of [this._aoRaw, this._aoBlur, this._ldr, this._ldr2, ...this._bloom]) target.dispose();
+    for (const target of [this._aoRaw, this._aoBlur, this._soft, this._ldr, this._ldr2, ...this._bloom]) target.dispose();
     this._smaa?.dispose();
     this._smaa = null;
     this.triangle.geometry.dispose();
@@ -660,6 +710,8 @@ export class Composite {
     this._width = width;
     this._height = height;
     this.target.setSize(width, height);
+    this._softScale = height >= SOFT_HALF_FROM ? 0.5 : 1;
+    this._soft.setSize(Math.max(1, Math.round(width * this._softScale)), Math.max(1, Math.round(height * this._softScale)));
     this.uniforms.aspect.value = aspect;
     this.uniforms.texel.value.set(1 / width, 1 / height);
     this._finalUniforms.texel.value.set(1 / width, 1 / height);
@@ -706,6 +758,11 @@ export class Composite {
     // The scissor keeps the scene pass's clear inside the drawn corner.
     this.target.scissor.set(0, 0, width, height);
     this.target.scissorTest = scaled;
+    const softWidth = Math.min(this._soft.width, Math.max(1, Math.round(width * this._softScale)));
+    const softHeight = Math.min(this._soft.height, Math.max(1, Math.round(height * this._softScale)));
+    this._soft.viewport.set(0, 0, softWidth, softHeight);
+    this._soft.scissor.set(0, 0, softWidth, softHeight);
+    this._soft.scissorTest = scaled;
     const ao = this.config.ao > 0 ? this.config.ao : 0.5;
     const aoWidth = Math.min(this._aoRaw.width, Math.max(1, Math.round(width * ao)));
     const aoHeight = Math.min(this._aoRaw.height, Math.max(1, Math.round(height * ao)));
@@ -733,7 +790,7 @@ export class Composite {
   configure(config: PostConfig): void {
     const before = this.config;
     this.config = { ...config };
-    const depth = config.ao > 0;
+    const depth = config.ao > 0 || config.depth, ao = config.ao > 0;
     if (this.target.samples !== config.samples || (this.target.depthTexture !== null) !== depth) {
       this.target.samples = config.samples;
       if (depth && !this._depth) {
@@ -761,16 +818,28 @@ export class Composite {
       this._smaa = null;
     }
     const realistic = config.look === 'realistic';
-    if (!depth) for (const target of [this._aoRaw, this._aoBlur]) target.dispose();
+    if (!ao) for (const target of [this._aoRaw, this._aoBlur]) target.dispose();
     if (!config.bloom) for (const target of this._bloom) target.dispose();
+    if (!config.depth) this._soft.dispose();
     // `_ldr` feeds SMAA on the flat look and the final pass on the realistic one; `_ldr2` is SMAA's output there.
     if (!realistic && !config.smaa) this._ldr.dispose();
     if (!realistic || !config.smaa) this._ldr2.dispose();
-    setDefines(this._low, { FXAA: config.fxaa, AO: depth, BLOOM: config.bloom, LDR_OUT: config.smaa });
-    setDefines(this._tone, { AO: depth, BLOOM: config.bloom });
+    setDefines(this._low, { FXAA: config.fxaa, AO: ao, BLOOM: config.bloom, LDR_OUT: config.smaa });
+    setDefines(this._tone, { AO: ao, BLOOM: config.bloom, SOFT: config.depth });
+    setDefines(this._prefilter, { SOFT: config.depth });
     setDefines(this._final, { FXAA: config.fxaa });
     // The Low composite and the realistic final pass both draw the feedback; only one runs.
     this._prefilterUniforms.exposure.value = realistic ? this._exposure : 1;
+  }
+
+  /** The soft particles' layer: its size, for their depth lookup (`gl_FragCoord` over it is the depth texture's UV). */
+  get softSize(): THREE.Vector2 {
+    return this._softSizeOut.set(this._soft.width, this._soft.height);
+  }
+
+  /** The scene's depth texture, while AO or the soft particles keep one (`PostConfig.depth`). */
+  get depthTexture(): THREE.DepthTexture | null {
+    return this._depth;
   }
 
   setGrade(grade: Grade): void {
@@ -786,6 +855,26 @@ export class Composite {
     this._exposure = exposure;
     this._toneUniforms.exposure.value = exposure;
     if (this.config.look === 'realistic') this._prefilterUniforms.exposure.value = exposure;
+  }
+
+  /**
+   * The soft particles (R5): `scene` drawn into their own single-sampled layer
+   * (at half size on a high-DPI frame: `SOFT_HALF_FROM`), which the bloom and
+   * tone passes lay over the scene (this frame only). They
+   * test no depth buffer: each fades out behind the scene's depth texture
+   * itself (render/fx.ts `SOFT`). A second draw into the multisampled scene
+   * target cost about 1 ms at Ultra even for one puff: it reloads the MSAA
+   * samples and resolves the whole frame again.
+   */
+  drawSoft(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera): void {
+    const alpha = renderer.getClearAlpha();
+    renderer.getClearColor(this._clear);
+    renderer.setClearColor(0x000000, 0);
+    renderer.setRenderTarget(this._soft);
+    renderer.clear(true, false, false);
+    renderer.render(scene, camera);
+    renderer.setClearColor(this._clear, alpha);
+    this._softUniforms.softOn.value = 1;
   }
 
   _pass(renderer: THREE.WebGLRenderer, material: THREE.ShaderMaterial, target: THREE.WebGLRenderTarget | null): void {
@@ -845,6 +934,7 @@ export class Composite {
       renderer.clear();
       this._pass(renderer, this._low, null);
     }
+    this._softUniforms.softOn.value = 0;
   }
 
   /** SMAA from `_ldr` into `target` (null: the canvas). Its passes clear to transparent black. */

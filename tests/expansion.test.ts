@@ -37,7 +37,7 @@ function setup() {
     game: { targets: () => [player], get mode() { return gs.mode; }, addScore: noop, hitstop: noop, isOnline: () => false },
     net: { active: false },
     effects: { shake: 0, strokeBurst: noop, tracer: noop, blood: noop, sparks: noop, debris: noop, bloodPool: noop,
-      fountain: noop, explosion: noop, particle: noop, bulletImpact: noop, smoke: noop },
+      fountain: noop, explosion: noop, particle: noop, bulletImpact: noop, smoke: noop, muzzleFlash: noop },
     audio: new Proxy({}, { get: () => noop }),
     hud: { setBoss: noop, hitmarker: noop, setModifier: noop, message: vi.fn(), key: () => 'F', tip: noop, setWave: noop, setTimer: noop },
     input: { rumble: noop, pressed: () => false },

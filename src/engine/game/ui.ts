@@ -21,7 +21,8 @@ export function createUI(app: App): UiApi {
   const { ctx, gs, lobby, settings, quality } = app;
   const { hud, net } = ctx;
   let joinCode = '';
-  const gfx = () => ({ choice: quality.choice, auto: quality.autoPreset, values: { ...quality.values }, fpsCounter: quality.fpsCounter });
+  const gfx = () => ({ choice: quality.choice, auto: quality.autoPreset, values: { ...quality.values }, fpsCounter: quality.fpsCounter,
+    msaaSoft: ctx.renderer?.msaaDepthReadable ?? true });
   const look = () => ({ sens: settings.sens, touchSens: settings.touchSens, touch: ctx.input.usingTouch, acogSens: settings.acogSens, sniperSens: settings.sniperSens,
     invert: settings.invert, music: settings.music, confirmKey: hud.key('confirm'), gfx: gfx() });
   const weapons = () => ({ optic: settings.optic, r4cOptic: settings.r4cOptic });
@@ -47,6 +48,7 @@ export function createUI(app: App): UiApi {
     else if (key === 'shadows' && listed(SHADOWS, raw)) quality.set('shadows', raw);
     else if (key === 'ao' && listed(AMBIENT_OCCLUSION, raw)) quality.set('ao', raw);
     else if (key === 'bloom') quality.set('bloom', raw === '1');
+    else if (key === 'softParticles') quality.set('softParticles', raw === '1');
     else if (key === 'textures' && listed(TEXTURE_QUALITIES, raw)) quality.set('textures', raw);
     else if (key === 'effects' && listed(EFFECTS, raw)) quality.set('effects', raw);
     else if (key === 'viewDistance' && listed(VIEW_DISTANCES, raw)) quality.set('viewDistance', raw);

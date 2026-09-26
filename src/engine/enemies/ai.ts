@@ -185,7 +185,7 @@ function rusher(m: EnemyManager, e: EnemyRecord, dt: number, dist: number, dy: n
   } else follow(m, e, target.body.pos, e.stats.speed, dt);
 }
 
-function oneShot(m: EnemyManager, e: EnemyRecord, aim: Vector3, speed: number, targetSpeed: number, target?: Target): void {
+function oneShot(m: EnemyManager, e: EnemyRecord, aim: Vector3, speed: number, targetSpeed: number, target?: Target, flash = true): void {
   const s = e.stats as RangedType;
   (e.figure.parts as CoreParts).tip.getWorldPosition(muzzle);
   if (target) {
@@ -197,7 +197,8 @@ function oneShot(m: EnemyManager, e: EnemyRecord, aim: Vector3, speed: number, t
   const spread = s.spread * (1 + targetSpeed * 0.06);
   shot.x += rand(-spread, spread); shot.y += rand(-spread, spread); shot.z += rand(-spread, spread); shot.normalize();
   spawnProjectile(m, muzzle, shot, speed, s.damage * m.mods.damage, e, 1, s.thickness, false);
-  m.ctx.effects.strokeBurst(muzzle, 3, 4, 4, { life: 0.07, size: 0.03 });
+  // A shotgun's pellets share one flash.
+  if (flash) m.ctx.effects.muzzleFlash(muzzle, shot, s.weapon === 'shotgun' ? 1.5 : s.stationary ? 1.4 : 1);
 }
 
 function laser(m: EnemyManager, e: EnemyRecord, aim: Vector3): void {
@@ -243,7 +244,7 @@ function fireControl(m: EnemyManager, e: EnemyRecord, dt: number, targetSpeed: n
     }
   } else if (e.attackCd <= 0) {
     if (s.weapon === 'shotgun') {
-      for (let i = 0; i < s.burst; i++) oneShot(m, e, target.center, s.projectileSpeed * rand(0.85, 1.1), targetSpeed, target);
+      for (let i = 0; i < s.burst; i++) oneShot(m, e, target.center, s.projectileSpeed * rand(0.85, 1.1), targetSpeed, target, i === 0);
       m.ctx.audio.enemyShotgun(e.center); e.attackCd = rollCooldown(s);
       m.ctx.effects.strokeBurst(muzzle, 3, 8, 5, { life: 0.1, size: 0.04 });
     } else { e.burstLeft = s.burst; e.burstT = 0; }

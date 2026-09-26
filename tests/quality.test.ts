@@ -437,7 +437,7 @@ test('effects detail thins cosmetic particles and pools, never tracers', () => {
   for (let i = 0; i < 10; i++) effects.tracer(origin, new THREE.Vector3(0, 0, -10));
   effects.update(0.001);
   expect(pool('drops').count).toBe(50);
-  expect(pool('strokes').count).toBe(10);
+  expect((scene.getObjectByName('effects:tracers') as THREE.Mesh<THREE.InstancedBufferGeometry>).geometry.instanceCount).toBe(10);
   for (let i = 0; i < 300; i++) effects.decal(new THREE.Vector3(i, 0, 0), up, 0, 1, 'hole');
   expect(pool('holes').count).toBe(130);
   effects.setDetail(1);

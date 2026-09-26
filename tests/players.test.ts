@@ -24,6 +24,9 @@ const ctx = {
   effects: {
     tracer: (from: Vector3, to: Vector3, tone?: number, thick?: number, life?: number) =>
       calls.tracers.push({ from: from.clone(), to: to.clone(), tone, thick, life }),
+    bulletTracer: (from: Vector3, to: Vector3, thick?: number, life?: number) =>
+      calls.tracers.push({ from: from.clone(), to: to.clone(), tone: 0, thick, life }),
+    muzzleFlash: () => {},
     debris: (mesh: Object3D, pos: Vector3, vel: Vector3, spin: Vector3, options?: unknown) => {
       scene.attach(mesh);
       calls.debris.push({ mesh, pos: pos.clone(), vel, spin, options });

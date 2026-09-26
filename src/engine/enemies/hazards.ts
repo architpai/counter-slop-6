@@ -1,13 +1,24 @@
 import { DoubleSide, Group, Mesh, MeshBasicMaterial, RingGeometry, SphereGeometry, BoxGeometry, Vector3 } from 'three';
 import { rand } from '../util';
+import { hazardSmokeMaterial } from '../render/fx';
 import type { NavGrid } from '../nav';
 import type { World } from '../physics';
 import type { Breakable, Target } from '../types';
+import type { SmokeHandle } from '../effects-real';
 import type { EnemyManager, EnemyRecord } from './index';
 
 export const RING = { cap: 3, radius: 5, spacing: 8, playerDistance: 4, countdown: 3, life: 8 } as const;
 export interface BanRing { pos: Vector3; age: number; owner: EnemyRecord; mesh: Mesh<RingGeometry, MeshBasicMaterial> }
-interface Smoke { pos: Vector3; from: Vector3; destination: Vector3; age: number; mesh: Mesh<SphereGeometry, MeshBasicMaterial> }
+/**
+ * A smoke grenade and its cloud. The flat look draws the cloud as the sphere,
+ * alpha-hashed so it stays in the opaque pass with no sorting (ARCHITECTURE
+ * §3.2: it used to be the scene's one blended mesh); the realistic tiers draw
+ * it as billowing smoke (effects-real.ts `smokeCloud`) and hide the sphere.
+ */
+interface Smoke { pos: Vector3; from: Vector3; destination: Vector3; age: number; mesh: Mesh<SphereGeometry, MeshBasicMaterial>; cloud: SmokeHandle | null }
+/** Seconds a cloud lasts from its landing, and its drawn size: the sight test (`obscures`) uses 3.5 m. */
+const SMOKE_LIFE = 8;
+const SMOKE_RADIUS = 3.2;
 interface Charge { prop: Breakable; target: Breakable; age: number }
 const inRing = (p: { x: number; y: number; z: number }, c: Vector3, margin = 0) =>
   Math.abs(p.y - c.y) < 2.2 && Math.hypot(p.x - c.x, p.z - c.z) < RING.radius + margin;
@@ -75,10 +86,10 @@ export class EnemyHazards {
 
   throwSmoke(from: Vector3, destination: Vector3): boolean {
     if (this.smoke.length >= 2) return false;
-    const mesh = new Mesh(new SphereGeometry(1, 16, 12), new MeshBasicMaterial({ color: 0x809096, transparent: true, opacity: 0.85, depthWrite: false }));
+    const mesh = new Mesh(new SphereGeometry(1, 16, 12), hazardSmokeMaterial().clone());
     mesh.name = 'smoke grenade'; mesh.position.copy(from); mesh.scale.setScalar(0.15);
     this.m.ctx.scene.add(mesh);
-    this.smoke.push({ from: from.clone(), destination: destination.clone(), pos: from.clone(), age: 0, mesh });
+    this.smoke.push({ from: from.clone(), destination: destination.clone(), pos: from.clone(), age: 0, mesh, cloud: null });
     return true;
   }
 
@@ -93,7 +104,7 @@ export class EnemyHazards {
 
   clearSmoke(center: Vector3, radius: number): void {
     for (let i = this.smoke.length - 1; i >= 0; i--) if (this.smoke[i]!.pos.distanceTo(center) < radius + 3.5) {
-      this.disposeMesh(this.smoke[i]!.mesh); this.smoke.splice(i, 1);
+      this.smoke[i]!.cloud?.stop(); this.disposeMesh(this.smoke[i]!.mesh); this.smoke.splice(i, 1);
     }
   }
 
@@ -139,7 +150,7 @@ export class EnemyHazards {
     }
     for (let i = this.smoke.length - 1; i >= 0; i--) {
       const smoke = this.smoke[i]!; smoke.age += dt;
-      if (smoke.age > 9) { this.disposeMesh(smoke.mesh); this.smoke.splice(i, 1); continue; }
+      if (smoke.age > 1 + SMOKE_LIFE) { smoke.cloud?.stop(); this.disposeMesh(smoke.mesh); this.smoke.splice(i, 1); continue; }
       if (smoke.age < 1) {
         const next = smoke.from.clone().lerp(smoke.destination, smoke.age); next.y += 4 * Math.sin(Math.PI * smoke.age);
         const direction = next.clone().sub(smoke.pos), distance = direction.length();
@@ -152,7 +163,12 @@ export class EnemyHazards {
       }
       if (smoke.age >= 1) {
         smoke.mesh.name = 'smoke cloud'; smoke.mesh.scale.set(3.5, 2.6, 3.5);
-        smoke.mesh.material.opacity = 0.78 * Math.min(1, (9 - smoke.age) / 1.5);
+        smoke.mesh.material.opacity = 0.78 * Math.min(1, (1 + SMOKE_LIFE - smoke.age) / 1.5);
+        // The look can change under a cloud: the realistic one billows, Low shows the sphere again, and
+        // effects built again (another realistic setup) lost the cloud, so it is asked for again.
+        if (!ctx.effects.realistic) smoke.cloud = null;
+        else if (!smoke.cloud?.live) smoke.cloud = ctx.effects.smokeCloud(smoke.pos, SMOKE_RADIUS, 1 + SMOKE_LIFE - smoke.age);
+        smoke.mesh.visible = smoke.cloud === null;
       }
       smoke.mesh.position.copy(smoke.pos);
     }
@@ -163,7 +179,7 @@ export class EnemyHazards {
       }
       charge.prop.group.scale.setScalar(1 + 0.12 * Math.sin(charge.age * 18));
       if (charge.age >= 3) {
-        ctx.effects.explosion(charge.prop.pos, 2, 3); ctx.audio.explosion(charge.prop.pos);
+        ctx.effects.explosion(charge.prop.pos, 2, 3, true); ctx.audio.explosion(charge.prop.pos);
         ctx.game.breakHit(charge.target, charge.target.hp, charge.target.pos, new Vector3(0, 1, 0));
         this.destroyedCover++; this.removeCharge(charge); this.charges.splice(i, 1);
       }
@@ -179,7 +195,7 @@ export class EnemyHazards {
     mesh.removeFromParent(); mesh.geometry.dispose(); mesh.material.dispose();
   }
   clear(): void {
-    this.rings.forEach(r => this.disposeMesh(r.mesh)); this.smoke.forEach(s => this.disposeMesh(s.mesh));
+    this.rings.forEach(r => this.disposeMesh(r.mesh)); this.smoke.forEach(s => { s.cloud?.stop(); this.disposeMesh(s.mesh); });
     this.charges.forEach(c => this.removeCharge(c));
     this.rings.length = this.smoke.length = this.charges.length = 0; this.destroyedCover = 0;
     this.damage.clear(); this.damageT = 0;
