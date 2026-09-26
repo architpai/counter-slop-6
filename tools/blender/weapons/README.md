@@ -12,6 +12,7 @@ is downloaded: no model, image, scan or HDRI is read from disk. Low keeps the co
 npm run weapons                    # model, pose and bake every set in Blender, then pack and encode (about 8 minutes)
 npm run weapons -- r4c pistol      # only these sets; the others' last build is packed with them
 npm run weapons -- --pack          # pack and encode the last build again, without Blender
+npm run weapons -- --glb           # pack the glb again only (the maps and their sizes stay as they are)
 ```
 
 `tools/weapons/build.mjs` needs Blender 5.x (`BLENDER=/path/to/blender`, default
@@ -26,11 +27,18 @@ npm run weapons -- --pack          # pack and encode the last build again, witho
 2. merges the sets' models into `public/models/weapons.glb`: one scene, the clips resampled,
    meshes welded, quantised and meshopt-compressed. A part the game moves keeps the transform it
    was authored with (its pivot); its mesh hangs on a child node, since quantisation folds a
-   dequantisation transform into the mesh's node;
+   dequantisation transform into the mesh's node. It adds the enemies' props (V12): for each
+   prop kind a node `prop__<kind>` (`PROPS`: `rifle` is the MP5, `blade` the knife with its blade
+   drawn out to the flat blade's 0.92 m), the model without hands, glass or clips, merged into one
+   mesh of its set's material in the flat props' frame (grip at the hand, +z forward, 1.25 × life
+   size and 1.3 × thicker across the barrel, `PROP_BULK`, 1.6 × on the blade, so it reads in the
+   chunky figures' hands; slid up to 10 cm so the muzzle meets the flat prop's tip) and simplified to 1,200
+   triangles; a kept triangle whose corners come from different UV islands takes one flat texel
+   from inside one of them, so it samples no atlas between islands;
 3. encodes the maps to KTX2 (Basis ETC1S with mipmaps) as `public/weapons/<size>/<set>-<map>.ktx2`.
    The optics, pistol and knife stop at 1024 (`MAX_SIZE`), so Ultra stays within 10 MB;
 4. writes `src/engine/render/weapon-assets.json`: file sizes per set and size, triangles per model
-   and node, and every clip's length. The game and `tests/weapon-assets.test.ts` read it.
+   and node, every clip's length, and the props' triangles. The game and `tests/weapon-assets.test.ts` read it.
 
 Commit the regenerated `public/models/weapons.glb`, `public/weapons/` and `weapon-assets.json`.
 

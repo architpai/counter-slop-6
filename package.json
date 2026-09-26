@@ -13,7 +13,8 @@
     "textures": "node tools/textures/build.mjs",
     "lightmaps": "node tools/lightmaps/build.mjs",
     "weapons": "node tools/weapons/build.mjs",
-    "effects": "node tools/effects/build.mjs"
+    "effects": "node tools/effects/build.mjs",
+    "characters": "node tools/characters/build.mjs"
   },
   "type": "module",
   "dependencies": {

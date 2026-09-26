@@ -8,7 +8,7 @@ import { Net } from './net';
 import { Input } from './input';
 import { Effects } from './effects';
 import { buildLevel, disposeLevel, validKey } from './level/index';
-import { tacticalTemplate } from './render/tactical';
+import { figureTemplate } from './render/figure';
 import { EnemyManager } from './enemies/index';
 import { Player } from './player/index';
 import { makeGameState } from './game/state';
@@ -290,8 +290,8 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
   // ---- actors 10
   const enemies = ctx.enemies = new EnemyManager(ctx);
   const player = ctx.player = new Player(ctx);
-  // The characters' programs compile at the menu, not with a wave's first spawns.
-  const characters = tacticalTemplate();
+  // The characters' programs compile and first draw at the menu, not with a wave's first spawns.
+  const characters = figureTemplate();
   if (characters) renderer.prewarm(characters);
   input.touch.getGrappleMode = () => player.grapple.mode;
   let touchInterrupted = false;

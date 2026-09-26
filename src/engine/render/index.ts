@@ -17,6 +17,7 @@ import { TEXTURE_SIZE, resolveMaterial, setInfo, setsFor } from './surfaces';
 import { BakeStreamer, TextureStreamer, fetchGrid, ktx2Loader, lightmapLoader, warmCompressedUploads } from './textures';
 import { WeaponAssets, weaponTextureSize } from './weapons';
 import { FX_UNIFORMS, FxAssets, fxTemplate, fxTextureSize } from './fx';
+import { usePropSource } from './figure';
 import type { PostFX } from './postfx';
 import type { SkyUniforms } from './materials';
 import type { GfxValues, ShadowBox } from './quality';
@@ -27,7 +28,7 @@ import type { BakeInfo } from './lightmap';
 import type { Level, LevelSurface, Mood } from '../types';
 
 export { TONE, TONE_HEX, WHITE_HEX, SMOKE_HEX, SURF } from './palette';
-export { surfMat, charMat, toneMat, unlitMat, cloudMat, setFlash } from './materials';
+export { surfMat, charMat, toneMat, unlitMat, cloudMat } from './materials';
 export { boxGeo, cylGeo, sphereGeo, coneGeo, torusGeo, starGeo, ringGeo } from './prims';
 export { makeFigure, makeWeaponProp, makeNameTag } from './figure';
 export type { PostFX } from './postfx';
@@ -273,10 +274,15 @@ export class Renderer {
    */
   _compiles: Warmup[] = [];
   _warmups: Warmup[] = [];
-  /** Roots whose programs compile for every look put in force (`prewarm`); the rig's view models always do. */
+  /** Roots whose programs compile and draw once for every look put in force (`prewarm`); the rig's view models always do. */
   readonly _prewarmed = new Set<THREE.Object3D>();
   /** The rig's and the prewarmed roots' programs are queued for the look in force. */
   _programsWarm = false;
+  /**
+   * The characters' programs for the look in force are queued (`_warmPrograms`): in a
+   * live match too, so their templates hold them and a wave's last death frees none.
+   */
+  _charactersHeld = false;
   /** A downloaded sky being put on a step a frame (`_landSky`): its background uploaded, then its environment made. */
   _skyLanding: { key: string; source: SkySource; uploaded: boolean; env: THREE.WebGLRenderTarget | null } | null = null;
   /**
@@ -391,6 +397,8 @@ export class Renderer {
       // A glb that lands after Start is drawn once the match's quiet start is over, not held to the next menu.
       warm: root => this._hold(this._warmups, root, () => this.weapons.holds(root), true),
     });
+    // Enemies hold the Blender guns' LODs while the weapons are in (render/figure.ts).
+    usePropSource(this.weapons);
     this.fx = new FxAssets({
       texture: (url, anisotropy) => (this._ktx2 ??= ktx2Loader(this.three)).load(url, anisotropy),
       upload: texture => this.three.initTexture(texture),
@@ -402,7 +410,7 @@ export class Renderer {
       this.fx.clear();
       this._releaseTextures();
       this._fences.clear();
-      this._programsWarm = false;
+      this._programsWarm = this._charactersHeld = false;
     };
     canvas.addEventListener('webglcontextrestored', this._onContextRestored);
     this.applyQuality(this._quality);
@@ -434,7 +442,7 @@ export class Renderer {
    */
   applyQuality(q: Readonly<GfxValues>): void {
     this._quality = q;
-    this._programsWarm = false;
+    this._programsWarm = this._charactersHeld = false;
     this.three.setPixelRatio(Math.min(window.devicePixelRatio || 1, q.pixelRatio));
     const aa = ANTIALIAS_SPEC[q.antialias], ao = AO_SCALE[q.ao], samples = Math.min(aa.samples, this.three.capabilities.maxSamples);
     // The soft particles read the scene's depth texture: with MSAA, the resolve's copy, which some GPUs do not make.
@@ -1027,12 +1035,26 @@ export class Renderer {
    * view model in the rig (the flat and the Blender guns alike, hidden or
    * not) and of the prewarmed roots, then draw the rig once where nobody sees
    * it, and on the realistic tiers the dome with a streamed sky (`_skyProbe`).
-   * A match then starts without linking or first-drawing any of them.
+   * A match then starts without linking or first-drawing any of them. A look
+   * put in force in a live match compiles the characters' programs only (the
+   * prewarmed roots and the Blender props, `weapons.template`): the figures
+   * wear copies of those materials, and without the templates holding the
+   * programs the last figure's death would free them for the next wave to link.
    */
   _warmPrograms(): void {
-    if (this._programsWarm || this._match.live) return;
+    if (this._programsWarm) return;
+    const live = this._match.live;
+    if (live && this._charactersHeld) return;
+    this._charactersHeld = true;
+    const weapons = this.weapons.template;
+    const characters = [...this._prewarmed].map(root => ({ root, valid: () => this._prewarmed.has(root) }));
+    if (weapons) characters.push({ root: weapons, valid: () => this.weapons.holds(weapons) });
+    for (const { root, valid } of characters) {
+      const compiled = this._hold(this._compiles, root, valid);
+      if (!live) void compiled.then(() => this._hold(this._warmups, root, valid));
+    }
+    if (live) return;
     this._programsWarm = true;
-    for (const root of this._prewarmed) void this._hold(this._compiles, root, () => this._prewarmed.has(root));
     void this._hold(this._compiles, this.rig, () => true).then(() => this._hold(this._warmups, this.rig, () => true));
     void this._hold(this._warmups, SHADOW_PROBE, () => true);
     const probe = this._skyProbe;
@@ -1136,8 +1158,10 @@ export class Renderer {
 
   /**
    * Compile `root`'s programs (the characters' template) for every look put
-   * in force, while no match is live, so no match links them in its first
-   * frames. Nothing is drawn: its geometry uploads with its first use.
+   * in force, while no match is live, then draw it once where nobody sees
+   * it, with the shadow maps, so no match links a program (its shadow
+   * pass's too), uploads its geometry or pays a program's first draw in its
+   * first frames.
    */
   prewarm(root: THREE.Object3D): void {
     this._prewarmed.add(root);
@@ -1253,6 +1277,7 @@ export class Renderer {
 
   dispose(): void {
     this._disposed = true;
+    usePropSource(null, this.weapons);
     window.removeEventListener('resize', this._onResize);
     this.three.domElement.removeEventListener('webglcontextrestored', this._onContextRestored);
     this.sky.geometry.dispose();

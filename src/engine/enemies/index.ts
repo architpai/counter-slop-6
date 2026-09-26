@@ -10,8 +10,8 @@ import type { NavPath } from '../nav';
 import type { Ctx, Enemy, EnemyKind, EnemyState, HitInfo, Target } from '../types';
 import { ENEMY_GRAVITY, TYPES, BOSS_ORDER } from './types';
 import type { EnemyType } from './types';
-import { makeModel, syncModel, flash, spawnPose, animate, corpse } from './model';
-import type { GroundJoints, EyeAnchors, HitSphere } from './model';
+import { makeModel, syncModel, flash, spawnPose, animate, corpse, planDeath, DEATH_END, FLASH_TIME } from './model';
+import type { Death, GroundJoints, EyeAnchors, HitSphere, ModelNodes } from './model';
 import { groundThink, wander, steer, follow, onHit } from './ai';
 import { flyerThink } from './flyer';
 import { updateProjectiles, removeProjectile } from './projectiles';
@@ -24,13 +24,6 @@ import { MUTATIONS, mutationCount } from './progression';
 import { spawnProjectile } from './projectiles';
 
 export { TYPES, BOSS_ORDER };
-
-/** Death animation record (E §13.4). */
-export interface Topple {
-  axis: 'x' | 'z';
-  sign: number;
-  t: number;
-}
 
 /** One half of the mirror-side interpolation pair (E §17.3). */
 export interface EnemySnap {
@@ -54,8 +47,8 @@ export interface EnemyRecord extends Enemy {
   walkAmt: number;
   aimAmt: number;
   flinch: number;
+  /** The hit tint's seconds left (model.ts `flash`). */
   flashT: number;
-  flashOn: boolean;
   path: NavPath | null;
   pathIndex: number;
   pathT: number;
@@ -87,7 +80,7 @@ export interface EnemyRecord extends Enemy {
   flightT: number;
   orbitDir: number;
   bossAttack: BossAttack | null;
-  /** The model was handed to the debris system: no topple, no scale-down. */
+  /** The model was handed to the debris system: no death pose, no sinking. */
   rootDetached: boolean;
   retargetT: number;
   laser: Mesh | null;
@@ -98,7 +91,7 @@ export interface EnemyRecord extends Enemy {
   aimPoint: Vector3 | null;
   aimWarned: boolean;
   diveHit: boolean;
-  topple: Topple | null;
+  death: Death | null;
   snapOld: EnemySnap | null;
   snapNew: EnemySnap | null;
   target: Target | null;
@@ -124,6 +117,7 @@ export interface EnemyRecord extends Enemy {
   figure: Figure;
   root: Group;
   hits: HitSphere[];
+  nodes: ModelNodes;
 }
 
 /** One hit-sphere ray result. */
@@ -213,23 +207,23 @@ export class EnemyManager {
   spawn(type: string, position: Vector3 | null | undefined, id?: number): EnemyRecord | null {
     if (!isKind(type) || !position) return null;
     const stats = TYPES[type];
-    const { figure, root, hits } = makeModel(stats);
+    const { figure, root, hits, nodes } = makeModel(stats);
     const flying = !!stats.flying;
     const body = new Body(position, flying ? 0.45 : Math.min(0.33 * stats.scale, 0.9), (flying ? 0.8 : 1.85) * stats.scale, stats.boss ? 1.2 : 0.6);
     body.alwaysStep = true; body.noSnap = flying;
     const e: EnemyRecord = {
       id: id ?? this.ids++, type, stats, hp: stats.hp, maxHp: stats.hp, alive: true, state: 'spawn', age: 0,
       body, center: position.clone(), yaw: rand(0, TAU), yawTo: 0, phase: rand(0, TAU), walkAmt: 0, aimAmt: 0,
-      flinch: 0, flashT: 0, flashOn: false, path: null, pathIndex: 0, pathT: 0, pathGoal: null, losT: 0, hasLOS: false,
+      flinch: 0, flashT: 0, path: null, pathIndex: 0, pathT: 0, pathGoal: null, losT: 0, hasLOS: false,
       attackCd: rand(0.6, 1.4), burstLeft: 0, burstT: 0, aimT: 0, attackT: 0, attackHit: false, stunDuration: 0, stuckT: 0,
       strafeDir: choose([-1, 1]), strafeT: rand(1, 2), deadT: 0, slotAngle: this.slots++ * GOLDEN, slotRadius: 0, slotT: rand(0, 2),
       approachPoint: new Vector3(), keepMult: rand(0.75, 1.35), backoffT: 0, fuseT: -1, shieldHp: stats.shield ? 2 : 0,
       flightPhase: 'orbit', flightT: rand(0, 3), orbitDir: choose([-1, 1]), bossAttack: null, rootDetached: false,
       retargetT: 0, laser: null, chargeCount: 0, sprayCount: 0, hopT: 1, hopping: false, aimPoint: null, aimWarned: false,
-      diveHit: false, topple: null, snapOld: null, snapNew: null, target: null, cover: null, coverT: 0, wantCover: false, patient: null,
+      diveHit: false, death: null, snapOld: null, snapNew: null, target: null, cover: null, coverT: 0, wantCover: false, patient: null,
       specialT: 0, specialCd: type === 'aimbot' ? 12 : 3, actionPoint: null, weakT: 0, yankableT: 0,
       rageT: 0, rageStacks: 0, guardT: 0, boostT: 0, retreatT: 0, homeYaw: 0,
-      payload: type === 'carrier', mutated: false, figure, root, hits,
+      payload: type === 'carrier', mutated: false, figure, root, hits, nodes,
     };
     this.ids = Math.max(this.ids, e.id + 1);
     root.position.copy(position); root.rotation.y = e.yaw;
@@ -238,7 +232,7 @@ export class EnemyManager {
     this.list.push(e); this.byId.set(e.id, e); this.alive++;
     this.mutate(e);
     if (type === 'turret') {
-      const arc = new ThreeGroup(); arc.name = 'sentry arc';
+      const arc = e.nodes.arc = new ThreeGroup(); arc.name = 'sentry arc';
       const mesh = new ThreeMesh(new RingGeometry(3.8, 4, 24, 1, -3 * Math.PI / 4, Math.PI / 2), unlitMat(0xffb020));
       mesh.rotation.x = -Math.PI / 2; mesh.position.y = 0.04; arc.add(mesh); root.add(arc);
     }
@@ -273,7 +267,7 @@ export class EnemyManager {
       e.age += dt;
       if (!e.alive) { corpse(e, dt); continue; }
       if (!passive) this._pickTarget(e, dt);
-      if (e.flashT > 0) { e.flashT -= dt; if (e.flashT <= 0) flash(e, false); }
+      flash(e, dt);
       e.flinch = damp(e.flinch, 0, 9, dt);
       e.weakT = Math.max(0, e.weakT - dt); e.yankableT = Math.max(0, e.yankableT - dt);
       e.boostT = Math.max(0, e.boostT - dt);
@@ -304,7 +298,7 @@ export class EnemyManager {
       e.yaw = angleLerp(e.yaw, e.yawTo, 1 - Math.exp(-10 * dt));
       e.root.position.copy(e.body.pos); e.root.rotation.y = e.yaw;
       if (e.type === 'turret') {
-        const arc = e.root.getObjectByName('sentry arc'); if (arc) arc.rotation.y = e.homeYaw - e.yaw;
+        const arc = e.nodes.arc; if (arc) arc.rotation.y = e.homeYaw - e.yaw;
       }
       if (!e.stats.flying && e.target && e.type !== 'aimbot' && e.type !== 'turret') {
         const r = 0.36 + e.body.halfW + 0.12, tp = e.target.body.pos;
@@ -323,7 +317,7 @@ export class EnemyManager {
     updateProjectiles(this, dt);
     for (let i = this.list.length - 1; i >= 0; i--) {
       const e = this.list[i];
-      if (!e || e.alive || e.deadT <= 9) continue;
+      if (!e || e.alive || e.deadT <= DEATH_END) continue;
       this._destroy(e); this.list.splice(i, 1);
       this.byId.delete(e.id);
     }
@@ -369,7 +363,8 @@ export class EnemyManager {
 
   _destroy(e: EnemyRecord): void {
     e.laser?.removeFromParent();
-    if (!e.rootDetached) e.figure.dispose();
+    // A root lent to the debris stays there; the figure still lets go of the rest.
+    e.figure.dispose();
   }
 
   clear(): void {
@@ -384,7 +379,7 @@ export class EnemyManager {
     e.shieldHp = 0;
     const i = e.hits.findIndex(h => h.part === 'shield');
     if (i >= 0) e.hits.splice(i, 1);
-    if (plate) this.ctx.effects.debris(plate, plate.position, vel.set(rand(-3, 3), 4, rand(-3, 3)), spin.set(rand(-6, 6), rand(-6, 6), rand(-6, 6)), { radius: 0.4, blood: false, life: 8 });
+    if (plate) this.ctx.effects.debris(plate, plate.position, vel.set(rand(-3, 3), 4, rand(-3, 3)), spin.set(rand(-6, 6), rand(-6, 6), rand(-6, 6)), { radius: 0.4, blood: false, life: 8, gone: e.figure.lend(plate) });
     this.ctx.audio.shieldHit(e.center);
     this.ctx.game.addScore(40, 'SHIELD BROKEN');
   }
@@ -411,7 +406,7 @@ export class EnemyManager {
       if ((info.source === 'melee' || info.source === 'blast') && e.shieldHp > 0 && --e.shieldHp <= 0) this._breakShield(e);
       return;
     }
-    e.flinch = 1; e.flashT = 0.07; flash(e, true);
+    e.flinch = 1; e.flashT = FLASH_TIME; flash(e, 0);
     effects.blood(point, dir, clamp(0.5 + amount / 70, 0.5, 2.2) * (e.stats.boss ? 1.6 : 1), { tone: this._bloodTone(e) });
     if (this.mirror) { hud.hitmarker(false, !!info.crit); this.onClientHit?.(e, amount, info); return; }
     amount *= this.mods.damage;
@@ -436,7 +431,7 @@ export class EnemyManager {
     part.getWorldPosition(pos);
     vel.copy(dir).multiplyScalar(rand(3, 7)).add(extra); vel.y += rand(2, 5);
     spin.set(rand(-8, 8), rand(-8, 8), rand(-8, 8));
-    this.ctx.effects.debris(part, pos, vel, spin, { radius, blood: true, life: rand(7, 10) });
+    this.ctx.effects.debris(part, pos, vel, spin, { radius, blood: true, life: rand(7, 10), gone: e.figure.lend(part) });
   }
 
   kill(e: EnemyRecord, info: HitInfo = {}, silent = false): void {
@@ -462,7 +457,7 @@ export class EnemyManager {
     if (e.stats.flying) {
       e.rootDetached = true;
       vel.copy(dir).multiplyScalar(4).add(scratch.set(rand(-2, 2), 1, rand(-2, 2)));
-      effects.debris(e.root, e.body.pos, vel, spin.set(rand(-9, 9), rand(-9, 9), rand(-9, 9)), { radius: 0.5, blood: true, life: 8 });
+      effects.debris(e.root, e.body.pos, vel, spin.set(rand(-9, 9), rand(-9, 9), rand(-9, 9)), { radius: 0.5, blood: true, life: 8, gone: e.figure.lend(e.root) });
       effects.blood(e.center, dir, 1, { tone }); done(true); return;
     }
     const src = info.source, slash = src === 'melee' || src === 'focus';
@@ -487,7 +482,7 @@ export class EnemyManager {
         for (let i = 0; i < k; i++) this._detach(e, parts[i], dir, scratch.set(0, 0, 0), 0.15);
       }
     }
-    e.topple = { axis: rand() < 0.5 ? 'x' : 'z', sign: dir.z > 0 ? 1 : choose([-1, 1]), t: 0 };
+    e.death = planDeath(this.ctx.world, e, dir, overkill);
     effects.bloodPool(e.body.pos, rand(1.1, 1.8) * (e.stats.boss ? 2.5 : 1), tone);
     effects.blood(e.center, dir, 1.2, { tone });
     if (rand() < 0.6) this._detach(e, 'weapon', dir, scratch.set(0, 0, 0), 0.08);

@@ -10,16 +10,14 @@ test('every enemy has a distinct clown mask without changing its hit anchors', (
   for (const stats of Object.values(TYPES)) {
     const { figure, hits } = makeModel(stats);
     try {
-      const mask = figure.root.getObjectByName(`clown-mask-${stats.key}`);
-      expect(mask, stats.key).toBeDefined();
-      expect(mask?.getObjectByName('mask-shell')).toBeDefined();
-      expect(mask?.getObjectByName('clown-nose')).toBeDefined();
+      // The mask is merged into the part it rides (V12: the head, or a machine's body); the asset
+      // loader has checked every kind's `clown-mask-<kind>` is in the file. Compare the baked
+      // vertices and their colours, which hold each mask's shape and paint.
+      const face = figure.parts.head?.getObjectByName(figure.parts.head === figure.parts.torso ? 'torso-surface' : 'head-surface');
+      expect(face, stats.key).toBeDefined();
       const meshes: unknown[] = [];
-      mask?.traverse(o => {
-        // The GLB batches paint into meshes; compare baked vertices, not only
-        // the transforms (which may all be identity after Blender's join).
-        if (o instanceof Mesh) meshes.push([Array.from(o.geometry.attributes.position.array), o.position.toArray(), o.scale.toArray(),
-          'color' in o.material ? o.material.color.getHex() : null]);
+      face?.traverse(o => {
+        if (o instanceof Mesh) meshes.push([Array.from(o.geometry.attributes.position.array), Array.from(o.geometry.attributes.color.array)]);
       });
       signatures.add(JSON.stringify(meshes));
       expect(hits.length).toBe(stats.kind === 'humanoid' ? (stats.shield ? 12 : 11) : stats.key === 'moderator' ? 2 : 1);
@@ -39,7 +37,7 @@ test('every enemy has a distinct clown mask without changing its hit anchors', (
   }
   expect(signatures.size).toBe(Object.keys(TYPES).length);
   const remote = makeFigure({ kind: 'humanoid' });
-  expect(remote.root.getObjectByName('mask-shell')).toBeUndefined();
+  expect(remote.root.getObjectByName('head-surface')).toBeUndefined();
   remote.dispose();
   expect([...GUN_LOADOUT]).toEqual(['r4c', 'rifle', 'shotgun', 'sniper', 'pistol']);
   for (const kind of GUN_LOADOUT) {

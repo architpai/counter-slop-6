@@ -263,16 +263,30 @@ Three material families, all created and cached by `render/materials.js`. Nothin
 | Family | Type | Used by |
 |---|---|---|
 | `surface` | `MeshLambertMaterial({ color, flatShading: true })` | level geometry, breakable props, pickups, grenades, debris, grapple hook |
-| `character` | `MeshToonMaterial({ color, gradientMap: 3-step })` | enemies, remote players, first-person view models |
+| `character` | `MeshToonMaterial({ color, gradientMap: 3-step })` | the flat look's first-person view models and the legacy figures (Mexico's musicians); `propMat()`, the same toon shading with each part's colour in a vertex colour, for the flat weapon props |
+| `characterMat` | `MeshStandardMaterial({ vertexColors, side: DoubleSide })`, patched | the Blender characters (`tactical.glb`): enemies, remote players, the flat look's view hands (V12, below) |
 | `unlit` | `MeshBasicMaterial({ color })` | particles, decals, tracers, muzzle flash, enemy laser, projectiles, name tags, focus/UI world marks |
 
 - The toon gradient map is a 3-pixel `DataTexture` (`NearestFilter`, no mips) built in
   `materials.js`. Three tonal steps, no rim light, no specular.
 - `flatShading: true` on every surface material; geometry is authored low-poly (cylinders 6–8
   sides, spheres 8 segments, cones 3–6 sides).
-- **Hit flash** (`rendering-effects.md` §5.4) is a material swap, not a shader uniform:
-  `setFlash(root, on, tone)` swaps every mesh under `root` to a cached unlit material of that tone
-  and back. Timings unchanged (enemy 0.07 s, remote player 0.08 s, lit bomber every frame).
+- **The characters' material** (V12, `characterMat`): every part of `tactical.glb` wears flat PBR
+  factors, so `render/tactical.ts` moves each material's colour, roughness, metalness and glow into
+  vertex attributes (`color`, and `pbr`: roughness, metalness, glow over `CHARACTER_GLOW`, and 1 on
+  the player's mark) when it merges a pivot's parts into one mesh, and this one material, one
+  program (`customProgramCacheKey` `character`), draws every figure. It is lit by the probe grid
+  like any moving thing, and the player's mark takes a `markColor` uniform.
+- **Hit flash** (V15) is a tint on a figure's own materials, not a swap: a tactical figure wears
+  its own copies (`ownMaterial`) of the character material and of its prop's (`propMat`, or on
+  the realistic tiers `weaponPropMaterial`), bound to one `hitTint` uniform per figure, which adds
+  light as emission (`Figure.setTint(amount, tone)`), so the lit kit keeps its shading and
+  brightens towards the tone. The copies share the originals' programs (same patch and key; the
+  originals stay alive in the warm-up templates, holding the programs, which a look put in force in
+  a live match compiles there too) and read the originals' maps
+  (a streamed set swapped there reaches every copy). Enemy: `HIT_TINT` (0.5) of the tone at the
+  hit, fading to none over `FLASH_TIME` (0.12 s, `flashAmount`); remote player: the same over its
+  0.08 s shot flash. The legacy figures never flash.
 - Instanced pools (`effects`) use `InstancedMesh` + `setColorAt` for per-instance colour. The flat
   look's particles are always unlit; "outline" particles (smoke rings) simply use a pale grey
   (`#DDE4EC`) and keep their `grow` behaviour. Its hole discs and blood splats wear
@@ -345,7 +359,8 @@ Three material families, all created and cached by `render/materials.js`. Nothin
   diffuse sky light from the bake instead of the probe (below); if the first realistic frame finds
   the geometry changed since the bake, they go back to the plain variant. Loose pieces (Mexico's props, the
   drones) keep the plain variant, lit by the probe grid. `gridLit(material)` puts the probe grid on
-  a moving thing's material: the GLB's (`tactical.ts`) and every `charMat` (view model, figures);
+  a moving thing's material: every `charMat` (view model, legacy figures); the character and prop
+  materials add the same patch themselves;
   `gridLit(material, true)` (the Blender weapons) adds the `GRID_VIEW_MODEL` define, which keeps
   60 % of the open sky's light as its floor (`probeGridViewFloor`) where characters keep 75 %, so
   the gun darkens further indoors and the darkest room's gun still reads (luma ≥ 10).
@@ -1470,7 +1485,10 @@ export function surfMat(key: SurfKey): THREE.MeshLambertMaterial;     // cached,
 export function charMat(color: number): THREE.MeshToonMaterial;       // cached per colour
 export function toneMat(tone: number): THREE.MeshToonMaterial;        // cached, character family
 export function unlitMat(color: number): THREE.MeshBasicMaterial;     // cached
-export function setFlash(root: THREE.Object3D, on: boolean, tone?: number): void;  // RE 5.4
+export function characterMat(): THREE.MeshStandardMaterial;          // V12: the Blender characters' one material (vertex colour and pbr attributes)
+export function propMat(): THREE.MeshToonMaterial;                    // the flat weapon props, vertex-coloured toon
+export function weaponPropMaterial(set: string): THREE.MeshStandardMaterial;  // an enemy's Blender gun (weapons.ts owns it), PROP_METALNESS of its maps' metal
+export function ownMaterial<T extends THREE.Material>(material: T, tint: HitTint, mark?: number): T;  // V15: a figure's copy, same program
 export function mergeByMaterial(parts: { geo: THREE.BufferGeometry; key: SurfKey }[]): THREE.Mesh[];
 
 // ---- prims.js  (all return geometry; positions in local space, low-poly segment counts)
@@ -1504,11 +1522,16 @@ export interface Figure {
   anchors: Record<HitPart, THREE.Object3D>;   // hit-sphere centres, world-updated by the owner
   setEyes(dead: boolean): void;               // normal eyes / X eyes
   setWeapon(kind: 'none'|'rifle'|'shotgun'|'sniper'|'blade'|'hammer'): void;
+  setTint(amount: number, color: number): void;  // V15 hit tint; tactical figures only
+  lend(part: THREE.Object3D): () => void;          // a part (or the root) handed to effects.debris: its own materials stay until the returned call (the debris's `gone`)
   dropShield(): THREE.Object3D | null;        // detach for debris, remove its anchor
   dispose(): void;
 }
 export function makeFigure(o: FigureOpts): Figure;
 export function makeWeaponProp(kind: WeaponPropKind): THREE.Group;   // remote-player hand props, N 11.3; callers map slot -> kind (render knows no loadout)
+export function figureTemplate(): THREE.Object3D | null;             // the merged characters and a flat prop, for Renderer.prewarm
+export function usePropSource(source: PropSource | null): void;      // the renderer's WeaponAssets: the realistic tiers' Blender props
+export function flashAmount(left: number, length: number): number;   // V15: the tint left seconds before a flash ends
 export function makeNameTag(name: string): THREE.Group;      // N 11.2; opaque generated canvas label
 
 // ---- index.js
@@ -1534,7 +1557,7 @@ export class Renderer {
   readonly streaming: boolean;                // a realistic tier's sky, level bake or sets, weapons or effect atlases are still to come in
   readonly gpuBehind: boolean;                // streaming, with 6 frames unfinished on the GPU (vsync off): boot skips this one (render/pacing.ts)
   setLive(live: boolean): void;               // boot, every frame: a match is being played (no menu over it, or online); its first 3 s stay quiet
-  prewarm(root: THREE.Object3D): void;        // compile a template's programs (the characters', a pickup's) for every look, at the menu
+  prewarm(root: THREE.Object3D): void;        // compile a template's programs (the characters', a pickup's) for every look, and draw it once with the shadow maps, at the menu
   applyQuality(values: GfxValues): void;      // live: look, pixel ratio, render scale, AA, AO, bloom, shadows, view distance
   setDynamicScale(scale: number): void;       // dynamic resolution: the drawn 0-1 share of each target
   setLevelShadow(center: THREE.Vector3, radius: number): void;
@@ -1553,6 +1576,29 @@ unique label material and texture; the returned group's `userData.dispose()` rel
 its geometry, and is safe to call twice. The remote owner calls it when removing the tag on
 ragdoll, respawn replacement or disposal. Keep the placement and billboard rule of N §11.2.
 
+**Characters (V12).** `tactical.glb` is optimised by `tools/characters/build.mjs` (simplified,
+deduplicated, quantised and meshopt-compressed: 1.1 MB, `character-assets.json` holds its size and
+hash). `loadTacticalModels` (boot, before the game starts) merges each `<kind>__<part>-surface`
+tree into one mesh per rigid pivot on `characterMat` (§3.2), in the part's own space, so the pivots
+`makeFigure` builds, and every name the AI, specials and animations reach through `figure.parts`,
+stay as they were; the nodes the game moves by name (`TACTICAL_NODES`: the carrier's payload, the
+aimbot's vent, the moderator's ring, the ragequit's cleaver) stay nodes of their own. A humanoid
+is 11 meshes and its prop (about 50 before), a spawn builds only nodes, and only the body, head
+and legs cast shadows (the arms, props and small machine parts do not). Hit areas are the merged
+meshes' own triangles, the same ones, tagged per pivot as before (`tests/characters.test.ts` casts
+the same rays at both). Weapon props are built once per kind and shared: the flat look's are one
+vertex-coloured mesh each (`propMat`), and on the realistic tiers an enemy holds the Blender gun's
+LOD (`prop__<kind>` in `weapons.glb`: no hands, glass or clips, one mesh of its set's material,
+1,200 triangles), which `WeaponAssets.prop` serves once the weapons are in; live figures swap props
+when that changes (`PropSource.subscribeProps`), and `WeaponAssets.clear` hides the copies it cannot
+swap (a dropped gun in the debris) before it frees their geometry and maps. The hammer stays flat.
+A figure's own materials (V15) outlive it while any piece it lent to the debris (`Figure.lend`,
+passed to `effects.debris` as `gone`) is still there; a ragdolled remote player and a dead flyer lend
+their whole root and dispose the figure at once. `figureTemplate()` (every
+merged part and a flat prop) is prewarmed at the menu: compiled and drawn once with the shadow
+maps, so a match's first spawns link, upload and first-draw nothing; the Blender props' programs
+warm with the weapons' template.
+
 **Implementer checklist**
 
 1. RE §2 renderer creation, pixel ratio, resize behaviour, the HUD layer sitting above the canvas.
@@ -1560,8 +1606,8 @@ ragdoll, respawn replacement or disposal. Keep the placement and billboard rule 
 3. RE §3.6 the weapon rig: child of the camera, scaled in x and y only for the view-model FOV (§3.4); each flat weapon root has uniform scale 0.46,
    applied exactly once (the Blender models of the realistic tiers are in metres, scale 1). Only the equipped weapon is visible, drawn in front of the world, never shadowed.
 4. RE §4 → **replaced by** this file §3.3 (sun + hemisphere + quality-dependent PCF shadows + fog).
-5. RE §5 → **replaced by** this file §3.1–3.2 (three material families, per-instance colour,
-   `setFlash` swap), but keep RE §5.4's flash *timings* and triggers.
+5. RE §5 → **replaced by** this file §3.1–3.2 (the material families, per-instance colour, the
+   hit tint of V15), keeping RE §5.4's flash triggers.
 6. RE §6.1–6.2 → **replaced by** this file §3.6 (single scene pass into a render target).
 7. RE §6.3 **kept verbatim**: the four intensities and the exact overlay formulas and order.
 8. E §4.2 humanoid template: every vertical offset, the limb lengths, the shoulder/leg offsets,
@@ -2206,7 +2252,17 @@ export class EnemyManager {
 10. E §11 projectiles, §11.1 the segment test, §11.2 deflect/redirect, §11.3 blast burst.
 11. E §12.1–12.8 damage entry, the multiplier quirk, shields, health damage, bomber detonation,
     yank, and the query helpers.
-12. E §13.1–13.4 kill, fall death, boss death, corpse update.
+12. E §13.1–13.4 kill, fall death, boss death, corpse update. V15 replaces the corpse's topple and
+    8-9 s scale-down: `kill` fixes a `Death` (`planDeath`: the killing hit's direction on the ground,
+    or straight back for a hit from above, turned aside, or back, where a wall or crate would take the
+    lying body, else slumping against it; a slide of 0.5 m, 0.9 on an overkill; a sink no deeper than
+    the floor slab; a seed from the id, so a host and its mirrors agree), and `deathPose` poses the
+    body from the time since death alone (frame-rate independent): knocked along the fall over
+    0.35 s, the knees giving with the feet on the floor as it topples onto its back over 0.6 s, the
+    limbs thrown on their pivots from their angles at the kill (`Death.pose`, `killPose`), lying still, then sinking (shrinking the rest of the way on a thin
+    slab) from 3.2 s to 4 s (`DEATH_END`), when it is removed (it was 9 s; nothing reads a corpse: waves count
+    `alive`, training respawns after 3 s). Gibs and a dropped weapon leave as debris as before, and
+    the pose leaves a limb debris owns alone. The hit tint fades on the corpse too.
 13. E §14 animation and telegraphs (the readable wind-up windows are gameplay).
 14. E §16 the payload `onKill` must provide.
 15. E §17.1–17.6 the replication contract (implement `snapshot`/`applySnapshot`/`killMirror` and

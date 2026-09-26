@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from 'vitest';
-import { Group, Mesh, MeshStandardMaterial, MeshToonMaterial, Vector3 } from 'three';
+import { Group, Mesh, MeshToonMaterial, Vector3 } from 'three';
 import { Gun, Melee, GUN_STATS, makeLoadout } from '@/engine/weapons/index';
 import type { GunKind } from '@/engine/weapons/index';
 import type { Breakable, Ctx, Player, WeaponState } from '@/engine/types';
@@ -127,10 +127,12 @@ test('loadout, view models and aim poses', () => {
   assert(must(geometry.boundingBox, 'bounding box').getSize(new Vector3()).distanceTo(new Vector3(0.10, 0.13, 0.48)) < 1e-7, 'MP5 uses its compact receiver dimensions');
   assert(must(revolver.root.getObjectByName('cylinder'), 'cylinder').children.length === 7, 'Revolver has a drum and six chambers');
   const rightHand = must(rifle.root.getObjectByName('right-hand'), 'right hand');
-  const fist = must(rightHand.getObjectByName('view-glove-palm'), 'glove'), forearm = must(rightHand.getObjectByName('view-sleeve'), 'sleeve');
-  if (!(fist instanceof Mesh) || !(forearm instanceof Mesh)) throw new Error('hand parts are not meshes');
-  const fistColor = (fist.material as MeshStandardMaterial).color.getHex(), sleeveColor = (forearm.material as MeshStandardMaterial).color.getHex();
-  assert(fistColor !== sleeveColor, 'Blender gloves use a distinct material from the tactical sleeve');
+  // The glove and sleeve are one merged mesh (V12), each part's colour in its vertices.
+  const sleeve = must(rightHand.getObjectByName('viewhandR-surface')?.getObjectByProperty('isMesh', true), 'sleeve');
+  if (!(sleeve instanceof Mesh)) throw new Error('the hand is not a mesh');
+  const colors = sleeve.geometry.getAttribute('color'), tones = new Set<string>();
+  for (let i = 0; i < colors.count; i++) tones.add(`${colors.getX(i).toFixed(3)},${colors.getY(i).toFixed(3)},${colors.getZ(i).toFixed(3)}`);
+  assert(tones.size >= 2, 'Blender gloves keep a distinct colour from the tactical sleeve');
   assert(rifle.root.getObjectByName('acog-tube') && !rifle.root.getObjectByName('sight-ring'), 'MP5 has an ACOG, not a holo sight');
   assert(rifle.root.getObjectByName('acog-elevation-turret') && rifle.root.getObjectByName('acog-windage-turret'), 'ACOG has top and side adjustment caps');
   const magnification = Math.tan(82 * Math.PI / 360) / Math.tan(rifle.adsFov * Math.PI / 360);

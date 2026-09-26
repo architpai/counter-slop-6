@@ -322,8 +322,10 @@ check(hudWork.frames > 0 && hudWork.renders < Math.max(5, hudWork.frames / 5),
   check(gfx.hip.aim === 0 && Math.abs(gfx.hip.scale - gfx.hip.expected) < 1e-3,
     `weapon rig draws at 65° (scale ${gfx.hip.scale.toFixed(4)}, expected ${gfx.hip.expected.toFixed(4)})`);
   check(Math.abs(gfx.ads - 1) < 1e-9, `the rig matches the world FOV at full ADS (scale ${gfx.ads})`);
-  check(gfx.softBefore > 0 && gfx.shared > 0 && gfx.drawnAfter > 0 && gfx.softAfter === 0,
-    `a shadow-filter change recompiles cached enemy materials (${gfx.shared} shared, ${gfx.softAfter} still PCFSoft of ${gfx.drawnAfter})`);
+  // Since V15 each figure wears its own copies of the cached materials (their hit tint), so the
+  // second grunt shares none with the first; its copies must still take the new filter.
+  check(gfx.softBefore > 0 && gfx.drawnAfter > 0 && gfx.softAfter === 0,
+    `a shadow-filter change reaches the enemy materials (${gfx.shared} shared, ${gfx.softAfter} still PCFSoft of ${gfx.drawnAfter})`);
   check(gfx.promptAfterChange === null, 'a preset change answers the open "Lower quality?" offer');
 }
 check(teardown.live === 0, `dispose() drops the instance count (got ${teardown.live})`);

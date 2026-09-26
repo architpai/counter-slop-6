@@ -110,13 +110,15 @@ test('debris ownership and expiry', () => {
   parent.add(mesh);
   scene.updateMatrixWorld(true);
   const worldQuat = mesh.getWorldQuaternion(new THREE.Quaternion());
-  let disposed = false;
+  let disposed = false, gone = 0;
   mesh.geometry.addEventListener('dispose', () => { disposed = true; });
-  effects.debris(mesh, mesh.getWorldPosition(new THREE.Vector3()), origin, origin, { life: 0.02, blood: true });
+  effects.debris(mesh, mesh.getWorldPosition(new THREE.Vector3()), origin, origin, { life: 0.02, blood: true, gone: () => gone++ });
   assert(mesh.parent === scene && Math.abs(mesh.scale.x - 2) < 1e-9 && Math.abs(mesh.quaternion.dot(worldQuat)) > 0.99999,
     'Debris transfers ownership and preserves the world transform');
+  effects.debris(mesh, origin, origin, origin, { gone: () => gone++ });
+  assert(gone === 1, 'A piece refused (already debris) is given back at once');
   effects.update(0.03);
-  assert(mesh.parent === null && disposed, 'Debris expiry removes the mesh and releases its geometry');
+  assert(mesh.parent === null && disposed && gone === 2, 'Debris expiry removes the mesh, releases its geometry and tells its lender');
 
   const pieces: THREE.Object3D[] = [];
   for (let i = 0; i < 71; i++) {

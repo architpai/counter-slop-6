@@ -7,7 +7,6 @@ import type { SetMaps } from './textures';
 const surfaces = new Map<SurfKey, THREE.MeshLambertMaterial>();
 const characters = new Map<number, THREE.MeshToonMaterial>();
 const unlit = new Map<number, THREE.MeshBasicMaterial>();
-const originals = new WeakMap<THREE.Object3D, THREE.Material | THREE.Material[]>();
 const labels = new WeakMap<THREE.Texture, THREE.MeshBasicMaterial>();
 const posts = new WeakMap<PostUniforms, THREE.ShaderMaterial>();
 const gradient = new THREE.DataTexture(new Uint8Array(TOON_STEPS), 3, 1, THREE.RedFormat);
@@ -16,11 +15,6 @@ gradient.generateMipmaps = false;
 gradient.needsUpdate = true;
 
 export type PostUniforms = Record<string, THREE.IUniform>;
-
-/** Duck-typed like the rest of three, so a mesh from any build still matches. */
-function isMesh(node: THREE.Object3D): node is THREE.Mesh {
-  return 'isMesh' in node && node.isMesh === true;
-}
 
 export function surfMat(key: SurfKey): THREE.MeshLambertMaterial {
   if (!Object.hasOwn(SURF, key)) key = 'block';
@@ -43,23 +37,6 @@ export function unlitMat(color: number): THREE.MeshBasicMaterial {
   let material = unlit.get(color);
   if (material === undefined) unlit.set(color, material = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide }));
   return material;
-}
-
-export function setFlash(root: THREE.Object3D, on: boolean, tone: number = TONE.HOSTILE): void {
-  const material = on ? unlitMat(TONE_HEX[tone] ?? TONE_HEX[TONE.HOSTILE]) : null;
-  root.traverse(mesh => {
-    if (!isMesh(mesh)) return;
-    if (material) {
-      if (!originals.has(mesh)) originals.set(mesh, mesh.material);
-      mesh.material = material;
-    } else {
-      const original = originals.get(mesh);
-      if (original !== undefined) {
-        mesh.material = original;
-        originals.delete(mesh);
-      }
-    }
-  });
 }
 
 /** The sky dome's uniforms; `setMood` writes them, nothing is rebuilt. */
@@ -269,8 +246,8 @@ vGridPos = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;
 const gridded = new WeakSet<THREE.Material>();
 const gridKey = (): string => 'probe-grid';
 /**
- * Light a moving thing's material from the probe grid (R3): characters (the
- * GLB's materials), the view model and figures (\`charMat\`). One patch for
+ * Light a moving thing's material from the probe grid (R3): the view model
+ * and figures (\`charMat\`); the characters' own materials below add it too. One patch for
  * every look: on Low \`probeGridMix\` is 0 and the shader takes its old path.
  * \`viewModel\` (the Blender weapons, R4) takes the view model's lower floor.
  */
@@ -281,6 +258,123 @@ export function gridLit<T extends THREE.Material>(material: T, viewModel = false
   material.onBeforeCompile = withGrid;
   material.customProgramCacheKey = gridKey;
   return material;
+}
+/**
+ * A figure's hit tint (V15): light added to its surfaces as emission while a
+ * hit flashes, so the lit kit keeps its shading and brightens towards the
+ * tone instead of turning into a flat unlit shape. One per figure, shared by
+ * the materials it owns (`ownMaterial`); black is no tint.
+ */
+export type HitTint = THREE.IUniform<THREE.Color>;
+/** What a figure's own copy of a material binds: its tint, and on the character material the player's mark colour. */
+interface Owned {
+  tint: HitTint;
+  mark: THREE.IUniform<THREE.Color>;
+}
+const NO_TINT: HitTint = { value: new THREE.Color(0, 0, 0) };
+/** player-mark in tactical.glb: the remote players' parts that wear their team tone (`ownMaterial`). */
+const MARK = new THREE.Color(0.075, 0.24, 0.65);
+const owned = new WeakMap<THREE.Material, Owned>();
+/** The maps a figure's copy of a material reads from the original (`ownMaterial`). */
+const TEXTURE_SLOTS = ['map', 'normalMap', 'aoMap', 'roughnessMap', 'metalnessMap'] as const;
+const baseOwned = (): Owned => ({ tint: NO_TINT, mark: { value: MARK } });
+/** An emission at `vPbr.z` of this much of the surface's colour is the GLB's brightest glow (the bomber's arming light, at 2). */
+export const CHARACTER_GLOW = 4;
+
+function tintShader(shader: THREE.WebGLProgramParametersWithUniforms, own: Owned): void {
+  shader.uniforms.hitTint = own.tint;
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', '#include <common>\nuniform vec3 hitTint;')
+    .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += hitTint;');
+}
+
+/**
+ * The characters' material (V12): every part of `tactical.glb` wears flat
+ * PBR factors (colour, roughness, metalness, a glow), so tactical.ts moves
+ * them into vertex attributes (`color`, and `pbr`: roughness, metalness,
+ * glow over `CHARACTER_GLOW`, and 1 on the player's mark) and a pivot's
+ * parts draw as one mesh with this one program. Lit by the probe grid like
+ * any moving thing, and tinted by its figure's hit (`ownMaterial`).
+ */
+function characterShader(this: THREE.Material, shader: THREE.WebGLProgramParametersWithUniforms): void {
+  const own = owned.get(this) ?? baseOwned();
+  withGrid(shader);
+  tintShader(shader, own);
+  shader.uniforms.markColor = own.mark;
+  shader.vertexShader = shader.vertexShader
+    .replace('#include <common>', '#include <common>\nattribute vec4 pbr;\nvarying vec4 vPbr;')
+    .replace('#include <begin_vertex>', '#include <begin_vertex>\nvPbr = pbr;');
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', '#include <common>\nuniform vec3 markColor;\nvarying vec4 vPbr;')
+    .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = mix( diffuseColor.rgb, markColor, vPbr.w );')
+    .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = vPbr.x;')
+    .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = vPbr.y;')
+    .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * vPbr.z * ${CHARACTER_GLOW.toFixed(1)};`);
+}
+const characterKey = (): string => 'character';
+
+let character: THREE.MeshStandardMaterial | undefined;
+/** The characters' shared material (see `characterShader`); figures that flash wear their own copy (`ownMaterial`). */
+export function characterMat(): THREE.MeshStandardMaterial {
+  if (character === undefined) {
+    // Double-sided, as the GLB's parts are (thin plates and open shells).
+    character = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide });
+    character.name = 'character';
+    character.onBeforeCompile = characterShader;
+    character.customProgramCacheKey = characterKey;
+  }
+  return character;
+}
+
+/** The probe grid and a hit tint: the enemy weapon props' materials (`propMat`, `weaponPropMaterial`). */
+function propShader(this: THREE.Material, shader: THREE.WebGLProgramParametersWithUniforms): void {
+  withGrid(shader);
+  tintShader(shader, owned.get(this) ?? baseOwned());
+}
+const propKey = (): string => 'prop';
+
+let prop: THREE.MeshToonMaterial | undefined;
+/**
+ * The flat look's weapon props (figure.ts): the toon shading of `charMat`,
+ * with each part's colour in a vertex colour, so a prop is one draw.
+ */
+export function propMat(): THREE.MeshToonMaterial {
+  if (prop === undefined) {
+    prop = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: gradient });
+    prop.name = 'prop';
+    prop.onBeforeCompile = propShader;
+    prop.customProgramCacheKey = propKey;
+  }
+  return prop;
+}
+
+/**
+ * A figure's own copy of a character or prop material, bound to its `tint`
+ * (and `mark`, the player's colour, on the character material). It shares
+ * the original's program: the patch and its key are the same, only the
+ * uniforms differ. The owner frees it; the original must stay alive, as it
+ * holds the program between figures (render/tactical.ts keeps them).
+ */
+export function ownMaterial<T extends THREE.Material>(material: T, tint: HitTint, mark?: number): T {
+  const copy = material.clone() as T;
+  copy.onBeforeCompile = material.onBeforeCompile;
+  copy.customProgramCacheKey = material.customProgramCacheKey;
+  // The maps stay the original's: a realistic prop's set swaps them there (render/weapons.ts `#wear`) and frees the old ones.
+  for (const slot of TEXTURE_SLOTS) {
+    if (slot in material) Object.defineProperty(copy, slot, { get: () => (material as Record<string, unknown>)[slot], set: () => {}, configurable: true });
+  }
+  owned.set(copy, { tint, mark: { value: mark === undefined ? MARK : new THREE.Color(mark) } });
+  return copy;
+}
+
+/** A character or prop material, which a figure copies to tint (`ownMaterial`). */
+export function tintable(material: THREE.Material): boolean {
+  return material.onBeforeCompile === characterShader || material.onBeforeCompile === propShader;
+}
+
+/** A tint that is off. */
+export function hitTint(): HitTint {
+  return { value: new THREE.Color(0, 0, 0) };
 }
 const standIns = new Map<TextureSet, SetMaps>();
 let flatNormal: THREE.DataTexture | undefined;
@@ -508,6 +602,26 @@ export function weaponMaterial(name: string): { material: THREE.Material; set: s
   material.name = name;
   wearMaps(material, weaponStandIns());
   return { material, set: tint !== undefined ? 'optics' : name };
+}
+
+/** The share of a weapon set's metalness an enemy's prop keeps (`weaponPropMaterial`). */
+export const PROP_METALNESS = 0.4;
+/**
+ * A weapon set on an enemy's gun (render/weapons.ts, the realistic tiers'
+ * props): PBR with the set's maps (stand-ins until they are in, as
+ * `weaponMaterial`), lit by the probe grid as the characters are (not the
+ * view model's floor), and tinted with its figure's hit. Its metal is
+ * `PROP_METALNESS` of the maps': a gun hanging at an enemy's side mirrors
+ * the ground and the horizon, not the sky the view model's faces catch, so
+ * at full metal the steel reads black; the rest of its albedo takes the sun.
+ */
+export function weaponPropMaterial(set: string): THREE.MeshStandardMaterial {
+  const material = new THREE.MeshStandardMaterial({ roughness: 1, metalness: PROP_METALNESS });
+  material.name = `${set}-prop`;
+  material.onBeforeCompile = propShader;
+  material.customProgramCacheKey = propKey;
+  wearMaps(material, weaponStandIns());
+  return material;
 }
 
 let levelDepth: THREE.MeshDepthMaterial | undefined;

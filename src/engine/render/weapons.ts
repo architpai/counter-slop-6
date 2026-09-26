@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import manifest from './weapon-assets.json';
-import { weaponMaterial, wearMaps } from './materials';
+import { weaponMaterial, weaponPropMaterial, wearMaps } from './materials';
 import { ANISOTROPY, TEXTURE_MAPS, TEXTURE_SIZE } from './surfaces';
 import { textureBytes } from './textures';
 import type { GfxValues } from './quality';
@@ -122,6 +122,10 @@ export class WeaponAssets {
   /** Bumped by `clear`, so a download that lands after it is dropped. */
   #generation = 0;
   readonly #listeners = new Set<() => void>();
+  /** The figures holding props (render/figure.ts `PropSource`); unlike `#listeners`, they do not make the weapons wanted. */
+  readonly #propListeners = new Set<() => void>();
+  /** Every prop handed out (`prop`), until it is gone: `clear` hides those it cannot swap (dropped guns). */
+  readonly #props = new Set<WeakRef<THREE.Object3D>>();
   readonly #warned = new Set<string>();
 
   constructor(loaders: WeaponLoaders) {
@@ -138,6 +142,8 @@ export class WeaponAssets {
 
   /** `root` is the live template; after a `clear` the old one is freed, even if a new size is wanted again. */
   holds(root: THREE.Object3D): boolean { return root === this.#template; }
+  /** The glb's scene once it is in (never drawn in play): the renderer compiles the props' programs from it for each look. */
+  get template(): THREE.Object3D | null { return this.#template; }
 
   /** Some view model listens for the weapons; with none (a renderer without a player), nothing is fetched. */
   get wanted(): boolean { return this.#listeners.size > 0; }
@@ -188,16 +194,20 @@ export class WeaponAssets {
     });
   }
 
-  /** The template: materials swapped for the game's (one per glTF name), geometry shared by every instance, clips by model. */
+  /**
+   * The template: materials swapped for the game's (one per glTF name; the
+   * enemy props', `prop__<kind>`, their own per set), geometry shared by
+   * every instance, clips by model.
+   */
   #adopt(gltf: LoadedModel): void {
     const byName = new Map<string, THREE.Material>();
     gltf.scene.traverse(node => {
       if (!(node instanceof THREE.Mesh)) return;
       node.geometry.userData.shared = true;
-      const name = (node.material as THREE.Material).name;
+      const prop = node.name.startsWith('prop__'), set = (node.material as THREE.Material).name, name = prop ? `${set}-prop` : set;
       let material = byName.get(name);
       if (!material) {
-        const made = weaponMaterial(name);
+        const made = prop ? { material: weaponPropMaterial(set), set } : weaponMaterial(set);
         this.#materials.push(made);
         byName.set(name, material = made.material);
       }
@@ -303,7 +313,7 @@ export class WeaponAssets {
   }
 
   #notify(): void {
-    for (const listener of [...this.#listeners]) listener();
+    for (const listener of [...this.#listeners, ...this.#propListeners]) listener();
   }
 
   /**
@@ -320,13 +330,43 @@ export class WeaponAssets {
     return copy;
   }
 
+  /**
+   * An enemy's prop on the realistic tiers (render/figure.ts `PropSource`):
+   * a copy of the kind's LOD (geometry and material shared). Null until
+   * `ready`, and for a kind without one (the hammer stays the flat prop).
+   */
+  prop(kind: string): THREE.Object3D | null {
+    const source = this.#ready ? this.#template?.getObjectByName(`prop__${kind}`) : undefined;
+    if (!source) return null;
+    for (const ref of this.#props) if (!ref.deref()) this.#props.delete(ref);
+    const copy = source.clone();
+    this.#props.add(new WeakRef(copy));
+    return copy;
+  }
+
+  /** Call `listener` whenever `prop` changes (the weapons turn ready or are freed). Returns the unsubscribe. */
+  subscribeProps(listener: () => void): () => void {
+    this.#propListeners.add(listener);
+    return () => this.#propListeners.delete(listener);
+  }
+
   /** A model's clips by name (`reload`, `equip`, ...), their tracks bound to an instance's node names. */
   clips(model: string): ReadonlyMap<string, THREE.AnimationClip> {
     return this.#clips.get(model) ?? new Map();
   }
 
-  /** Free the model, the materials and every map, and tell the subscribers (the flat guns come back). */
+  /**
+   * Free the model, the materials and every map, and tell the subscribers
+   * (the flat guns come back). A prop still around is hidden first: the
+   * figures swap those still in hand, but a dropped one (the debris, for its
+   * last seconds) would draw the freed geometry and maps.
+   */
   clear(): void {
+    for (const ref of this.#props) {
+      const prop = ref.deref();
+      if (prop) prop.visible = false;
+    }
+    this.#props.clear();
     this.#generation++;
     this.#size = null;
     this.#loading = this.#failed = this.#warm = false;

@@ -1,6 +1,6 @@
 {
  "version": 1,
- "glb": 1158788,
+ "glb": 1351960,
  "sets": {
   "hands": {
    "maxSize": 2048,
@@ -263,5 +263,14 @@
   "knife.slash": 0.27,
   "knife.slash-back": 0.27,
   "knife.guard": 0.1
+ },
+ "props": {
+  "r4c": 1200,
+  "rifle": 1198,
+  "shotgun": 1200,
+  "sniper": 1200,
+  "pistol": 1199,
+  "knife": 1200,
+  "blade": 1200
  }
 }

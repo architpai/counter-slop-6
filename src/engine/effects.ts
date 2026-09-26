@@ -85,6 +85,8 @@ interface Debris {
   scale: THREE.Vector3;
   life: number; radius: number; blood: boolean;
   bounces: number; atRest: boolean; trailT: number;
+  /** Called once it is gone (a figure's lent part, render/figure.ts `lend`). */
+  gone: (() => void) | undefined;
 }
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -518,20 +520,23 @@ export class Effects {
   /**
    * Takes ownership of a caller-owned mesh: it is re-parented into the scene
    * with `scene.attach` semantics and removed here when it expires. The caller
-   * must never remove or dispose it afterwards.
+   * must never remove or dispose it afterwards. `gone` is called once it is
+   * removed, or at once when it is refused.
    */
   debris(mesh: THREE.Object3D, pos: THREE.Vector3, vel: THREE.Vector3, angVel: THREE.Vector3,
-    o: { life?: number; radius?: number; blood?: boolean } = {}): void {
-    if (!mesh?.isObject3D || !finiteVector(pos) || !finiteVector(vel) || !finiteVector(angVel)) return;
-    const existing = this._debris.findIndex(d => d.mesh === mesh);
-    if (existing !== -1) return;
+    o: { life?: number; radius?: number; blood?: boolean; gone?: () => void } = {}): void {
+    if (!mesh?.isObject3D || !finiteVector(pos) || !finiteVector(vel) || !finiteVector(angVel)
+      || this._debris.some(d => d.mesh === mesh)) {
+      o.gone?.();
+      return;
+    }
     if (this._debris.length >= Math.max(10, Math.round(70 * this.detail))) this._removeDebris(0);
     this.scene.attach(mesh);
     mesh.position.copy(this.scene.worldToLocal(localPosition.copy(pos)));
     mesh.traverse(child => { if ('isMesh' in child && child.isMesh) { child.castShadow = true; child.receiveShadow = false; } });
     const d = { mesh, pos: pos.clone(), vel: vel.clone(), angVel: angVel.clone(),
       scale: mesh.scale.clone(), life: finite(o.life, 10), radius: Math.max(0, finite(o.radius, 0.18)),
-      blood: o.blood === true, bounces: 0, atRest: false, trailT: 0 };
+      blood: o.blood === true, bounces: 0, atRest: false, trailT: 0, gone: o.gone };
     this._debris.push(d);
     if (d.blood) this._bloodyGibs++;
   }
@@ -548,6 +553,7 @@ export class Effects {
     // Gibs are tactical parts: their geometry is shared with every live figure.
     for (const geometry of geometries) if (geometry.userData.shared !== true) geometry.dispose();
     if (d.blood) this._bloodyGibs--;
+    d.gone?.();
   }
 
   _stepDebris(index: number, dt: number): void {

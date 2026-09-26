@@ -1,0 +1,35 @@
+{
+ "version": 1,
+ "bytes": 1084284,
+ "sha256": "90d580eb80985dca436a99a79607534637e6b0a94a75ad5290cb12a133ca5ad3",
+ "triangles": 116978,
+ "kinds": {
+  "aimbot": 5821,
+  "bomber": 3000,
+  "boss": 6363,
+  "breacher": 6121,
+  "carrier": 2895,
+  "flyer": 2531,
+  "grunt": 5227,
+  "heavy": 5885,
+  "hitbox": 3171,
+  "lagspike": 3067,
+  "medic": 5557,
+  "moderator": 4191,
+  "packleader": 5521,
+  "parry": 5505,
+  "player": 5822,
+  "ragequit": 6403,
+  "rubberbander": 5565,
+  "rusher": 5343,
+  "sapper": 5639,
+  "shield": 5792,
+  "smoker": 6019,
+  "sniper": 5827,
+  "turret": 5713
+ },
+ "source": {
+  "bytes": 10454976,
+  "triangles": 238298
+ }
+}
