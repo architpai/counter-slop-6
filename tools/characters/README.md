@@ -1,4 +1,11 @@
-# Character model file (V12)
+# Character model files (V12, R7)
+
+Two sets of characters: the flat look's `public/models/tactical.glb` (below; every tier's hit areas,
+and Low's look) and the realistic tiers' operators, `public/models/operators.glb` and
+`operators-lod1.glb` with their maps, made by `npm run operators` from the Blender scripts in
+`tools/blender/characters/` (README there).
+
+## The flat models (V12)
 
 `public/models/tactical.glb` holds the player and all 22 enemies (see `assets/models/README.md` for the
 models themselves). Blender's export of it is 10.4 MB and 238k triangles; the game ships it optimised

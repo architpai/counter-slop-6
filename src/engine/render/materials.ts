@@ -367,9 +367,90 @@ export function ownMaterial<T extends THREE.Material>(material: T, tint: HitTint
   return copy;
 }
 
-/** A character or prop material, which a figure copies to tint (`ownMaterial`). */
+/**
+ * The realistic operators' material (R7, render/operators.ts): PBR with a
+ * texture set's neutral maps (fabric, folds, wear, grime) multiplied by the
+ * vertex colour, which carries each kind's kit colours. The `fx` attribute is
+ * a glow's strength (0..1, of `CHARACTER_GLOW`), or on the player's team
+ * colour -1 (its mark: armbands, helmet band) or -0.6 (its carrier, lightened
+ * by `TEAM_TINT`), which take the figure's mark colour instead of its
+ * vertex colour.
+ * Lit by the probe grid and tinted by its figure's hit (`ownMaterial`), like
+ * the flat look's characters; skinned, so the pivots drive it.
+ */
+function operatorShader(this: THREE.Material, shader: THREE.WebGLProgramParametersWithUniforms): void {
+  const own = owned.get(this) ?? baseOwned();
+  withGrid(shader);
+  tintShader(shader, own);
+  shader.uniforms.markColor = own.mark;
+  shader.vertexShader = shader.vertexShader
+    .replace('#include <common>', '#include <common>\nattribute float fx;\nvarying float vFx;')
+    .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFx = fx;');
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', '#include <common>\nuniform vec3 markColor;\nvarying float vFx;')
+    .replace('#include <color_fragment>', `#include <color_fragment>
+if ( vFx < -0.5 ) diffuseColor.rgb *= ( markColor + ( 1.0 - markColor ) * ( vFx > -0.8 ? ${TEAM_TINT.toFixed(2)} : 0.0 ) * vec3( 0.3, 1.0, 0.3 ) ) / max( vColor.rgb, vec3( 1e-3 ) );`)
+    // A faint glow (the mask's glaze, under half strength) is strongest where the surface faces the viewer and fades
+    // towards its outline, so the moulded brow, nose and cheeks keep their form under it; a lamp glows evenly.
+    .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+float glaze = vFx < 0.5 ? mix( ${GLAZE_RIM.toFixed(2)}, 1.0, pow( saturate( dot( normal, normalize( vViewPosition ) ) ), 2.0 ) ) : 1.0;
+totalEmissiveRadiance += diffuseColor.rgb * max( vFx, 0.0 ) * glaze * ${CHARACTER_GLOW.toFixed(1)};`)
+    // The readability fill: more of the ambient light, most in a room (where the probe grid's light, before its
+    // floor, is a small share of the open sky's, and ambient is all a figure gets), least in the open, so the kit
+    // keeps its value against sunlit ground and its bounce and still reads indoors.
+    .replace('#include <lights_fragment_begin>', 'float roomOpen = 1.0;\n#include <lights_fragment_begin>')
+    .replace('vec3 gridLight = gridCube.rgb;', `vec3 gridLight = gridCube.rgb;
+roomOpen = mix( 1.0, clamp( dot( gridCube.rgb, ${LUMA_GLSL} ) / max( dot( irradiance, ${LUMA_GLSL} ), 1e-4 ), 0.0, 1.0 ), probeGridMix );`)
+    .replace('#include <lights_fragment_end>', `float fill = mix( ${OPERATOR_LIGHT.room.toFixed(2)}, ${OPERATOR_LIGHT.open.toFixed(2)}, smoothstep( ${OPERATOR_LIGHT.shut.toFixed(2)}, ${OPERATOR_LIGHT.clear.toFixed(2)}, roomOpen ) );
+irradiance *= fill;
+iblIrradiance *= fill;
+reflectedLight.directDiffuse *= ${OPERATOR_LIGHT.key.toFixed(2)};
+#include <lights_fragment_end>`);
+}
+const operatorKey = (): string => 'operator';
+/**
+ * How far the remote player's team carrier is lightened from its team's tone (`operatorShader`): a saturated
+ * blue or red reads dark (their luma is low) and sank into dark floors. It is lightened mostly through green,
+ * the channel that carries luma, so blue goes to sky blue and red to coral, each still clearly its team's; lifted
+ * evenly towards white, red went to a grey pink.
+ */
+const TEAM_TINT = 0.5;
+/** The mask glaze's share at the mask's outline (`operatorShader`), 1 where it faces the viewer. */
+const GLAZE_RIM = 0.3;
+/**
+ * The operators' light over the flat characters' (`operatorShader`): their readability. `key` scales
+ * the direct light's diffuse, `open` and `room` the ambient in the open and in a room. Balanced with
+ * the kit's albedo (tools/blender/characters/roster.py) against fe14d35's flat look view by view
+ * (tests/tiers.shots.mjs, tests/indoor.shots.mjs): a chest facing the sun read darker than the flat
+ * look's (House, Training) and one turned from it, lit by the sky and the bounce, lighter (Mexico,
+ * House's shade), so more of the sun and less ambient in the open; indoors ambient is all a figure
+ * gets. The room's fill fades to the open's as the probe grid's light (before its floor,
+ * `probeGridFloor`) goes from `shut` to `clear` of the open sky's, so a street between walls stays
+ * outdoors.
+ */
+export const OPERATOR_LIGHT = { key: 1.3, open: 0.9, room: 2.0, shut: 0.3, clear: 0.7 } as const;
+
+/**
+ * The operators' baked occlusion strength (render/operators.ts `occlusion`): half where GTAO (the AO
+ * setting) darkens the folds and pouches again, since indoors, where ambient light is all a figure
+ * gets, the two together took its chest under the readability floor; more where it is off (Medium),
+ * where the kit read lighter than on the tiers above (whole, it read darker).
+ */
+export const OPERATOR_AO = { withGtao: 0.5, alone: 0.6 } as const;
+
+/** A realistic operator set's material (`operatorShader`), on stand-in maps until the set's are in (render/operators.ts). */
+export function operatorMaterial(set: string): THREE.MeshStandardMaterial {
+  const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 1, aoMapIntensity: OPERATOR_AO.withGtao });
+  material.name = set;
+  material.onBeforeCompile = operatorShader;
+  material.customProgramCacheKey = operatorKey;
+  wearMaps(material, weaponStandIns());
+  return material;
+}
+
+/** A character, operator or prop material, which a figure copies to tint (`ownMaterial`). */
 export function tintable(material: THREE.Material): boolean {
-  return material.onBeforeCompile === characterShader || material.onBeforeCompile === propShader;
+  return material.onBeforeCompile === characterShader || material.onBeforeCompile === propShader || material.onBeforeCompile === operatorShader;
 }
 
 /** A tint that is off. */
@@ -626,12 +707,12 @@ export function weaponPropMaterial(set: string): THREE.MeshStandardMaterial {
 
 let levelDepth: THREE.MeshDepthMaterial | undefined;
 /**
- * The shadow pass of the textured level. three's shared depth material takes
- * each caster's `map` and keeps the last one: once the streamed maps are
- * freed, the next caster without a map binds a freed albedo, and three
- * uploads it again, for good. This one is as three's (RGBA-packed depth) but
- * never samples a map (the level has no cut-outs), so no streamed texture
- * reaches the shadow pass.
+ * The shadow pass of the textured level and of the realistic operators
+ * (render/operators.ts). three's shared depth material takes each caster's
+ * `map` and keeps the last one: once the streamed maps are freed, the next
+ * caster without a map binds a freed albedo, and three uploads it again, for
+ * good. This one is as three's (RGBA-packed depth) but never samples a map
+ * (neither has cut-outs), so no streamed texture reaches the shadow pass.
  */
 export function levelDepthMat(): THREE.MeshDepthMaterial {
   if (levelDepth === undefined) {

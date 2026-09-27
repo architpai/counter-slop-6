@@ -25,7 +25,7 @@
 //            (the rest of the HUD stays hidden)
 // Enemies, effects and pickups are cleared per map, and the run is paused, so shots only differ
 // by preset. Realistic presets wait for the map's sky and environment, its texture sets, its
-// bake (lightmap or AO map, and probe grid) and the first-person weapons to stream in first.
+// bake (lightmap or AO map, and probe grid), the first-person weapons and the operators (R7) to stream in first.
 // Dynamic resolution is pinned at full scale, so every preset is judged at its base resolution. The page renders at CS6_DPR (default 2, so the presets' pixel-ratio caps apply);
 // screenshots are saved at CSS size. On the real GPU vsync and the frame-rate limit are off, so
 // live frame times show the cost of each preset instead of the display's refresh.
@@ -39,9 +39,11 @@
 // gap between animation frames over the same span). While something streams the game skips an
 // animation frame when the GPU is `MAX_FRAMES_IN_FLIGHT` behind (render/pacing.ts): a run of skips
 // is one long rendered gap. With nothing streaming none is skipped (skippedFrames in the timing).
+// It also records each staged grunt's chest and mask contrast (readability), and fails on a realistic
+// preset where one reads worse than fe14d35's flat look in the same view (`READABLE_SLACK`, `WAIVED`).
 // Later phases rerun this script to compare before and after.
 import assert from 'node:assert/strict';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
 
 const url = process.argv[2] ?? 'http://127.0.0.1:3000/';
@@ -57,6 +59,34 @@ const args = gl === 'metal'
   : ['--use-gl=angle', `--use-angle=${gl}`];
 /** Fog share at 60 m that still reads as "clearly visible" (docs/VISUALS.md, V6). */
 const FOG_AT_60_MAX = 0.15;
+/**
+ * The readability guardrail (docs/VISUALS.md): on the realistic presets every staged grunt's chest and mask
+ * contrast must be at least fe14d35's (the flat look, tests/readability-fe14d35.json, the same views) less this
+ * slack (sRGB luma, 0-255). Two runs of one build read the same to 0.0 in all 96 readings (the synchronous
+ * render is deterministic); the slack only covers the readings' rounding. CS6_READABILITY=0 records without judging.
+ */
+const READABLE_SLACK = 0.5;
+/**
+ * The readings where the operators (R7) read under fe14d35 and no balance of their light (render/materials.ts
+ * `OPERATOR_LIGHT`, `OPERATOR_AO`) lifted them without sinking others: [chest, mask] as they read, each held there
+ * (less the slack) instead of to fe14d35, so it cannot get worse; null keeps fe14d35's. Most are a grunt whose
+ * chest sits within a few luma of its background on both looks (the sunlit Training floor, House's shade) or a
+ * figure 20 pixels tall under the fog (Downtown at 70 m); in each the mask reads 13-60 above fe14d35's.
+ * docs/VISUALS.md (R7, readability) lists them.
+ */
+const WAIVED = {
+  'medium mexico best 30 sun': [null, 75.6],
+  'medium training best 10 sun': [1.4, null],
+  'high downtown best 70 shade': [2.4, null],
+  'high training best 10 sun': [10.6, null],
+  'high downtown-arena best 10 sun': [23.3, null],
+  'ultra house shade 10 shade': [100.5, null],
+  'ultra house shade 60 shade': [8.5, null],
+  'ultra training best 10 sun': [11.4, null],
+  'ultra downtown-arena best 10 sun': [21.7, null],
+};
+const baseline = process.env.CS6_READABILITY === '0' ? null
+  : JSON.parse(await readFile(new URL('./readability-fe14d35.json', import.meta.url), 'utf8')).readings;
 
 /** Corridors for the enemy view, [x, z, dx, dz], where the geometry search picks a poor one. */
 const PREFERRED = {
@@ -146,8 +176,20 @@ try {
       await page.waitForFunction(() => {
         const r = window.__game.ctx.renderer;
         // The bake fades in over BAKE_FADE_MS once it is on the GPU; shoot the final look.
-        return !r.skyPending && !r.texturesPending && !r.bakePending && !r.bakeFading && !r.weaponsPending;
+        return !r.skyPending && !r.texturesPending && !r.bakePending && !r.bakeFading && !r.weaponsPending && !r.operatorsPending;
       }, null, { timeout: 30_000 });
+      // Figures already in play put their operators on only out of view (R7): look away for a few frames,
+      // so Training's dummies are drawn as the tier draws them.
+      await page.evaluate(() => {
+        const camera = window.__game.ctx.camera;
+        window.__view = { position: camera.position.clone(), quaternion: camera.quaternion.clone() };
+        camera.position.y += 500; camera.lookAt(camera.position.x, camera.position.y + 1, camera.position.z);
+      });
+      await frames(3);
+      await page.evaluate(() => {
+        const camera = window.__game.ctx.camera, view = window.__view;
+        camera.position.copy(view.position); camera.quaternion.copy(view.quaternion); camera.updateMatrixWorld();
+      });
       await frames(20);
 
       const row = { shots: [] };
@@ -174,11 +216,14 @@ try {
         const mb = list => +(list.reduce((n, e) => n + e.encodedBodySize, 0) / 1e6).toFixed(2);
         const arms = window.__game.ctx.renderer.weapons.stats;
         const effects = resources.filter(e => e.name.includes('/fx/') && e.name.endsWith('.ktx2'));
+        const operators = resources.filter(e => e.name.includes('/characters/') || /\/models\/operators(-lod1)?\.glb$/.test(e.name));
+        const cast = window.__game.ctx.renderer.operators?.stats ?? { residentBytes: 0 };
         const atlases = window.__game.ctx.renderer.fx?.stats ?? { residentBytes: 0 };
         return { files: fetched.length, fetchedMB: mb(fetched), textures: stats.textures, residentMB: +(stats.residentBytes / 1e6).toFixed(1),
           bakeFile: bake.file, bakeMB: mb(baked), bakeResidentMB: +(bake.residentBytes / 1e6).toFixed(1),
           weaponsMB: mb(weapons), weaponsResidentMB: +(arms.residentBytes / 1e6).toFixed(1),
-          effectsMB: mb(effects), effectsResidentMB: +(atlases.residentBytes / 1e6).toFixed(1) };
+          effectsMB: mb(effects), effectsResidentMB: +(atlases.residentBytes / 1e6).toFixed(1),
+          operatorsMB: mb(operators), operatorsResidentMB: +(cast.residentBytes / 1e6).toFixed(1) };
       });
       // How much fog a grunt at 60 m wears on this preset (linear fog).
       row.fogAt60 = await page.evaluate(() => {
@@ -396,6 +441,45 @@ try {
         const view = p => p && { eye: p.eye.toArray(), dir: p.dir.toArray(), placed: p.placed };
         return { best: view(best), shade: view(shade) };
       }, PREFERRED[map] ?? []);
+      /**
+       * Readability (docs/VISUALS.md, the guardrail): for each staged grunt, sRGB luma of its chest (a box
+       * a sixth of its apparent height), of its mask (the brightest tenth of a box a fifth of its height
+       * round the head) and of the ground and
+       * wall behind it either side (boxes 0.8 m out from its middle), from a synchronous render. The
+       * contrast is chest or mask against that background.
+       */
+      const readability = view => page.evaluate(placed => {
+        const g = window.__game, renderer = g.ctx.renderer, context = renderer.three.getContext(), camera = g.ctx.camera;
+        renderer.render(g.gs.time, { hurt: 0, flash: 0, slow: 0, lowHp: 0 });
+        const w = context.drawingBufferWidth, h = context.drawingBufferHeight;
+        const lumas = (p, half) => {
+          const x = Math.round((p.x + 1) / 2 * w), y = Math.round((p.y + 1) / 2 * h), size = 2 * half + 1, px = new Uint8Array(size * size * 4);
+          context.readPixels(x - half, y - half, size, size, context.RGBA, context.UNSIGNED_BYTE, px);
+          const out = [];
+          for (let i = 0; i < px.length; i += 4) out.push(0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2]);
+          return out.sort((a, b) => a - b);
+        };
+        const luma = (p, half) => { const l = lumas(p, half); return l.reduce((a, b) => a + b, 0) / l.length; };
+        const V = g.player.body.pos.constructor;
+        return g.enemies.list.filter(e => e.alive).map(e => {
+          const range = Math.round(e.body.pos.distanceTo(camera.position) / 10) * 10;
+          const foot = e.body.pos.clone().project(camera), top = e.body.pos.clone().setY(e.body.pos.y + 1.8).project(camera);
+          const tall = Math.abs(top.y - foot.y) * h / 2;
+          const chest = e.body.pos.clone().setY(e.body.pos.y + 1.25).project(camera);
+          const face = g.enemies.eye(e).add(new V(Math.sin(e.yaw), 0, Math.cos(e.yaw)).multiplyScalar(0.12)).project(camera);
+          const right = new V(Math.cos(e.yaw), 0, -Math.sin(e.yaw)).multiplyScalar(0.8);
+          const sides = [1, -1].map(s => luma(e.body.pos.clone().setY(e.body.pos.y + 1.1).addScaledVector(right, s).project(camera), Math.max(1, Math.round(tall / 10))));
+          const background = (sides[0] + sides[1]) / 2;
+          // The mask: the bright tail (90th percentile) of a box round the head a fifth of the figure across,
+          // so a mask a few pixels wide at 60 m is read wherever it lands in the box.
+          const head = lumas(face, Math.max(1, Math.round(tall / 10)));
+          const c = luma(chest, Math.max(1, Math.round(tall / 12))), m = head[Math.floor(0.9 * (head.length - 1))];
+          const near = spot => spot && Math.hypot(spot[0] - e.body.pos.x, spot[2] - e.body.pos.z) < 0.5;
+          const light = placed.some(p => near(p.sun)) ? 'sun' : placed.some(p => near(p.shadow)) ? 'shade' : '?';
+          return { range, light, chest: +c.toFixed(1), mask: +m.toFixed(1), background: +background.toFixed(1),
+            chestContrast: +Math.abs(c - background).toFixed(1), maskContrast: +Math.abs(m - background).toFixed(1) };
+        });
+      }, view.placed);
       /** Spawn a view's grunts facing the eye and put the camera there. */
       const stage = view => page.evaluate(({ eye, dir, placed }) => {
         const g = window.__game, V = g.player.body.pos.constructor;
@@ -438,11 +522,13 @@ try {
         await stage(views.best);
         row.shots.push(await shot(`${preset}-${map}-enemies`));
         await drawn(views.best);
+        row.readability = await readability(views.best);
         if (views.shade) {
           row.enemiesShade = views.shade;
           await stage(views.shade);
           row.shots.push(await shot(`${preset}-${map}-enemies-shade`));
           await drawn(views.shade);
+          row.readability.push(...(await readability(views.shade)).map(r => ({ ...r, view: 'shade' })));
         }
         row.enemies.placed.forEach((p, i) => {
           const extra = views.shade?.placed[i];
@@ -485,6 +571,19 @@ try {
       assert.ok(row.fogAt60 <= FOG_AT_60_MAX, `${preset} ${map}: grunts at 60 m wear ${row.fogAt60} fog`);
     }
   }
+  const unreadable = [];
+  for (const [preset, rows] of Object.entries(summary.presets)) {
+    for (const [map, row] of Object.entries(rows)) {
+      for (const r of row.readability ?? []) {
+        const key = [preset, map, r.view ?? 'best', r.range, r.light].join(' '), base = baseline?.[key];
+        if (!base) continue;
+        const [chest, mask] = base.map((v, i) => WAIVED[key]?.[i] ?? v), held = i => (WAIVED[key]?.[i] != null ? 'held at' : 'fe14d35');
+        if (r.chestContrast < chest - READABLE_SLACK) unreadable.push(`${key}: chest ${r.chestContrast} (${held(0)} ${chest})`);
+        if (r.maskContrast < mask - READABLE_SLACK) unreadable.push(`${key}: mask ${r.maskContrast} (${held(1)} ${mask})`);
+      }
+    }
+  }
+  assert.deepEqual(unreadable, [], 'grunts read at least as well as on fe14d35');
 } finally {
   await browser.close();
 }

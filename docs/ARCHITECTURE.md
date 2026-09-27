@@ -265,6 +265,7 @@ Three material families, all created and cached by `render/materials.js`. Nothin
 | `surface` | `MeshLambertMaterial({ color, flatShading: true })` | level geometry, breakable props, pickups, grenades, debris, grapple hook |
 | `character` | `MeshToonMaterial({ color, gradientMap: 3-step })` | the flat look's first-person view models and the legacy figures (Mexico's musicians); `propMat()`, the same toon shading with each part's colour in a vertex colour, for the flat weapon props |
 | `characterMat` | `MeshStandardMaterial({ vertexColors, side: DoubleSide })`, patched | the Blender characters (`tactical.glb`): enemies, remote players, the flat look's view hands (V12, below) |
+| `operatorMaterial` | `MeshStandardMaterial({ vertexColors })` with a set's maps, patched, skinned | the realistic tiers' operators (`operators.glb`, R7, below): one per texture set (`operator`, `kit`, `machine`) |
 | `unlit` | `MeshBasicMaterial({ color })` | particles, decals, tracers, muzzle flash, enemy laser, projectiles, name tags, focus/UI world marks |
 
 - The toon gradient map is a 3-pixel `DataTexture` (`NearestFilter`, no mips) built in
@@ -277,6 +278,18 @@ Three material families, all created and cached by `render/materials.js`. Nothin
   the player's mark) when it merges a pivot's parts into one mesh, and this one material, one
   program (`customProgramCacheKey` `character`), draws every figure. It is lit by the probe grid
   like any moving thing, and the player's mark takes a `markColor` uniform.
+- **The operators' material** (R7, `operatorMaterial`): a texture set's neutral maps (fabric
+  weave and folds, seams, wear, grime; ORM) times the vertex colour, which carries each kind's kit
+  colours, so one atlas serves every kind. The `fx` vertex attribute is a glow (0..1 of
+  `CHARACTER_GLOW`; a faint one, the masks' glaze, strongest where the surface faces the viewer and
+  0.3 of it at the outline, `GLAZE_RIM`, so the mask's relief shows) or the player's team colour,
+  which takes the figure's `markColor`: -1 its tone (armbands, helmet band), -0.6 a light tint of it
+  (the carrier; `TEAM_TINT`, lifted mostly through green). Probe-grid lit and hit-tinted like
+  `characterMat`; one program (`operator`) for every set, skinned. Its light is rebalanced for
+  readability (`OPERATOR_LIGHT`: the direct light's diffuse at 1.3; the ambient at 0.9 in the open,
+  up to 2.0 where the probe grid's light before its floor is a small share of the open sky's, a room)
+  and its baked occlusion follows the AO setting (`OPERATOR_AO`: 0.5 with GTAO, 0.6 without); both are
+  balanced against fe14d35's flat look view by view (`tests/tiers.shots.mjs`, `tests/indoor.shots.mjs`).
 - **Hit flash** (V15) is a tint on a figure's own materials, not a swap: a tactical figure wears
   its own copies (`ownMaterial`) of the character material and of its prop's (`propMat`, or on
   the realistic tiers `weaponPropMaterial`), bound to one `hitTint` uniform per figure, which adds
@@ -1462,7 +1475,8 @@ export interface BuildOpts { mat?: string; noCollide?: boolean; noNav?: boolean;
 **Files:** `src/render/index.js` (public), `palette.js`, `materials.js`, `prims.js`, `figure.js`,
 `postfx.js`, `quality.ts`, `shadows.ts` (cascades), `sky.ts` (sky streaming), `tactical.ts`,
 `weapons.ts` (the realistic tiers' first-person weapons and arms, R4, and `weapon-assets.json`),
-`fx.ts` (R5: the effect atlases' manifest `fx-assets.json` and streamer `FxAssets`, the effect
+`operators.ts` (R7: the realistic operators' streamer `OperatorAssets`, `OperatorBody`, and
+`operator-assets.json`), `operator-motion.ts` (R7: the clips' library and blending), `fx.ts` (R5: the effect atlases' manifest `fx-assets.json` and streamer `FxAssets`, the effect
 materials, flipbook timing, `FX_UNIFORMS`), `impacts.ts` (R5: material tag → surface family →
 impact recipe)
 **Imports:** `three`, `three/addons` (BufferGeometryUtils, RoomEnvironment, GLTFLoader, meshopt decoder, RGBELoader, SMAAPass), `util`
@@ -1598,6 +1612,64 @@ their whole root and dispose the figure at once. `figureTemplate()` (every
 merged part and a flat prop) is prewarmed at the menu: compiled and drawn once with the shadow
 maps, so a match's first spawns link, upload and first-draw nothing; the Blender props' programs
 warm with the weapons' template.
+
+**Operators (R7), realistic tiers.** `render/operators.ts` (`OperatorAssets`, owned by the renderer)
+streams `operators.glb` (LOD0, for the Textures setting's 1K and 2K: High and Ultra) or
+`operators-lod1.glb` (LOD1, its 512: Medium) and the three texture sets at the Textures size, in
+the upload slots after the level's bake and sets, never in a match's quiet start, and only in a game
+that prewarms the characters' template (boot); Low fetches none. Made by `npm run operators`
+(`tools/characters/operators.mjs`, the Blender scripts in `tools/blender/characters/`). Each kind is
+one skinned mesh per set on an armature whose bones sit on the pivots `makeFigure` builds (same
+names, rest positions and parents; the nodes the game moves by name are bones too), plus bones of
+its own (`chest`, the feet, the drones' rotors). Every figure with a Blender model enlists with it
+(`FigureRig`, `useOperatorSource`): a figure made once the operators are in wears one at once (at
+spawn); one already in play when a session's first operators land puts it on only in a frame where
+the camera cannot see it (`OperatorAssets.frame`, before each render), so nothing changes looks
+mid-fight; after a settings change (another LOD or size, or Low to a realistic tier) the figures in
+play at the change put the new one on as soon as it is in, in view or not (`#settle`). Low, a lost
+context or a LOD change takes every operator off at once. A glb that does not match
+`operator-assets.json` is freed with a warning and the flat models stay (`pending` turns false). LOD1
+is simplified with each mask's face and paint locked (`tools/characters/operators.mjs` `maskLock`).
+A worn operator (`OperatorBody`):
+- **Hit areas do not change.** The flat model's merged parts stay on their pivots as the hit
+  surfaces, moved to `HIT_LAYER` (30): `raycastFigure`'s ray tests that layer, no camera draws it
+  (nor the shadow pass). Radii, parts and anchors are the flat model's; the skinned mesh has no ray
+  test of its own. `tests/operators.test.ts` casts the same rays at every kind worn and flat.
+- **Bones follow the pivots.** Each frame a bone copies its pivot's local position, rotation and
+  scale, times the clips' rotation for it (`OperatorMotion.delta`); a pivot lent to the debris (a
+  torn-off limb) folds its bone to nothing, and the limb takes a rigid copy of its part of the
+  operator (`GIB_BONES`: the triangles whose heaviest bone is in its subtree, sharing the mesh's
+  attributes, placed by the bone's inverse bind matrix). A hidden node (the carrier's dropped
+  payload) folds its bone. The V15 death poses drive the pivots, so they drive the operator.
+- **Clips** (`render/operator-motion.ts`): the owners (`enemies/model.ts` `drive`, `players.ts`)
+  tell the figure's `motion` its speed, stride phase, sideways share, aim, carry and crouch each
+  step, and the one-shots as they happen (a gun's shot and the reload after a long gun's burst, a
+  hit, a throw; the melee at the swing's progress; a blade's projectiles, the parry's deflections,
+  play no recoil). `loopWeights` blends idle, walk, run and the strafes by speed and
+  direction, with the crouch and aim poses on top; the stride loops play at the procedural phase,
+  so the feet do not slide. The support hand reaches the gun's foregrip (or the pistol's grip) by
+  two-bone IK on the left arm's bones while it aims. None of it touches a pivot.
+- **The prop** moves from the weapon group into a socket under the gun forearm's bone (the prop's lay),
+  so the gun moves with the clips: a Blender gun at its true size (`OPERATOR_PROP_SCALE` undoes the flat
+  figures' 1.25) with its grip in the glove's fist (`FIST`, per-gun `PROP_HOLDS`), a flat prop by its
+  origin. The weapon group keeps its `tip` on the pivots, where projectiles leave from. A lent gun
+  (dropped) takes its prop back, and so does a lent limb that carries it (the gun arm, the torso), so
+  the gun flies off with it as on Low. While it aims, the left arm's bones reach for the prop's handguard
+  (`PROP_HOLDS.support`) by two-bone IK, or as far along the gun from the grip as they reach.
+- **Draws and shadows.** One skinned draw per set a kind wears (a humanoid 1-2, a machine 1-2) and the
+  prop; at most 15 an enemy (tested). Each skinned mesh is frustum-culled per camera and per shadow
+  cascade by its kind's sphere (`KindTemplate.bounds`, set as the mesh's `boundingSphere`, so three never
+  skins vertices on the CPU for it): the rest pose's, each vertex free to swing about the joint its limb
+  hangs from, plus `BOUNDS_MARGIN` for the trunk's moves; the swap's "out of view" test uses it too. The
+  shadow pass draws them with `levelDepthMat` (no map sampled), since three's shared depth material keeps
+  the last caster's `map` and would bind an operator map a Textures change freed. Its materials are the
+  figure's own tinted copies (`FigureRig.own`), freed when it comes off or the figure goes.
+- **Clips only while worn.** `FigureRig.worn` says a figure wears an operator; the owners skip the clip
+  state otherwise (Low, or a stand-in), and a corpse (enemy or remote player) lets its loops fade
+  (`STILL`). The clip layer allocates nothing a frame (clips by group and name, reused inputs).
+- **Warm-up.** When a glb lands its programs compile and it is drawn once where nobody sees it, with
+  its shadow pass and a rigid gib, before any figure wears it; the renderer holds its template with
+  the characters' (`_warmPrograms`), so no program links once every kind has spawned.
 
 **Implementer checklist**
 

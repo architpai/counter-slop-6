@@ -5,7 +5,7 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { GRADE, LIGHT, SURF } from './palette';
 import { Composite, RIG_DEPTH } from './postfx';
 import {
-  BAKE_UNIFORMS, GRID_UNIFORMS, casterGroups, hiddenMat, levelDepthMat, realMat, realMaterials, skyMat, standInGrid, standInLightmap,
+  BAKE_UNIFORMS, GRID_UNIFORMS, OPERATOR_AO, casterGroups, hiddenMat, levelDepthMat, realMat, realMaterials, skyMat, standInGrid, standInLightmap,
   standInMaps, surfMat, wearMaps,
 } from './materials';
 import { BAKE_FILE, LIGHTMAP_SIZE, bakeFor, bakedTriangles, layoutLightmap, lightmapCharts, wearLightmapUVs } from './lightmap';
@@ -17,7 +17,8 @@ import { TEXTURE_SIZE, resolveMaterial, setInfo, setsFor } from './surfaces';
 import { BakeStreamer, TextureStreamer, fetchGrid, ktx2Loader, lightmapLoader, warmCompressedUploads } from './textures';
 import { WeaponAssets, weaponTextureSize } from './weapons';
 import { FX_UNIFORMS, FxAssets, fxTemplate, fxTextureSize } from './fx';
-import { usePropSource } from './figure';
+import { useOperatorSource, usePropSource } from './figure';
+import { OperatorAssets, operatorWant } from './operators';
 import type { PostFX } from './postfx';
 import type { SkyUniforms } from './materials';
 import type { GfxValues, ShadowBox } from './quality';
@@ -260,6 +261,12 @@ export class Renderer {
    * Empty on Low.
    */
   readonly weapons: WeaponAssets;
+  /**
+   * Realistic tiers: the Blender operators (R7), streamed in the upload
+   * slots at the Textures size (LOD1 with its 512 maps, LOD0 above); every
+   * figure with a Blender model wears one once they are in. Empty on Low.
+   */
+  readonly operators: OperatorAssets;
   /** One fence a frame, so boot keeps the GPU at most `MAX_FRAMES_IN_FLIGHT` frames behind (render/pacing.ts). */
   readonly _fences: GpuFences;
   /** Whether a match is live and in its quiet start, as boot says every frame (`setLive`). */
@@ -399,6 +406,16 @@ export class Renderer {
     });
     // Enemies hold the Blender guns' LODs while the weapons are in (render/figure.ts).
     usePropSource(this.weapons);
+    this.operators = new OperatorAssets({
+      model: url => new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(url),
+      texture: (url, anisotropy) => (this._ktx2 ??= ktx2Loader(this.three)).load(url, anisotropy),
+      upload: texture => this.three.initTexture(texture),
+      compile: root => this._hold(this._compiles, root, () => this.operators.holds(root)),
+      // Like the weapons': a glb that lands after Start is drawn once the match's quiet start is over.
+      warm: root => this._hold(this._warmups, root, () => this.operators.holds(root), true),
+    });
+    // Figures with a Blender model wear the realistic operators while they are in (render/figure.ts).
+    useOperatorSource(this.operators);
     this.fx = new FxAssets({
       texture: (url, anisotropy) => (this._ktx2 ??= ktx2Loader(this.three)).load(url, anisotropy),
       upload: texture => this.three.initTexture(texture),
@@ -407,6 +424,7 @@ export class Renderer {
     window.addEventListener('resize', this._onResize);
     this._onContextRestored = () => {
       this.weapons.clear();
+      this.operators.clear();
       this.fx.clear();
       this._releaseTextures();
       this._fences.clear();
@@ -448,6 +466,7 @@ export class Renderer {
     // The soft particles read the scene's depth texture: with MSAA, the resolve's copy, which some GPUs do not make.
     this._softFx = q.look === 'realistic' && q.softParticles && (samples === 0 || this.msaaDepthReadable);
     this.post.configure({ look: q.look, samples, fxaa: aa.fxaa, smaa: aa.smaa, ao, depth: this._softFx, bloom: q.bloom });
+    this.operators.occlusion(ao > 0 ? OPERATOR_AO.withGtao : OPERATOR_AO.alone);
     this._setFxLights(q.look === 'realistic' ? FX_LIGHTS : 0);
     const shadow = SHADOW_SPEC[q.shadows];
     this.sun.castShadow = shadow !== null;
@@ -487,6 +506,7 @@ export class Renderer {
     // Low frees the weapons (the flat guns come back) and the effect atlases before the texture loader they share goes.
     if (q.look !== 'realistic') {
       this.weapons.want(null);
+      this.operators.want(null);
       this.fx.want(null);
     }
     this._applySurfaces();
@@ -979,6 +999,28 @@ export class Renderer {
   }
 
   /**
+   * Realistic tiers: keep the operators streaming at the look's LOD and
+   * Textures size (from the first realistic frame, once the characters'
+   * template is prewarmed; Low never fetches), in
+   * the level's upload slots once its bake and sets are on, never in a
+   * match's quiet start. The glb's programs compile and it is drawn once
+   * when it lands (render/operators.ts), so the figures' swap compiles nothing.
+   */
+  _streamOperators(): void {
+    const want = operatorWant(this._quality);
+    // Only for a game with characters to draw (boot prewarms their template): a bare renderer fetches none.
+    if (want === null || this._prewarmed.size === 0) return;
+    this.operators.want(want);
+    const now = performance.now();
+    if (!this.operators.pending || this.bakePending || this.texturesPending || now < this._uploadAt || this._match.quiet(now)) return;
+    const bytes = this.operators.pump();
+    if (bytes > 0) {
+      if (performance.now() - now > UPLOAD_SLOW_MS) this._uploadPace = Math.min(4, this._uploadPace * 2);
+      this._uploadAt = now + Math.max(UPLOAD_GAP_MS, bytes / UPLOAD_BYTES_PER_MS) * this._uploadPace;
+    }
+  }
+
+  /**
    * Realistic tiers: keep the effect atlases streaming at the Textures size
    * (from the first realistic frame, while the effects listen; Low never fetches), uploaded in the
    * level's slots once its bake and sets are on, never in a match's quiet
@@ -1046,9 +1088,10 @@ export class Renderer {
     const live = this._match.live;
     if (live && this._charactersHeld) return;
     this._charactersHeld = true;
-    const weapons = this.weapons.template;
+    const weapons = this.weapons.template, operators = this.operators.template;
     const characters = [...this._prewarmed].map(root => ({ root, valid: () => this._prewarmed.has(root) }));
     if (weapons) characters.push({ root: weapons, valid: () => this.weapons.holds(weapons) });
+    if (operators) characters.push({ root: operators, valid: () => this.operators.holds(operators) });
     for (const { root, valid } of characters) {
       const compiled = this._hold(this._compiles, root, valid);
       if (!live) void compiled.then(() => this._hold(this._warmups, root, valid));
@@ -1153,7 +1196,7 @@ export class Renderer {
 
   /** A realistic tier's sky, level bake or sets, or weapons are still to download, upload or put on. */
   get streaming(): boolean {
-    return this.skyPending || this._skyLanding !== null || this.bakePending || this.texturesPending || this.weapons.pending || this.fx.pending;
+    return this.skyPending || this._skyLanding !== null || this.bakePending || this.texturesPending || this.weapons.pending || this.fx.pending || this.operators.pending;
   }
 
   /**
@@ -1166,6 +1209,11 @@ export class Renderer {
   prewarm(root: THREE.Object3D): void {
     this._prewarmed.add(root);
     this._programsWarm = false;
+  }
+
+  /** A realistic tier's operators (or another LOD or size of them) are still streaming. */
+  get operatorsPending(): boolean {
+    return this.operators.pending;
   }
 
   /** A realistic tier's weapons (or a new size of them) are still streaming. */
@@ -1278,6 +1326,7 @@ export class Renderer {
   dispose(): void {
     this._disposed = true;
     usePropSource(null, this.weapons);
+    useOperatorSource(null, this.operators);
     window.removeEventListener('resize', this._onResize);
     this.three.domElement.removeEventListener('webglcontextrestored', this._onContextRestored);
     this.sky.geometry.dispose();
@@ -1294,6 +1343,7 @@ export class Renderer {
     this._skyAssets = null;
     this._landSky();
     this.weapons.clear();
+    this.operators.clear();
     this.fx.clear();
     this._setFxLights(0);
     this._releaseTextures();
@@ -1316,6 +1366,7 @@ export class Renderer {
     this._streamTextures();
     this._streamFx();
     this._streamWeapons();
+    this._streamOperators();
     this._warmPrograms();
     this._runCompiles();
     // The shadow boxes only move on frames that redraw the maps, so a skipped
@@ -1330,6 +1381,9 @@ export class Renderer {
     this.sky.position.copy(this.camera.position);
     this._drawWarmups();
     this._updateFx();
+    // The operators follow their figures' pivots and clips, and figures out of view put theirs on.
+    this.camera.updateMatrixWorld();
+    this.operators.frame(this.camera);
     this.three.setRenderTarget(this.post.target);
     this.three.clear();
     this.three.render(this.scene, this.camera);

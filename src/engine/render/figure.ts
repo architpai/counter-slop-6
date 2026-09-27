@@ -5,6 +5,8 @@ import { TONE, TONE_HEX, WHITE_HEX } from './palette';
 import { charMat, hitTint, ownMaterial, propMat, tintable, unlitMat, makeLabelMaterial } from './materials';
 import { boxGeo, cylGeo, sphereGeo, coneGeo, torusGeo } from './prims';
 import { tacticalPart, tacticalTemplate, TACTICAL_MODELS, type TacticalKind } from './tactical';
+import { OperatorMotion, type ClipGroup } from './operator-motion';
+import { HIT_LAYER } from './operators';
 
 const DARK = TONE_HEX[TONE.DARK], ACCENT = TONE_HEX[TONE.ACCENT];
 
@@ -107,6 +109,8 @@ const HIT_REGIONS: Partial<Record<FigurePartName, FigureAnchorName>> = {
   thighL: 'legL', thighR: 'legR', shinL: 'shinL', shinR: 'shinR',
 };
 const shotRay = new THREE.Raycaster();
+// Under a worn operator the flat model's surfaces sit on `HIT_LAYER`: still the hit areas.
+shotRay.layers.enable(HIT_LAYER);
 
 /** The hit tint's peak (V15): this share of the tone's colour added to the figure's light (`Figure.setTint`). */
 export const HIT_TINT = 0.5;
@@ -133,10 +137,53 @@ export function raycastFigure(root: THREE.Object3D, origin: THREE.Vector3, direc
   return null;
 }
 
+/**
+ * What render/operators.ts reaches in a figure with a Blender model to put a
+ * realistic operator on it (R7): its kind, pivots and flat surfaces (which
+ * stay its hit areas), its clip state, its prop, and hooks the operator sets
+ * while worn. Owners drive `motion` (enemies/model.ts, players.ts).
+ */
+export interface FigureRig {
+  readonly kind: TacticalKind;
+  readonly root: THREE.Group;
+  readonly parts: FigureParts;
+  /** The flat model's surfaces: its hit areas on every tier. */
+  readonly low: readonly THREE.Mesh[];
+  /** Its clip state, which its owner drives while it wears an operator (`worn`). */
+  readonly motion: OperatorMotion;
+  /** It wears a realistic operator now (set by render/operators.ts): only then do the clips matter. */
+  worn: boolean;
+  /** The prop mesh in hand (in the weapon group), if any. */
+  prop(): THREE.Object3D | null;
+  /** The figure's own copy of a material, bound to its hit tint and mark; freed by `disown` or with the figure. */
+  own(material: THREE.Material): THREE.Material;
+  disown(): void;
+  /** Pieces lent to the debris and not yet back. */
+  readonly lent: ReadonlySet<THREE.Object3D>;
+  /** Disposed by its owner (it may still have pieces out in the debris). */
+  disposed: boolean;
+  /** Set by a worn operator: the prop changed, and a piece is about to be lent. */
+  onWeapon: (() => void) | null;
+  onLend: ((part: THREE.Object3D) => void) | null;
+}
+
+/** Where realistic operators come from (render/operators.ts `OperatorAssets`), set by the renderer. */
+export interface OperatorSource {
+  /** A figure that can wear one, while it lives; returns its leave. */
+  enlist(rig: FigureRig): () => void;
+}
+let operatorSource: OperatorSource | null = null;
+/** Set the operators' source; with `from`, only while that one is still in use. */
+export function useOperatorSource(source: OperatorSource | null, from?: OperatorSource): void {
+  if (from === undefined || operatorSource === from) operatorSource = source;
+}
+
 export interface Figure {
   root: THREE.Group;
   parts: FigureParts;
   anchors: FigureAnchors;
+  /** A figure with a Blender model: what a realistic operator needs of it (`FigureRig`). */
+  rig?: FigureRig;
   /** Normal eyes / X eyes. */
   setEyes(dead: boolean): void;
   setWeapon(kind: WeaponPropKind): void;
@@ -486,6 +533,7 @@ export function makeFigure(o: FigureOpts): Figure {
   const parts: FigureParts = {}, anchors: FigureAnchors = {};
   const color = o.color ?? TONE_HEX[TONE.HOSTILE];
   let eyeSets: FaceSets, weapon: THREE.Group | null = null;
+  const low: THREE.Mesh[] = [];
   // Tactical actors release every primitive surface below and replace it with authored
   // geometry, so build stubs instead: same pivots, names and positions, no surface.
   const prim: typeof mesh = o.tactical ? (parent, _geo, _color, x, y, z) => stub(parent, x, y, z) : mesh;
@@ -625,7 +673,9 @@ export function makeFigure(o: FigureOpts): Figure {
       for (const child of [...pivot.children]) if (isMesh(child)) release(child);
       const surface = tacticalPart(o.tactical, name);
       surface.traverse(object => {
-        if (isMesh(object)) object.userData.hitPart = o.kind === 'humanoid' || name === 'head' ? HIT_REGIONS[name] ?? 'torso' : 'torso';
+        if (!isMesh(object)) return;
+        object.userData.hitPart = o.kind === 'humanoid' || name === 'head' ? HIT_REGIONS[name] ?? 'torso' : 'torso';
+        low.push(object);
       });
       // The authored cleaver follows the forearm, but remains a weapon, not armour.
       surface.getObjectByName('heavy-melee')?.traverse(object => { delete object.userData.hitPart; });
@@ -659,11 +709,33 @@ export function makeFigure(o: FigureOpts): Figure {
   adopt(root, own);
   // The figure holds its materials, and so does each piece it lent to the debris.
   let disposed = false, rootLent = false, holds = 1, held: WeaponPropKind = 'none';
+  let leave: (() => void) | undefined;
+  /** The prop mesh made for the weapon in hand (a worn operator holds it in its own hand). */
+  let heldProp: THREE.Object3D | null = null;
+  const lent = new Set<THREE.Object3D>();
+  // Copies of the realistic operators' materials (render/operators.ts), freed when it takes its operator off.
+  const realOwn = new Map<THREE.Material, THREE.Material>();
   const drop = () => {
-    if (--holds === 0) for (const material of [...own.values(), ...propOwn.values()]) material.dispose();
+    if (--holds !== 0) return;
+    leave?.();
+    for (const material of [...own.values(), ...propOwn.values(), ...realOwn.values()]) material.dispose();
   };
+  const clips: ClipGroup = o.kind === 'humanoid' ? 'humanoid' : o.kind === 'blob' ? 'machine' : 'drone';
+  const rig: FigureRig | undefined = o.tactical ? {
+    kind: o.tactical, root, parts, low, motion: new OperatorMotion(clips), worn: false, lent, disposed: false, onWeapon: null, onLend: null,
+    prop: () => heldProp,
+    own(material) {
+      let copy = realOwn.get(material);
+      if (!copy) realOwn.set(material, copy = ownMaterial(material, tint, o.tactical === 'player' ? color : undefined));
+      return copy;
+    },
+    disown() {
+      for (const material of realOwn.values()) material.dispose();
+      realOwn.clear();
+    },
+  } : undefined;
   const figure: Figure = {
-    root, parts, anchors,
+    root, parts, anchors, rig,
     setEyes(dead) { eyeSets.eyes.visible = !dead; eyeSets.dead.visible = !!dead; },
     setWeapon(kind) {
       const mount = parts.gunMount;
@@ -676,12 +748,14 @@ export function makeFigure(o: FigureOpts): Figure {
       }
       held = kind;
       weapon = propMesh(kind, o.tactical ? 0x333d44 : color);
+      heldProp = weapon.children.find(isMesh) ?? null;
       adopt(weapon, propOwn);
       // Props point down +z; the forearm hangs down -y. Lay the prop along the forearm so a raised arm aims it forward.
       weapon.rotation.x = Math.PI / 2;
       mount.add(weapon);
       parts.weapon = weapon;
       parts.tip = group(weapon, 'tip', 0, 0.05, kind === 'blade' ? 0.92 : kind === 'knife' || kind === 'pistol' ? 0.31 : kind === 'rifle' ? 0.59 : kind === 'hammer' ? 0.6 : 0.78);
+      rig?.onWeapon?.();
     },
     setTint(amount, tone) {
       tint.value.setHex(tone).multiplyScalar(amount);
@@ -699,17 +773,21 @@ export function makeFigure(o: FigureOpts): Figure {
     },
     lend(part) {
       if (part === root) rootLent = true;
+      rig?.onLend?.(part);
+      lent.add(part);
       holds++;
-      let lent = true;
+      let out = true;
       return () => {
-        if (!lent) return;
-        lent = false;
+        if (!out) return;
+        out = false;
+        lent.delete(part);
         drop();
       };
     },
     dispose() {
       if (disposed) return;
       disposed = true;
+      if (rig) rig.disposed = true;
       unsubscribe?.();
       if (!rootLent) release(root);
       drop();
@@ -720,6 +798,8 @@ export function makeFigure(o: FigureOpts): Figure {
   const unsubscribe = o.tactical && parts.gunMount
     ? propSource?.subscribeProps(() => { if (weapon?.parent === parts.gunMount) figure.setWeapon(held); })
     : undefined;
+  // On the realistic tiers it wears an operator once they are in (render/operators.ts).
+  if (rig) leave = operatorSource?.enlist(rig);
   return figure;
 }
 

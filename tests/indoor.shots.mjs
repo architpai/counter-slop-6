@@ -8,7 +8,7 @@
 // mean brightness of the screen round each grunt's chest, of the view model's corner and of the
 // screen's middle square, and the run fails if an indoor view on a realistic preset breaks the
 // guardrail (`READABLE`): too dark to play, or not clearly darker than outside.
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
 
 const url = process.argv[2] ?? 'http://127.0.0.1:3000/';
@@ -33,6 +33,14 @@ const VIEWS = [
  * `darker` of House's outside view, so rooms still read as rooms.
  */
 const READABLE = { grunt: 25, gun: 10, screen: 24, darker: 0.6 };
+/**
+ * And each grunt's chest at least as bright as on fe14d35 (the flat look, tests/readability-fe14d35.json,
+ * the same views) less this slack (sRGB luma; the readings are whole numbers and the same from run to
+ * run): the realistic operators (R7) read as well indoors. CS6_READABILITY=0 skips it.
+ */
+const READABLE_SLACK = 0.5;
+const baseline = process.env.CS6_READABILITY === '0' ? null
+  : JSON.parse(await readFile(new URL('./readability-fe14d35.json', import.meta.url), 'utf8')).indoor;
 
 await mkdir(out, { recursive: true });
 const browser = await chromium.launch({ args });
@@ -73,7 +81,8 @@ try {
         // The bake fades in over BAKE_FADE_MS once it is on the GPU; shoot the final look, with the
         // Blender gun on (R4) where the preset is realistic.
         const worn = r.weapons.size === null || (r.weapons.ready && w._real !== null && w._model === w._real);
-        return !r.skyPending && !r.texturesPending && !r.bakePending && !r.bakeFading && (worn || !r.weaponsPending);
+        // The operators too (R7): the grunts below spawn once they are in, so they wear them.
+        return !r.skyPending && !r.texturesPending && !r.bakePending && !r.bakeFading && (worn || !r.weaponsPending) && !(r.operatorsPending ?? false);
       }, null, { timeout: 30_000 });
       // A realistic preset measures the Blender gun, never the flat one it falls back to if the weapons fail.
       const gun = await page.evaluate(() => {
@@ -135,6 +144,10 @@ try {
     const outside = report[preset]['house-outside']?.screen;
     for (const [name, view] of Object.entries(report[preset]).filter(([name]) => !name.endsWith('-outside'))) {
       if (Math.min(...view.grunts) < READABLE.grunt) unreadable.push(`${preset} ${name}: grunt ${Math.min(...view.grunts)}`);
+      const base = baseline?.[`${preset} ${name}`];
+      view.grunts.forEach((grunt, i) => {
+        if (base && grunt < base[i] - READABLE_SLACK) unreadable.push(`${preset} ${name}: grunt ${grunt} (fe14d35 ${base[i]})`);
+      });
       if (view.gun < READABLE.gun) unreadable.push(`${preset} ${name}: gun ${view.gun}`);
       if (view.screen < READABLE.screen) unreadable.push(`${preset} ${name}: screen ${view.screen}`);
       if (outside !== undefined && view.screen > READABLE.darker * outside) unreadable.push(`${preset} ${name}: screen ${view.screen}, outside ${outside}`);

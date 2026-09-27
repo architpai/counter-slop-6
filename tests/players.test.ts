@@ -203,9 +203,17 @@ test('shot batches, the muzzle flash and damage', () => {
 });
 
 test('death, ragdoll and respawn', () => {
+  // A worn operator (R7) mid-stride and aiming as it dies: its loops and aim fade as it lies, as an enemy corpse's.
+  const rig = must(must(remote._figure, 'figure').rig, 'rig');
+  rig.worn = true;
+  rig.motion.weights.idle = 0;
+  rig.motion.weights.run = 1;
+  rig.motion.aim = 1;
   remote.push(state(0, 0, 16), 4);
   remote.update(0.05, 4.08);
   assert(!remote.alive && must(remote._figure, 'figure').root.rotation.x > 0 && remote.deadT === 0.05, 'Dead flag starts the slump and dead timer.');
+  assert(rig.motion.weights.run < 0.7 && rig.motion.aim < 0.7, 'A dead remote operator lets go of its stride and aim.');
+  rig.worn = false;
   const tracers = calls.tracers.length;
   remote.shots('rifle', [1, 2, 3]);
   remote.takeDamage(12);

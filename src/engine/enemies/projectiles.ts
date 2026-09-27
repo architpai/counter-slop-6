@@ -44,6 +44,7 @@ export function spawnProjectile(m: EnemyManager, pos: Vector3, direction: Vector
     mesh: new Mesh(BOLT, boltMaterial(tone)),
   };
   p.mesh.name = 'projectile';
+  if (owner) owner.shots++;
   m.ctx.scene.add(p.mesh);
   draw(p);
   m.projectiles.push(p);

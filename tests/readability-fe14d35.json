@@ -1,0 +1,439 @@
+{
+ "about": "fe14d35 (the flat look on every tier), the same scripts: tests/tiers.shots.mjs readability as [chest, mask] contrast (sRGB luma) by preset, map, view, range (m) and light; tests/indoor.shots.mjs grunts' chest brightness by preset and view",
+ "readings": {
+  "medium downtown best 10 sun": [
+   11,
+   110.5
+  ],
+  "medium downtown best 10 shade": [
+   1.2,
+   81.6
+  ],
+  "medium downtown best 30 sun": [
+   76.5,
+   25
+  ],
+  "medium downtown best 30 shade": [
+   55.8,
+   17
+  ],
+  "medium downtown best 60 sun": [
+   37.6,
+   30.1
+  ],
+  "medium downtown best 70 shade": [
+   0.2,
+   63.6
+  ],
+  "medium house best 10 sun": [
+   20.9,
+   102.7
+  ],
+  "medium house best 10 shade": [
+   29.4,
+   50.4
+  ],
+  "medium house best 30 sun": [
+   9.3,
+   97.1
+  ],
+  "medium house best 30 shade": [
+   71.7,
+   2.4
+  ],
+  "medium house best 60 sun": [
+   14.1,
+   69.8
+  ],
+  "medium house shade 10 sun": [
+   21.5,
+   122.8
+  ],
+  "medium house shade 10 shade": [
+   97.6,
+   17.3
+  ],
+  "medium house shade 30 sun": [
+   6.7,
+   94.8
+  ],
+  "medium house shade 60 shade": [
+   13.3,
+   102.2
+  ],
+  "medium mexico best 10 sun": [
+   94.3,
+   34.3
+  ],
+  "medium mexico best 10 shade": [
+   57.1,
+   29.7
+  ],
+  "medium mexico best 30 sun": [
+   37.3,
+   78.1
+  ],
+  "medium mexico best 30 shade": [
+   3.6,
+   83.5
+  ],
+  "medium mexico best 60 sun": [
+   30.8,
+   60.8
+  ],
+  "medium mexico best 60 shade": [
+   39.4,
+   33.2
+  ],
+  "medium training best 10 sun": [
+   10.8,
+   109.1
+  ],
+  "medium training best 10 shade": [
+   2.1,
+   82.5
+  ],
+  "medium training best 30 sun": [
+   31.3,
+   56.5
+  ],
+  "medium training best 60 sun": [
+   21.7,
+   48.1
+  ],
+  "medium training best 60 shade": [
+   3.1,
+   77.1
+  ],
+  "medium downtown-arena best 10 sun": [
+   24.5,
+   76.4
+  ],
+  "medium downtown-arena best 10 shade": [
+   94.7,
+   15.5
+  ],
+  "medium downtown-arena best 30 sun": [
+   35.7,
+   55.5
+  ],
+  "medium downtown-arena best 30 shade": [
+   88.1,
+   0.2
+  ],
+  "medium downtown-arena best 60 sun": [
+   29.7,
+   54.6
+  ],
+  "medium downtown-arena best 60 shade": [
+   61.1,
+   3
+  ],
+  "high downtown best 10 sun": [
+   17.4,
+   108.8
+  ],
+  "high downtown best 10 shade": [
+   1.1,
+   80.5
+  ],
+  "high downtown best 30 sun": [
+   74.5,
+   35.2
+  ],
+  "high downtown best 30 shade": [
+   57.6,
+   17.4
+  ],
+  "high downtown best 60 sun": [
+   49.2,
+   51.8
+  ],
+  "high downtown best 70 shade": [
+   6.4,
+   61.7
+  ],
+  "high house best 10 sun": [
+   20.9,
+   104.8
+  ],
+  "high house best 10 shade": [
+   31.3,
+   50.1
+  ],
+  "high house best 30 sun": [
+   9,
+   95.4
+  ],
+  "high house best 30 shade": [
+   75.7,
+   0.5
+  ],
+  "high house best 60 sun": [
+   11.8,
+   71.2
+  ],
+  "high house shade 10 sun": [
+   20.1,
+   123.5
+  ],
+  "high house shade 10 shade": [
+   101.4,
+   13.8
+  ],
+  "high house shade 30 sun": [
+   4.3,
+   91.2
+  ],
+  "high house shade 60 shade": [
+   9.4,
+   90.3
+  ],
+  "high mexico best 10 sun": [
+   96.6,
+   35.8
+  ],
+  "high mexico best 10 shade": [
+   58.4,
+   30.7
+  ],
+  "high mexico best 30 sun": [
+   46.1,
+   78.4
+  ],
+  "high mexico best 30 shade": [
+   0.4,
+   85.4
+  ],
+  "high mexico best 60 sun": [
+   41.3,
+   60.6
+  ],
+  "high mexico best 60 shade": [
+   47.4,
+   35.8
+  ],
+  "high training best 10 sun": [
+   11.6,
+   111.8
+  ],
+  "high training best 10 shade": [
+   6.5,
+   77.9
+  ],
+  "high training best 30 sun": [
+   32.1,
+   58
+  ],
+  "high training best 60 sun": [
+   26.7,
+   51.2
+  ],
+  "high training best 60 shade": [
+   5.1,
+   72
+  ],
+  "high downtown-arena best 10 sun": [
+   24.7,
+   78.6
+  ],
+  "high downtown-arena best 10 shade": [
+   99.7,
+   16.5
+  ],
+  "high downtown-arena best 30 sun": [
+   37.3,
+   59.5
+  ],
+  "high downtown-arena best 30 shade": [
+   95.2,
+   1.5
+  ],
+  "high downtown-arena best 60 sun": [
+   32.1,
+   54.4
+  ],
+  "high downtown-arena best 60 shade": [
+   70.5,
+   3.2
+  ],
+  "ultra downtown best 10 sun": [
+   16,
+   110.6
+  ],
+  "ultra downtown best 10 shade": [
+   0.4,
+   81.3
+  ],
+  "ultra downtown best 30 sun": [
+   31.3,
+   77.3
+  ],
+  "ultra downtown best 30 shade": [
+   58.6,
+   18.3
+  ],
+  "ultra downtown best 60 sun": [
+   25.6,
+   64
+  ],
+  "ultra downtown best 70 shade": [
+   7.3,
+   84.3
+  ],
+  "ultra house best 10 sun": [
+   21.7,
+   105.1
+  ],
+  "ultra house best 10 shade": [
+   30.8,
+   51.2
+  ],
+  "ultra house best 30 sun": [
+   12.4,
+   98.3
+  ],
+  "ultra house best 30 shade": [
+   75.7,
+   1.1
+  ],
+  "ultra house best 60 sun": [
+   13.9,
+   71.8
+  ],
+  "ultra house shade 10 sun": [
+   18.8,
+   123.9
+  ],
+  "ultra house shade 10 shade": [
+   101.5,
+   15.9
+  ],
+  "ultra house shade 30 sun": [
+   9,
+   95.7
+  ],
+  "ultra house shade 60 shade": [
+   9.4,
+   86.8
+  ],
+  "ultra mexico best 10 sun": [
+   94.5,
+   37.3
+  ],
+  "ultra mexico best 10 shade": [
+   56.3,
+   32.3
+  ],
+  "ultra mexico best 30 sun": [
+   45.5,
+   79.2
+  ],
+  "ultra mexico best 30 shade": [
+   4.6,
+   90.1
+  ],
+  "ultra mexico best 60 sun": [
+   42,
+   63.5
+  ],
+  "ultra mexico best 60 shade": [
+   46,
+   36.4
+  ],
+  "ultra training best 10 sun": [
+   11.6,
+   112.3
+  ],
+  "ultra training best 10 shade": [
+   5.8,
+   78.2
+  ],
+  "ultra training best 30 sun": [
+   29.6,
+   60.2
+  ],
+  "ultra training best 60 sun": [
+   31.7,
+   60.2
+  ],
+  "ultra training best 60 shade": [
+   5.2,
+   67.5
+  ],
+  "ultra downtown-arena best 10 sun": [
+   24.6,
+   80.2
+  ],
+  "ultra downtown-arena best 10 shade": [
+   99.2,
+   15.5
+  ],
+  "ultra downtown-arena best 30 sun": [
+   35.5,
+   60.3
+  ],
+  "ultra downtown-arena best 30 shade": [
+   91.4,
+   2.3
+  ],
+  "ultra downtown-arena best 60 sun": [
+   34.7,
+   58.9
+  ],
+  "ultra downtown-arena best 60 shade": [
+   74.6,
+   3
+  ]
+ },
+ "indoor": {
+  "medium house-basement": [
+   47,
+   47
+  ],
+  "medium house-ground": [
+   43,
+   31
+  ],
+  "medium house-outside": [
+   128,
+   119
+  ],
+  "medium downtown-b": [
+   45,
+   36
+  ],
+  "high house-basement": [
+   46,
+   43
+  ],
+  "high house-ground": [
+   41,
+   29
+  ],
+  "high house-outside": [
+   126,
+   117
+  ],
+  "high downtown-b": [
+   41,
+   35
+  ],
+  "ultra house-basement": [
+   46,
+   43
+  ],
+  "ultra house-ground": [
+   41,
+   29
+  ],
+  "ultra house-outside": [
+   126,
+   117
+  ],
+  "ultra downtown-b": [
+   42,
+   34
+  ]
+ }
+}

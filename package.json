@@ -14,7 +14,8 @@
     "lightmaps": "node tools/lightmaps/build.mjs",
     "weapons": "node tools/weapons/build.mjs",
     "effects": "node tools/effects/build.mjs",
-    "characters": "node tools/characters/build.mjs"
+    "characters": "node tools/characters/build.mjs",
+    "operators": "node tools/characters/operators.mjs"
   },
   "type": "module",
   "dependencies": {

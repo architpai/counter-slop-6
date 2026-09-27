@@ -15,3 +15,5 @@ tools/weapons/.build/
 tools/blender/weapons/__pycache__/
 tools/effects/.build/
 tools/blender/effects/__pycache__/
+tools/characters/.build/
+tools/blender/characters/__pycache__/

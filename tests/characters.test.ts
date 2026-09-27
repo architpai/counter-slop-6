@@ -372,18 +372,29 @@ test('the menu warm-up covers every character program: none links once enemies s
       renderer.applyQuality(PRESET_VALUES[preset]);
       const realistic = preset !== 'low';
       for (let start = performance.now(); ; await yieldTo()) {
-        if (performance.now() - start > 50_000) throw new Error(`${preset}: warm-up timed out`);
+        // A realistic preset decodes and warms the operators' glb too (R7): slow under software GL beside the other files.
+        if (performance.now() - start > 120_000) throw new Error(`${preset}: warm-up timed out`);
         renderer.render(0, fx);
-        if (renderer._compiles.length === 0 && renderer._warmups.length === 0 && renderer._programsWarm && (!realistic || renderer.weapons.ready)) break;
+        if (renderer._compiles.length === 0 && renderer._warmups.length === 0 && renderer._programsWarm
+          && (!realistic || (renderer.weapons.ready && renderer.operators.ready))) break;
       }
       renderer.render(0, fx);
       const programs = renderer.three.info.programs!.length;
+      const known = new Set(renderer.three.info.programs!.map(p => p.cacheKey));
       const { figures, player } = lineup(renderer);
       try {
-        if (realistic) expect(figures[0]!.figure.parts.weapon!.children[0]!.name, 'a Blender prop in hand').toBe('prop__rifle');
-        // A dropped gun, as the debris holds it: in the scene, casting.
+        if (realistic) {
+          expect(figures[0]!.figure.rig!.prop()!.name, 'a Blender prop in hand').toBe('prop__rifle');
+          // Every figure made from now wears its operator (R7); a torn-off head takes its rigid copy.
+          expect(figures.every(e => e.root.getObjectByName('operator'))).toBe(true);
+        }
+        // A dropped gun, as the debris holds it: lent, in the scene, casting.
         const dropped = figures[2]!.figure.parts.weapon!;
+        const returned = figures[2]!.figure.lend(dropped);
         renderer.scene.attach(dropped);
+        const head = figures[4]!.figure.parts.head!;
+        const headBack = figures[4]!.figure.lend(head);
+        renderer.scene.attach(head);
         dropped.traverse(node => { node.castShadow = true; });
         renderer.render(0, fx);
         for (const [i, e] of figures.entries()) {
@@ -396,11 +407,16 @@ test('the menu warm-up covers every character program: none links once enemies s
         player.setTint(HIT_TINT, 0x4c7dff);
         renderer.render(0, fx);
         renderer.render(0, fx);
+        const fresh = renderer.three.info.programs!.filter(p => !known.has(p.cacheKey)).map(p => `${p.name}: ${p.cacheKey.slice(0, 400)}`);
+        expect(fresh, preset).toEqual([]);
         expect(renderer.three.info.programs!.length, preset).toBe(programs);
+        returned();
+        headBack();
       } finally {
         for (const e of figures) e.figure.dispose();
         player.dispose();
         renderer.scene.remove(figures[2]!.figure.parts.weapon!);
+        renderer.scene.remove(figures[4]!.figure.parts.head!);
       }
     }
     // A look put in force in a live match: the templates hold its programs, so a wave's last death frees none.
@@ -425,8 +441,11 @@ test('the menu warm-up covers every character program: none links once enemies s
     // Low frees the Blender guns: a dropped one still in the scene (the figure gone, or still alive) is hidden, not drawn freed.
     const { figures, player } = lineup(renderer, 4);
     const gone = figures[0]!, alive = figures[1]!, armed = figures[3]!;
-    for (const e of [gone, alive]) renderer.scene.attach(e.figure.parts.weapon!);
-    const guns = [gone, alive].map(e => e.figure.parts.weapon!.children[0]!);
+    for (const e of [gone, alive]) {
+      e.figure.lend(e.figure.parts.weapon!);
+      renderer.scene.attach(e.figure.parts.weapon!);
+    }
+    const guns = [gone, alive].map(e => e.figure.parts.weapon!.children.find(node => node.name.startsWith('prop__')) ?? e.figure.rig!.prop()!);
     expect(guns.map(gun => gun.name)).toEqual(['prop__rifle', 'prop__blade']);
     renderer.render(0, fx);
     gone.figure.dispose();
@@ -434,7 +453,8 @@ test('the menu warm-up covers every character program: none links once enemies s
     renderer.render(0, fx);
     renderer.render(0, fx);
     expect(guns.map(gun => gun.visible)).toEqual([false, false]);
-    expect(armed.figure.parts.weapon!.children[0]!.name, 'the flat prop back in hand').not.toMatch(/^prop__/);
+    expect(armed.figure.rig!.prop()!.name, 'the flat prop back in hand').not.toMatch(/^prop__/);
+    expect(armed.figure.root.getObjectByName('operator'), 'the flat model back').toBeUndefined();
     for (const e of figures) e.figure.dispose();
     player.dispose();
     for (const gun of guns) gun.parent?.removeFromParent();
@@ -443,4 +463,4 @@ test('the menu warm-up covers every character program: none links once enemies s
     renderer.dispose();
     canvas.remove();
   }
-}, 300_000);
+}, 420_000);

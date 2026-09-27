@@ -3,6 +3,7 @@ import { alignSegment, clamp, damp, rand, round1, round2, wrapAngle } from './ut
 import { makeFigure, makeNameTag, cylGeo, sphereGeo, surfMat, TONE, TONE_HEX } from './render/index';
 import type { Figure, FigureAnchorName, FigureAnchors, FigureParts } from './render/figure';
 import { flashAmount, raycastFigure } from './render/figure';
+import { STILL, type MotionInput } from './render/operator-motion';
 import { PS_FLAG } from './types';
 import type { Ctx, Enemy, Snap, StatePacket, Target } from './types';
 import type { Player } from './player/index';
@@ -124,6 +125,8 @@ export class RemotePlayer implements Target {
   _pitch: number;
   _phase: number;
   _walk: number;
+  /** What a worn operator's clips are told each step (R7), reused. */
+  readonly _motion: MotionInput = { ...STILL, still: false };
   _flashT: number;
   _wi: number;
   _disposed: boolean;
@@ -333,6 +336,8 @@ export class RemotePlayer implements Target {
     this._figure.setEyes(!this.alive);
     if (!this.alive) {
       root.rotation.x = damp(root.rotation.x, Math.PI / 2, 5, dt);
+      // A worn operator's loops and aim fade out as it lies, as an enemy corpse's do (enemies/model.ts `corpse`).
+      if (this._figure.rig?.worn) this._figure.rig.motion.update(dt, STILL);
       return;
     }
     root.rotation.x = damp(root.rotation.x, 0, 8, dt);
@@ -362,6 +367,15 @@ export class RemotePlayer implements Target {
     }
     p.torso.rotation.set(-0.2 * w + (this.sliding ? 0.5 : 0) + (this.crouching ? 0.25 : 0), -0.3 * aim, 0);
     p.head.rotation.x = clamp(-this._pitch, -0.7, 0.7) * 0.7;
+    // A worn operator's clips (R7): the figure's +x is the player's left, as the root turns half round.
+    if (!this._figure.rig?.worn) return;
+    const lateral = sp > 0.2 ? (this.body.vel.x * -Math.cos(this._yaw) + this.body.vel.z * Math.sin(this._yaw)) / sp : 0;
+    const gun = GUN_LOADOUT[this._wi] ?? GUN_LOADOUT[0];
+    const input = this._motion;
+    input.speed = sp; input.phase = this._phase; input.lateral = lateral; input.aim = aim;
+    input.carry = blade ? 'blade' : gun === 'pistol' ? 'pistol' : 'long';
+    input.onGround = this.body.onGround; input.crouch = this.crouching || this.sliding;
+    this._figure.rig.motion.update(dt, input);
   }
 
   raycast(origin: Vector3, direction: Vector3, max: number) {
@@ -392,6 +406,7 @@ export class RemotePlayer implements Target {
     endpoint.set(num(ends[0]), num(ends[1]), num(ends[2])).sub(muzzle);
     if (endpoint.lengthSq() > 1e-6) this._ctx.effects.muzzleFlash(muzzle, endpoint.normalize(), kind === 'shotgun' || kind === 'sniper' ? 1.4 : 1);
     this.flash();
+    this._figure.rig?.motion.trigger('fire');
     this._ctx.audio.remoteShot(kind === 'r4c' || kind === 'shotgun' || kind === 'sniper' || kind === 'pistol' ? kind : 'rifle', muzzle);
   }
 

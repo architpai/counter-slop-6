@@ -2,6 +2,7 @@ import { Vector3, Mesh, Quaternion, SphereGeometry } from 'three';
 import type { Group, Object3D } from 'three';
 import { makeFigure, TONE_HEX, unlitMat } from '../render/index';
 import { flashAmount } from '../render/figure';
+import { STILL, type MotionInput } from '../render/operator-motion';
 import type { Figure, FigureAnchorName, FigureAnchors, FigureParts, WeaponPropKind } from '../render/figure';
 import { clamp, damp, rand, wrapAngle } from '../util';
 import type { RayHit } from '../types';
@@ -158,6 +159,48 @@ export function spawnPose(e: EnemyRecord): void {
   syncModel(e);
 }
 
+/** What the operator's clips have seen of an enemy (render/operator-motion.ts): its shots, flinch and special cooldown last step. */
+const cues = new WeakMap<EnemyRecord, { shots: number; flinch: number; special: number; boss: boolean }>();
+const _right = new Vector3();
+/** `drive`'s input to the clips, reused each step. */
+const _input: MotionInput = { ...STILL, still: false };
+
+/**
+ * Tell a worn operator (R7) what the enemy is doing, after the procedural
+ * pose: speed, stride phase and sideways share, aim and carry, and the
+ * one-shots as they happen (a shot, the reload after a burst, a hit, a
+ * smoke or charge thrown, a boss's throw; the melee plays at the swing's
+ * own progress). Looks only: nothing here reads back into play.
+ */
+function drive(e: EnemyRecord, dt: number, speed: number): void {
+  const rig = e.figure.rig;
+  // Low, or its operator not on yet: nothing plays the clips.
+  if (!rig?.worn) return;
+  const motion = rig.motion;
+  let cue = cues.get(e);
+  if (!cue) cues.set(e, cue = { shots: e.shots, flinch: e.flinch, special: e.specialCd, boss: false });
+  const weapon = e.stats.weapon;
+  const carry = weapon === 'rifle' || weapon === 'shotgun' || weapon === 'sniper' ? 'long' : weapon === 'pistol' ? 'pistol' : weapon === 'blade' ? 'blade' : 'none';
+  // A gun's recoil and reload; a blade's projectiles (the parry's deflections) are no gunshots.
+  if (e.shots !== cue.shots && (carry === 'long' || carry === 'pistol')) {
+    motion.trigger('fire');
+    // The burst's last shot, with a long wait before the next: time to change magazines.
+    if (carry === 'long' && e.burstLeft === 0 && e.attackCd > 1.3) motion.trigger('reload');
+  }
+  if (e.flinch > cue.flinch + 0.3) motion.trigger('hit');
+  if ((e.type === 'smoker' || e.type === 'sapper') && e.specialCd > cue.special + 4) motion.trigger('throw');
+  const thrown = e.bossAttack?.kind === 'throw' && 'fired' in e.bossAttack && e.bossAttack.fired;
+  if (thrown && !cue.boss) motion.trigger('throw');
+  cue.shots = e.shots; cue.flinch = e.flinch; cue.special = e.specialCd; cue.boss = !!thrown;
+  _right.set(Math.cos(e.yaw), 0, -Math.sin(e.yaw));
+  const lateral = speed > 0.2 ? (e.body.vel.x * _right.x + e.body.vel.z * _right.z) / speed : 0;
+  const input = _input;
+  input.speed = speed; input.phase = e.phase; input.lateral = lateral; input.aim = e.aimAmt; input.carry = carry;
+  input.onGround = e.body.onGround; input.flinch = e.flinch;
+  input.melee = carry === 'blade' && e.attackT > 0 ? clamp(1 - e.attackT / 0.55, 0, 1) : null;
+  motion.update(dt, input);
+}
+
 export function animate(e: EnemyRecord, dt: number): void {
   const speed = Math.hypot(e.body.vel.x, e.body.vel.z);
   e.walkAmt = damp(e.walkAmt, clamp(speed / 4, 0, 1), 10, dt);
@@ -179,6 +222,7 @@ export function animate(e: EnemyRecord, dt: number): void {
     // Tilt-wing motors trim the aircraft; they do not flap like a paper bird.
     p.wingL.rotation.z = clamp(-p.torso.rotation.z * 0.15, -0.12, 0.12);
     p.wingR.rotation.z = -p.wingL.rotation.z;
+    drive(e, dt, speed);
     return;
   }
   const p = e.figure.parts as GroundJoints;
@@ -242,6 +286,7 @@ export function animate(e: EnemyRecord, dt: number): void {
     p.head.rotation.x = clamp(-Math.atan2(delta.y, Math.hypot(delta.x, delta.z)) * 0.8, -0.6, 0.6);
     p.head.rotation.z = s * 0.04 * w + (e.fuseT >= 0 ? Math.sin(30 * e.age) * 0.3 : 0);
   }
+  drive(e, dt, speed);
 }
 
 /**
@@ -251,6 +296,7 @@ export function animate(e: EnemyRecord, dt: number): void {
 export function corpse(e: EnemyRecord, dt: number): void {
   e.deadT += dt;
   flash(e, dt);
+  if (e.figure.rig?.worn) e.figure.rig.motion.update(dt, STILL);
   if (e.rootDetached || !e.death) return;
   deathPose(e, e.death, e.deadT);
 }

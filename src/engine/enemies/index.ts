@@ -49,6 +49,8 @@ export interface EnemyRecord extends Enemy {
   flinch: number;
   /** The hit tint's seconds left (model.ts `flash`). */
   flashT: number;
+  /** Projectiles fired so far: the realistic operator's recoil and reload watch it (model.ts `drive`). A look only. */
+  shots: number;
   path: NavPath | null;
   pathIndex: number;
   pathT: number;
@@ -214,7 +216,7 @@ export class EnemyManager {
     const e: EnemyRecord = {
       id: id ?? this.ids++, type, stats, hp: stats.hp, maxHp: stats.hp, alive: true, state: 'spawn', age: 0,
       body, center: position.clone(), yaw: rand(0, TAU), yawTo: 0, phase: rand(0, TAU), walkAmt: 0, aimAmt: 0,
-      flinch: 0, flashT: 0, path: null, pathIndex: 0, pathT: 0, pathGoal: null, losT: 0, hasLOS: false,
+      flinch: 0, flashT: 0, shots: 0, path: null, pathIndex: 0, pathT: 0, pathGoal: null, losT: 0, hasLOS: false,
       attackCd: rand(0.6, 1.4), burstLeft: 0, burstT: 0, aimT: 0, attackT: 0, attackHit: false, stunDuration: 0, stuckT: 0,
       strafeDir: choose([-1, 1]), strafeT: rand(1, 2), deadT: 0, slotAngle: this.slots++ * GOLDEN, slotRadius: 0, slotT: rand(0, 2),
       approachPoint: new Vector3(), keepMult: rand(0.75, 1.35), backoffT: 0, fuseT: -1, shieldHp: stats.shield ? 2 : 0,
