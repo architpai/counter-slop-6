@@ -143,11 +143,14 @@ class Fnv {
   a = 0x811c9dc5;
   b = 0xcbf29ce4;
   word(value: number): void {
+    let a = this.a, b = this.b;
     for (let shift = 0; shift < 32; shift += 8) {
       const byte = (value >>> shift) & 0xff;
-      this.a = Math.imul(this.a ^ byte, 0x01000193);
-      this.b = Math.imul(this.b ^ byte, 0x01000193) ^ (this.b >>> 13);
+      a = Math.imul(a ^ byte, 0x01000193);
+      b = Math.imul(b ^ byte, 0x01000193) ^ (b >>> 13);
     }
+    this.a = a;
+    this.b = b;
   }
   text(value: string): void {
     for (let i = 0; i < value.length; i++) this.word(value.charCodeAt(i));
@@ -158,6 +161,18 @@ class Fnv {
 }
 
 const quantize = (v: number): number => Math.round(v / QUANTUM);
+/** Quantised coordinates (millimetres) fit ±`COORD_HALF`, so a point's x and z make one exact number. */
+const COORD_HALF = 2 ** 19;
+const COORD_SPAN = 2 ** 20;
+/**
+ * A plane as one exact number: its normal's thousandths (−1000..1000 each) and its offset in quanta (within
+ * ±`COORD_HALF`), the same classes as `${nx},${ny},${nz},${d}` would make.
+ */
+function planeKey(nx: number, ny: number, nz: number, d: number): number {
+  if (Math.abs(d) >= COORD_HALF) throw new Error('lightmap: a face over 500 m from the origin');
+  return ((((nx + 1000) * 2001 + ny + 1000) * 2001 + nz + 1000) * COORD_SPAN) + d + COORD_HALF;
+}
+const IDENTITY = new THREE.Matrix4();
 const _a = new THREE.Vector3();
 const _b = new THREE.Vector3();
 const _c = new THREE.Vector3();
@@ -174,6 +189,42 @@ function frame(normal: THREE.Vector3, t: THREE.Vector3, s: THREE.Vector3): void 
   } else {
     s.copy(Y).addScaledVector(normal, -normal.y).normalize();
     t.crossVectors(s, normal);
+  }
+}
+
+/**
+ * An open-addressed table from a key of two exact integers (`a` under 2^53,
+ * `b` a 32-bit one) to the order it was first seen in: the chart pass's
+ * planes, points and edges, tens of thousands a map, with no allocation per
+ * key (a `Map` keyed by numbers past 2^31 boxes each).
+ */
+class KeyTable {
+  #a: Float64Array;
+  #b: Int32Array;
+  #value: Int32Array;
+  size = 0;
+  constructor(expected: number) {
+    const capacity = 2 ** Math.ceil(Math.log2(Math.max(16, 2 * expected)));
+    this.#a = new Float64Array(capacity);
+    this.#b = new Int32Array(capacity);
+    this.#value = new Int32Array(capacity).fill(-1);
+  }
+  /** The key's number, or -1 with the key added as number `value`. */
+  claim(a: number, b: number, value: number): number {
+    const mask = this.#value.length - 1, high = Math.floor(a / 4294967296);
+    let slot = (Math.imul((a - high * 4294967296) | 0, 0x9e3779b1) ^ Math.imul(high | 0, 0x85ebca6b) ^ Math.imul(b, 0xc2b2ae35)) & mask;
+    for (;;) {
+      const found = this.#value[slot]!;
+      if (found === -1) {
+        this.#a[slot] = a;
+        this.#b[slot] = b;
+        this.#value[slot] = value;
+        this.size++;
+        return -1;
+      }
+      if (this.#a[slot] === a && this.#b[slot] === b) return found;
+      slot = (slot + 1) & mask;
+    }
   }
 }
 
@@ -206,22 +257,32 @@ class UnionFind {
  */
 export function bakedTriangles(surfaces: readonly LevelSurface[]): BakedTriangles {
   const baked = bakedSurfaces(surfaces);
-  const owner: number[] = [], corners: number[] = [], positions: number[] = [];
+  // Sized first, then filled in place: a map's tens of thousands of triangles grow plain arrays through many copies.
+  const ranges = baked.map(drawnRanges);
+  const total = ranges.reduce((n, list) => n + list.reduce((m, { count }) => m + Math.floor(count / 3), 0), 0);
+  const owner = new Int32Array(total), corners = new Int32Array(3 * total), positions = new Float64Array(9 * total);
   const hash = new Fnv();
+  let tri = 0;
   baked.forEach((surface, index) => {
     const mesh = surface.mesh, geometry = mesh.geometry;
     mesh.updateWorldMatrix(true, false);
     const position = geometry.getAttribute('position'), indices = geometry.index;
-    for (const { start, count, tag } of drawnRanges(surface)) {
+    // The merged level sits at the origin: its positions are read straight from the array (the same numbers).
+    const plain = position instanceof THREE.BufferAttribute && !position.normalized && position.itemSize === 3 && mesh.matrixWorld.equals(IDENTITY);
+    const array = position.array, order = indices?.array ?? null;
+    for (const { start, count, tag } of ranges[index]!) {
       const real = resolveMaterial(tag, surface.surf);
       hash.text(real.key);
-      for (let i = start; i + 2 < start + count; i += 3) {
-        owner.push(index);
+      for (let i = start; i + 2 < start + count; i += 3, tri++) {
+        owner[tri] = index;
         for (let k = 0; k < 3; k++) {
-          const vertex = indices ? indices.getX(i + k) : i + k;
-          corners.push(vertex);
-          _a.fromBufferAttribute(position, vertex).applyMatrix4(mesh.matrixWorld);
-          positions.push(_a.x, _a.y, _a.z);
+          const vertex = order ? order[i + k]! : i + k;
+          corners[3 * tri + k] = vertex;
+          if (plain) _a.set(array[3 * vertex]!, array[3 * vertex + 1]!, array[3 * vertex + 2]!);
+          else _a.fromBufferAttribute(position, vertex).applyMatrix4(mesh.matrixWorld);
+          positions[9 * tri + 3 * k] = _a.x;
+          positions[9 * tri + 3 * k + 1] = _a.y;
+          positions[9 * tri + 3 * k + 2] = _a.z;
           hash.word(quantize(_a.x));
           hash.word(quantize(_a.y));
           hash.word(quantize(_a.z));
@@ -229,7 +290,25 @@ export function bakedTriangles(surfaces: readonly LevelSurface[]): BakedTriangle
       }
     }
   });
-  return { surfaces: baked, owner: Int32Array.from(owner), corners: Int32Array.from(corners), positions: Float64Array.from(positions), hash: hash.hex };
+  return { surfaces: baked, owner, corners, positions, hash: hash.hex };
+}
+
+/**
+ * Triangles a layout step works through before it pauses (`lightmapChartSteps`,
+ * `layoutSteps`): a few hundred microseconds of script on a desktop.
+ */
+const STEP_TRIANGLES = 4096;
+/** Pause here every `STEP_TRIANGLES`th triangle `i` (a step's `yield`). */
+const pause = (i: number): boolean => i % STEP_TRIANGLES === STEP_TRIANGLES - 1;
+/** Cells the packer places before it pauses: each scans the atlas's 512 columns. */
+const PACK_CELLS = 512;
+
+/** Run a layout's steps to the end, at once (the exporter, the tests). */
+export function runSteps<T>(steps: Generator<void, T>): T {
+  for (;;) {
+    const next = steps.next();
+    if (next.done) return next.value;
+  }
 }
 
 /**
@@ -238,34 +317,47 @@ export function bakedTriangles(surfaces: readonly LevelSurface[]): BakedTriangle
  * get the same charts, and the density search can pack them many times.
  */
 export function lightmapCharts(surfaces: readonly LevelSurface[], bounds: Bounds, triangles = bakedTriangles(surfaces)): LightmapCharts {
+  return runSteps(lightmapChartSteps(surfaces, bounds, triangles));
+}
+
+/**
+ * `lightmapCharts` in steps: it pauses (yields) between its passes and every
+ * `STEP_TRIANGLES` triangles within them, so the game can spread a map's
+ * 30-80 ms of it over frames (render/index.ts `_layBake`).
+ */
+export function* lightmapChartSteps(surfaces: readonly LevelSurface[], bounds: Bounds, triangles = bakedTriangles(surfaces)): Generator<void, LightmapCharts> {
   const { owner, corners, positions: p } = triangles, n = owner.length;
   const at = (tri: number, k: number, v: THREE.Vector3) => v.set(p[9 * tri + 3 * k]!, p[9 * tri + 3 * k + 1]!, p[9 * tri + 3 * k + 2]!);
   // Triangle normals (area-weighted) and the key of the plane each lies in.
-  const normals = new Float64Array(3 * n), areas = new Float64Array(n), planes: string[] = [];
+  const normals = new Float64Array(3 * n), areas = new Float64Array(n), planes = new Float64Array(n);
   for (let i = 0; i < n; i++) {
     at(i, 0, _a); at(i, 1, _b); at(i, 2, _c);
     _n.subVectors(_c, _b).cross(_d.subVectors(_a, _b));
     const area = _n.length() / 2;
     areas[i] = area;
     if (area > 1e-12) _n.normalize();
-    normals.set([_n.x, _n.y, _n.z], 3 * i);
-    planes.push(`${Math.round(_n.x * 1e3)},${Math.round(_n.y * 1e3)},${Math.round(_n.z * 1e3)},${quantize(_n.dot(_a))}`);
+    normals[3 * i] = _n.x;
+    normals[3 * i + 1] = _n.y;
+    normals[3 * i + 2] = _n.z;
+    planes[i] = planeKey(Math.round(_n.x * 1e3), Math.round(_n.y * 1e3), Math.round(_n.z * 1e3), quantize(_n.dot(_a)));
+    if (pause(i)) yield;
   }
+  yield;
   // Charts: triangles sharing a vertex (a box face) always; then two charts in
   // the same plane that share a whole edge (a cylinder's side quad, wall
   // segments end to end), as long as the pair still fills its bounding box
   // (`MERGE_FILL`): a ring of coplanar faces round a torus would otherwise
   // become one chart of empty box.
   const sets = new UnionFind(n);
-  const byVertex = new Map<number, number>();
+  const byVertex = new KeyTable(3 * n);
   for (let i = 0; i < n; i++) {
     for (let k = 0; k < 3; k++) {
-      const vertex = owner[i]! * 0x1000000 + corners[3 * i + k]!;
-      const seen = byVertex.get(vertex);
-      if (seen === undefined) byVertex.set(vertex, i);
-      else sets.union(seen, i);
+      const seen = byVertex.claim(owner[i]!, corners[3 * i + k]!, i);
+      if (seen !== -1) sets.union(seen, i);
     }
+    if (pause(i)) yield;
   }
+  yield;
   // Each root's area and its box in the plane frame of its first triangle.
   const rootArea = new Float64Array(n), rootBox = new Float64Array(4 * n).fill(Infinity);
   for (let i = 0; i < 4 * n; i += 4) rootBox[i + 2] = rootBox[i + 3] = -Infinity;
@@ -282,28 +374,46 @@ export function lightmapCharts(surfaces: readonly LevelSurface[], bounds: Bounds
       rootBox[4 * root + 2] = Math.max(rootBox[4 * root + 2]!, u);
       rootBox[4 * root + 3] = Math.max(rootBox[4 * root + 3]!, v);
     }
+    if (pause(i)) yield;
   }
-  const byEdge = new Map<string, number>();
-  const point = (tri: number, k: number) => `${quantize(p[9 * tri + 3 * k]!)},${quantize(p[9 * tri + 3 * k + 1]!)},${quantize(p[9 * tri + 3 * k + 2]!)}`;
+  yield;
+  // An edge is its plane and its two (quantised) end points, unordered; each is numbered once, so an edge's key is a
+  // number (a displaced shell's tens of thousands of triangles made string keys the layout's slowest step).
+  const planeIds = new KeyTable(n), pointIds = new KeyTable(3 * n);
+  const cornerIds = new Float64Array(3 * n), planeOf = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const plane = planeIds.claim(planes[i]!, 0, planeIds.size);
+    planeOf[i] = plane === -1 ? planeIds.size - 1 : plane;
+    for (let k = 0; k < 3; k++) {
+      const x = quantize(p[9 * i + 3 * k]!), y = quantize(p[9 * i + 3 * k + 1]!), z = quantize(p[9 * i + 3 * k + 2]!);
+      if (Math.abs(x) >= COORD_HALF || Math.abs(z) >= COORD_HALF) throw new Error('lightmap: a face over 500 m from the origin');
+      const point = pointIds.claim((x + COORD_HALF) * COORD_SPAN + z + COORD_HALF, y, pointIds.size);
+      cornerIds[3 * i + k] = point === -1 ? pointIds.size - 1 : point;
+    }
+    if (pause(i)) yield;
+  }
+  yield;
+  const fill = (root: number) => rootArea[root]! / Math.max(1e-12, (rootBox[4 * root + 2]! - rootBox[4 * root]!) * (rootBox[4 * root + 3]! - rootBox[4 * root + 1]!));
+  const span = pointIds.size, byEdge = new KeyTable(3 * n);
   for (let i = 0; i < n; i++) {
     for (let k = 0; k < 3; k++) {
-      const [e0, e1] = [point(i, k), point(i, (k + 1) % 3)].sort();
-      const edge = `${planes[i]}|${e0}|${e1}`;
-      const other = byEdge.get(edge);
-      if (other === undefined) { byEdge.set(edge, i); continue; }
+      const e0 = cornerIds[3 * i + k]!, e1 = cornerIds[3 * i + (k + 1) % 3]!;
+      const other = byEdge.claim((planeOf[i]! * span + Math.min(e0, e1)) * span + Math.max(e0, e1), 0, i);
+      if (other === -1) continue;
       const a = sets.find(other), b = sets.find(i);
       if (a === b) continue;
       const u0 = Math.min(rootBox[4 * a]!, rootBox[4 * b]!), v0 = Math.min(rootBox[4 * a + 1]!, rootBox[4 * b + 1]!);
       const u1 = Math.max(rootBox[4 * a + 2]!, rootBox[4 * b + 2]!), v1 = Math.max(rootBox[4 * a + 3]!, rootBox[4 * b + 3]!);
       const area = rootArea[a]! + rootArea[b]!;
-      const fill = (root: number) => rootArea[root]! / Math.max(1e-12, (rootBox[4 * root + 2]! - rootBox[4 * root]!) * (rootBox[4 * root + 3]! - rootBox[4 * root + 1]!));
       if (area < Math.max(MIN_FILL, MERGE_FILL * Math.min(fill(a), fill(b))) * (u1 - u0) * (v1 - v0)) continue;
       sets.union(a, b);
       const root = sets.find(a);
       rootArea[root] = area;
       rootBox.set([u0, v0, u1, v1], 4 * root);
     }
+    if (pause(i)) yield;
   }
+  yield;
   const byRoot = new Map<number, ChartShape>(), charts: ChartShape[] = [];
   for (let i = 0; i < n; i++) {
     const root = sets.find(i);
@@ -318,9 +428,11 @@ export function lightmapCharts(surfaces: readonly LevelSurface[], bounds: Bounds
     chart.normal.x += normals[3 * i]! * areas[i]!;
     chart.normal.y += normals[3 * i + 1]! * areas[i]!;
     chart.normal.z += normals[3 * i + 2]! * areas[i]!;
+    if (pause(i)) yield;
   }
+  yield;
   const rect = new Map<ChartShape, boolean>();
-  let bottom = Infinity;
+  let bottom = Infinity, seen = 0;
   for (const chart of charts) {
     if (chart.normal.lengthSq() < 1e-24) chart.normal.set(0, 1, 0);
     chart.normal.normalize();
@@ -345,7 +457,13 @@ export function lightmapCharts(surfaces: readonly LevelSurface[], bounds: Bounds
     else bottom = Math.min(bottom, low);
     const box = (chart.max.x - chart.min.x) * (chart.max.y - chart.min.y);
     rect.set(chart, area >= box * (1 - 1e-6) - 1e-9);
+    seen += chart.triangles.length;
+    if (seen >= STEP_TRIANGLES) {
+      seen = 0;
+      yield;
+    }
   }
+  yield;
   // The world's underside: a face looking down from the lowest point of the playable level.
   for (const chart of charts) {
     if (chart.normal.y < -0.999 && chart.triangles.every(tri => Math.max(p[9 * tri + 1]!, p[9 * tri + 4]!, p[9 * tri + 7]!) <= bottom + QUANTUM)) chart.hidden = true;
@@ -360,8 +478,14 @@ export function lightmapCharts(surfaces: readonly LevelSurface[], bounds: Bounds
     if (list === undefined) byPlane.set(key, list = []);
     list.push(chart);
   }
+  yield;
   for (const list of byPlane.values()) {
     if (list.length < 2) continue;
+    seen += list.length;
+    if (seen >= STEP_TRIANGLES / 16) {
+      seen = 0;
+      yield;
+    }
     for (const inner of list) {
       if (inner.hidden) continue;
       for (const cover of list) {
@@ -404,6 +528,11 @@ const units = (texels: number): number => Math.ceil((texels + 2 * PADDING) / ALI
  * Null when they do not fit.
  */
 function pack(source: LightmapCharts, size: number, density: number): { cells: Cell[]; rows: number } | null {
+  return runSteps(packSteps(source, size, density));
+}
+
+/** `pack` in steps: it pauses every `PACK_CELLS` cells placed (each scans the atlas's width). */
+function* packSteps(source: LightmapCharts, size: number, density: number): Generator<void, { cells: Cell[]; rows: number } | null> {
   const cells: Cell[] = [];
   for (const chart of source.charts) {
     if (chart.hidden) continue;
@@ -415,7 +544,9 @@ function pack(source: LightmapCharts, size: number, density: number): { cells: C
   const order = cells.slice().sort((a, b) => b.hu - a.hu || b.wu - a.wu || a.chart.first - b.chart.first);
   const span = size / ALIGN, heights = new Int32Array(span);
   const window: number[] = [];
+  let placed = 0;
   for (const cell of order) {
+    if (++placed % PACK_CELLS === 0) yield;
     if (cell.wu > span) return null;
     // The lowest top over every run of `wu` columns (a sliding-window maximum), leftmost on ties.
     let best = -1, bestTop = Infinity;
@@ -442,8 +573,15 @@ function pack(source: LightmapCharts, size: number, density: number): { cells: C
 
 /** Lay the charts out at a given density and write each surface's `uv1`. Null when they do not fit. */
 export function layoutLightmap(source: LightmapCharts, size: number, density: number): LightmapLayout | null {
-  const packed = pack(source, size, density);
+  return runSteps(layoutSteps(source, size, density));
+}
+
+/** `layoutLightmap` in steps: it pauses while packing, after it, and every `STEP_TRIANGLES` or so triangles written. */
+export function* layoutSteps(source: LightmapCharts, size: number, density: number): Generator<void, LightmapLayout | null> {
+  const packed = yield* packSteps(source, size, density);
   if (packed === null) return null;
+  yield;
+  let written = 0;
   // Anything not given texels below (flat-only groups, hidden and backdrop faces) keeps the probe.
   const uvs = source.surfaces.map(s => new Float32Array(2 * s.mesh.geometry.getAttribute('position').count).fill(NO_LIGHTMAP));
   const p = source.positions;
@@ -461,7 +599,9 @@ export function layoutLightmap(source: LightmapCharts, size: number, density: nu
         _a.set(p[9 * tri + 3 * k]!, p[9 * tri + 3 * k + 1]!, p[9 * tri + 3 * k + 2]!);
         const u = (_a.dot(chart.t) - chart.min.x) * su, v = (_a.dot(chart.s) - chart.min.y) * sv;
         const tx = cell.rotated ? v : u, ty = cell.rotated ? u : v;
-        uv.set([(x0 + tx) / size, (y0 + ty) / size], 2 * source.corners[3 * tri + k]!);
+        const corner = 2 * source.corners[3 * tri + k]!;
+        uv[corner] = (x0 + tx) / size;
+        uv[corner + 1] = (y0 + ty) / size;
         lo.min(_a);
         hi.max(_a);
       }
@@ -469,6 +609,11 @@ export function layoutLightmap(source: LightmapCharts, size: number, density: nu
     lo.add(hi).multiplyScalar(0.5);
     charts.push({ x: cell.x * ALIGN, y: cell.y * ALIGN, w: cell.wu * ALIGN, h: cell.hu * ALIGN,
       normal: [chart.normal.x, chart.normal.y, chart.normal.z], centre: [lo.x, lo.y, lo.z] });
+    written += chart.triangles.length;
+    if (written >= STEP_TRIANGLES) {
+      written = 0;
+      yield;
+    }
   }
   return {
     size, density, surfaces: source.surfaces, uvs, charts, triangles: source.owner.length,

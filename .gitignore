@@ -17,3 +17,5 @@ tools/effects/.build/
 tools/blender/effects/__pycache__/
 tools/characters/.build/
 tools/blender/characters/__pycache__/
+tools/props/.build/
+tools/blender/props/__pycache__/

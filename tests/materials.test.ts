@@ -144,8 +144,8 @@ test('Low draws every map exactly as before the material tags', async () => {
     const actual: Record<string, string> = {};
     for (const [id, list] of [...tris].sort()) actual[id] = `${list.length}:${await sha(list.sort().join('\n'))}`;
     expect(actual, `${key}${arena ? ' arena' : ''}`).toEqual(LOW_BEFORE_R2[`${key}${arena ? '-arena' : ''}`]);
-    // Built in the flat palette: each surface mesh wears its key's shared Lambert.
-    for (const { mesh, surf } of level.surfaces) expect(mesh.material).toBe(surfMat(surf));
+    // Built in the flat palette: each surface mesh wears its key's shared Lambert; realistic-only trim (R6) is hidden.
+    for (const { mesh, surf, realOnly } of level.surfaces) expect(mesh.material).toBe(realOnly ? hiddenMat() : surfMat(surf));
   }
 });
 
@@ -256,10 +256,13 @@ test('planar UVs: metres over the tile, v up walls, no stretch on slopes, seamle
 
 test('Low draws one merged mesh per surface key; the realistic tiers draw one group per tag and hide flat-only joints', () => {
   const level = build('mexico');
-  // Merged meshes carry one group per tag (a loose primitive keeps its own groups, if any, and one tag).
-  const merged = level.surfaces.filter(s => s.mesh.geometry.groups.length === s.materials.length);
-  const keys = new Set(merged.map(s => s.surf));
-  expect(merged.length).toBe(keys.size);
+  // Merged meshes carry one group per tag (a loose primitive keeps its own groups, if any, and one tag);
+  // realistic-only trim (R6) merges the same way into meshes of its own.
+  for (const realOnly of [false, true]) {
+    const merged = level.surfaces.filter(s => s.mesh.geometry.groups.length === s.materials.length && !!s.realOnly === realOnly);
+    expect(merged.length).toBe(new Set(merged.map(s => s.surf)).size);
+  }
+  const merged = level.surfaces.filter(s => s.mesh.geometry.groups.length === s.materials.length && !s.realOnly);
   expect(merged.length).toBeLessThan(20);
   for (const { mesh, materials } of merged) {
     // Every triangle is in exactly one group, in order, and the geometry is indexed.
@@ -536,7 +539,7 @@ test('the renderer textures the level on realistic tiers, frees it all on Low, a
 
   // Low: the flat palette again, and every streamed texture gone.
   renderer.applyQuality(PRESET_VALUES.low);
-  for (const { mesh, surf } of house.surfaces) expect(mesh.material).toBe(surfMat(surf));
+  for (const { mesh, surf, realOnly } of house.surfaces) expect(mesh.material).toBe(realOnly ? hiddenMat() : surfMat(surf));
   expect(renderer.textureStats.textures).toBe(0);
   expect(renderer._textures).toBeNull();
   for (const material of realMaterials()) {

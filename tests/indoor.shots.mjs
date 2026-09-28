@@ -82,7 +82,7 @@ try {
         // Blender gun on (R4) where the preset is realistic.
         const worn = r.weapons.size === null || (r.weapons.ready && w._real !== null && w._model === w._real);
         // The operators too (R7): the grunts below spawn once they are in, so they wear them.
-        return !r.skyPending && !r.texturesPending && !r.bakePending && !r.bakeFading && (worn || !r.weaponsPending) && !(r.operatorsPending ?? false);
+        return !r.skyPending && !r.texturesPending && !r.bakePending && !r.bakeFading && (worn || !r.weaponsPending) && !(r.operatorsPending ?? false) && !(r.propsPending ?? false);
       }, null, { timeout: 30_000 });
       // A realistic preset measures the Blender gun, never the flat one it falls back to if the weapons fail.
       const gun = await page.evaluate(() => {

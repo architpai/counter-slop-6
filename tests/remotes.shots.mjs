@@ -64,7 +64,7 @@ try {
     await host.evaluate(preset => window.__game.hud.onUiAction('gfxPreset', preset, new Event('click')), preset);
     await wait(host, () => {
       const r = window.__game.ctx.renderer;
-      return !r.skyPending && !r.texturesPending && !r.bakePending && !r.bakeFading && !r.weaponsPending && !r.operatorsPending;
+      return !r.skyPending && !r.texturesPending && !r.bakePending && !r.bakeFading && !r.weaponsPending && !r.operatorsPending && !(r.propsPending ?? false);
     }, null, 90_000);
     summary.presets[preset] = {};
     for (const range of RANGES) {

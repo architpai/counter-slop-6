@@ -317,6 +317,83 @@ export interface LevelSurface {
   static: boolean;
   /** A piece the level moves (the drones, `BuildOpts.moving`): it casts no shadow on the realistic tiers. */
   moving?: boolean;
+  /**
+   * Drawn on the realistic tiers only (`BuildOpts.realOnly`: bevelled trim,
+   * kerbs, backdrops); Low hides the whole mesh, so it looks as it always did.
+   */
+  realOnly?: boolean;
+  /**
+   * The realistic tiers' vertex colours (linear, per vertex of the geometry:
+   * per-building tints, the rock shells' strata), absent where all are
+   * white. Kept here, off the geometry: the renderer puts them on when a
+   * realistic look first goes on, so Low never uploads them.
+   */
+  colours?: Float32Array;
+}
+
+type Vec3 = readonly [number, number, number];
+
+/** Which kit a map dresses with (tools/blender/props/, `public/props/<family>.glb`). */
+export type PropFamily = 'downtown' | 'house' | 'mexico';
+
+/**
+ * One piece of the realistic tiers' detail kit on a map (docs/VISUALS.md,
+ * R6), placed by the map's dressing (level/dressing.ts). Visual only: no
+ * collider, no nav surface, nothing a bullet or a grapple hits.
+ */
+export interface PropPlacement {
+  /** The kit piece's name in `render/prop-assets.json`. */
+  piece: string;
+  x: number;
+  y: number;
+  z: number;
+  /** Radians about +y. */
+  yaw: number;
+  /** Per axis, in the piece's own frame. */
+  scale: Vec3;
+  /** An sRGB colour multiplied over the piece's own colours (paint variety); white keeps them. */
+  tint: number;
+  /** Signs and posters: the `signs` atlas cell their face shows. */
+  cell: number;
+}
+
+/** A sagging cable between two points (power and phone lines, bunting strings), made at load. */
+export interface CablePlacement {
+  from: Vec3;
+  to: Vec3;
+  /** How far the middle hangs below the straight line, in metres. */
+  sag: number;
+  radius: number;
+}
+
+/**
+ * A grime decal (V16): a quad of the `grime` atlas laid on a level face,
+ * multiplied over it (white leaves the face as it is), so it darkens the
+ * lit surface under it whatever the light.
+ */
+export interface DecalPlacement {
+  /** The `grime` atlas cell. */
+  cell: number;
+  /** Middle of the quad on the face. */
+  x: number;
+  y: number;
+  z: number;
+  /** The face it lies on, by its outward normal. */
+  facing: '+x' | '-x' | '+y' | '+z' | '-z';
+  width: number;
+  height: number;
+  /** Turn in the face's plane, radians (ground decals). */
+  turn: number;
+  /** 0-1: how far towards the cell's full darkness. */
+  strength: number;
+}
+
+/** A map's realistic-tier dressing: what `render/props.ts` builds once its kit has streamed in. */
+export interface LevelDressing {
+  family: PropFamily;
+  props: PropPlacement[];
+  cables: CablePlacement[];
+  decals: DecalPlacement[];
 }
 
 export interface Level {
@@ -350,6 +427,13 @@ export interface Level {
    * realistic tiers' textured material for the tag).
    */
   surfaces: LevelSurface[];
+  /**
+   * The realistic tiers' kit props, cables and grime (R6, V16); null where a
+   * map has none (training). Made on its first read (level/index.ts: the
+   * renderer reads it on a realistic look's first frame), so a device that
+   * stays on Low never makes its tables.
+   */
+  readonly dressing: LevelDressing | null;
   /** Directional-light shadow fit. */
   shadow: { center: THREE.Vector3; radius: number };
   mood?: Mood;

@@ -47,7 +47,7 @@ try {
     }, preset);
     await page.waitForFunction(() => {
       const r = window.__game.ctx.renderer;
-      return !r.skyPending && !r.texturesPending && !r.bakePending && !r.bakeFading && !r.weaponsPending && !(r.operatorsPending ?? false);
+      return !r.skyPending && !r.texturesPending && !r.bakePending && !r.bakeFading && !r.weaponsPending && !(r.operatorsPending ?? false) && !(r.propsPending ?? false);
     }, null, { timeout: 60_000 });
     const row = {};
     for (const [name, kinds, range] of [['roles', ROLES, 30], ['masks', ['grunt', 'medic', 'sniper', 'heavy', 'smoker', 'parry'], 60]]) {

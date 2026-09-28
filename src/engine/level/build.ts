@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { surfMat, cloudMat, TONE, boxGeo, cylGeo, sphereGeo, coneGeo, torusGeo } from '../render/index';
+import { hiddenMat } from '../render/materials';
 import { DEFAULT_MATERIAL, MATERIAL_SET, planarUVs, setInfo } from '../render/surfaces';
 import { OVERLAY_GAP, OVERLAY_SUNK, OVERLAY_THICK } from '../render/impacts';
 import type { SurfKey } from '../render/palette';
@@ -26,6 +27,26 @@ export interface BuildOpts {
    * carry (paving joints), which would draw a second grid over the texture's.
    */
   flatOnly?: boolean;
+  /**
+   * Drawn on the realistic tiers only (docs/VISUALS.md, R6): bevelled trim,
+   * kerbs and backdrops that make the textured boxes read as built places.
+   * Low never draws it, so Low looks as it always did. Visual only: it has
+   * no collider and is never a surface a bullet lands on (`impactFor`).
+   */
+  realOnly?: boolean;
+  /**
+   * The geometry brings its own texture coordinates (in the material's tile,
+   * as `planarUVs` makes them) and index: a displaced shell whose faces
+   * planar UVs would split into loose triangles, and so into a lightmap chart
+   * each (level/mexico-dressing.ts).
+   */
+  ownUVs?: boolean;
+  /**
+   * A per-building shade on the realistic tiers (V16): an sRGB colour
+   * multiplied over the piece's material, white (the default) keeps it. Low
+   * never loads it (`surfaceGeometry`).
+   */
+  tint?: number;
   rotation?: THREE.Euler;
   /** Keep this piece as its own object instead of merging it. */
   separate?: boolean;
@@ -42,6 +63,17 @@ export interface BuildOpts {
 export interface StairOpts extends BuildOpts {
   rise?: number;
   run?: number;
+}
+
+/** A stair flight: `LevelBuilder.stairs`'s arguments. */
+export interface StairFlight {
+  x: number;
+  y: number;
+  z: number;
+  dir: '+x' | '-x' | '+z' | '-z';
+  n: number;
+  width: number;
+  opts: StairOpts;
 }
 
 export interface PlaneOpts extends BuildOpts {
@@ -65,22 +97,59 @@ export type Gap = [number, number, number?, number?];
 /** The marker lists on `Level`, all of them `THREE.Vector3[]`. */
 export type MarkerKind = 'spawns' | 'snipers' | 'pickups' | 'rings' | 'arenaSpawns';
 
+const _tint = new THREE.Color();
+const IDENTITY = new THREE.Matrix4();
+const WHITE = 0xffffff;
+
 /**
  * A piece ready to merge: texture coordinates in the material's tile size
  * (planar per face, `planarUVs`), in the geometry's current space, and an
  * index. Boxes keep their own; a smooth sphere or cylinder shares vertices
  * between faces that need different coordinates, so it splits into separate
  * triangles first. Every primitive leaves here in the same layout, so any of
- * them can merge.
+ * them can merge. Its vertex colours for the realistic tiers (linear: a
+ * `color` attribute it came with, as the rock shells', times its `tint`) wait
+ * in `userData.colours`, null for plain white: the renderer puts them on when
+ * a realistic look first goes on (`LevelSurface.colours`), so Low uploads none.
  */
-function surfaceGeometry(geometry: THREE.BufferGeometry, material: MaterialTag): THREE.BufferGeometry {
+function surfaceGeometry(geometry: THREE.BufferGeometry, material: MaterialTag, tint = WHITE, ownUVs = false): THREE.BufferGeometry {
   const tile = setInfo(MATERIAL_SET[material]).tile;
-  if (planarUVs(geometry, tile)) return geometry;
-  const flat = geometry.toNonIndexed();
-  geometry.dispose();
-  planarUVs(flat, tile);
-  flat.setIndex([...Array(flat.getAttribute('position').count).keys()]);
-  return flat;
+  let out = geometry;
+  if (ownUVs) {
+    if (!geometry.index || !geometry.getAttribute('uv')) throw new Error('ownUVs: the geometry needs its index and uv');
+  } else if (!planarUVs(geometry, tile)) {
+    out = geometry.toNonIndexed();
+    geometry.dispose();
+    planarUVs(out, tile);
+    out.setIndex([...Array(out.getAttribute('position').count).keys()]);
+  }
+  const own = out.getAttribute('color');
+  let colours: Float32Array | null = null;
+  if (own || tint !== WHITE) {
+    _tint.set(tint);
+    const count = out.getAttribute('position').count;
+    colours = new Float32Array(3 * count);
+    for (let i = 0; i < count; i++) {
+      colours[3 * i] = _tint.r * (own ? own.getX(i) : 1);
+      colours[3 * i + 1] = _tint.g * (own ? own.getY(i) : 1);
+      colours[3 * i + 2] = _tint.b * (own ? own.getZ(i) : 1);
+    }
+    out.deleteAttribute('color');
+  }
+  out.userData.colours = colours;
+  return out;
+}
+
+/** The merged pieces' colours in merge order (`surfaceGeometry`), white where a piece has none; null if none has any. */
+function mergedColours(geometries: readonly THREE.BufferGeometry[]): Float32Array | null {
+  if (!geometries.some(g => g.userData.colours)) return null;
+  const out = new Float32Array(3 * geometries.reduce((n, g) => n + g.getAttribute('position').count, 0)).fill(1);
+  let at = 0;
+  for (const g of geometries) {
+    if (g.userData.colours) out.set(g.userData.colours as Float32Array, at);
+    at += 3 * g.getAttribute('position').count;
+  }
+  return out;
 }
 
 /** Duck-typed like the rest of three, so a mesh from any build still matches. */
@@ -97,12 +166,16 @@ export class LevelBuilder {
    * tag (a flat-only piece under `flat`).
    */
   parts: Map<SurfKey, Map<MaterialTag | 'flat', THREE.BufferGeometry[]>>;
+  /** The same for realistic-only pieces (`BuildOpts.realOnly`), merged into meshes of their own. */
+  realParts: Map<SurfKey, Map<MaterialTag | 'flat', THREE.BufferGeometry[]>>;
   /**
    * Every visible piece's world box, tag and surface key, so `finish` can say
    * what a bare collider (a `collider()` call with no mesh of its own) stands
    * for: the piece it overlaps most.
    */
   pieces: { min: THREE.Vector3; max: THREE.Vector3; material: MaterialTag; surf: SurfKey; overlay: boolean }[];
+  /** Every stair flight as built (`stairs`), for the realistic tiers' stringers (level/dressing.ts). */
+  flights: StairFlight[];
   level: Level;
 
   constructor(scene: THREE.Scene, world: World, key: LevelKey, arena: boolean) {
@@ -110,13 +183,15 @@ export class LevelBuilder {
     this.world = world;
     this.tone = TONE;
     this.parts = new Map();
+    this.realParts = new Map();
     this.pieces = [];
+    this.flights = [];
     const p = key === 'mexico' ? 62 : key === 'house' ? 39 : arena ? 68 : 55;
     this.level = {
       key, arena, playerStart: new THREE.Vector3(0, 0, key === 'mexico' ? 16 : key === 'house' ? 21 : 42),
       bounds: { minX: -p, maxX: p, minZ: -p, maxZ: p },
       spawns: [], snipers: [], pickups: [], rings: [], arenaSpawns: [], teamSpawns: [],
-      movers: [], animated: [], breakables: [], meshes: [], surfaces: [],
+      movers: [], animated: [], breakables: [], meshes: [], surfaces: [], dressing: null,
       shadow: { center: new THREE.Vector3(), radius: p * 1.15 },
     };
   }
@@ -133,25 +208,30 @@ export class LevelBuilder {
   mesh(geometry: THREE.BufferGeometry, pos: THREE.Vector3 | [number, number, number],
     opts: BuildOpts = {}): THREE.Mesh {
     const key = opts.mat ?? opts.surface ?? surfaces[opts.tone ?? TONE.PRIMARY] ?? 'block';
-    const material = opts.material ?? DEFAULT_MATERIAL[key];
-    const object = new THREE.Mesh(geometry, surfMat(key));
+    const material = opts.material ?? DEFAULT_MATERIAL[key], real = !!opts.realOnly;
+    const object = new THREE.Mesh(geometry, real ? hiddenMat() : surfMat(key));
     if (Array.isArray(pos)) object.position.fromArray(pos);
     else object.position.copy(pos);
     if (opts.rotation) object.rotation.copy(opts.rotation);
-    if (!opts.flatOnly && !opts.moving) this._piece(geometry, object, material, key, !!opts.noCollide);
+    if (!opts.flatOnly && !opts.moving && !real) this._piece(geometry, object, material, key, !!opts.noCollide);
     if (opts.separate) {
-      object.geometry = surfaceGeometry(geometry, material);
-      this.level.surfaces.push({ mesh: object, surf: key, materials: [opts.flatOnly ? null : material], static: !opts.moving, moving: opts.moving });
+      object.geometry = surfaceGeometry(geometry, material, opts.tint, opts.ownUVs);
+      const colours = object.geometry.userData.colours as Float32Array | null;
+      delete object.geometry.userData.colours;
+      this.level.surfaces.push({ mesh: object, surf: key, materials: [opts.flatOnly ? null : material], static: !opts.moving, moving: opts.moving,
+        ...(real ? { realOnly: true } : {}), ...(colours ? { colours } : {}) });
       return this.addObject(object);
     }
     object.updateMatrix();
-    geometry.applyMatrix4(object.matrix);
-    let tags = this.parts.get(key);
-    if (tags === undefined) this.parts.set(key, tags = new Map());
-    const tag = opts.flatOnly ? 'flat' : material;
+    // A piece built in place (the rock shells, the stringers) keeps its arrays as they are.
+    if (!object.matrix.equals(IDENTITY)) geometry.applyMatrix4(object.matrix);
+    const parts = real ? this.realParts : this.parts;
+    let tags = parts.get(key);
+    if (tags === undefined) parts.set(key, tags = new Map());
+    const tag = opts.flatOnly && !real ? 'flat' : material;
     let group = tags.get(tag);
     if (group === undefined) tags.set(tag, group = []);
-    group.push(surfaceGeometry(geometry, material));
+    group.push(surfaceGeometry(geometry, material, opts.tint, opts.ownUVs));
     return object;
   }
 
@@ -196,7 +276,7 @@ export class LevelBuilder {
   box(x: number, y: number, z: number, w: number, h: number, d: number,
     opts: BuildOpts = {}): Box | null {
     this.mesh(boxGeo(w, h, d), [x, y + h / 2, z], opts);
-    return opts.noCollide ? null : this._tagBox(this.collider(x, y, z, w, h, d, opts), opts);
+    return opts.noCollide || opts.realOnly ? null : this._tagBox(this.collider(x, y, z, w, h, d, opts), opts);
   }
 
   slab(x1: number, z1: number, x2: number, z2: number, top: number, thickness: number,
@@ -234,6 +314,7 @@ export class LevelBuilder {
     opts: StairOpts = {}): void {
     const rise = opts.rise ?? 4 / 14, run = opts.run ?? 0.45;
     const alongX = dir.endsWith('x'), sign = dir.startsWith('-') ? -1 : 1;
+    this.flights.push({ x, y, z, dir, n, width, opts: { ...opts, rise, run } });
     for (let i = 0; i < n; i++) {
       const distance = sign * (i + 0.5) * run;
       this.box(x + (alongX ? distance : 0), y, z + (alongX ? 0 : distance),
@@ -258,7 +339,7 @@ export class LevelBuilder {
   cylinder(x: number, y: number, z: number, r: number, h: number,
     opts: BuildOpts = {}): Box | null {
     this.mesh(cylGeo(r, h, opts.segments ?? 8, 'y'), [x, y + h / 2, z], opts);
-    return opts.noCollide ? null : this._tagBox(this.collider(x, y, z, 1.6 * r, h, 1.6 * r, opts), opts);
+    return opts.noCollide || opts.realOnly ? null : this._tagBox(this.collider(x, y, z, 1.6 * r, h, 1.6 * r, opts), opts);
   }
 
   sphere(x: number, y: number, z: number, r: number, opts: BuildOpts = {}): THREE.Mesh {
@@ -345,23 +426,29 @@ export class LevelBuilder {
    * (render/index.ts), one call per tag. Neither look rebuilds geometry.
    */
   finish(): Level {
-    for (const [surf, tags] of this.parts) {
-      const groups = [...tags.values()], geometries = groups.flat();
-      // ponytail: @types/three types mergeGeometries as non-null, but it returns null on
-      // mismatched attributes, so the guard below is live despite looking dead.
-      const geometry = mergeGeometries(geometries, false);
-      if (!geometry) throw new Error('Level geometry could not be merged.');
-      let start = 0;
-      groups.forEach((group, i) => {
-        const count = group.reduce((n, part) => n + (part.index?.count ?? 0), 0);
-        geometry.addGroup(start, count, i);
-        start += count;
-      });
-      for (const part of geometries) part.dispose();
-      const mesh = this.addObject(new THREE.Mesh(geometry, surfMat(surf)));
-      this.level.surfaces.push({ mesh, surf, materials: [...tags.keys()].map(tag => (tag === 'flat' ? null : tag)), static: true });
+    for (const [parts, realOnly] of [[this.parts, false], [this.realParts, true]] as const) {
+      for (const [surf, tags] of parts) {
+        const groups = [...tags.values()], geometries = groups.flat();
+        // ponytail: @types/three types mergeGeometries as non-null, but it returns null on
+        // mismatched attributes, so the guard below is live despite looking dead.
+        const geometry = mergeGeometries(geometries, false);
+        if (!geometry) throw new Error('Level geometry could not be merged.');
+        const colours = mergedColours(geometries);
+        geometry.userData = {};
+        let start = 0;
+        groups.forEach((group, i) => {
+          const count = group.reduce((n, part) => n + (part.index?.count ?? 0), 0);
+          geometry.addGroup(start, count, i);
+          start += count;
+        });
+        for (const part of geometries) part.dispose();
+        // Realistic-only pieces start hidden, as Low (the renderer's default look) shows them.
+        const mesh = this.addObject(new THREE.Mesh(geometry, realOnly ? hiddenMat() : surfMat(surf)));
+        const materials = [...tags.keys()].map(tag => (tag === 'flat' ? null : tag));
+        this.level.surfaces.push({ mesh, surf, materials, static: true, ...(realOnly ? { realOnly } : {}), ...(colours ? { colours } : {}) });
+      }
+      parts.clear();
     }
-    this.parts.clear();
     this._listOverlays();
     this._tagBareColliders();
     this.world.finalize();

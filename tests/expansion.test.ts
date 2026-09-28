@@ -30,7 +30,7 @@ function setup() {
   const noop = () => {};
   const level: Level = { key: 'downtown', arena: false, playerStart: body.pos.clone(), bounds,
     spawns: [new Vector3(20, 0, 0), new Vector3(-20, 0, 0)], snipers: [new Vector3(20, 0, 0)],
-    pickups: [], rings: [], movers: [], animated: [], breakables: [], meshes: [], surfaces: [], arenaSpawns: [], teamSpawns: [],
+    pickups: [], rings: [], movers: [], animated: [], breakables: [], meshes: [], surfaces: [], dressing: null, arenaSpawns: [], teamSpawns: [],
     shadow: { center: new Vector3(), radius: 40 } };
   const gs = makeGameState(); gs.state = 'play';
   const ctx = { world, scene, nav, bossNav: nav, level, player,

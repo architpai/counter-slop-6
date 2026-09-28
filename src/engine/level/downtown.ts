@@ -186,7 +186,7 @@ function buildTower(b: LevelBuilder) {
 function buildA(b: LevelBuilder) {
   for (const y of [4, 8, 12]) b.slab(-43, 4, -25, 20, y, 0.4, concrete);
   // Building A is rendered white outside and plastered inside (the default `block` key).
-  const render: BuildOpts = { material: 'stucco' }, inner: BuildOpts = { material: 'plaster' };
+  const render: BuildOpts = { material: 'stucco', tint: 0xfdfaf4 }, inner: BuildOpts = { material: 'plaster' };
   b.wall('z', 4, 20, -25, 0, 12, 0.4, [[10, 13, 0, 3.2], [6, 9, 5, 7],
     [14, 17, 5, 7], [6, 9, 9, 11], [14, 17, 9, 11]], render);
   b.wall('z', 4, 20, -43, 0, 12, 0.4, [[8, 11, 0, 3.2], [8, 11, 4.5, 7.5], [8, 11, 8.5, 11.5]], render);
@@ -275,8 +275,10 @@ function buildHighway(b: LevelBuilder) {
 }
 
 function buildHouses(b: LevelBuilder) {
-  for (const [x, h, mat, material] of [[-30, 7, 'wood', 'siding'], [-8, 11, 'blockAlt', 'concrete'], [16, 7, 'roof', 'brick']] as const) {
-    b.box(x, 0, -45, 14, h, 10, { mat, material });
+  // A shade of its own for each house on the realistic tiers (V16).
+  for (const [x, h, mat, material, tint] of [[-30, 7, 'wood', 'siding', 0xf8f2ea], [-8, 11, 'blockAlt', 'concrete', 0xf0f4f6],
+    [16, 7, 'roof', 'brick', 0xfaf0ea]] as const) {
+    b.box(x, 0, -45, 14, h, 10, { mat, material, tint });
   }
   for (const x of [-31, 29, 0]) b.box(x, 6.7, -37.25, 2.6, 0.3, 5.5, treads);
   for (const x of [-32.3, -29.7, 27.7, 30.3]) b.rail(x, -40, x, -34.5, 7);

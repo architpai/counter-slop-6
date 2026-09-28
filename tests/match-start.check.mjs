@@ -3,12 +3,13 @@
 // Environment: CS6_PRESET=ultra  CS6_MAP=house  CS6_START_MS=1000  CS6_RUNS=1  CS6_GL=metal|swiftshader
 //
 // A fresh page on the preset, Start clicked CS6_START_MS into the menu on a map other than the
-// menu's backdrop, so the level's sky, texture sets and bake and the first-person weapons all
-// stream in while the match is live (nothing paused), W held the whole time. Every frame the game
-// renders is timed for the first WINDOW_MS after the click. Fails on any gap between rendered
-// frames over STALL_MS after the Start click's own frame (the first gesture creates the
-// AudioContext there, before the player can move), or if the streams have not all landed by
-// the end, so the window really covered them. Real GPU with vsync on (as the player gets it) on
+// menu's backdrop, so the level's sky, texture sets and bake, the first-person weapons and the
+// detail kit (R6: its glb and atlases, and the map's merge of it) all stream in while the match
+// is live (nothing paused), W held the whole time. Every frame the game renders is timed for the
+// first WINDOW_MS after the click. Fails on any gap between rendered frames over STALL_MS after
+// the Start click's own frame (the first gesture creates the AudioContext there, before the
+// player can move), or if the streams have not all landed by the end, so the window really
+// covered them. Real GPU with vsync on (as the player gets it) on
 // macOS; SwiftShader elsewhere, where frame times say little.
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
@@ -48,7 +49,8 @@ try {
     await page.click('.screen-button[data-act="start"]');
     const result = await page.evaluate(({ clickAt, windowMs }) => new Promise(resolve => {
       const g = window.__game, r = g.ctx.renderer, landed = {};
-      const pending = { sky: () => r.skyPending, textures: () => r.texturesPending, bake: () => r.bakePending, weapons: () => r.weaponsPending };
+      const pending = { sky: () => r.skyPending, textures: () => r.texturesPending, bake: () => r.bakePending, weapons: () => r.weaponsPending,
+        props: () => r.propsPending };
       const atStart = Object.fromEntries(Object.entries(pending).map(([name, is]) => [name, is()]));
       const tick = () => {
         const now = performance.now();

@@ -17,7 +17,7 @@ type HumanoidJoints = Required<Pick<FigureParts,
   'head' | 'torso' | 'gunMount' | 'upperL' | 'upperR' | 'foreL' | 'foreR'>>;
 
 type Point = readonly [number, number, number];
-type Box6 = readonly [number, number, number, number, number, number];
+export type Box6 = readonly [number, number, number, number, number, number];
 
 const ORANGE: BuildOpts = { mat: 'accent', material: 'stucco' };
 const TERRACOTTA: BuildOpts = { mat: 'roof', material: 'terracotta' };
@@ -28,9 +28,33 @@ const DARK_VISUAL: BuildOpts = { tone: TONE.DARK, noCollide: true, material: 'wo
 const WINDOW: BuildOpts = { tone: TONE.DARK, noCollide: true, material: 'glass' };
 const HALF_PI = Math.PI / 2;
 
+/** The distant mesas beyond the perimeter: x, z, width, height (V14). */
+export const MESAS: readonly (readonly [number, number, number, number])[] = [
+  [-120, -160, 60, 30], [40, -190, 90, 36], [150, -120, 70, 26], [-170, 60, 50, 24], [160, 90, 80, 30], [-60, 190, 100, 34],
+];
+
 /** Fixed pseudo-random offsets so every peer builds the same colliders (levels.md §7). */
 const JITTER = [-1.1, 0.7, 0.2, -0.6, 1.0, -0.3, 0.9, -0.9, 0.4, -1.2] as const;
 const jitter = (i: number) => JITTER[((i % JITTER.length) + JITTER.length) % JITTER.length] ?? 0;
+
+/**
+ * The perimeter's stepped rock stacks: three tiers each, `[x, y, z, w, h, d]`
+ * (y the tier's foot), jittered by the fixed offsets so every peer builds the
+ * same colliders. The realistic tiers draw faceted shells over them (mexico-dressing.ts).
+ */
+export const ROCK_STACKS: readonly (readonly Box6[])[] = (() => {
+  const stacks: Box6[][] = [];
+  let k = 0;
+  for (let i = -2; i <= 2; i++) {
+    for (const [x, z, w, d] of [[24 * i, -62, 19, 8], [24 * i, 62, 19, 8],
+      [-62, 24 * i, 8, 19], [62, 24 * i, 8, 19]] as const) {
+      stacks.push([[x, 0, z, w, 11, d], [x + jitter(k), 11, z + jitter(k + 3), 0.78 * w, 7, 0.78 * d],
+        [x + jitter(k + 5), 18, z + jitter(k + 7), 0.5 * w, 5, 0.5 * d]]);
+      k++;
+    }
+  }
+  return stacks;
+})();
 
 export function buildMexico(b: LevelBuilder) {
   b.level.key = 'mexico';
@@ -41,16 +65,8 @@ export function buildMexico(b: LevelBuilder) {
     fogNear: 55, fogFar: 260, sunDisc: true, sunDir: [70, 105, -150], grade: GRADE.mexico, sky: 'mexico', realistic: { exposure: -0.15, grade: REAL_GRADE.mexico } };
   b.box(0, -1, 0, 134, 1, 134, { mat: 'sand', material: 'sand' });
   b.collider(0, 62, 0, 164, 6, 164, { noNav: true, noGrapple: true });
-  let k = 0;
-  for (let i = -2; i <= 2; i++) {
-    for (const [x, z, w, d] of [[24 * i, -62, 19, 8], [24 * i, 62, 19, 8],
-      [-62, 24 * i, 8, 19], [62, 24 * i, 8, 19]] as const) {
-      b.box(x, 0, z, w, 11, d, ROCK);
-      b.box(x + jitter(k), 11, z + jitter(k + 3), 0.78 * w, 7, 0.78 * d, ROCK);
-      b.box(x + jitter(k + 5), 18, z + jitter(k + 7), 0.5 * w, 5, 0.5 * d, ROCK);
-      k++;
-    }
-  }
+  // The flat look's boxes; the realistic tiers draw faceted, banded shells over the same colliders (mexico-dressing.ts).
+  for (const stack of ROCK_STACKS) for (const tier of stack) b.box(...tier, { ...ROCK, flatOnly: true });
   for (let i = -2; i <= 1; i++) {
     const q = 24 * i + 12;
     for (const [x, z] of [[q, -57], [q, 57], [-57, q], [57, q]] as const) b.marker('spawns', x, 0, z);
@@ -124,10 +140,10 @@ export function buildMexico(b: LevelBuilder) {
     [-30, 0, 46], [30, 0, 46], [0, 13.45, -5.8], [-8, 30.6, 44]];
   for (const p of arenaSpawns) b.marker('arenaSpawns', ...p);
 
-  for (const [x, z, w, h] of [[-120, -160, 60, 30], [40, -190, 90, 36],
-    [150, -120, 70, 26], [-170, 60, 50, 24], [160, 90, 80, 30], [-60, 190, 100, 34]] as const) {
-    b.box(x, 0, z, w, h, 30, { ...ROCK, noCollide: true });
-    b.box(x, h, z, 0.6 * w, 0.5 * h, 22, { ...ROCK, noCollide: true });
+  // The flat look's stepped mesas; the realistic tiers show faceted Blender ones in their place (mexico-dressing.ts).
+  for (const [x, z, w, h] of MESAS) {
+    b.box(x, 0, z, w, h, 30, { ...ROCK, noCollide: true, flatOnly: true });
+    b.box(x, h, z, 0.6 * w, 0.5 * h, 22, { ...ROCK, noCollide: true, flatOnly: true });
   }
   b.planes(3, 30, 26, { scale: 1.4, radiusStep: 8, heightStep: 6, speed: 0.11 });
 }
@@ -206,13 +222,17 @@ function church(b: LevelBuilder) {
 
 function houses(b: LevelBuilder) {
   const walls: readonly BuildOpts[] = [{ mat: 'adobe', material: 'adobe' }, WHITE, { mat: 'plaster', material: 'stucco' }];
+  // A shade of lime wash of its own for each house on the realistic tiers (V16); the east row's barely off white, as the
+  // long views' grunts stand against it (the readability guardrail).
+  const tints = [0xfff8f0, 0xf6f8ff, 0xfff6f4, 0xfbfaf8, 0xffffff, 0xffffff];
   let n = 0;
   for (const [x, z, w, d, h, tone, side] of [
     [-40, -20, 11, 9, 6, TONE.HEAL, 1], [-40, -4, 9, 8, 5, TONE.BOSS, 1],
     [-40, 14, 12, 10, 7.5, TONE.ACCENT, 1], [40, -18, 12, 9, 7, TONE.BOSS, -1],
     [40, 0, 9, 8, 5.5, TONE.HEAL, -1], [40, 16, 11, 10, 6.5, TONE.ACCENT, -1],
   ] as const) {
-    b.box(x, 0, z, w, h, d, walls[n++ % walls.length]);
+    b.box(x, 0, z, w, h, d, { ...walls[n % walls.length], tint: tints[n] });
+    n++;
     b.box(x, h, z, w + 0.6, 0.35, d + 0.6, ROOF_TILES);
     b.rail(x - w / 2, z - d / 2, x + w / 2, z - d / 2, h + 0.35, { mat: 'wood', material: 'wood' });
     const doorX = x + side * (w / 2 + 0.01);

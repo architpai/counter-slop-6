@@ -138,6 +138,7 @@ test('soft particles draw into their own layer; a GPU that renders MSAA straight
   // It compiles the realistic presets' post passes: a few seconds alone, more beside the other GPU tests.
 }, 60_000);
 
+// About 2 s alone; beside the suite's streaming tests in the one browser it has taken 14-17 s (c2c96cf's 14).
 test('dynamic resolution only moves viewports, a pass switched off frees its targets, and dispose frees them all', () => {
   const three = new THREE.WebGLRenderer({ canvas: document.createElement('canvas') });
   cleanup.push(() => { three.dispose(); three.forceContextLoss(); });
@@ -182,7 +183,7 @@ test('dynamic resolution only moves viewports, a pass switched off frees its tar
   expect(three.info.memory.textures).toBe(allocated - 3 - post._bloom.length);
   post.dispose();
   expect(three.info.memory.textures).toBe(before);
-});
+}, 60_000);
 
 test('a reduced dynamic scale shows only this frame: nothing beyond the drawn corner bleeds in', () => {
   const three = new THREE.WebGLRenderer({ canvas: document.createElement('canvas') });

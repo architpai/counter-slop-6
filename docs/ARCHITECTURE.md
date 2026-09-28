@@ -365,7 +365,11 @@ Three material families, all created and cached by `render/materials.js`. Nothin
   is no tangent attribute. Loose pieces (breakable props, figure accessories) come from
   `LevelBuilder.part` and are tagged the same way. Mexico keeps its breakable props as separate meshes, as before.
   The static level also gets a second UV set, `uv1`, for its lightmap (§3.3, baked lighting), made by
-  a deterministic chart packer (`render/lightmap.ts`) on the first realistic frame; Low never makes it.
+  a deterministic chart packer (`render/lightmap.ts`); Low never makes it. The first realistic frame
+  checks the geometry's hash and puts `uv1` on (the session's checked layout, or zeros), and
+  `_layBake` lays the charts out in steps of about 4 ms in the upload slots while the bake downloads
+  (`lightmapChartSteps`, `layoutSteps`: generators that pause between passes and every few thousand
+  triangles or 512 packed cells), before it goes on.
 - **Baked variant** (R3): on a map with a bake in the manifest, the static level's realistic
   materials are `realMat(real, info, true)`, cached apart (one more program): the same PBR material
   wearing a lightmap on `uv1` (a 1 × 1 stand-in until the bake is in) and a patch that takes its
@@ -927,10 +931,27 @@ interface Level {
   breakables: Breakable[];        // Mexico only; id === index
   meshes: THREE.Object3D[];       // everything to remove on rebuild
   surfaces: LevelSurface[];       // every surface-palette mesh with its material tag (§3.1)
+  dressing: LevelDressing | null; // R6: the realistic tiers' kit props, cables and grime; null on Training
   shadow: { center: THREE.Vector3; radius: number };   // directional-light shadow fit
 }
 
-interface LevelSurface { mesh: THREE.Mesh; surf: SurfKey; materials: readonly (MaterialTag | null)[] }  // one per group; null = flat-only
+interface LevelSurface {
+  mesh: THREE.Mesh; surf: SurfKey;
+  materials: readonly (MaterialTag | null)[];  // one per group; null = flat-only
+  static: boolean;                              // baked with the level (R3)
+  moving?: boolean;                             // a drone
+  realOnly?: boolean;                           // R6 trim, kerbs, rock shells: drawn on the realistic tiers only, hidden on Low
+  colours?: Float32Array;                       // V16 tints and the shells' strata, per vertex; put on the geometry only by a realistic look
+}
+
+// R6: visual only. Nothing here is a collider, a nav surface or a target.
+type PropFamily = 'downtown' | 'house' | 'mexico';      // which kit glb the map dresses with
+interface PropPlacement { piece: string; x: number; y: number; z: number; yaw: number;
+  scale: [number, number, number]; tint: number /* sRGB over the piece's colours */; cell: number /* signs atlas cell */ }
+interface CablePlacement { from: Vec3; to: Vec3; sag: number; radius: number }
+interface DecalPlacement { cell: number /* grime atlas */; x: number; y: number; z: number;
+  facing: '+x' | '-x' | '+y' | '+z' | '-z'; width: number; height: number; turn: number; strength: number }
+interface LevelDressing { family: PropFamily; props: PropPlacement[]; cables: CablePlacement[]; decals: DecalPlacement[] }
 
 interface GrappleMover { mesh: THREE.Object3D; radius: number }
 interface Animated { mesh: THREE.Object3D; update(time: number): void }
@@ -1416,7 +1437,9 @@ export class NavGrid {
 
 ### 6.5 `level`
 
-**Files:** `src/level/index.js` (public), `build.js`, `downtown.js`, `mexico.js`, `props.js`
+**Files:** `src/level/index.js` (public), `build.js`, `downtown.js`, `mexico.js`, `props.js`, and for the
+realistic tiers' dressing (R6) `dressing.ts` (the `Dresser` helpers) with `downtown-dressing.ts`,
+`house-dressing.ts` and `mexico-dressing.ts`
 **Imports:** `three`, `three/addons/utils/BufferGeometryUtils.js`, `util`, `render`, `physics`
 **Responsibility:** build map geometry and colliders, place all markers, create breakable props,
 merge static geometry per material, return the `Level` record.
@@ -1431,7 +1454,10 @@ export function disposeLevel(scene: THREE.Scene, level: Level): void; // remove 
 
 // internal helpers exported for the Mexico/Downtown builders and for tests
 export interface BuildOpts { mat?: string; noCollide?: boolean; noNav?: boolean;
-                             noShoot?: boolean; noGrapple?: boolean; tag?: any }
+                             noShoot?: boolean; noGrapple?: boolean; tag?: any;
+                             material?: MaterialTag; flatOnly?: boolean;    // R2: what it is made of; Low only
+                             realOnly?: boolean; tint?: number;             // R6: realistic tiers only; a per-building shade
+                             ownUVs?: boolean }                             // R6: the geometry brings its UVs (a displaced shell)
 ```
 
 `buildLevel` must:
@@ -1446,6 +1472,63 @@ export interface BuildOpts { mat?: string; noCollide?: boolean; noNav?: boolean;
   `radius` = the bounds half-size × 1.15).
 
 **Events:** none. `level.animated[i].update(time)` is called by `main` every frame.
+
+**Dressing (R6, V14, V16; realistic tiers only).** Each map's dressing (`dressDowntown`,
+`dressHouse`, `dressMexico`, a `DressMap`; Training has none) runs in two passes (`DressPass`) of the
+same code, each skipping the other's pieces. The *trim* pass runs after the map's builder and before
+`finish` (its pieces are level geometry, baked with it). The *props* pass runs on the first read of
+`level.dressing`, a lazy property `buildLevel` defines, which the renderer makes on a realistic look's
+first frame (`_dress`): so Low never makes its tables. It scans a world of the colliders as built
+(play removes breakables and adds charges), and trim never draws from the map's generator, so the two
+passes agree. A `Dresser` (level/dressing.ts) finalises the world once (trim pass) so it can query the
+colliders built so far, and places, all deterministically (tables and one seeded generator per map):
+
+- *trim* (`realOnly` boxes: no collider, not a `pieces` entry, so impact tags and overlays stay as
+  they were): plinths, cornices, pilasters, frames and sills round openings, window trim, kerbs, path
+  edging, and `Dresser.room`'s skirting inside Downtown's blocks and every House room (with switches,
+  conduit, radiators, pictures up high, dirt along the skirting, shelving where there is room); edges
+  on the large masses: `stringers` down every stair flight's open sides (`LevelBuilder.flights` records
+  each `stairs` call; the band's top follows the risers' feet, so it never rises over a tread),
+  `fascia` round a slab's sides (the tower's floors, the highway deck, House's eaves and porch roof),
+  `coping` along a wall's top over its solid runs (the highway's barriers, the perimeter's edge),
+  House's corner boards.
+  Mexico's rock stacks get `rockShell`s: each tier's four sides and top (and, on a tier over another,
+  its underside) as grids with their own UVs (`ownUVs`, so a face stays one lightmap chart), the
+  vertical and top edges cut back in a facet and the top edges broken back in places, stepped in the
+  stack's strata and moved by noise, 6 cm out of the collider at most, one mesh a stack; the stack
+  boxes themselves are `flatOnly`.
+  `Dresser.facade` reads a facade's openings from its colliders (the wall boxes' rectangles on a grid
+  of their own edges), so trim follows the real openings and never stands in one; a window a walker
+  can step through (a floor within 0.6 m under it) gets no sill. `finish` merges realistic-only pieces
+  into meshes of their own per surface key (`LevelSurface.realOnly`, built on `hiddenMat`); they are
+  static, so they are baked with the level (R3).
+- *kit props, cables and grime decals* on `level.dressing` (render/props.ts draws them). A floor
+  piece inside the play space goes through `propIfClear`, which runs the walker grid's node test
+  (nav.ts) on the cells round it and places it only where no node's column or link middle reaches
+  it (`clearOfWalkers`); `tuck` tries clutter round the foot of the loose things on the ground
+  (crates, containers, piers) the same way; `footDirt` lays the `edge-dirt` cell along a wall's foot,
+  `scatter` groups grime where wear collects.
+
+Two map-builder changes go with it (V14, V16): `BuildOpts.tint` gives a building a shade of its own,
+carried as a vertex colour that the realistic materials multiply in (`realMat` has `vertexColors`).
+The colours wait on the CPU (`LevelSurface.colours`, null where all white): the renderer puts a
+`color` attribute on each level mesh when a realistic look goes on (white where it has none) and takes
+it off again on the flat look while it has never been drawn, so Low never uploads it (the first level
+is built before the quality is applied). Mexico's stepped box mesas (`MESAS`) and rock stacks
+(`ROCK_STACKS`, exported with the same boxes and jitter) are `flatOnly`, so the realistic tiers show
+the kit's faceted mesas and the shells in their place while Low keeps the boxes.
+
+Nothing may stand where a walker goes or a line of fire runs: wall pieces stay within
+`WALL_DEPTH` (0.12 m) of their wall below head height, floor pieces stand where the walker grid leaves
+room or outside the play space (House's neighbourhood past its invisible walls, the Downtown
+perimeter's top beyond the level's bounds), flat ones (decals, litter, stones) under `WALK_FLOOR`
+(0.13 m), the rest hangs overhead. `tests/dressing-check.ts` checks every piece against the walk volume
+(`WALK_COLUMN` round every walker-grid node and link middle a player can reach: a marker's component,
+or one with a top a grapple lands on, as the rock stacks' tiers and the perimeter's top) and the
+markers' open sightlines (tests/dressing.test.ts), and the gameplay hashes (colliders with flags and
+impact tags, markers, nav graph, drone paths) must equal c2c96cf's. Where the long views stage their
+grunts (tests/tiers.shots.mjs), the walls and ground they are read against keep their feet plain
+(docs/VISUALS.md, R6, readability).
 
 **Implementer checklist**
 
@@ -1478,7 +1561,8 @@ export interface BuildOpts { mat?: string; noCollide?: boolean; noNav?: boolean;
 `operators.ts` (R7: the realistic operators' streamer `OperatorAssets`, `OperatorBody`, and
 `operator-assets.json`), `operator-motion.ts` (R7: the clips' library and blending), `fx.ts` (R5: the effect atlases' manifest `fx-assets.json` and streamer `FxAssets`, the effect
 materials, flipbook timing, `FX_UNIFORMS`), `impacts.ts` (R5: material tag → surface family →
-impact recipe)
+impact recipe), `props.ts` (R6: the detail kit's manifest `prop-assets.json`, streamer `PropAssets`,
+merging of a map's dressing, decals, cables, the drone)
 **Imports:** `three`, `three/addons` (BufferGeometryUtils, RoomEnvironment, GLTFLoader, meshopt decoder, RGBELoader, SMAAPass), `util`
 **Responsibility:** the renderer, scene, camera, lights, shadows, the full-screen composite pass,
 the whole material/palette system, low-poly primitive factories, and the **shared humanoid /
@@ -1567,6 +1651,8 @@ export class Renderer {
   readonly fxScene: THREE.Scene;              // R5: the soft particles, drawn after the scene into their own layer when soft particles are on and it holds something
   readonly msaaDepthReadable: boolean;        // R5: false with WEBGL_multisampled_render_to_texture (no soft particles with MSAA there)
   readonly fxLights: THREE.PointLight[];      // R5: FX_LIGHTS pooled point lights, always in the scene on realistic tiers (dark until an effect takes one); none on Low
+  readonly props: PropAssets;                 // R6: streams the map family's kit glb (past a match's quiet start) and the signs and grime atlases on realistic tiers (after the level's bake and sets), merges the dressing, puts the kit's drone on the movers; frees it all on Low
+  readonly propsPending: boolean;             // a realistic tier's kit (or the current map's merge of it) is still to come in
   fxContext(): RealContext | null;            // R5: where the realistic effects draw, once the atlases are in; null on Low
   readonly streaming: boolean;                // a realistic tier's sky, level bake or sets, weapons or effect atlases are still to come in
   readonly gpuBehind: boolean;                // streaming, with 6 frames unfinished on the GPU (vsync off): boot skips this one (render/pacing.ts)
@@ -1612,6 +1698,27 @@ their whole root and dispose the figure at once. `figureTemplate()` (every
 merged part and a flat prop) is prewarmed at the menu: compiled and drawn once with the shadow
 maps, so a match's first spawns link, upload and first-draw nothing; the Blender props' programs
 warm with the weapons' template.
+
+**Detail kit (R6, V14, V16), realistic tiers.** `render/props.ts` (`PropAssets`, owned by the renderer,
+its `root` in the scene) streams `public/props/<family>.glb` (the common pieces and the family's own,
+made by `npm run props` from `tools/blender/props/`) and the `signs` and `grime` atlases at the Textures
+size (the signs at 1024 at least, `atlasSize`), in the upload slots once the level's bake and sets are on; the glb is fetched
+(`fetch`) only past a match's quiet start, as three parses it on the main thread; Low fetches none. On the level's first realistic
+frame `_dress` reads `level.dressing` (making its tables) and adds the dressing's texture sets (`dressingSets`) to the level's, so the kit's materials (`kitMat`: the
+level's PBR patch, smooth-shaded, white over the set's mean so the vertex colour is the albedo; grid-lit,
+or sky-probe-only for backdrops) wear the level's streamed maps. `mergeDressing` merges the placements
+(transformed, tinted, UVs re-stretched to square texels as the level's, a sign's face mapped to its cell):
+the pieces that cast shadows (with the cables) and the small pieces each per 32 m cell (`PROP_CELL`,
+so the camera and each shadow cascade cull cells; the small ones hidden beyond 48 m, `update`), the
+backdrops in one mesh; each draws once per texture set, and each caster cell's shadow pass is one run,
+like the level's `_casters` (the shadow pass swaps them in only on frames that redraw the maps). Medium (the low Textures size,
+`propDetail`) merges in cells twice as wide and hides the small pieces from 24 m; a Textures change across it merges again. Once
+uploaded, the merged arrays are dropped (`freeOnUpload`). The decals are one mesh on `grimeMat` (multiplied over the frame, faded to white by
+the fog), the cables tubes in the shadow mesh. The merge compiles and draws once unseen (the held
+compile and warm-up, in a match past its quiet start too) before it is shown; then each drone
+(`level.movers`) takes the kit's drone as a child at the mover's scale, and its flat cone the hidden
+material (`_applySurfaces` keeps it hidden). A new map re-merges from the kit in memory; Low frees it all
+and gives the cones back.
 
 **Operators (R7), realistic tiers.** `render/operators.ts` (`OperatorAssets`, owned by the renderer)
 streams `operators.glb` (LOD0, for the Textures setting's 1K and 2K: High and Ultra) or

@@ -414,7 +414,9 @@ function buildYard(b: LevelBuilder) {
 
 function neighbour(b: LevelBuilder, x: number, z: number, w: number, d: number, h: number, mat: BuildOpts['mat']) {
   const material = mat === 'siding' ? 'siding' : mat === 'blockAlt' ? 'brick' : 'stucco';
-  box(b, x, 0, z, w, h, d, { mat, noCollide: true, material });
+  // A shade of its own for each neighbour on the realistic tiers (V16).
+  const tint = [0xfaf4ec, 0xf2f6f9, 0xf8f8f0, 0xfbf2f0][Math.abs(Math.round(x + z)) % 4];
+  box(b, x, 0, z, w, h, d, { mat, noCollide: true, material, tint });
   const rise = 2.6, half = d / 2 + 0.5, pitch = Math.atan2(rise, half), length = Math.hypot(half, rise);
   for (const side of [-1, 1]) {
     mesh(b, boxGeo(w + 1, 0.3, length), [x, h + rise / 2, z + side * half / 2],

@@ -593,12 +593,13 @@ float bakedShade = 1.0;
 #endif
 iblIrradiance = vec3( 0.0 );`);
   } else {
-    withGrid(shader);
+    // Backdrops beyond the play space keep the sky probe: the grid would lend them its edge cells' light.
+    if (!this.userData.far) withGrid(shader);
     shader.fragmentShader = shader.fragmentShader.replace('#include <lights_fragment_maps>', '#include <lights_fragment_maps>\niblIrradiance = vec3( 0.0 );');
   }
 }
 function macroKey(this: THREE.Material): string {
-  return this.userData.baked ? 'level-pbr-baked' : 'level-pbr';
+  return this.userData.baked ? 'level-pbr-baked' : this.userData.far ? 'level-pbr-far' : 'level-pbr';
 }
 
 /**
@@ -624,7 +625,8 @@ export function realMat(real: RealMaterial, info: SetInfo, baked = false): THREE
   if (material === undefined) {
     const color = new THREE.Color(real.color);
     color.setRGB(color.r / info.albedo[0], color.g / info.albedo[1], color.b / info.albedo[2], THREE.LinearSRGBColorSpace);
-    material = new THREE.MeshStandardMaterial({ color, roughness: 1, metalness: 1, flatShading: true });
+    // Vertex colours carry the level's per-building tint (level/build.ts `BuildOpts.tint`), white by default.
+    material = new THREE.MeshStandardMaterial({ color, roughness: 1, metalness: 1, flatShading: true, vertexColors: true });
     if (OVERLAY_TAGS.has(real.tag)) Object.assign(material, { polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
     material.userData.set = real.set;
     material.userData.macro = { value: MACRO[real.set] ?? MACRO_DEFAULT };
@@ -637,6 +639,97 @@ export function realMat(real: RealMaterial, info: SetInfo, baked = false): THREE
     reals.set(key, material);
   }
   return material;
+}
+
+/**
+ * The detail kit's material for one texture set (R6, render/props.ts): the
+ * level's PBR patch (macro variation, the probe grid, no diffuse from the
+ * sky's PMREM), smooth-shaded for the kit's bevels, and white over the set's
+ * mean albedo, so each vertex's colour (a part's paint, times its
+ * placement's tint) is the albedo it averages to. Lit by the probe grid, like
+ * the loose pieces; `far` (backdrops: the skyline, the mesas, the treeline)
+ * by the sky probe alone. Kept with the level's materials, so the level's
+ * texture streaming puts each set's maps on it.
+ */
+export function kitMat(set: TextureSet, info: SetInfo, far = false): THREE.MeshStandardMaterial {
+  const key = `kit:${set}${far ? '|far' : ''}`;
+  let material = reals.get(key);
+  if (material === undefined) {
+    const color = new THREE.Color().setRGB(1 / info.albedo[0], 1 / info.albedo[1], 1 / info.albedo[2], THREE.LinearSRGBColorSpace);
+    material = new THREE.MeshStandardMaterial({ color, roughness: 1, metalness: 1, vertexColors: true });
+    material.name = key;
+    material.userData.set = set;
+    material.userData.macro = { value: MACRO[set] ?? MACRO_DEFAULT };
+    material.userData.baked = false;
+    material.userData.far = far;
+    material.onBeforeCompile = macroVariation;
+    material.customProgramCacheKey = macroKey;
+    wearMaps(material, standInMaps(set, info));
+    reals.set(key, material);
+  }
+  return material;
+}
+
+let signs: THREE.MeshStandardMaterial | undefined;
+/**
+ * The signs and posters (R6): the kit's `signs` atlas (render/props.ts puts
+ * it on, a grey texel until then), matte paint, lit by the probe grid.
+ */
+export function signsMat(): THREE.MeshStandardMaterial {
+  if (signs === undefined) {
+    signs = gridLit(new THREE.MeshStandardMaterial({ roughness: 0.62, metalness: 0, map: pixel(0.7, 0.7, 0.7, THREE.SRGBColorSpace) }));
+    signs.name = 'signs';
+  }
+  return signs;
+}
+
+let grime: THREE.ShaderMaterial | undefined;
+/**
+ * The grime decals (V16, render/props.ts): the `grime` atlas multiplied over
+ * whatever lies under them, so a stain darkens a face in its own light (sun,
+ * shade or bake alike) and needs no lighting of its own. Each quad's
+ * `strength` blends from white towards the cell; the fog takes it back to
+ * white, so a far stain fades with the face. Drawn after the opaque level,
+ * pulled towards the eye so it wins the depth tie; the scene's alpha (the
+ * lit share GTAO reads) is left as it is.
+ */
+export function grimeMat(): THREE.ShaderMaterial {
+  return grime ??= new THREE.ShaderMaterial({
+    name: 'grime',
+    uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { map: { value: pixel(1, 1, 1, THREE.SRGBColorSpace) } }]),
+    fog: true, transparent: true, depthWrite: false,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4,
+    blending: THREE.CustomBlending, blendEquation: THREE.AddEquation,
+    blendSrc: THREE.ZeroFactor, blendDst: THREE.SrcColorFactor, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor,
+    vertexShader: `
+      #include <common>
+      #include <fog_pars_vertex>
+      attribute float strength;
+      varying vec2 vUv;
+      varying float vStrength;
+      void main() {
+        vUv = uv;
+        vStrength = strength;
+        vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
+        gl_Position = projectionMatrix * mvPosition;
+        #include <fog_vertex>
+      }
+    `,
+    fragmentShader: `
+      #include <common>
+      #include <fog_pars_fragment>
+      uniform sampler2D map;
+      varying vec2 vUv;
+      varying float vStrength;
+      void main() {
+        vec3 multiplier = mix( vec3( 1.0 ), texture2D( map, vUv ).rgb, vStrength );
+        #ifdef USE_FOG
+        multiplier = mix( multiplier, vec3( 1.0 ), smoothstep( fogNear, fogFar, vFogDepth ) );
+        #endif
+        gl_FragColor = vec4( multiplier, 1.0 );
+      }
+    `,
+  });
 }
 
 /**

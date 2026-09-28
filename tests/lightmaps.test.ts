@@ -6,7 +6,7 @@ import { BAKE_FADE_MS, Renderer } from '@/engine/render/index';
 import { BAKE_UNIFORMS, GRID_UNIFORMS, realMaterials, standInGrid, standInLightmap } from '@/engine/render/materials';
 import {
   ALIGN, BAKE_FILE, BAKE_FILES, LIGHTMAP_SIZE, NO_LIGHTMAP, PADDING, bakeFor, bakeMips, bakeUrl, bakedTriangles, bakes, layoutLightmap,
-  lightmapCharts, parseBakes,
+  layoutSteps, lightmapChartSteps, lightmapCharts, parseBakes,
 } from '@/engine/render/lightmap';
 import { PRESET_VALUES } from '@/engine/render/quality';
 import { parseSkyData, skyUrl } from '@/engine/render/sky';
@@ -52,6 +52,48 @@ test('every bake matches its map as built today: edit a map and this fails until
   expect(() => parseBakes({ size: 1024, bakes: {} })).toThrow();
 });
 
+test('the layout runs in short steps that give the same charts and uv1 as at once', () => {
+  const level = build('mexico'), info = bakeFor(level)!.info, triangles = bakedTriangles(level.surfaces);
+  let steps = 0, longest = 0;
+  const run = <T>(generator: Generator<void, T>): T => {
+    for (;;) {
+      const start = performance.now(), next = generator.next();
+      longest = Math.max(longest, performance.now() - start);
+      if (next.done) return next.value;
+      steps++;
+    }
+  };
+  const charts = run(lightmapChartSteps(level.surfaces, level.bounds, triangles));
+  const layout = run(layoutSteps(charts, LIGHTMAP_SIZE, info.density))!;
+  // Mexico's 30,000-odd triangles take tens of steps, none long (the whole pass is 30-80 ms on a desktop).
+  expect(steps).toBeGreaterThan(20);
+  expect(longest).toBeLessThan(25);
+  const once = layoutLightmap(lightmapCharts(level.surfaces, level.bounds), LIGHTMAP_SIZE, info.density)!;
+  expect(layout.charts).toEqual(once.charts);
+  expect(layout.uvs.every((uv, i) => uv.every((v, k) => v === once.uvs[i]![k]))).toBe(true);
+});
+
+test('a layout that no longer matches its bake keeps the probe, and its zero uv1 stays on the geometry', () => {
+  const renderer = new Renderer(document.createElement('canvas'));
+  cleanup.push(() => renderer.dispose());
+  const level = build('training'), warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  renderer.setSurfaces(level.surfaces, level);
+  renderer.applyQuality(PRESET_VALUES.high);
+  renderer._checkBake();
+  expect(renderer._bakeLayout).not.toBeNull();
+  const uv1 = level.surfaces.filter(s => s.static).map(s => s.mesh.geometry.getAttribute('uv1'));
+  expect(uv1.every(a => a !== undefined)).toBe(true);
+  // The same hash, another layout (as a map edit the hash misses would give).
+  renderer._bake = { ...renderer._bake!, info: { ...renderer._bake!.info, charts: -1 } };
+  while (!renderer._layBake()) { /* one budgeted step a slot */ }
+  expect(warn).toHaveBeenCalledWith(expect.stringContaining('bake training'));
+  expect(renderer._bake).toBeNull();
+  // Left on (the unbaked materials never read it): taking it off would strand its GPU buffer.
+  expect(level.surfaces.filter(s => s.static).map(s => s.mesh.geometry.getAttribute('uv1'))).toEqual(uv1);
+  expect(level.surfaces.every(s => [s.mesh.material].flat().every(m => !m.userData.baked))).toBe(true);
+  warn.mockRestore();
+});
+
 test('each bake was made under the map\'s current sky', async () => {
   for (const [name, info] of Object.entries(bakes())) {
     const mood = build(info.map, info.arena).mood;
@@ -87,7 +129,7 @@ test('lightmap UVs: deterministic, one texel density, charts apart by their padd
     const cells = la.charts;
     const cellOf = (u: number, v: number) => cells.find(c => u >= c.x && u <= c.x + c.w && v >= c.y && v <= c.y + c.h);
     let checked = 0, even = 0;
-    const p = new THREE.Vector3(), q = new THREE.Vector3();
+    const p = new THREE.Vector3(), q = new THREE.Vector3(), r = new THREE.Vector3();
     la.surfaces.forEach((surface, i) => {
       const uv = la.uvs[i]!, geometry = surface.mesh.geometry, position = geometry.getAttribute('position'), index = geometry.index;
       surface.mesh.updateWorldMatrix(true, false);
@@ -106,6 +148,12 @@ test('lightmap UVs: deterministic, one texel density, charts apart by their padd
         }
         p.fromBufferAttribute(position, corners[0]!).applyMatrix4(surface.mesh.matrixWorld);
         q.fromBufferAttribute(position, corners[1]!).applyMatrix4(surface.mesh.matrixWorld);
+        // A displaced shell (Mexico's rock stacks, R6) is one chart per face, laid flat over the face's plane: its
+        // facets' edges out of that plane read short, as they should. The check reads the flat pieces.
+        if (surface.realOnly) {
+          r.fromBufferAttribute(position, corners[2]!).applyMatrix4(surface.mesh.matrixWorld);
+          if (!(['x', 'y', 'z'] as const).some(k => Math.abs(p[k] - q[k]) < 1e-4 && Math.abs(p[k] - r[k]) < 1e-4)) continue;
+        }
         const metres = p.distanceTo(q), texels = Math.hypot(us[0]! - us[1]!, vs[0]! - vs[1]!);
         if (metres * info.density > 2) {
           checked++;
@@ -219,6 +267,7 @@ test('bake streaming: nothing reaches the GPU before pump, sizes swap once in, o
   expect(warn).toHaveBeenCalledTimes(1);
 });
 
+// About 40 s alone; beside the suite's other streaming tests in the one browser 88-94 s (c2c96cf's 88).
 test('the renderer lights the static level with its bake on realistic tiers, props and figures from the grid, and frees it all', async () => {
   const canvas = document.createElement('canvas');
   document.body.append(canvas);
@@ -339,4 +388,4 @@ test('the renderer lights the static level with its bake on realistic tiers, pro
   expect(house.surfaces.every(s => [s.mesh.material].flat().every(m => !m.userData.baked))).toBe(true);
   expect(renderer.bakePending).toBe(false);
   expect(errors).not.toHaveBeenCalled();
-}, 90_000);
+}, 150_000);

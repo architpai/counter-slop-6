@@ -8,24 +8,26 @@ import {
   BAKE_UNIFORMS, GRID_UNIFORMS, OPERATOR_AO, casterGroups, hiddenMat, levelDepthMat, realMat, realMaterials, skyMat, standInGrid, standInLightmap,
   standInMaps, surfMat, wearMaps,
 } from './materials';
-import { BAKE_FILE, LIGHTMAP_SIZE, bakeFor, bakedTriangles, layoutLightmap, lightmapCharts, wearLightmapUVs } from './lightmap';
+import { BAKE_FILE, LIGHTMAP_SIZE, bakeFor, bakedTriangles, layoutSteps, lightmapChartSteps, wearLightmapUVs } from './lightmap';
 import { ANTIALIAS_SPEC, AO_SCALE, PRESET_VALUES, SHADOW_SPEC, VIEW_SCALE } from './quality';
 import { GpuFences, MatchClock } from './pacing';
 import { aimShadowBox, cascadeCentre, sizeShadowBox } from './shadows';
 import { disposeSky, loadSky } from './sky';
-import { TEXTURE_SIZE, resolveMaterial, setInfo, setsFor } from './surfaces';
+import { TEXTURE_SETS, TEXTURE_SIZE, resolveMaterial, setInfo, setsFor } from './surfaces';
 import { BakeStreamer, TextureStreamer, fetchGrid, ktx2Loader, lightmapLoader, warmCompressedUploads } from './textures';
 import { WeaponAssets, weaponTextureSize } from './weapons';
 import { FX_UNIFORMS, FxAssets, fxTemplate, fxTextureSize } from './fx';
 import { useOperatorSource, usePropSource } from './figure';
 import { OperatorAssets, operatorWant } from './operators';
+import { PropAssets, dressingSets, propTextureSize } from './props';
 import type { PostFX } from './postfx';
 import type { SkyUniforms } from './materials';
 import type { GfxValues, ShadowBox } from './quality';
 import type { SkyAssets, SkySource } from './sky';
 import type { TextureSet } from './surfaces';
 import type { BakedLight, LoadBake } from './textures';
-import type { BakeInfo } from './lightmap';
+import type { BakeInfo, BakedTriangles, LightmapLayout } from './lightmap';
+import type { PropRequest } from './props';
 import type { Level, LevelSurface, Mood } from '../types';
 
 export { TONE, TONE_HEX, WHITE_HEX, SMOKE_HEX, SURF } from './palette';
@@ -107,6 +109,17 @@ const UPLOAD_SLOW_MS = 4;
  * maps of a session); half a second later none did.
  */
 export const UPLOAD_SETTLE_MS = 500;
+/** Script a slot spends laying a bake's charts out (`_layBake`): a map's layout takes several slots, no frame a long one. */
+const LAYOUT_STEP_MS = 4;
+
+/** A bake's layout as steps: the chart pass, then packing and writing `uv1` (render/lightmap.ts). */
+function* bakeLayoutSteps(surfaces: readonly LevelSurface[], bounds: Level['bounds'], triangles: BakedTriangles,
+  density: number): Generator<void, LightmapLayout | null> {
+  const charts = yield* lightmapChartSteps(surfaces, bounds, triangles);
+  yield;
+  return yield* layoutSteps(charts, LIGHTMAP_SIZE, density);
+}
+
 /**
  * A map's bake fades in over this long (eased) once it is on the GPU, so the
  * light does not pop: indoors the bake is about half the probe's light, and a
@@ -155,6 +168,42 @@ interface Warmup {
   valid: () => boolean;
   inMatch: boolean;
   drawn: boolean;
+}
+
+/** Vertex colours that have gone to the GPU (`wearColours`). */
+const uploadedColours = new WeakSet<THREE.BufferAttribute>();
+
+/** White vertex colours shared by every level mesh without its own: one buffer on the GPU, as long as the longest. */
+let whiteColours: THREE.BufferAttribute | null = null;
+
+/**
+ * The realistic materials' vertex colours (level/build.ts `BuildOpts.tint`),
+ * put on a level mesh when a realistic look goes on: its own, or the shared
+ * white (a draw reads only its own vertices' share of it).
+ */
+function wearColours({ mesh, colours }: LevelSurface): void {
+  const geometry = mesh.geometry;
+  if (geometry.getAttribute('color')) return;
+  const count = geometry.getAttribute('position').count;
+  let attribute: THREE.BufferAttribute;
+  if (colours) attribute = new THREE.BufferAttribute(colours, 3);
+  else {
+    if (!whiteColours || whiteColours.count < count) whiteColours = new THREE.BufferAttribute(new Float32Array(3 * count).fill(1), 3);
+    attribute = whiteColours;
+  }
+  attribute.onUpload(function (this: THREE.BufferAttribute) { uploadedColours.add(this); });
+  geometry.setAttribute('color', attribute);
+}
+
+/**
+ * The flat look draws no vertex colour: take a level mesh's off while it has
+ * never been drawn (the first level is built before the quality goes on), so
+ * Low never uploads them. Once uploaded they stay (a desktop that switched to
+ * Low): a removed attribute's buffer would outlive its geometry's disposal.
+ */
+function shedColours({ mesh }: LevelSurface): void {
+  const colour = mesh.geometry.getAttribute('color');
+  if (colour instanceof THREE.BufferAttribute && !uploadedColours.has(colour)) mesh.geometry.deleteAttribute('color');
 }
 
 export class Renderer {
@@ -216,8 +265,12 @@ export class Renderer {
    * cascade, though the level's all cast alike.
    */
   _casters: { mesh: THREE.Mesh; material: THREE.Material[]; groups: THREE.GeometryGroup[] }[] = [];
-  /** The texture sets the current level's tags need. */
+  /** The texture sets the current level's tags need, and its detail kit's (R6) once `_dress` has asked. */
   _surfaceSets: readonly TextureSet[] = [];
+  /** What the current level asks of the detail kit (its dressing and drones), null for none (Training). Made by `_dress`. */
+  _propRequest: PropRequest | null = null;
+  /** `_dress` has read the current level's dressing. */
+  _dressed = false;
   /**
    * Realistic tiers: the texture sets streaming or on the level, and their KTX2
    * loader (its transcoder workers). Both null on Low, which loads no texture.
@@ -233,8 +286,8 @@ export class Renderer {
   _uploadsWarm = false;
   /** The streamer's current sets are on the materials. */
   _texturesWorn = false;
-  /** The current level's key, arena flag and bounds: which bake it takes, if any (R3). */
-  _level: Pick<Level, 'key' | 'arena' | 'bounds'> | null = null;
+  /** The current level's key, arena flag and bounds: which bake it takes, if any (R3); its dressing and drones (R6, `_dress`). */
+  _level: (Pick<Level, 'key' | 'arena' | 'bounds'> & Partial<Pick<Level, 'dressing' | 'movers'>>) | null = null;
   /**
    * The current level's bake, once its geometry is checked against the
    * manifest (`_checkBake`, on the first realistic frame); null without one.
@@ -243,6 +296,13 @@ export class Renderer {
   _bakeChecked: readonly LevelSurface[] | null = null;
   /** Each bake's checked `uv1` per static surface, kept for the session: its geometry is the manifest's, so it never changes. */
   _bakeLayouts = new Map<string, Float32Array[]>();
+  /**
+   * The current level's lightmap layout still to make (`_layBake`): its
+   * triangles, the chart pass and packing as steps (render/lightmap.ts), and
+   * the `uv1` arrays (zeros till then) they fill. Null once laid out, or
+   * with no bake.
+   */
+  _bakeLayout: { triangles: BakedTriangles; steps: Generator<void, LightmapLayout | null>; uvs: Float32Array[] } | null = null;
   /** Realistic tiers: the bake streaming or on the level. Null on Low. */
   _bakes: BakeStreamer | null = null;
   /**
@@ -303,6 +363,12 @@ export class Renderer {
    * upload slots at the Textures size; the effects listen for them. Empty on Low.
    */
   readonly fx: FxAssets;
+  /**
+   * Realistic tiers: the detail kit (R6, render/props.ts): the map family's
+   * props, the signs and grime atlases, the drones' model. Streamed in the
+   * upload slots once the level's bake and sets are on; empty on Low.
+   */
+  readonly props: PropAssets;
   /**
    * The soft particles' pass (R5): drawn after the scene into their own layer
    * (postfx.ts `drawSoft`), reading the scene's depth, so smoke and fire can
@@ -376,23 +442,30 @@ export class Renderer {
       object.onBeforeRender = this._beforeRig;
       object.onAfterRender = this._afterRig;
     };
-    // Between the scene's draw list and its draws: the level's casters swap to their shadow groups for this pass only.
+    // Between the scene's draw list and its draws: the level's casters and the detail kit's (R6) swap to their shadow
+    // groups for this pass only. Frames that keep the shadow maps allocate nothing here.
     const shadowMap = this.three.shadowMap, drawShadows = shadowMap.render.bind(shadowMap);
     shadowMap.render = (lights, scene, camera) => {
-      if (!shadowMap.needsUpdate || this._casters.length === 0) return drawShadows(lights, scene, camera);
-      const own = this._casters.map(({ mesh, material, groups }) => {
-        const saved = { material: mesh.material, groups: mesh.geometry.groups };
-        mesh.material = material;
-        mesh.geometry.groups = groups;
-        return saved;
-      });
+      const props = this.props.casters;
+      if (!shadowMap.needsUpdate || this._casters.length + props.length === 0) return drawShadows(lights, scene, camera);
+      const lists = [this._casters, props], own: { material: THREE.Material | THREE.Material[]; groups: THREE.GeometryGroup[] }[] = [];
+      for (const list of lists) {
+        for (const { mesh, material, groups } of list) {
+          own.push({ material: mesh.material, groups: mesh.geometry.groups });
+          mesh.material = material;
+          mesh.geometry.groups = groups;
+        }
+      }
       try {
         drawShadows(lights, scene, camera);
       } finally {
-        this._casters.forEach(({ mesh }, i) => {
-          mesh.material = own[i]!.material;
-          mesh.geometry.groups = own[i]!.groups;
-        });
+        let i = 0;
+        for (const list of lists) {
+          for (const { mesh } of list) {
+            mesh.material = own[i]!.material;
+            mesh.geometry.groups = own[i++]!.groups;
+          }
+        }
       }
     };
     this.weapons = new WeaponAssets({
@@ -420,12 +493,22 @@ export class Renderer {
       texture: (url, anisotropy) => (this._ktx2 ??= ktx2Loader(this.three)).load(url, anisotropy),
       upload: texture => this.three.initTexture(texture),
     });
+    this.props = new PropAssets({
+      model: url => new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(url),
+      texture: (url, anisotropy) => (this._ktx2 ??= ktx2Loader(this.three)).load(url, anisotropy),
+      upload: texture => this.three.initTexture(texture),
+      // Compiled off the frame, then drawn once unseen (past a match's quiet start too), before they are shown.
+      warm: root => this._hold(this._compiles, root, () => this.props.holds(root))
+        .then(() => this._hold(this._warmups, root, () => this.props.holds(root), true)),
+    });
+    this.scene.add(this.props.root);
     this._onResize = () => this.resize();
     window.addEventListener('resize', this._onResize);
     this._onContextRestored = () => {
       this.weapons.clear();
       this.operators.clear();
       this.fx.clear();
+      this.props.clear();
       this._releaseTextures();
       this._fences.clear();
       this._programsWarm = this._charactersHeld = false;
@@ -508,6 +591,7 @@ export class Renderer {
       this.weapons.want(null);
       this.operators.want(null);
       this.fx.want(null);
+      this.props.want(null, null);
     }
     this._applySurfaces();
     if (q.look !== 'realistic') {
@@ -741,11 +825,31 @@ export class Renderer {
    * palette; the realistic tiers texture them and, given the level (its key,
    * arena flag and bounds) and a bake for it, light them with it.
    */
-  setSurfaces(surfaces: readonly LevelSurface[], level: Pick<Level, 'key' | 'arena' | 'bounds'> | null = null): void {
+  setSurfaces(surfaces: readonly LevelSurface[],
+    level: (Pick<Level, 'key' | 'arena' | 'bounds'> & Partial<Pick<Level, 'dressing' | 'movers'>>) | null = null): void {
     this._surfaces = surfaces;
     this._level = level;
     this._surfaceSets = setsFor(surfaces.flatMap(s => s.materials.filter(tag => tag !== null)));
+    this._propRequest = null;
+    this._dressed = false;
     this._applySurfaces();
+  }
+
+  /**
+   * On the level's first realistic frame (as `_checkBake`, so Low never pays
+   * for it): read its dressing, which makes its placement tables
+   * (level/index.ts: 1-8 ms), and add the detail kit's texture sets (and the
+   * drones') to the level's.
+   */
+  _dress(): void {
+    if (this._dressed) return;
+    this._dressed = true;
+    const dressing = this._level?.dressing ?? null, movers = this._level?.movers ?? [];
+    this._propRequest = dressing || movers.length > 0 ? { dressing, movers } : null;
+    const sets = new Set([...this._surfaceSets, ...dressingSets(dressing, movers.length > 0)]);
+    if (sets.size === this._surfaceSets.length) return;
+    this._surfaceSets = TEXTURE_SETS.filter(set => sets.has(set));
+    this._texturesAsked = false;
   }
 
   /**
@@ -765,8 +869,11 @@ export class Renderer {
     this._texturesAsked = this._bakeAsked = false;
     this._casters = [];
     if (this._quality.look !== 'realistic') {
-      for (const { mesh, surf, moving } of this._surfaces) {
-        mesh.material = surfMat(surf);
+      for (const surface of this._surfaces) {
+        const { mesh, surf, moving, realOnly } = surface;
+        shedColours(surface);
+        // Realistic-only trim and backdrops (R6) are not drawn on the flat look.
+        mesh.material = realOnly ? hiddenMat() : surfMat(surf);
         mesh.customDepthMaterial = undefined;
         if (moving) mesh.castShadow = true;
       }
@@ -778,10 +885,20 @@ export class Renderer {
     this._uploadAt = performance.now() + UPLOAD_SETTLE_MS;
     // Until the first realistic frame checks it (`_checkBake`), a level with a bake in the manifest wears baked materials.
     const baked = this._bakeChecked === this._surfaces ? this._bake !== null : this._level !== null && bakeFor(this._level) !== null;
-    for (const { mesh, surf, materials, static: fixed, moving } of this._surfaces) {
+    // The shared white as long as the longest mesh wearing it, so one buffer serves them all.
+    const longest = this._surfaces.reduce((n, s) => (s.colours ? n : Math.max(n, s.mesh.geometry.getAttribute('position').count)), 0);
+    if (longest > (whiteColours?.count ?? 0)) whiteColours = new THREE.BufferAttribute(new Float32Array(3 * longest).fill(1), 3);
+    for (const surface of this._surfaces) {
+      const { mesh, surf, materials, static: fixed, moving } = surface;
+      wearColours(surface);
       // 30-40 m up, a drone's shadow in the sharp cascades is a hard grey wedge on the ground by the
       // player, the drone itself a speck near the sun: it read as a stray plane in front of the gun.
       if (moving) mesh.castShadow = false;
+      // A drone wearing the kit's model (render/props.ts) keeps its cone hidden.
+      if (moving && this.props.wearsDrone(mesh)) {
+        mesh.material = hiddenMat();
+        continue;
+      }
       const looks = materials.map(tag => {
         if (tag === null) return hiddenMat();
         const real = resolveMaterial(tag, surf);
@@ -814,37 +931,75 @@ export class Renderer {
   /**
    * Once per level, on its first realistic frame (so Low never pays for it):
    * does the level have a bake, and is its geometry the one that was baked?
-   * The game hashes the static triangles, lays the lightmap charts out again
-   * at the manifest's density (render/lightmap.ts) and puts `uv1` on the
-   * static meshes only if the hash, chart count and atlas height all match; a
-   * map edited without a new bake keeps the sky probe (and the unit test
-   * fails), and its static pieces go back to the unbaked materials. The
-   * layout costs 35-65 ms on a desktop (the arena about 130), once per bake
-   * a session (`_bakeLayouts`): a restart or a return to the map only hashes,
-   * a few ms. It runs in the load's first frame, before the level is shown.
+   * The game hashes the static triangles (a few ms); a map edited without a
+   * new bake keeps the sky probe (and the unit test fails), and its static
+   * pieces go back to the unbaked materials. A match puts `uv1` on the
+   * static meshes at once, so the first frame compiles the programs the bake
+   * draws with: the session's checked layout (`_bakeLayouts`: a restart or a
+   * return to the map), or zeros while `_layBake` lays the charts out again
+   * in the upload slots, before the bake goes on (25-60 ms of script on a
+   * desktop, once per bake a session: kept out of the match's first frames).
    */
   _checkBake(): void {
     if (this._bakeChecked === this._surfaces) return;
     this._bakeChecked = this._surfaces;
     this._bake = null;
+    this._bakeLayout = null;
     const level = this._level, bake = level ? bakeFor(level) : null;
     if (!level || !bake) return;
     const triangles = bakedTriangles(this._surfaces);
-    let uvs = triangles.hash === bake.info.hash ? this._bakeLayouts.get(bake.name) ?? null : null;
-    if (uvs && !uvs.every((uv, i) => uv.length === 2 * triangles.surfaces[i]!.mesh.geometry.getAttribute('position').count)) uvs = null;
-    if (!uvs && triangles.hash === bake.info.hash) {
-      const layout = layoutLightmap(lightmapCharts(this._surfaces, level.bounds, triangles), LIGHTMAP_SIZE, bake.info.density);
-      if (layout && layout.charts.length === bake.info.charts && layout.rows === bake.info.rows && layout.triangles === bake.info.triangles) {
-        this._bakeLayouts.set(bake.name, uvs = layout.uvs);
-      }
-    }
-    if (!uvs || uvs.length !== triangles.surfaces.length) {
-      console.warn(`bake ${bake.name}: the map changed since it was baked (npm run lightmaps); using the sky probe`);
-      this._applySurfaces();
+    if (triangles.hash !== bake.info.hash) {
+      this._bakeMismatch(bake.name);
       return;
+    }
+    let uvs = this._bakeLayouts.get(bake.name) ?? null;
+    if (uvs && (uvs.length !== triangles.surfaces.length
+      || !uvs.every((uv, i) => uv.length === 2 * triangles.surfaces[i]!.mesh.geometry.getAttribute('position').count))) uvs = null;
+    if (!uvs) {
+      uvs = triangles.surfaces.map(s => new Float32Array(2 * s.mesh.geometry.getAttribute('position').count));
+      this._bakeLayout = { triangles, steps: bakeLayoutSteps(this._surfaces, level.bounds, triangles, bake.info.density), uvs };
     }
     wearLightmapUVs(triangles.surfaces, uvs);
     this._bake = bake;
+  }
+
+  /**
+   * The current level's lightmap layout (render/lightmap.ts) for about
+   * `budget` ms of script, in an upload slot: its charts, then the atlas,
+   * written into the `uv1` zeros `_checkBake` put on (a map's whole layout is
+   * 30-80 ms on a desktop). True once laid out (or nothing to lay out). A
+   * layout that no longer matches its manifest (the map changed since its
+   * bake, in a way the hash misses) takes the bake off: the level keeps the
+   * probe.
+   */
+  _layBake(budget = LAYOUT_STEP_MS): boolean {
+    const pending = this._bakeLayout, bake = this._bake;
+    if (!pending || !bake) return true;
+    const until = performance.now() + budget;
+    let next = pending.steps.next();
+    while (!next.done && performance.now() < until) next = pending.steps.next();
+    if (!next.done) return false;
+    const layout = next.value;
+    this._bakeLayout = null;
+    if (!layout || layout.charts.length !== bake.info.charts || layout.rows !== bake.info.rows || layout.triangles !== bake.info.triangles) {
+      // The zero `uv1` stays on: the unbaked materials never read it, and a removed attribute's buffer, drawn once
+      // already, would outlive its geometry's disposal (as `shedColours` says).
+      this._bakeMismatch(bake.name);
+      return true;
+    }
+    layout.uvs.forEach((uv, i) => {
+      pending.uvs[i]!.set(uv);
+      pending.triangles.surfaces[i]!.mesh.geometry.getAttribute('uv1').needsUpdate = true;
+    });
+    this._bakeLayouts.set(bake.name, pending.uvs);
+    return true;
+  }
+
+  /** A level whose geometry is not its bake's: warned, and lit by the probe with the unbaked materials. */
+  _bakeMismatch(name: string): void {
+    console.warn(`bake ${name}: the map changed since it was baked (npm run lightmaps); using the sky probe`);
+    this._bake = null;
+    this._applySurfaces();
   }
 
   /**
@@ -895,6 +1050,14 @@ export class Renderer {
       this._bakeAsked = true;
     }
     const now = performance.now();
+    // The layout's steps come first in the slots, while the bake downloads; it goes on only once laid out.
+    if (this._bakeLayout) {
+      if (now < this._uploadAt || this._match.quiet(now)) return;
+      // Script only (no upload): a slot's gap after it, and the pace the uploads keep is left as it is.
+      this._layBake();
+      this._uploadAt = performance.now() + UPLOAD_GAP_MS;
+      return;
+    }
     if (!bakes.ready) {
       if (now >= this._uploadAt && !this._match.quiet(now)) {
         const bytes = bakes.pump();
@@ -1037,6 +1200,34 @@ export class Renderer {
       if (performance.now() - now > UPLOAD_SLOW_MS) this._uploadPace = Math.min(4, this._uploadPace * 2);
       this._uploadAt = now + Math.max(UPLOAD_GAP_MS, bytes / UPLOAD_BYTES_PER_MS) * this._uploadPace;
     }
+  }
+
+  /**
+   * Realistic tiers: keep the level's detail kit streaming (R6, render/props.ts):
+   * the atlases download at once, the family glb once past a match's quiet
+   * start (it parses on the main thread); the atlases upload in the
+   * level's upload slots once its bake and sets are on (the props wear those
+   * sets), and the dressing merges a few milliseconds a frame in between,
+   * never in a match's quiet start.
+   */
+  _streamProps(): void {
+    const size = propTextureSize(this._quality);
+    if (size === null) return;
+    this.props.want(this._propRequest, size);
+    const now = performance.now();
+    if (this._match.quiet(now)) return;
+    this.props.fetch();
+    if (!this.props.pending || this.bakePending || this.texturesPending || now < this._uploadAt) return;
+    const bytes = this.props.pump();
+    if (bytes > 0) {
+      if (performance.now() - now > UPLOAD_SLOW_MS) this._uploadPace = Math.min(4, this._uploadPace * 2);
+      this._uploadAt = now + Math.max(UPLOAD_GAP_MS, bytes / UPLOAD_BYTES_PER_MS) * this._uploadPace;
+    }
+  }
+
+  /** A realistic tier's detail kit (or the current map's merge of it) is still streaming. */
+  get propsPending(): boolean {
+    return this.props.pending;
   }
 
   /**
@@ -1196,7 +1387,8 @@ export class Renderer {
 
   /** A realistic tier's sky, level bake or sets, or weapons are still to download, upload or put on. */
   get streaming(): boolean {
-    return this.skyPending || this._skyLanding !== null || this.bakePending || this.texturesPending || this.weapons.pending || this.fx.pending || this.operators.pending;
+    return this.skyPending || this._skyLanding !== null || this.bakePending || this.texturesPending || this.weapons.pending || this.fx.pending
+      || this.operators.pending || this.props.pending;
   }
 
   /**
@@ -1345,6 +1537,7 @@ export class Renderer {
     this.weapons.clear();
     this.operators.clear();
     this.fx.clear();
+    this.props.clear();
     this._setFxLights(0);
     this._releaseTextures();
     this._fences.clear();
@@ -1362,11 +1555,13 @@ export class Renderer {
     this._frame++;
     this._landSky();
     if (this._skyLoading === null && this.skyPending) this._requestSky();
+    if (this._quality.look === 'realistic') this._dress();
     this._streamBake();
     this._streamTextures();
     this._streamFx();
     this._streamWeapons();
     this._streamOperators();
+    this._streamProps();
     this._warmPrograms();
     this._runCompiles();
     // The shadow boxes only move on frames that redraw the maps, so a skipped
@@ -1384,6 +1579,7 @@ export class Renderer {
     // The operators follow their figures' pivots and clips, and figures out of view put theirs on.
     this.camera.updateMatrixWorld();
     this.operators.frame(this.camera);
+    this.props.update(this.camera);
     this.three.setRenderTarget(this.post.target);
     this.three.clear();
     this.three.render(this.scene, this.camera);

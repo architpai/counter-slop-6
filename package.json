@@ -15,7 +15,8 @@
     "weapons": "node tools/weapons/build.mjs",
     "effects": "node tools/effects/build.mjs",
     "characters": "node tools/characters/build.mjs",
-    "operators": "node tools/characters/operators.mjs"
+    "operators": "node tools/characters/operators.mjs",
+    "props": "node tools/props/build.mjs"
   },
   "type": "module",
   "dependencies": {

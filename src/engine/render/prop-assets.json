@@ -1,0 +1,1550 @@
+{
+ "version": 1,
+ "glbs": {
+  "downtown": 577912,
+  "house": 631172,
+  "mexico": 883004
+ },
+ "atlases": {
+  "signs": {
+   "cols": 8,
+   "rows": 4,
+   "cells": [
+    "slop-mart",
+    "counter-slop",
+    "no-parking",
+    "high-voltage",
+    "exit",
+    "laundromat",
+    "vote-bob",
+    "lost-cat",
+    "gg-burgers",
+    "clown-college",
+    "slop-st",
+    "respawn",
+    "honk",
+    "parking",
+    "staff-only",
+    "no-slop",
+    "tacos",
+    "farmacia",
+    "pinatas",
+    "helados",
+    "aguas",
+    "lucha",
+    "talavera-blue",
+    "talavera-yellow",
+    "for-sale",
+    "beware",
+    "number",
+    "portrait",
+    "landscape",
+    "watch",
+    "drawing",
+    "drive-slow"
+   ],
+   "bytes": {
+    "1024": 61196,
+    "2048": 143480
+   }
+  },
+  "grime": {
+   "cols": 8,
+   "rows": 4,
+   "cells": [
+    "base",
+    "leaks",
+    "rust",
+    "damp",
+    "oil",
+    "ground",
+    "cracks",
+    "skid",
+    "patch",
+    "cover",
+    "drain",
+    "soot",
+    "graffiti-slop",
+    "graffiti-clown",
+    "moss",
+    "worn",
+    "stain",
+    "puddle",
+    "gum",
+    "leaf-litter",
+    "tyres",
+    "edge-dirt",
+    "sand-drift",
+    "scuffs",
+    "cracks-wide",
+    "water-line",
+    "streaks",
+    "plaster-crack",
+    "tile-grime",
+    "burn",
+    "dirt",
+    "footprints"
+   ],
+   "bytes": {
+    "512": 22318,
+    "1024": 57798,
+    "2048": 140340
+   }
+  }
+ },
+ "pieces": {
+  "crate": {
+   "kit": "common",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -0.504,
+    0,
+    -0.506
+   ],
+   "max": [
+    0.504,
+    1,
+    0.506
+   ],
+   "triangles": 660,
+   "sets": [
+    "planks"
+   ]
+  },
+  "crate-small": {
+   "kit": "common",
+   "small": true,
+   "backdrop": false,
+   "min": [
+    -0.304,
+    0,
+    -0.306
+   ],
+   "max": [
+    0.304,
+    0.6,
+    0.306
+   ],
+   "triangles": 660,
+   "sets": [
+    "planks"
+   ]
+  },
+  "pallet": {
+   "kit": "common",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -0.61,
+    0,
+    -0.5
+   ],
+   "max": [
+    0.61,
+    0.144,
+    0.5
+   ],
+   "triangles": 496,
+   "sets": [
+    "planks"
+   ]
+  },
+  "barrel": {
+   "kit": "common",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -0.292,
+    0,
+    -0.292
+   ],
+   "max": [
+    0.292,
+    0.898,
+    0.292
+   ],
+   "triangles": 600,
+   "sets": [
+    "painted-metal",
+    "steel"
+   ]
+  },
+  "trash-bags": {
+   "kit": "common",
+   "small": true,
+   "backdrop": false,
+   "min": [
+    -0.5126,
+    -0.0255,
+    -0.3635
+   ],
+   "max": [
+    0.5345,
+    0.502,
+    0.4714
+   ],
+   "triangles": 400,
+   "sets": [
+    "paint"
+   ]
+  },
+  "cardboard": {
+   "kit": "common",
+   "small": true,
+   "backdrop": false,
+   "min": [
+    -0.3545,
+    0,
+    -0.2618
+   ],
+   "max": [
+    0.4697,
+    0.405,
+    0.3818
+   ],
+   "triangles": 432,
+   "sets": [
+    "paint"
+   ]
+  },
+  "rubble": {
+   "kit": "common",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -0.7427,
+    -0.7386,
+    -0.5998
+   ],
+   "max": [
+    0.722,
+    0.3902,
+    0.623
+   ],
+   "triangles": 784,
+   "sets": [
+    "brick",
+    "concrete"
+   ]
+  },
+  "litter": {
+   "kit": "common",
+   "small": true,
+   "backdrop": false,
+   "min": [
+    -0.5095,
+    0,
+    -0.5518
+   ],
+   "max": [
+    0.4189,
+    0.066,
+    0.5614
+   ],
+   "triangles": 216,
+   "sets": [
+    "paint"
+   ]
+  },
+  "papers": {
+   "kit": "common",
+   "small": true,
+   "backdrop": false,
+   "min": [
+    -0.4486,
+    -0.0061,
+    -0.5101
+   ],
+   "max": [
+    0.5552,
+    0.08,
+    0.371
+   ],
+   "triangles": 132,
+   "sets": [
+    "paint"
+   ]
+  },
+  "cardboard-flat": {
+   "kit": "common",
+   "small": true,
+   "backdrop": false,
+   "min": [
+    -0.5019,
+    0.001,
+    -0.5069
+   ],
+   "max": [
+    0.5407,
+    0.0365,
+    0.5322
+   ],
+   "triangles": 360,
+   "sets": [
+    "paint"
+   ]
+  },
+  "ac-wall": {
+   "kit": "common",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -0.42,
+    0,
+    0
+   ],
+   "max": [
+    0.509,
+    0.62,
+    0.4
+   ],
+   "triangles": 948,
+   "sets": [
+    "painted-metal",
+    "steel"
+   ]
+  },
+  "ac-roof": {
+   "kit": "common",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -0.566,
+    0,
+    -0.6
+   ],
+   "max": [
+    0.566,
+    0.92,
+    0.6
+   ],
+   "triangles": 836,
+   "sets": [
+    "painted-metal",
+    "steel"
+   ]
+  },
+  "vent-roof": {
+   "kit": "common",
+   "small": true,
+   "backdrop": false,
+   "min": [
+    -0.28,
+    0,
+    -0.28
+   ],
+   "max": [
+    0.28,
+    0.62,
+    0.28
+   ],
+   "triangles": 164,
+   "sets": [
+    "steel"
+   ]
+  },
+  "vent-wall": {
+   "kit": "common",
+   "small": true,
+   "backdrop": false,
+   "min": [
+    -0.3,
+    0,
+    0
+   ],
+   "max": [
+    0.3,
+    0.42,
+    0.0545
+   ],
+   "triangles": 192,
+   "sets": [
+    "steel"
+   ]
+  },
+  "downpipe": {
+   "kit": "common",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -0.065,
+    0,
+    0
+   ],
+   "max": [
+    0.065,
+    1,
+    0.115
+   ],
+   "triangles": 144,
+   "sets": [
+    "painted-metal"
+   ]
+  },
+  "gutter": {
+   "kit": "common",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -0.5,
+    -0.1,
+    0.01
+   ],
+   "max": [
+    0.5,
+    0,
+    0.16
+   ],
+   "triangles": 24,
+   "sets": [
+    "painted-metal"
+   ]
+  },
+  "meter-box": {
+   "kit": "common",
+   "small": true,
+   "backdrop": false,
+   "min": [
+    -0.2,
+    -0.8,
+    0
+   ],
+   "max": [
+    0.2,
+    0.5,
+    0.109
+   ],
+   "triangles": 160,
+   "sets": [
+    "paint",
+    "painted-metal"
+   ]
+  },
+  "lamp-wall": {
+   "kit": "common",
+   "small": true,
+   "backdrop": false,
+   "min": [
+    -0.15,
+    0,
+    0
+   ],
+   "max": [
+    0.15,
+    0.18,
+    0.4762
+   ],
+   "triangles": 244,
+   "sets": [
+    "paint",
+    "steel"
+   ]
+  },
+  "sign": {
+   "kit": "common",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -0.5,
+    0,
+    0
+   ],
+   "max": [
+    0.5,
+    1,
+    0.075
+   ],
+   "triangles": 36,
+   "sets": [
+    "painted-metal",
+    "signs",
+    "steel"
+   ]
+  },
+  "poster": {
+   "kit": "common",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -0.5,
+    0,
+    0
+   ],
+   "max": [
+    0.5,
+    1,
+    0.004
+   ],
+   "triangles": 12,
+   "sets": [
+    "painted-metal",
+    "signs"
+   ]
+  },
+  "window": {
+   "kit": "common",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -0.68,
+    0,
+    0
+   ],
+   "max": [
+    0.68,
+    1.56,
+    0.11
+   ],
+   "triangles": 96,
+   "sets": [
+    "concrete",
+    "glass",
+    "painted-metal"
+   ]
+  },
+  "door-metal": {
+   "kit": "common",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -0.59,
+    0,
+    0
+   ],
+   "max": [
+    0.59,
+    2.19,
+    0.106
+   ],
+   "triangles": 332,
+   "sets": [
+    "painted-metal",
+    "steel"
+   ]
+  },
+  "door-wood": {
+   "kit": "common",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -0.59,
+    0,
+    0
+   ],
+   "max": [
+    0.59,
+    2.19,
+    0.106
+   ],
+   "triangles": 332,
+   "sets": [
+    "paint",
+    "steel",
+    "wood"
+   ]
+  },
+  "fence": {
+   "kit": "common",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -1,
+    0,
+    -0.03
+   ],
+   "max": [
+    1,
+    1.85,
+    0.03
+   ],
+   "triangles": 720,
+   "sets": [
+    "painted-metal"
+   ]
+  },
+  "cone": {
+   "kit": "common",
+   "small": true,
+   "backdrop": false,
+   "min": [
+    -0.18,
+    0,
+    -0.18
+   ],
+   "max": [
+    0.18,
+    0.52,
+    0.18
+   ],
+   "triangles": 268,
+   "sets": [
+    "paint"
+   ]
+  },
+  "pipe-h": {
+   "kit": "common",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -0.5,
+    -0.07,
+    0
+   ],
+   "max": [
+    0.5,
+    0.07,
+    0.1471
+   ],
+   "triangles": 252,
+   "sets": [
+    "painted-metal",
+    "steel"
+   ]
+  },
+  "light-ceiling": {
+   "kit": "common",
+   "small": true,
+   "backdrop": false,
+   "min": [
+    -0.625,
+    -0.505,
+    -0.11
+   ],
+   "max": [
+    0.625,
+    0,
+    0.11
+   ],
+   "triangles": 144,
+   "sets": [
+    "paint",
+    "painted-metal",
+    "steel"
+   ]
+  },
+  "bench": {
+   "kit": "common",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -0.75,
+    0,
+    -0.2632
+   ],
+   "max": [
+    0.75,
+    0.85,
+    0.175
+   ],
+   "triangles": 292,
+   "sets": [
+    "painted-metal",
+    "planks"
+   ]
+  },
+  "planter": {
+   "kit": "common",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -0.4278,
+    0,
+    -0.2068
+   ],
+   "max": [
+    0.4303,
+    0.6568,
+    0.2059
+   ],
+   "triangles": 104,
+   "sets": [
+    "foliage",
+    "planks"
+   ]
+  },
+  "planter-box": {
+   "kit": "common",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -0.7,
+    0,
+    -0.25
+   ],
+   "max": [
+    0.7,
+    0.8039,
+    0.25
+   ],
+   "triangles": 116,
+   "sets": [
+    "cast-concrete",
+    "foliage",
+    "paint"
+   ]
+  },
+  "bin-street": {
+   "kit": "common",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -0.26,
+    -0.01,
+    -0.2535
+   ],
+   "max": [
+    0.26,
+    0.84,
+    0.2535
+   ],
+   "triangles": 196,
+   "sets": [
+    "paint",
+    "painted-metal",
+    "steel"
+   ]
+  },
+  "pot": {
+   "kit": "common",
+   "small": true,
+   "backdrop": false,
+   "min": [
+    -0.26,
+    0,
+    -0.26
+   ],
+   "max": [
+    0.26,
+    0.6748,
+    0.26
+   ],
+   "triangles": 200,
+   "sets": [
+    "foliage",
+    "terracotta"
+   ]
+  },
+  "leaves": {
+   "kit": "common",
+   "small": true,
+   "backdrop": false,
+   "min": [
+    -0.4059,
+    0.0015,
+    -0.2693
+   ],
+   "max": [
+    0.3909,
+    0.0171,
+    0.443
+   ],
+   "triangles": 264,
+   "sets": [
+    "paint"
+   ]
+  },
+  "shelf": {
+   "kit": "common",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -0.5,
+    0,
+    0.005
+   ],
+   "max": [
+    0.5752,
+    1.9,
+    0.445
+   ],
+   "triangles": 288,
+   "sets": [
+    "paint",
+    "painted-metal"
+   ]
+  },
+  "radiator": {
+   "kit": "common",
+   "small": true,
+   "backdrop": false,
+   "min": [
+    -0.4,
+    0.125,
+    0
+   ],
+   "max": [
+    0.4,
+    0.68,
+    0.085
+   ],
+   "triangles": 432,
+   "sets": [
+    "painted-metal",
+    "steel"
+   ]
+  },
+  "switch": {
+   "kit": "common",
+   "small": true,
+   "backdrop": false,
+   "min": [
+    -0.0425,
+    0,
+    0
+   ],
+   "max": [
+    0.0425,
+    0.085,
+    0.015
+   ],
+   "triangles": 56,
+   "sets": [
+    "paint"
+   ]
+  },
+  "conduit": {
+   "kit": "common",
+   "small": true,
+   "backdrop": false,
+   "min": [
+    -0.05,
+    0,
+    0
+   ],
+   "max": [
+    0.05,
+    1.05,
+    0.045
+   ],
+   "triangles": 88,
+   "sets": [
+    "painted-metal",
+    "steel"
+   ]
+  },
+  "frame": {
+   "kit": "common",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -0.56,
+    -0.06,
+    0
+   ],
+   "max": [
+    0.56,
+    1.06,
+    0.035
+   ],
+   "triangles": 444,
+   "sets": [
+    "painted-metal",
+    "signs",
+    "wood"
+   ]
+  },
+  "clock": {
+   "kit": "common",
+   "small": true,
+   "backdrop": false,
+   "min": [
+    -0.17,
+    0,
+    0
+   ],
+   "max": [
+    0.17,
+    0.34,
+    0.049
+   ],
+   "triangles": 176,
+   "sets": [
+    "paint"
+   ]
+  },
+  "drone": {
+   "kit": "common",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -1.395,
+    -0.14,
+    -1.55
+   ],
+   "max": [
+    1.395,
+    0.74,
+    1.9864
+   ],
+   "triangles": 2916,
+   "sets": [
+    "glass",
+    "paint",
+    "painted-metal",
+    "steel"
+   ]
+  },
+  "awning": {
+   "kit": "downtown",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -0.51,
+    -0.77,
+    -0.0061
+   ],
+   "max": [
+    0.51,
+    0.0092,
+    0.961
+   ],
+   "triangles": 104,
+   "sets": [
+    "fabric",
+    "steel"
+   ]
+  },
+  "antenna": {
+   "kit": "downtown",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -0.6552,
+    0,
+    -1.1298
+   ],
+   "max": [
+    1.3046,
+    4,
+    1.1298
+   ],
+   "triangles": 112,
+   "sets": [
+    "steel"
+   ]
+  },
+  "water-tank": {
+   "kit": "downtown",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -1.22,
+    0,
+    -1.1894
+   ],
+   "max": [
+    1.22,
+    6,
+    1.1894
+   ],
+   "triangles": 988,
+   "sets": [
+    "planks",
+    "rust",
+    "steel"
+   ]
+  },
+  "skyline-a": {
+   "kit": "downtown",
+   "small": false,
+   "backdrop": true,
+   "min": [
+    -12.18,
+    0,
+    -9.18
+   ],
+   "max": [
+    12.18,
+    52.8,
+    9.18
+   ],
+   "triangles": 480,
+   "sets": [
+    "cast-concrete",
+    "glass"
+   ]
+  },
+  "skyline-b": {
+   "kit": "downtown",
+   "small": false,
+   "backdrop": true,
+   "min": [
+    -9.18,
+    0,
+    -9.18
+   ],
+   "max": [
+    9.18,
+    97.5,
+    9.18
+   ],
+   "triangles": 740,
+   "sets": [
+    "cast-concrete",
+    "glass",
+    "steel"
+   ]
+  },
+  "skyline-c": {
+   "kit": "downtown",
+   "small": false,
+   "backdrop": true,
+   "min": [
+    -15.18,
+    0,
+    -8.18
+   ],
+   "max": [
+    15.18,
+    35.3,
+    8.18
+   ],
+   "triangles": 444,
+   "sets": [
+    "cast-concrete",
+    "glass"
+   ]
+  },
+  "skyline-d": {
+   "kit": "downtown",
+   "small": false,
+   "backdrop": true,
+   "min": [
+    -7.18,
+    0,
+    -7.18
+   ],
+   "max": [
+    7.18,
+    119,
+    7.18
+   ],
+   "triangles": 656,
+   "sets": [
+    "cast-concrete",
+    "glass",
+    "steel"
+   ]
+  },
+  "skyline-e": {
+   "kit": "downtown",
+   "small": false,
+   "backdrop": true,
+   "min": [
+    -11.18,
+    0,
+    -10.18
+   ],
+   "max": [
+    11.18,
+    57.1,
+    10.18
+   ],
+   "triangles": 624,
+   "sets": [
+    "cast-concrete",
+    "glass"
+   ]
+  },
+  "car": {
+   "kit": "house",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -0.885,
+    0,
+    -2.06
+   ],
+   "max": [
+    0.885,
+    1.41,
+    2.06
+   ],
+   "triangles": 1104,
+   "sets": [
+    "glass",
+    "paint",
+    "painted-metal",
+    "steel"
+   ]
+  },
+  "bin": {
+   "kit": "house",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -0.31,
+    0,
+    -0.4156
+   ],
+   "max": [
+    0.31,
+    0.995,
+    0.4
+   ],
+   "triangles": 300,
+   "sets": [
+    "paint"
+   ]
+  },
+  "picket": {
+   "kit": "house",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -1,
+    0,
+    -0.035
+   ],
+   "max": [
+    1,
+    1.02,
+    0.01
+   ],
+   "triangles": 296,
+   "sets": [
+    "paint"
+   ]
+  },
+  "hedge": {
+   "kit": "house",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -1.0318,
+    -0.0114,
+    -0.4235
+   ],
+   "max": [
+    1.0138,
+    1.1612,
+    0.4199
+   ],
+   "triangles": 432,
+   "sets": [
+    "foliage"
+   ]
+  },
+  "mailbox": {
+   "kit": "house",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -0.12,
+    0,
+    -0.23
+   ],
+   "max": [
+    0.145,
+    1.35,
+    0.23
+   ],
+   "triangles": 228,
+   "sets": [
+    "paint",
+    "painted-metal",
+    "wood"
+   ]
+  },
+  "bbq": {
+   "kit": "house",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -0.3,
+    0.0025,
+    -0.3
+   ],
+   "max": [
+    0.3,
+    1,
+    0.3
+   ],
+   "triangles": 212,
+   "sets": [
+    "painted-metal",
+    "steel"
+   ]
+  },
+  "gnome": {
+   "kit": "house",
+   "small": true,
+   "backdrop": false,
+   "min": [
+    -0.14,
+    0,
+    -0.14
+   ],
+   "max": [
+    0.14,
+    0.6,
+    0.14
+   ],
+   "triangles": 338,
+   "sets": [
+    "paint"
+   ]
+  },
+  "mower": {
+   "kit": "house",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -0.295,
+    0,
+    -0.58
+   ],
+   "max": [
+    0.295,
+    0.963,
+    0.3056
+   ],
+   "triangles": 332,
+   "sets": [
+    "fabric",
+    "paint",
+    "painted-metal",
+    "steel"
+   ]
+  },
+  "hose-reel": {
+   "kit": "house",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -0.2075,
+    -0.6212,
+    0
+   ],
+   "max": [
+    0.2355,
+    0.3343,
+    0.18
+   ],
+   "triangles": 620,
+   "sets": [
+    "paint",
+    "steel"
+   ]
+  },
+  "tree": {
+   "kit": "house",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -2.3967,
+    0,
+    -2.742
+   ],
+   "max": [
+    1.8728,
+    6.2243,
+    2.1829
+   ],
+   "triangles": 424,
+   "sets": [
+    "foliage",
+    "wood"
+   ]
+  },
+  "tree-far": {
+   "kit": "house",
+   "small": false,
+   "backdrop": true,
+   "min": [
+    -4.2455,
+    0,
+    -3.661
+   ],
+   "max": [
+    4.5402,
+    10.045,
+    3.603
+   ],
+   "triangles": 124,
+   "sets": [
+    "foliage",
+    "wood"
+   ]
+  },
+  "house-far": {
+   "kit": "house",
+   "small": false,
+   "backdrop": true,
+   "min": [
+    -5.6,
+    0,
+    -4.6
+   ],
+   "max": [
+    5.6,
+    9.2,
+    4.6
+   ],
+   "triangles": 104,
+   "sets": [
+    "brick",
+    "glass",
+    "shingles",
+    "siding",
+    "wood"
+   ]
+  },
+  "viga": {
+   "kit": "mexico",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -0.0985,
+    -0.094,
+    0
+   ],
+   "max": [
+    0.0985,
+    0.1,
+    0.765
+   ],
+   "triangles": 64,
+   "sets": [
+    "wood"
+   ]
+  },
+  "canal": {
+   "kit": "mexico",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -0.13,
+    -0.2524,
+    0.0032
+   ],
+   "max": [
+    0.13,
+    0.0539,
+    0.9207
+   ],
+   "triangles": 32,
+   "sets": [
+    "terracotta"
+   ]
+  },
+  "niche": {
+   "kit": "mexico",
+   "small": true,
+   "backdrop": false,
+   "min": [
+    -0.32,
+    0,
+    0
+   ],
+   "max": [
+    0.32,
+    0.94,
+    0.1
+   ],
+   "triangles": 344,
+   "sets": [
+    "glass",
+    "paint",
+    "stucco"
+   ]
+  },
+  "ristra": {
+   "kit": "mexico",
+   "small": true,
+   "backdrop": false,
+   "min": [
+    -0.0902,
+    -0.9,
+    -0.0891
+   ],
+   "max": [
+    0.0902,
+    0,
+    0.0736
+   ],
+   "triangles": 332,
+   "sets": [
+    "fabric",
+    "paint"
+   ]
+  },
+  "lantern": {
+   "kit": "mexico",
+   "small": true,
+   "backdrop": false,
+   "min": [
+    -0.11,
+    -0.44,
+    -0.11
+   ],
+   "max": [
+    0.11,
+    0,
+    0.11
+   ],
+   "triangles": 172,
+   "sets": [
+    "glass",
+    "steel"
+   ]
+  },
+  "hanging-pot": {
+   "kit": "mexico",
+   "small": true,
+   "backdrop": false,
+   "min": [
+    -0.1694,
+    -0.45,
+    0
+   ],
+   "max": [
+    0.1694,
+    0.01,
+    0.48
+   ],
+   "triangles": 220,
+   "sets": [
+    "foliage",
+    "steel",
+    "terracotta"
+   ]
+  },
+  "olla": {
+   "kit": "mexico",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -0.31,
+    0,
+    -0.3022
+   ],
+   "max": [
+    0.31,
+    0.785,
+    0.3022
+   ],
+   "triangles": 252,
+   "sets": [
+    "paint",
+    "terracotta"
+   ]
+  },
+  "sacks": {
+   "kit": "mexico",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -0.6101,
+    -0.0072,
+    -0.2559
+   ],
+   "max": [
+    0.6284,
+    0.6462,
+    0.281
+   ],
+   "triangles": 240,
+   "sets": [
+    "fabric"
+   ]
+  },
+  "produce": {
+   "kit": "mexico",
+   "small": false,
+   "backdrop": false,
+   "min": [
+    -0.3,
+    0,
+    -0.2
+   ],
+   "max": [
+    0.3,
+    0.3842,
+    0.2
+   ],
+   "triangles": 436,
+   "sets": [
+    "paint",
+    "planks"
+   ]
+  },
+  "pebbles": {
+   "kit": "mexico",
+   "small": true,
+   "backdrop": false,
+   "min": [
+    -0.6617,
+    -0.012,
+    -0.5769
+   ],
+   "max": [
+    0.8129,
+    0.0991,
+    0.7865
+   ],
+   "triangles": 220,
+   "sets": [
+    "sandstone"
+   ]
+  },
+  "mesa-a": {
+   "kit": "mexico",
+   "small": false,
+   "backdrop": true,
+   "min": [
+    -51.0054,
+    -2.9205,
+    -25.4479
+   ],
+   "max": [
+    58.1985,
+    35.6254,
+    23.1315
+   ],
+   "triangles": 2935,
+   "sets": [
+    "sandstone"
+   ]
+  },
+  "mesa-b": {
+   "kit": "mexico",
+   "small": false,
+   "backdrop": true,
+   "min": [
+    -71.4984,
+    -2.7984,
+    -24.0916
+   ],
+   "max": [
+    75.1835,
+    33.2991,
+    25.0868
+   ],
+   "triangles": 2626,
+   "sets": [
+    "sandstone"
+   ]
+  },
+  "mesa-c": {
+   "kit": "mexico",
+   "small": false,
+   "backdrop": true,
+   "min": [
+    -47.6894,
+    -2.7849,
+    -20.1758
+   ],
+   "max": [
+    42.1403,
+    37.6129,
+    19.0365
+   ],
+   "triangles": 2934,
+   "sets": [
+    "sandstone"
+   ]
+  }
+ }
+}
