@@ -1,5 +1,13 @@
 # Rendering Pipeline and Visual Effects Specification
 
+> **Superseded (2026-09-28).** This is the original clean-room spec of the old ink look (one light, no
+> shadows, the outline and hatch composite). The game no longer renders that way: see
+> [ARCHITECTURE §3](../ARCHITECTURE.md#3-visual-system) for the renderer as built (the flat Low look and
+> the realistic Medium, High and Ultra tiers) and [VISUALS.md](../VISUALS.md) for how it got there and
+> what each tier draws. Two parts of this file still hold as written, and ARCHITECTURE points back to
+> them: the gameplay feedback overlays of §6.3 (normative) and the gameplay-relevant sizes, timings and
+> counts of the camera, rig and effects that ARCHITECTURE §3 does not restate.
+
 This document describes WHAT the rendering and effects subsystem does, so that an implementer can rebuild identical gameplay-relevant visuals. 
 
 Units: world units are metres. Times are seconds. Angles are radians unless stated. "rand(a, b)" means a uniform random real number in [a, b]. "randvec(x∈[a,b], y∈[c,d], z∈[e,f])" means a vector whose components are drawn independently from those ranges. "normalize" means scale to unit length. "damp(current, target, λ, dt)" means `current + (target − current) × (1 − e^(−λ·dt))`, an exponential approach with rate λ per second.

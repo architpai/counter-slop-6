@@ -251,7 +251,28 @@ export interface Mood {
     /** Exposure in stops on top of the default (render/index.ts REAL_EXPOSURE), per map mood. */
     exposure?: number;
     grade?: Grade;
+    /** Aerial perspective and light shafts (R8, render/atmosphere.ts); none without it. */
+    atmosphere?: Atmosphere;
   };
+}
+
+/**
+ * A map's haze on the realistic tiers (R8, render/atmosphere.ts): density
+ * `haze × exp(−falloff × (y − base))` per metre, from `start` metres out.
+ */
+export interface Atmosphere {
+  /** Density per metre at the base height. */
+  haze: number;
+  /** Per metre of height: the haze thins by e over 1 / falloff metres up. */
+  falloff: number;
+  /** Height of the haze's base (the map's ground), metres; 0 by default. */
+  base?: number;
+  /** No haze nearer than this, so the play space's grunts keep the linear fog's clarity. */
+  start: number;
+  /** The fog colour's brightening straight towards the sun, as a share of its brightness, in the sun's hue. */
+  glow: number;
+  /** Light shafts' strength (Graphics → Light shafts); 0 draws none on this map. */
+  shafts: number;
 }
 
 /** A gentle per-mood colour grade, applied after tone mapping. Neutral is 0 / 1 / 1 / 1. */

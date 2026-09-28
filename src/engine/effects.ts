@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { choose, clamp, lerp, rand, TAU } from './util';
 import { TONE, TONE_HEX, WHITE_HEX, SMOKE_HEX, unlitMat } from './render/index';
-import { flatDecalMaterial, splatMaterial, tracerGeometry, tracerMaterial } from './render/fx';
+import { flatDecalMaterial, lowGlowMaterial, splatMaterial, tracerGeometry, tracerMaterial } from './render/fx';
 import { impactFor, surfaceAt } from './render/impacts';
 import { RealEffects } from './effects-real';
 import type { RealContext, ShellKind, SmokeHandle } from './effects-real';
@@ -20,6 +20,8 @@ export interface ParticleSpec {
   stretch?: number; fixedLen?: number; axis?: THREE.Vector3;
   decalSize?: number; shrink?: boolean; grow?: number;
   rate?: number; emitDir?: THREE.Vector3;
+  /** A drop drawn additively, fading out over its life (the flat grenade's fire). */
+  glow?: boolean;
 }
 
 /** A live particle: a spec with every default resolved. */
@@ -33,7 +35,7 @@ interface Particle {
   collide: 'none' | 'decal';
   stretch: number; fixedLen: number; axis: THREE.Vector3 | null;
   decalSize: number; shrink: boolean; grow: number;
-  rate: number; acc: number; emitDir: THREE.Vector3; hex: number;
+  rate: number; acc: number; emitDir: THREE.Vector3; hex: number; glow: boolean;
 }
 
 /** One instanced-mesh ring buffer. `generations` stamps every reuse of a slot. */
@@ -68,6 +70,8 @@ const TRACER_GAIN = 1.8;
 const BULLET_TRACER = new THREE.Color(1, 0.74, 0.46).multiplyScalar(3.2);
 /** Spark streaks off metal on the flat look (V10). */
 const SPARK_HEX = 0xffc860;
+/** A flat grenade's fire blob at its birth, over its tone, where it faces the eye: a few overlapping ones run to a hot core. */
+const GLOW_GAIN = 0.7;
 
 /** A blood pool scaling up in place, dropped when its slot is reused. */
 interface Growing {
@@ -162,9 +166,9 @@ function blobGeometry(seed: number): THREE.ShapeGeometry {
   return new THREE.ShapeGeometry(shapes, 4);
 }
 
-function put(pool: Pool, index: number, matrix: THREE.Matrix4, hex: number): void {
+function put(pool: Pool, index: number, matrix: THREE.Matrix4, hex: number, strength = 1): void {
   pool.mesh.setMatrixAt(index, matrix);
-  pool.mesh.setColorAt(index, color.setHex(hex));
+  pool.mesh.setColorAt(index, color.setHex(hex).multiplyScalar(strength));
   pool.mesh.instanceMatrix.needsUpdate = true;
   if (pool.mesh.instanceColor) pool.mesh.instanceColor.needsUpdate = true;
 }
@@ -224,6 +228,8 @@ export class Effects {
   _bloodyGibs: number;
   _drops: Pool;
   _strokes: Pool;
+  /** The flat grenade's additive fire blobs (`ParticleSpec.glow`). */
+  _glows: Pool;
   _splats: Pool[];
   _holes: Pool;
   _pools: Pool[];
@@ -252,9 +258,11 @@ export class Effects {
     this._bloodyGibs = 0;
     this._drops = makePool(scene, 'drops', new THREE.IcosahedronGeometry(0.5, 1), 700);
     this._strokes = makePool(scene, 'strokes', new THREE.BoxGeometry(1, 1, 1), 600);
+    // Rounder than the drops: the glow's falloff to its rim shows the facets of a coarser ball.
+    this._glows = makePool(scene, 'glows', new THREE.IcosahedronGeometry(0.5, 2), 64, lowGlowMaterial());
     this._splats = Array.from({ length: 5 }, (_, i) => makePool(scene, `splats-${i}`, blobGeometry(i), 300, flatDecalMaterial()));
     this._holes = makePool(scene, 'holes', new THREE.CircleGeometry(0.5, 8), 260, flatDecalMaterial());
-    this._pools = [this._drops, this._strokes, ...this._splats, this._holes];
+    this._pools = [this._drops, this._strokes, this._glows, ...this._splats, this._holes];
     this._tracerMesh = new THREE.Mesh(tracerGeometry(TRACERS), tracerMaterial());
     this._tracerMesh.name = 'effects:tracers';
     this._tracerMesh.frustumCulled = false;
@@ -328,13 +336,13 @@ export class Effects {
       axis: finiteVector(p.axis) ? unit(p.axis.clone()) : null,
       decalSize: Math.max(0, finite(p.decalSize, 3)), shrink: p.shrink !== false,
       grow: Math.max(0, finite(p.grow, 0)), rate: Math.max(0, finite(p.rate, 0)), acc: 0,
-      emitDir: finiteVector(p.emitDir) ? p.emitDir.clone() : UP.clone(), hex: toneHex(p.tone),
+      emitDir: finiteVector(p.emitDir) ? p.emitDir.clone() : UP.clone(), hex: toneHex(p.tone), glow: p.glow === true && p.kind === 'drop',
     });
   }
 
   update(dt: number): void {
     if (!Number.isFinite(dt) || dt < 0) return;
-    this._drops.mesh.count = this._strokes.mesh.count = 0;
+    this._drops.mesh.count = this._strokes.mesh.count = this._glows.mesh.count = 0;
     // New particles draw at birth but start their simulation on the following frame.
     for (let i = this._particles.length - 1; i >= 0; i--) {
       const p = this._particles[i];
@@ -420,7 +428,7 @@ export class Effects {
   }
 
   _draw(p: Particle): void {
-    const pool = p.kind === 'drop' ? this._drops : this._strokes;
+    const pool = p.glow ? this._glows : p.kind === 'drop' ? this._drops : this._strokes;
     if (pool.mesh.count >= pool.limit) return;
     const frac = clamp(p.life / p.maxLife, 0, 1);
     transform.position.copy(p.pos);
@@ -441,7 +449,8 @@ export class Effects {
       transform.scale.set(width, length, width);
     }
     transform.updateMatrix();
-    put(pool, pool.mesh.count++, transform.matrix, p.hex);
+    // A glow fades out as its life runs down, fast at the end: additive, so it thins to nothing.
+    put(pool, pool.mesh.count++, transform.matrix, p.hex, p.glow ? GLOW_GAIN * frac * frac : 1);
   }
 
   decal(point: THREE.Vector3, normal: THREE.Vector3, tone: number, size: number,
@@ -817,15 +826,20 @@ export class Effects {
       this.shake += 0.5;
       return;
     }
-    for (let i = 0; i < 40; i++) this.particle({ kind: 'drop', pos, tone,
+    for (let i = 0; i < 28; i++) this.particle({ kind: 'drop', pos, tone,
       vel: unit(randomVector(-0.2, 1)).multiplyScalar(rand(4, 14)),
-      size: rand(0.03, 0.1), life: rand(1, 2), collide: 'decal', gravity: 20, decalSize: rand(3, 6) });
-    for (let i = 0; i < 26; i++) this.particle({ kind: 'stroke', pos, tone: i % 3 === 0 ? TONE.ACCENT : tone,
-      vel: unit(randomVector(-0.3, 1)).multiplyScalar(rand(10, 22)),
-      size: rand(0.03, 0.06), life: rand(0.2, 0.45), gravity: 6, stretch: 0.05 });
-    for (let i = 0; i < 8; i++) this._smokeParticle({ kind: 'drop', pos, tone: TONE.PRIMARY,
-      vel: randomVector(0.5, 1.5).multiplyScalar(rand(1, 3)), size: rand(0.12, 0.25),
-      life: rand(0.7, 1.2), gravity: -1.5, drag: 2.5, grow: 3, shrink: false });
+      size: rand(0.03, 0.08), life: rand(1, 2), collide: 'decal', gravity: 20, decalSize: rand(3, 6) });
+    // Sparks, short and thin, a few in a coloured blast's tone: 26 metre-long rods, two in three dark, fanned
+    // across the view at point blank (the same crude look as the grenade's old slabs), and a dark one a
+    // metre from the eye still lay across the lower frame; the chips are the dark drops.
+    const streak = toneId(tone) === TONE.DARK ? TONE.ACCENT : tone;
+    for (let i = 0; i < 14; i++) this.particle({ kind: 'stroke', pos, tone: i % 4 === 0 ? streak : TONE.ACCENT,
+      vel: unit(randomVector(-0.3, 1)).multiplyScalar(rand(10, 20)),
+      size: rand(0.02, 0.04), life: rand(0.2, 0.4), gravity: 6, stretch: 0.016 });
+    // A few small, short puffs that stay low: opaque, they are what covers a grunt (at point blank, half the view).
+    for (let i = 0; i < 5; i++) this._smokeParticle({ kind: 'drop', pos, tone: TONE.PRIMARY,
+      vel: randomVector(0.3, 1).multiplyScalar(rand(1, 2.4)), size: rand(0.1, 0.18),
+      life: rand(0.5, 0.85), gravity: -1, drag: 2.5, grow: 2.4, shrink: false });
     this.bloodPool(pos, radius * 0.9, tone);
     this.shake += 0.5;
   }
@@ -839,23 +853,27 @@ export class Effects {
       return;
     }
     const k = radius / 5;
-    // The flat balls are opaque and grow to their end, so they are kept small and short: they used to
-    // swell to 10 m and fill half the view, hiding every enemy behind the blast (readability guardrail).
-    for (let i = 0; i < 4; i++) this.particle({ kind: 'drop', pos, tone: TONE.ACCENT,
-      vel: unit(randomVector(0.2, 1)).multiplyScalar(rand(0.3, 1.6)), size: rand(1, 1.4) * k,
-      life: rand(0.2, 0.3), gravity: -2, drag: 3, grow: 2.4, shrink: false });
-    for (let i = 0; i < 26; i++) this.particle({ kind: 'drop', pos, tone: i % 5 === 0 ? TONE.DARK : TONE.ACCENT,
-      vel: unit(randomVector(-0.3, 1)).multiplyScalar(rand(2, 8)), size: rand(0.5, 1) * k,
-      life: rand(0.25, 0.45), gravity: -3, drag: 4, grow: 2.2, shrink: false });
-    for (let i = 0; i < 64; i++) this.particle({ kind: 'stroke', pos, tone: i % 4 === 0 ? TONE.DARK : TONE.ACCENT,
-      vel: unit(randomVector(-0.15, 0.9)).multiplyScalar(rand(14, 34) * k), size: rand(0.09, 0.2) * k,
-      life: rand(0.3, 0.55), gravity: 8, stretch: 0.09, drag: 2 });
-    for (let i = 0; i < 30; i++) this.particle({ kind: 'drop', pos, tone: TONE.DARK,
-      vel: unit(randomVector(0.2, 1)).multiplyScalar(rand(3, 10) * k), size: rand(0.06, 0.14),
+    // The fire is additive and fades out as it swells (`glow`), so it hides nothing behind it and never fills
+    // the view: opaque balls swelled to 10 m and filled half of it (readability guardrail), and, kept small,
+    // still read as a flat orange blob. Point blank, the camera is inside the blobs, which draw no back faces.
+    for (let i = 0; i < 3; i++) this.particle({ kind: 'drop', pos, tone: TONE.ACCENT, glow: true,
+      vel: unit(randomVector(0.2, 1)).multiplyScalar(rand(0.3, 1.6)), size: rand(0.9, 1.2) * k,
+      life: rand(0.25, 0.35), gravity: -2, drag: 3, grow: 2.2, shrink: false });
+    for (let i = 0; i < 12; i++) this.particle({ kind: 'drop', pos, tone: TONE.ACCENT, glow: true,
+      vel: unit(randomVector(-0.3, 1)).multiplyScalar(rand(2, 8)), size: rand(0.4, 0.8) * k,
+      life: rand(0.25, 0.45), gravity: -3, drag: 4, grow: 2, shrink: false });
+    // Sparks and small dark chips (drops): the slabs of debris (up to 20 cm thick and 1.6 m long) read as crude
+    // planks, and a dark stroke still did near the eye.
+    for (let i = 0; i < 28; i++) this.particle({ kind: 'stroke', pos, tone: TONE.ACCENT,
+      vel: unit(randomVector(-0.15, 0.9)).multiplyScalar(rand(12, 28) * k), size: rand(0.03, 0.06) * k,
+      life: rand(0.3, 0.5), gravity: 8, stretch: 0.022, drag: 2 });
+    for (let i = 0; i < 14; i++) this.particle({ kind: 'drop', pos, tone: TONE.DARK,
+      vel: unit(randomVector(0.2, 1)).multiplyScalar(rand(3, 10) * k), size: rand(0.04, 0.09),
       life: rand(0.8, 1.6), collide: 'decal', gravity: 16, decalSize: rand(3, 7) * k });
-    for (let i = 0; i < 18; i++) this._smokeParticle({ kind: 'drop', pos, tone: TONE.DARK,
-      vel: randomVector(0.8, 2).multiplyScalar(rand(1.2, 3.4)), size: rand(0.25, 0.45) * k,
-      life: rand(0.8, 1.3), gravity: -2, drag: 2.2, grow: 3, shrink: false });
+    // Opaque, so fewer and lower than they were (18 rising puffs up to 1.35 m hid the 30 and 60 m grunts for a second).
+    for (let i = 0; i < 8; i++) this._smokeParticle({ kind: 'drop', pos, tone: TONE.DARK,
+      vel: randomVector(0.5, 1.3).multiplyScalar(rand(1, 2.6)), size: rand(0.22, 0.38) * k,
+      life: rand(0.6, 1), gravity: -1.2, drag: 2.4, grow: 2.6, shrink: false });
     this.bloodPool(pos, radius * 0.8, TONE.DARK);
     this.shake += 0.8;
   }

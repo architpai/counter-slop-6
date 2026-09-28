@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { FOG_UNIFORMS, fogAt, setAtmosphere } from './atmosphere';
 import { GRADE, LIGHT, SURF } from './palette';
 import { Composite, RIG_DEPTH } from './postfx';
 import {
@@ -402,6 +403,7 @@ export class Renderer {
       horizon: { value: new THREE.Color(SURF.fog) }, zenith: { value: new THREE.Color(LIGHT.zenith) },
       sunDir: { value: SUN_DIR.clone() }, sunColor: { value: new THREE.Color(LIGHT.sun) }, sunDisc: { value: 0 },
       skyMap: { value: null }, skyScale: { value: 1 }, skyGain: { value: SKY_GAIN }, skySaturation: { value: SKY_SATURATION },
+      ...FOG_UNIFORMS,
     };
     this.sky = new THREE.Mesh(new THREE.SphereGeometry(SKY_RADIUS, 24, 12), skyMat(this._sky));
     const standIn = new THREE.DataTexture(new Uint8Array(4), 1, 1);
@@ -548,7 +550,9 @@ export class Renderer {
     const aa = ANTIALIAS_SPEC[q.antialias], ao = AO_SCALE[q.ao], samples = Math.min(aa.samples, this.three.capabilities.maxSamples);
     // The soft particles read the scene's depth texture: with MSAA, the resolve's copy, which some GPUs do not make.
     this._softFx = q.look === 'realistic' && q.softParticles && (samples === 0 || this.msaaDepthReadable);
-    this.post.configure({ look: q.look, samples, fxaa: aa.fxaa, smaa: aa.smaa, ao, depth: this._softFx, bloom: q.bloom });
+    // The shafts read the scene's depth texture too (R8).
+    const shafts = q.look === 'realistic' && q.shafts && (samples === 0 || this.msaaDepthReadable);
+    this.post.configure({ look: q.look, samples, fxaa: aa.fxaa, smaa: aa.smaa, ao, depth: this._softFx, bloom: q.bloom, shafts });
     this.operators.occlusion(ao > 0 ? OPERATOR_AO.withGtao : OPERATOR_AO.alone);
     this._setFxLights(q.look === 'realistic' ? FX_LIGHTS : 0);
     const shadow = SHADOW_SPEC[q.shadows];
@@ -802,6 +806,7 @@ export class Renderer {
       uniforms.horizon.value.copy(haze);
       fogColor?.copy(haze);
       this.three.setClearColor(haze);
+      this._applyAtmosphere();
       return;
     }
     uniforms.sunColor.value.set(mood.sun ?? LIGHT.sun);
@@ -818,6 +823,29 @@ export class Renderer {
     this.hemi.groundColor.set(mood.hemiGround ?? LIGHT.ground);
     this.scene.environment = this._roomEnv;
     this.scene.environmentIntensity = ENV_INTENSITY;
+    this._applyAtmosphere();
+  }
+
+  /**
+   * The map's haze and light shafts (R8, render/atmosphere.ts) on the
+   * realistic look, in the fog colour and sun in force, stretched by the view
+   * distance as the fog is; none on Low. Uniform writes only.
+   */
+  _applyAtmosphere(): void {
+    const atmosphere = this._quality.look === 'realistic' ? this._mood.realistic?.atmosphere ?? null : null;
+    const fog = this.scene.fog instanceof THREE.Fog ? this.scene.fog.color : _tint.set(SURF.fog);
+    setAtmosphere(atmosphere, this._sky.sunDir.value, this.sun.color, fog, VIEW_SCALE[this._quality.viewDistance]);
+    this.post.setShafts(atmosphere?.shafts ?? 0, this._sky.sunDir.value, this.sun.color);
+  }
+
+  /**
+   * The fog's share (linear and haze) on a ray of `distance` metres from an
+   * eye at `eyeY` to a point at `pointY`, as the look in force draws it: the
+   * tier checks read a 60 m grunt's fog from here.
+   */
+  fogAt(distance: number, eyeY: number, pointY: number): number {
+    const fog = this.scene.fog;
+    return fog instanceof THREE.Fog ? fogAt(distance, eyeY, pointY, fog.near, fog.far) : 0;
   }
 
   /**

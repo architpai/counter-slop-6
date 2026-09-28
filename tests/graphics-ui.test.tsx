@@ -88,6 +88,19 @@ test('the Graphics section shows the presets, Auto with its pick, and the Advanc
   expect(soft().parentElement!.title).toBe('Not with MSAA on this GPU; smoke is dithered');
   gfx.values = { ...PRESET_VALUES.ultra, antialias: 'fxaa' }; show();
   expect(soft().disabled).toBe(false);
+  // Light shafts (R8) read the scene's depth too: the same rules, and a click sends the setting.
+  const shafts = () => [...host.querySelectorAll<HTMLInputElement>('.graphics-grid input[type="checkbox"][data-act="gfx"]')]
+    .find(input => input.parentElement?.textContent?.includes('Light shafts'))!;
+  expect([shafts().disabled, shafts().checked]).toEqual([false, true]);
+  flushSync(() => shafts().click());
+  expect(onAction).toHaveBeenLastCalledWith('gfx', 'shafts:0', expect.any(Event));
+  gfx.values = { ...PRESET_VALUES.ultra }; show();
+  expect(shafts().disabled).toBe(true);
+  expect(shafts().parentElement!.title).toBe('Not with MSAA on this GPU');
+  Object.assign(gfx, { values: { ...PRESET_VALUES.low }, msaaSoft: true }); show();
+  expect([shafts().disabled, shafts().checked, shafts().parentElement!.title]).toEqual([true, false, 'Medium, High and Ultra only']);
+  gfx.values = { ...PRESET_VALUES.high }; show();
+  expect([shafts().disabled, shafts().checked]).toEqual([false, false]);
 });
 
 test('menu actions validate graphics values before they reach the settings', () => {
@@ -108,6 +121,10 @@ test('menu actions validate graphics values before they reach the settings', () 
   act('gfx', 'shadows:off');
   expect(quality.choice).toBe('custom');
   expect(quality.values.shadows).toBe('off');
+  act('gfx', 'shafts:1');
+  expect(quality.values.shafts).toBe(true);
+  act('gfx', 'shafts:0');
+  expect(quality.values.shafts).toBe(false);
   act('gfx', 'ao:quarter');
   expect(quality.values.ao).toBe(PRESET_VALUES.high.ao);
   act('gfx', 'ao:full');

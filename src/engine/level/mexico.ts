@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { TONE, TONE_HEX, makeFigure } from '../render/index';
-import { GRADE, REAL_GRADE } from '../render/palette';
+import { ATMOSPHERE, GRADE, REAL_GRADE } from '../render/palette';
 import type { SurfKey } from '../render/palette';
 import type { MaterialTag } from '../render/surfaces';
 import type { BreakableKind } from '../types';
@@ -62,7 +62,7 @@ export function buildMexico(b: LevelBuilder) {
   b.level.bounds = { minX: -62, maxX: 62, minZ: -62, maxZ: 62 };
   // The sun sits about 32° up, ahead and right of the spawn view, where the old sun sphere stood.
   b.level.mood = { horizon: 0xf2dfbc, zenith: 0x579cc4, fog: 0xeddbba, sun: 0xffefd1, sunIntensity: 2.25, hemiIntensity: 1.05, hemiSky: 0xbddbeb, hemiGround: 0xb69d79,
-    fogNear: 55, fogFar: 260, sunDisc: true, sunDir: [70, 105, -150], grade: GRADE.mexico, sky: 'mexico', realistic: { exposure: -0.15, grade: REAL_GRADE.mexico } };
+    fogNear: 55, fogFar: 260, sunDisc: true, sunDir: [70, 105, -150], grade: GRADE.mexico, sky: 'mexico', realistic: { exposure: -0.15, grade: REAL_GRADE.mexico, atmosphere: ATMOSPHERE.mexico } };
   b.box(0, -1, 0, 134, 1, 134, { mat: 'sand', material: 'sand' });
   b.collider(0, 62, 0, 164, 6, 164, { noNav: true, noGrapple: true });
   // The flat look's boxes; the realistic tiers draw faceted, banded shells over the same colliders (mexico-dressing.ts).
@@ -187,6 +187,8 @@ function bandstand(b: LevelBuilder) {
       parts.foreL.rotation.x = -0.9;
     }
     b.addObject(root);
+    // One mesh per material on each pivot the band moves (V19): 23 meshes a musician were 23 draws.
+    b.rigid(root, [parts.torso, trumpet ? parts.head : parts.foreR]);
     b.level.animated.push({ mesh: root, update(t: number) {
       const s = Math.sin(6 * t + x);
       root.position.y = 1.2 + 0.08 * Math.max(0, s);

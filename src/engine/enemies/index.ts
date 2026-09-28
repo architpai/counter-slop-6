@@ -14,7 +14,7 @@ import { makeModel, syncModel, flash, spawnPose, animate, corpse, planDeath, DEA
 import type { Death, GroundJoints, EyeAnchors, HitSphere, ModelNodes } from './model';
 import { groundThink, wander, steer, follow, onHit } from './ai';
 import { flyerThink } from './flyer';
-import { updateProjectiles, removeProjectile } from './projectiles';
+import { updateProjectiles, clearProjectiles } from './projectiles';
 import type { ProjectileRecord } from './projectiles';
 import type { BossAttack } from './boss';
 import { EnemyHazards } from './hazards';
@@ -373,7 +373,7 @@ export class EnemyManager {
     this.hazards.clear(); this.mutations.clear();
     for (const e of this.list) this._destroy(e);
     this.list.length = 0; this.byId.clear(); this.alive = 0;
-    while (this.projectiles.length) removeProjectile(this, 0);
+    clearProjectiles(this);
   }
 
   _breakShield(e: EnemyRecord): void {

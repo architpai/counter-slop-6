@@ -6,7 +6,7 @@
 // view and its frame times, as the player gets it), and `downtown-arena` (the online match's own
 // geometry, loaded through the debug handle's `loadArena`).
 //
-// Each preset × map gets four views (five on House), all deterministic:
+// Each preset × map gets four views (five on House), and on the realistic presets a fifth (sixth), all deterministic:
 //   spawn    the player's start view (no gun, no HUD)
 //   enemies  grunts at 10, 30 and 60 m, one sunlit and one shadowed at each range where the map
 //            allows it; the corridor is searched from the level geometry, and the AI is frozen.
@@ -16,6 +16,9 @@
 //            Where the best corridor misses a shade range that another one fills (House at
 //            60 m), that corridor is a second view, enemies-shade, logged in brackets: '[H]'.
 //   overview a fixed high corner view of the whole map
+//   sun      into the sun (R8's light shafts) past something thin in front of it, the nearest such spot to the start
+//            (from the start where there is none); a preset with shafts on is also rendered with them off and the
+//            frame's change judged (`SHAFT_DIFF`)
 //   weapon   first person at spawn with the R4-C at the hip
 //   weapon-<kind>, weapon-<kind>-ads  every gun slot at the hip and at full aim, and the knife's
 //            guard, weapon-knife; on the realistic presets these are the Blender weapons (R4). A scoped
@@ -91,6 +94,12 @@ const WAIVED = {
 const baseline = process.env.CS6_READABILITY === '0' ? null
   : JSON.parse(await readFile(new URL('./readability-fe14d35.json', import.meta.url), 'utf8')).readings;
 
+/**
+ * The sun view's change with the light shafts on (and the lens dirt), against off, sRGB 0-255 a channel: [least,
+ * most] on average over the frame and at its 99th percentile. The M4 Pro reads 0.9-1.5 and 6-11 on Ultra; under the
+ * least the pass draws nothing, over the most it veils the frame, as two builds before R8's last did.
+ */
+const SHAFT_DIFF = { mean: [0.3, 4], p99: [3, 30] };
 /** Corridors for the enemy view, [x, z, dx, dz], where the geometry search picks a poor one. */
 const PREFERRED = {
   // The nearest open lane runs under a tree the colliders cannot see (trunks are visual only).
@@ -117,6 +126,8 @@ const shot = async name => { await frames(3); await page.screenshot({ path: `${o
  */
 const STREAM_STALL = { ms: 100, frames: 3 };
 const warnings = [];
+/** Sun views whose light shafts fall outside `SHAFT_DIFF`. */
+const shaftFailures = [];
 const warn = message => { warnings.push(message); console.warn(`WARN ${message}`); };
 
 try {
@@ -231,9 +242,11 @@ try {
           operatorsMB: mb(operators), operatorsResidentMB: +(cast.residentBytes / 1e6).toFixed(1),
           propsMB: mb(props), propsResidentMB: +(kit.residentBytes / 1e6).toFixed(1), propsTriangles: kit.triangles };
       });
-      // How much fog a grunt at 60 m wears on this preset (linear fog).
+      // How much fog a grunt's chest at 60 m wears on this preset, from the eye: the linear fog and, on the realistic
+      // tiers, the haze (R8; `renderer.fogAt`, the shader's own formula; a build before R8 has the linear fog only).
       row.fogAt60 = await page.evaluate(() => {
-        const fog = window.__game.ctx.scene.fog;
+        const r = window.__game.ctx.renderer, fog = window.__game.ctx.scene.fog;
+        if (r.fogAt) return +r.fogAt(60, 1.7, 1.25).toFixed(3);
         return +Math.min(1, Math.max(0, (60 - fog.near) / (fog.far - fog.near))).toFixed(3);
       });
       // Weapon view first, while the camera still holds the player's settled pose.
@@ -361,6 +374,8 @@ try {
           }
           return false;
         };
+        // The sun view below looks for a thin occluder in front of the sun with it.
+        window.__meshHit = meshHit;
         // Grunt body points (knee, hip, chest, head) and ground points around the feet. A spot is
         // shade only if the sun is blocked at all of them and sun only if at none, so a wire or
         // a post shadow across the feet counts as neither.
@@ -559,6 +574,75 @@ try {
         camera.lookAt(0, 0, 0); camera.updateMatrixWorld();
       });
       row.shots.push(await shot(`${preset}-${map}-overview`));
+
+      // Light shafts (R8), on the realistic presets: looking into the sun past something thin in front of it (the
+      // crane's beams, a roof's edge), the nearest such spot to the start, or from the start where there is none. A
+      // preset with shafts on is read back with them and without (a synchronous render each): how much they change
+      // the frame, sRGB 0-255 a channel, on average and at the 99th percentile. SHAFT_DIFF bounds both.
+      if (await page.evaluate(() => window.__game.quality.values.look === 'realistic')) {
+        row.sun = await page.evaluate(() => {
+          const g = window.__game, V = g.player.body.pos.constructor, renderer = g.ctx.renderer, camera = g.ctx.camera;
+          const b = g.level.bounds, start = g.level.playerStart, meshHit = window.__meshHit;
+          const sun = renderer.sun.position.clone().sub(renderer.sun.target.position).normalize();
+          const side = new V(0, 1, 0).cross(sun).normalize(), up = sun.clone().cross(side);
+          const ground = (x, z) => {
+            const hit = g.world.raycast(new V(x, 2.2, z), new V(0, -1, 0), 5);
+            return hit && Math.abs(hit.point.y) < 0.6 ? hit.point.y : null;
+          };
+          // Blocked straight at the sun from 4 m out, open sky above the eye, and at least three of eight rays 1.5
+          // degrees round it clear: something thin crosses the sun.
+          const around = Array.from({ length: 8 }, (_, i) => sun.clone()
+            .addScaledVector(side, Math.cos(i * Math.PI / 4) * 0.026).addScaledVector(up, Math.sin(i * Math.PI / 4) * 0.026).normalize());
+          const eyes = [];
+          if (meshHit) for (let x = b.minX + 2; x <= b.maxX - 2; x += 2) for (let z = b.minZ + 2; z <= b.maxZ - 2; z += 2) {
+            if (Math.hypot(x - start.x, z - start.z) <= 40) eyes.push([x, z]);
+          }
+          eyes.sort((p, q) => Math.hypot(p[0] - start.x, p[1] - start.z) - Math.hypot(q[0] - start.x, q[1] - start.z) || p[0] - q[0] || p[1] - q[1]);
+          let eye = null;
+          for (const [x, z] of eyes) {
+            const y = ground(x, z);
+            if (y === null) continue;
+            const at = new V(x, y + 1.6, z);
+            if (meshHit(at, new V(0, 1, 0), 30) || !meshHit(at.clone().addScaledVector(sun, 4), sun, 116)) continue;
+            if (around.filter(dir => !meshHit(at, dir, 120)).length >= 3) { eye = at; break; }
+          }
+          const thin = eye !== null;
+          eye ??= new V(start.x, (ground(start.x, start.z) ?? 0) + 1.6, start.z);
+          camera.position.copy(eye);
+          camera.fov = 75; camera.updateProjectionMatrix();
+          camera.lookAt(eye.clone().add(sun)); camera.updateMatrixWorld();
+          const view = { eye: eye.toArray().map(n => +n.toFixed(1)), thin };
+          if (!renderer.post.config.shafts) return view;
+          const context = renderer.three.getContext(), w = context.drawingBufferWidth, h = context.drawingBufferHeight;
+          const fx = { hurt: 0, flash: 0, slow: 0, lowHp: 0 };
+          const frame = () => {
+            for (let i = 0; i < 3; i++) renderer.render(g.gs.time, fx);
+            const px = new Uint8Array(w * h * 4);
+            context.readPixels(0, 0, w, h, context.RGBA, context.UNSIGNED_BYTE, px);
+            return px;
+          };
+          const on = frame(), config = renderer.post.config;
+          renderer.post.configure({ ...config, shafts: false });
+          const off = frame();
+          renderer.post.configure(config);
+          const diffs = new Uint16Array(w * h);
+          let sum = 0;
+          for (let i = 0, n = 0; i < on.length; i += 4, n++) {
+            const d = (Math.abs(on[i] - off[i]) + Math.abs(on[i + 1] - off[i + 1]) + Math.abs(on[i + 2] - off[i + 2])) / 3;
+            diffs[n] = Math.round(d);
+            sum += d;
+          }
+          diffs.sort();
+          return { ...view, meanDiff: +(sum / diffs.length).toFixed(2), p99Diff: diffs[Math.floor(diffs.length * 0.99)] };
+        });
+        row.shots.push(await shot(`${preset}-${map}-sun`));
+        if (row.sun.meanDiff !== undefined) {
+          if (row.sun.meanDiff < SHAFT_DIFF.mean[0] || row.sun.meanDiff > SHAFT_DIFF.mean[1] || row.sun.p99Diff < SHAFT_DIFF.p99[0] || row.sun.p99Diff > SHAFT_DIFF.p99[1]) {
+            shaftFailures.push(`${preset} ${map}: the light shafts change the sun view by ${row.sun.meanDiff} on average, ${row.sun.p99Diff} at p99 `
+              + `(${SHAFT_DIFF.mean.join('-')}, ${SHAFT_DIFF.p99.join('-')})`);
+          }
+        }
+      }
       summary.presets[preset][map] = row;
       console.log(preset.padEnd(7), map.padEnd(14), `frame ${row.frameMs} ms (p95 ${row.frameP95Ms})`, `render ${row.renderMs} ms`,
         `tex ${row.textures.fetchedMB} MB fetched, ${row.textures.residentMB} MB resident`,
@@ -568,7 +652,8 @@ try {
           const extra = row.enemiesShade?.placed[i];
           const shade = p.shadow ? (p.shadowDrawn ? 'H' : 'h') : extra?.shadow ? (extra.shadowDrawn ? '[H]' : '[h]') : '-';
           return `${p.range}m:${p.sun ? 'S' : '-'}${shade}`;
-        }).join(' ')}` : 'no corridor');
+        }).join(' ')}` : 'no corridor',
+        row.sun?.meanDiff !== undefined ? `shafts ${row.sun.meanDiff} (p99 ${row.sun.p99Diff})${row.sun.thin ? '' : ' open sun'}` : '');
     }
   }
   summary.warnings = warnings;
@@ -594,6 +679,7 @@ try {
     }
   }
   assert.deepEqual(unreadable, [], 'grunts read at least as well as on fe14d35');
+  assert.deepEqual(shaftFailures, [], 'the light shafts show, and do not veil the frame');
 } finally {
   await browser.close();
 }

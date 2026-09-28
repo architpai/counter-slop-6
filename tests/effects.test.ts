@@ -35,7 +35,7 @@ const tracers = (): THREE.Mesh<THREE.InstancedBufferGeometry> => {
 };
 
 test('tracer pools', () => {
-  assert(scene.children.length === 9, 'Effects has eight fixed instance pools and the tracer ribbons');
+  assert(scene.children.length === 10, 'Effects has nine fixed instance pools (the flat grenade\'s fire among them) and the tracer ribbons');
   effects.tracer(origin, new THREE.Vector3(0, -10, 0));
   effects.tracer(origin, origin);
   effects.update(0.01);

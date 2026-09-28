@@ -226,25 +226,71 @@ test('decals are lit, offset in depth and never write it; the flat look\'s too a
   expect([flashMaterial().forceSinglePass, lowFlashMaterial().forceSinglePass, tracerMaterial().forceSinglePass]).toEqual([true, true, true]);
 });
 
-test('Low\'s grenade blast stays small and short: its opaque balls never fill the view', () => {
+test('Low\'s grenade blast: its fire glows and fades out, never an opaque blob, and its debris stays small', () => {
   const scene = new THREE.Scene(), world = new World(), effects = new Effects(scene, world);
   effects.boom(V(0, 0.5, -7), 5);
   const matrix = new THREE.Matrix4(), scale = new THREE.Vector3(), position = new THREE.Vector3(), quaternion = new THREE.Quaternion();
-  let largest = 0, alive = 0;
+  const colour = new THREE.Color();
+  const widest = (mesh: THREE.InstancedMesh, axis: 'x' | 'y') => {
+    let most = 0;
+    for (let i = 0; i < mesh.count; i++) {
+      mesh.getMatrixAt(i, matrix);
+      matrix.decompose(position, quaternion, scale);
+      most = Math.max(most, scale[axis]);
+    }
+    return most;
+  };
+  let opaque = 0, fire = 0, chip = 0, chipLength = 0;
+  const glow: number[] = [];
   for (let frame = 0; frame < 120; frame++) {
     effects.update(1 / 60);
-    const drops = effects._drops.mesh;
-    for (let i = 0; i < drops.count; i++) {
-      drops.getMatrixAt(i, matrix);
-      matrix.decompose(position, quaternion, scale);
-      largest = Math.max(largest, scale.x);
+    opaque = Math.max(opaque, widest(effects._drops.mesh, 'x'));
+    fire = Math.max(fire, widest(effects._glows.mesh, 'x'));
+    chip = Math.max(chip, widest(effects._strokes.mesh, 'x'));
+    chipLength = Math.max(chipLength, widest(effects._strokes.mesh, 'y'));
+    let bright = 0;
+    for (let i = 0; i < effects._glows.mesh.count; i++) {
+      effects._glows.mesh.getColorAt(i, colour);
+      bright = Math.max(bright, colour.r);
     }
-    // The fireball's big balls are gone within a third of a second.
-    if (frame === 20) alive = effects._particles.filter(p => p.size >= 1).length;
+    glow.push(bright);
   }
-  // Metres across: 10 m and half the screen at 7 m before; now at most about 3.4 m.
-  expect(largest).toBeLessThan(3.5);
-  expect(alive).toBe(0);
+  // The fire is additive (it adds light, hides nothing) and draws no back faces: from inside, point blank, nothing.
+  const fireMaterial = effects._glows.mesh.material as THREE.MeshBasicMaterial;
+  expect([fireMaterial.blending, fireMaterial.depthWrite, fireMaterial.side]).toEqual([THREE.AdditiveBlending, false, THREE.FrontSide]);
+  // It swells to at most about 3 m and fades out: dimmer by a sixth of a second, gone within half a second.
+  expect(fire).toBeLessThan(3);
+  expect(glow[10]!).toBeLessThan(glow[0]! * 0.7);
+  expect(glow.slice(30).every(b => b === 0)).toBe(true);
+  // Nothing opaque is bigger than the smoke puffs (1 m); the debris are chips and sparks, not planks.
+  expect(opaque).toBeLessThan(1.05);
+  expect(chip).toBeLessThan(0.08);
+  expect(chipLength).toBeLessThan(1.0);
+  effects.clear();
+  for (const mesh of scene.children) if (mesh instanceof THREE.Mesh) mesh.geometry.dispose();
+});
+
+test('Low\'s small blast (a bomber\'s, a charge\'s): short sparks, mostly bright, not a fan of long dark rods', () => {
+  const scene = new THREE.Scene(), world = new World(), effects = new Effects(scene, world);
+  effects.explosion(V(0, 0.5, -3), 2.5, TONE.DARK);
+  const strokes = effects._particles.filter(p => p.kind === 'stroke');
+  expect(strokes.length).toBeLessThanOrEqual(14);
+  expect(strokes.filter(p => p.hex === TONE_HEX[TONE.DARK]).length).toBeLessThanOrEqual(4);
+  const matrix = new THREE.Matrix4(), scale = new THREE.Vector3(), position = new THREE.Vector3(), quaternion = new THREE.Quaternion();
+  let width = 0, length = 0;
+  for (let frame = 0; frame < 30; frame++) {
+    effects.update(1 / 60);
+    const mesh = effects._strokes.mesh;
+    for (let i = 0; i < mesh.count; i++) {
+      mesh.getMatrixAt(i, matrix);
+      matrix.decompose(position, quaternion, scale);
+      width = Math.max(width, scale.x);
+      length = Math.max(length, scale.y);
+    }
+  }
+  // Metres: 1.1 m rods before; now under 5 cm wide and 70 cm long.
+  expect(width).toBeLessThan(0.05);
+  expect(length).toBeLessThan(0.7);
   effects.clear();
   for (const mesh of scene.children) if (mesh instanceof THREE.Mesh) mesh.geometry.dispose();
 });

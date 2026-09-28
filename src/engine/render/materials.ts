@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { FOG_UNIFORMS } from './atmosphere';
 import { OPTIC_COLOR, SURF, TONE, TONE_HEX, TOON_STEPS } from './palette';
 import type { SurfKey } from './palette';
 import type { MaterialTag, RealMaterial, SetInfo, TextureSet } from './surfaces';
@@ -53,7 +54,7 @@ export type SkyUniforms = {
   /** Realistic tiers: the sky's brightness and saturation above the horizon haze (1 is physical). */
   skyGain: THREE.IUniform<number>;
   skySaturation: THREE.IUniform<number>;
-};
+} & typeof FOG_UNIFORMS;
 
 /**
  * Unlit, inside-out, never fogged: the sky dome. The horizon-to-zenith gradient
@@ -62,7 +63,8 @@ export type SkyUniforms = {
  * the gradient becomes the Blender sky image in three's equirect layout, and
  * the sun is a bright disc only: the image already holds its glow. The image
  * fades into `horizon` (the fog colour) over the lowest 10 degrees, so the sky
- * meets the fogged ground without a seam and wears the mood's haze there.
+ * meets the fogged ground without a seam and wears the mood's haze there,
+ * with the haze's glow towards the sun (R8, render/atmosphere.ts) as the fog has it.
  */
 export function skyMat(uniforms: SkyUniforms): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
@@ -80,6 +82,8 @@ export function skyMat(uniforms: SkyUniforms): THREE.ShaderMaterial {
       #ifdef SKY_MAP
       uniform sampler2D skyMap;
       uniform float skyScale, skyGain, skySaturation;
+      uniform vec4 fogAerial, fogSun;
+      uniform vec3 fogGlow;
       #endif
       varying vec3 vDir;
       void main() {
@@ -96,7 +100,9 @@ export function skyMat(uniforms: SkyUniforms): THREE.ShaderMaterial {
         // deeper, brighter blue overhead. That lift grows over the lowest 25 degrees.
         float up = smoothstep(0.0, 0.42, dir.y);
         sky = mix(vec3(dot(sky, vec3(0.2126, 0.7152, 0.0722))), sky, mix(1.0, skySaturation, up)) * mix(1.0, skyGain, up);
-        vec3 col = mix(horizon, max(sky, 0.0), smoothstep(0.0, 0.17, dir.y));
+        vec3 haze = horizon;
+        if (fogAerial.x > 0.0) haze += fogGlow * pow(max(dot(dir, fogSun.xyz), 0.0), fogSun.w);
+        vec3 col = mix(haze, max(sky, 0.0), smoothstep(0.0, 0.17, dir.y));
         col += sunColor * sunDisc * smoothstep(0.99992, 0.99996, d) * 40.0;
         #else
         vec3 col = mix(horizon, zenith, pow(max(dir.y, 0.0), 0.6));
@@ -724,7 +730,7 @@ export function grimeMat(): THREE.ShaderMaterial {
       void main() {
         vec3 multiplier = mix( vec3( 1.0 ), texture2D( map, vUv ).rgb, vStrength );
         #ifdef USE_FOG
-        multiplier = mix( multiplier, vec3( 1.0 ), smoothstep( fogNear, fogFar, vFogDepth ) );
+        multiplier = mix( multiplier, vec3( 1.0 ), fogAmount() );
         #endif
         gl_FragColor = vec4( multiplier, 1.0 );
       }

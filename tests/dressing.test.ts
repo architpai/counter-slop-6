@@ -181,7 +181,8 @@ test('Low draws none of it: realistic-only trim is hidden and no kit or atlas lo
   renderer.applyQuality(PRESET_VALUES.low);
   for (const { mesh } of trim) expect(mesh.material).toBe(hiddenMat());
   expect(renderer.props.pending).toBe(false);
-});
+  // Half a second alone (a renderer and two looks); beside the other GPU test files it waits its turn: over 15 s at R8.
+}, 60_000);
 
 test('merging: meshes per cell, one draw per texture set, the backdrops in one, a single decal mesh, the drone', async () => {
   for (const family of FAMILIES) {
@@ -342,7 +343,8 @@ test('Low uploads no vertex colours; a realistic look puts the tints on, one sha
   const block = tinted.find(s => s.surf === 'block')!;
   expect(Array.from(block.colours!).some(v => v < 1)).toBe(true);
   expect(Array.from(block.colours!).some(v => v === 1)).toBe(true);
-});
+  // A few seconds alone (a renderer and two looks); beside the other GPU test files it waits its turn: 20 s at R8.
+}, 60_000);
 
 test('the dresser keeps floor pieces out of the walk volume, and the rock shells sit on their stacks\' colliders', () => {
   const scene = new THREE.Scene(), world = new World(), b = new LevelBuilder(scene, world, 'downtown', false);

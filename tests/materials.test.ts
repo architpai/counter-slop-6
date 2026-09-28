@@ -124,9 +124,11 @@ test('Low draws every map exactly as before the material tags', async () => {
     const level = build(key, arena);
     const tris = new Map<string, string[]>();
     const p = new THREE.Vector3(), r = (v: number) => (Math.round(v * 1e4) / 1e4).toFixed(4);
+    // Mexico's breakable parts are read where they stand in their props (hidden): the batches Low draws them from
+    // (V19) hold the same triangles in float32 world space, which the next test checks against them.
     for (const root of level.meshes) root.traverse(o => {
       const mesh = o as THREE.Mesh;
-      if (!mesh.isMesh || !(mesh.material instanceof THREE.MeshLambertMaterial)) return;
+      if (!mesh.isMesh || mesh.name === 'breakables' || !(mesh.material instanceof THREE.MeshLambertMaterial)) return;
       const id = `${mesh.material.color.getHexString()}|${mesh.castShadow}${mesh.receiveShadow}`;
       let list = tris.get(id);
       if (!list) tris.set(id, list = []);
@@ -257,12 +259,15 @@ test('planar UVs: metres over the tile, v up walls, no stretch on slopes, seamle
 test('Low draws one merged mesh per surface key; the realistic tiers draw one group per tag and hide flat-only joints', () => {
   const level = build('mexico');
   // Merged meshes carry one group per tag (a loose primitive keeps its own groups, if any, and one tag);
-  // realistic-only trim (R6) merges the same way into meshes of its own.
+  // realistic-only trim (R6) merges the same way into meshes of its own, and so do the breakable props (V19).
   for (const realOnly of [false, true]) {
-    const merged = level.surfaces.filter(s => s.mesh.geometry.groups.length === s.materials.length && !!s.realOnly === realOnly);
+    const merged = level.surfaces.filter(s => s.static && s.mesh.geometry.groups.length === s.materials.length && !!s.realOnly === realOnly);
     expect(merged.length).toBe(new Set(merged.map(s => s.surf)).size);
   }
-  const merged = level.surfaces.filter(s => s.mesh.geometry.groups.length === s.materials.length && !s.realOnly);
+  const batches = level.surfaces.filter(s => s.mesh.name === 'breakables');
+  expect(batches.length).toBe(new Set(batches.map(s => s.surf)).size);
+  for (const { mesh, materials } of batches) expect(mesh.geometry.groups.length).toBe(materials.length);
+  const merged = level.surfaces.filter(s => s.static && s.mesh.geometry.groups.length === s.materials.length && !s.realOnly);
   expect(merged.length).toBeLessThan(20);
   for (const { mesh, materials } of merged) {
     // Every triangle is in exactly one group, in order, and the geometry is indexed.
@@ -547,6 +552,6 @@ test('the renderer textures the level on realistic tiers, frees it all on Low, a
     expect(material.map).toBe(standInMaps(set, setInfo(set)).albedo);
   }
 
-// About 33 s alone: the uploads are paced in wall-clock time, and the full suite's parallel files
-// slow each render, which took it past 60 s (at phase 4's commit too).
-}, 120_000);
+// About 22-33 s alone: the uploads are paced in wall-clock time, and the full suite's parallel files
+// slow each render, which took it past 60 s (at phase 4's commit too), and to 117 s at 4d01b4c.
+}, 240_000);

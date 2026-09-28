@@ -1,4 +1,4 @@
-import type { Grade } from '../types';
+import type { Atmosphere, Grade } from '../types';
 import type { MaterialTag } from './surfaces';
 
 export const TONE = Object.freeze({ PRIMARY: 0, HOSTILE: 1, DARK: 2, ACCENT: 3, HEAL: 4, BOSS: 5 } as const);
@@ -76,10 +76,38 @@ export const GRADE = Object.freeze({
  * the sky-lit shade is already blue, and more of it turned grey concrete navy
  * and dark paint black. Downtown takes no warm gain, as its sun is warm
  * already; a stronger warm gain than House's turns its lawn to straw.
+ * Retuned with R8's haze in (all content in): Mexico a little less orange (its
+ * haze and the glow round the sun warm it now), Training neutral (no tint at
+ * all); Downtown's clear cool morning and House's warm late afternoon read
+ * right as they were (a cooler Downtown gain cost its 60 m grunt's mask
+ * contrast, the readability guardrail).
  */
 export const REAL_GRADE = Object.freeze({
   downtown: { lift: [0.004, 0.008, 0.016], gain: [1, 1, 1], saturation: 1.04, contrast: 1.08 },
   house: { lift: [0.02, 0.01, 0], gain: [1.06, 1, 0.9], saturation: 1.05, contrast: 1.06 },
-  mexico: { lift: [0.018, 0.008, 0], gain: [1.1, 1.01, 0.85], saturation: 1.05, contrast: 1.06 },
-  training: { lift: [0, 0.004, 0.012], gain: [1, 1, 1], saturation: 1.04, contrast: 1.06 },
+  mexico: { lift: [0.018, 0.008, 0], gain: [1.08, 1.01, 0.87], saturation: 1.04, contrast: 1.06 },
+  training: { lift: [0, 0, 0], gain: [1, 1, 1], saturation: 1.03, contrast: 1.06 },
 } as const satisfies Record<string, Grade>);
+
+/**
+ * The realistic tiers' haze and light shafts per map (R8, render/atmosphere.ts):
+ * none nearer than `start`, at least the play space's width (its bounds, side
+ * to side), so a grunt anywhere straight across it, and the walls and ground
+ * he is read against, stay as clear as the linear fog leaves them (the
+ * readability guardrail: from 60 m, the far walls behind the 60 and 70 m
+ * grunts hazed their masks and chests by 2-3 luma; from 80 m on Mexico, a
+ * 110 m grunt dissolved into the mesas behind him). Past it, the backdrops
+ * and the few long diagonals thicken, densest at the ground. Downtown a clear
+ * cool morning (thin haze, and no glow: any lightened the far wall behind its
+ * 60 m grunt; its arena, wider, from further out), House a warm late
+ * afternoon (a warm glow, the strongest shafts through the trees), Mexico a
+ * hot haze (the densest, slowest to thin with height, the widest glow),
+ * Training neutral.
+ */
+export const ATMOSPHERE = Object.freeze({
+  downtown: { haze: 0.006, falloff: 0.04, start: 110, glow: 0, shafts: 0.5 },
+  arena: { haze: 0.006, falloff: 0.04, start: 140, glow: 0, shafts: 0.5 },
+  house: { haze: 0.009, falloff: 0.045, start: 80, glow: 0.35, shafts: 0.7 },
+  mexico: { haze: 0.014, falloff: 0.025, start: 125, glow: 0.45, shafts: 0.45 },
+  training: { haze: 0.005, falloff: 0.05, start: 80, glow: 0.1, shafts: 0.3 },
+} as const satisfies Record<string, Atmosphere>);

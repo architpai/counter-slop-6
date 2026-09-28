@@ -216,27 +216,37 @@ PINK → `boss`, RED → `hot`.
 
 | Key | Hex | Use |
 |---|---|---|
-| `sky` | `#9FD2E8` | scene background |
-| `fog` | `#C7E3EF` | linear fog colour |
-| `ground` | `#CFC7B4` | ground plane, paving |
-| `road` | `#9E9A90` | highway deck, asphalt |
-| `block` | `#EFE9DC` | default building mass (the "BLUE" default of the level spec) |
-| `blockAlt` | `#7C8AA0` | secondary mass, concrete |
-| `blockDeep` | `#48566B` | shaded mass, undersides, tower |
-| `roof` | `#E0714A` | roofs, terracotta, tile |
-| `wood` | `#B4784A` | planks, stalls, crates |
-| `metal` | `#A6AEB8` | rails, catwalks, fire escapes, cranes |
-| `dark` | `#232B38` | trim, frames, doors, windows |
-| `accent` | `#FFC24B` | highlights, rings, signage |
-| `foliage` | `#4CA96B` | cactus, plants |
-| `water` | `#4FB3D9` | fountain, well |
-| `hot` | `#E5484D` | rare warning surfaces |
-| `boss` | `#C56BFF` | surfaces marked PINK in the level spec |
+| `sky` | `#A8D2E2` | the parry flash's colour (no scene background: the dome covers every pixel) |
+| `fog` | `#CBDDE2` | default fog and clear colour (each mood sets its own) |
+| `ground` | `#B5B7AD` | ground plane, paving |
+| `road` | `#52606A` | highway deck, asphalt |
+| `block` | `#E5E4D9` | default building mass (the "BLUE" default of the level spec) |
+| `blockAlt` | `#96A9B4` | secondary mass, concrete |
+| `blockDeep` | `#405562` | shaded mass, undersides, tower |
+| `roof` | `#C87651` | roofs, terracotta, tile |
+| `wood` | `#9F7858` | planks, stalls, crates |
+| `metal` | `#B8C6CC` | rails, catwalks, fire escapes, cranes |
+| `dark` | `#263640` | trim, frames, doors, windows |
+| `accent` | `#E7B34F` | highlights, rings, signage |
+| `foliage` | `#4F8766` | cactus, plants, trees |
+| `water` | `#40B7B7` | fountain, well, lake |
+| `hot` | `#C96557` | rare warning surfaces |
+| `boss` | `#A887B7` | surfaces marked PINK in the level spec |
+| `cloud` | `#FBFAF5` | the merged cloud mesh (`cloudMat`, unfogged) |
+| `lawn` | `#829B65` | House's lawns |
+| `siding` | `#F0E6D2` | House's clapboard, Mexico's white stucco |
+| `shingle` | `#3E5262` | House's roofs |
+| `plaster` | `#D9DCD5` | interior walls |
+| `adobe` | `#E5BD92` | Mexico's adobe houses |
+| `sandstone` | `#BE845D` | Mexico's rocks, rock stacks and mesas |
+| `sand` | `#DBC59C` | Mexico's ground |
+| `paving` | `#E1D8C3` | plazas and paths |
 
 Rules: at most **12 distinct materials visible in one frame** of level geometry on Low. Do not tint
 per-object; pick a palette key. No external image textures, normal maps or emissive maps on
-materials. The only generated textures are the three-step toon gradient and opaque name-tag labels
-made by render. Three exceptions, all realistic tiers only and all self-made in Blender: each map's
+materials. The only generated textures are the three-step toon gradient, opaque name-tag labels
+made by render and, on the realistic tiers with light shafts and bloom on, the lens dirt (R8,
+`postfx.ts` `lensDirt`: drawn once from a fixed seed). Three exceptions, all realistic tiers only and all self-made in Blender: each map's
 sky images, streamed from `public/sky/<map>/`, feed the sky dome and the environment (§3.3); the
 level's texture sets (§3.2, material tags); and each map's baked lighting, a lightmap or AO map and
 a probe grid streamed from `public/maps/<map>/` (§3.3, baked lighting).
@@ -307,7 +317,11 @@ Three material families, all created and cached by `render/materials.js`. Nothin
 - **The effects family** (R5, `render/fx.ts`, each made once and cached like the rest):
   `tracerMaterial` (every tier: camera-facing ribbons with premultiplied alpha, so one draw holds
   the player's additive glow and the enemies' solid red), `lowFlashMaterial` (the flat guns' flash
-  stars, additive), `boltMaterial(tone)` (enemy projectiles, unlit, a little over white), and on the
+  stars, additive), `lowGlowMaterial` (the flat grenade's fire: additive, front faces only, each blob
+  fading out with its instance colour and, within it, from where it faces the eye to nothing at its rim,
+  so overlapping blobs show no faceted edge), `boltMaterial()` (enemy projectiles: one instanced mesh for
+  every bolt in flight, `enemies/projectiles.ts`, each instance its tone a little over white,
+  `boltColor`, laid out once a frame at the end of the enemies' update), and on the
   realistic tiers `spriteMaterial` (`fire` and `fire-soft`: the fire atlas, additive, a billboard
   pulled towards the eye by half its size so a figure it swells round is behind all of it; `soft`:
   the lit atlas, premultiplied, faded against the scene's depth in the soft-particle layer, with no
@@ -363,7 +377,12 @@ Three material families, all created and cached by `render/materials.js`. Nothin
   vertices than before (Low: 37.5k, 29.4k and 68.1k on Downtown, House and Mexico, from 35.7k, 24.3k
   and 34.5k; no measurable render cost). Normal maps use three's derivative tangent frame, so there
   is no tangent attribute. Loose pieces (breakable props, figure accessories) come from
-  `LevelBuilder.part` and are tagged the same way. Mexico keeps its breakable props as separate meshes, as before.
+  `LevelBuilder.part` and are tagged the same way. Mexico's breakable props draw from one batch per
+  surface key with a group per tag (V19, `LevelBuilder._batchBreakables`: 249 part meshes, 48 props,
+  in 7 meshes), their parts kept in the props' groups, hidden, as level surfaces that wear the look in
+  force: a break shows them for the debris and collapses that prop's vertices in its batches onto one
+  point (a partial upload), when the group leaves the scene. The mariachis' meshes merge per moving
+  pivot and material (`LevelBuilder.rigid`: 23 meshes a musician to 7), so the band still sways.
   The static level also gets a second UV set, `uv1`, for its lightmap (§3.3, baked lighting), made by
   a deterministic chart packer (`render/lightmap.ts`); Low never makes it. The first realistic frame
   checks the geometry's hash and puts `uv1` on (the session's checked layout, or zeros), and
@@ -399,11 +418,11 @@ low-poly look (`lowpoly`) and the HDR pipeline of the realistic tiers (`realisti
 
 **Low (and a realistic tier whose sky has not streamed in yet):**
 
-- One `DirectionalLight`, colour `#FFF6E5`, intensity 2.2, direction `normalize(0.38, 0.82, 0.42)`
+- One `DirectionalLight`, colour `#FFEFD6`, intensity 2.0 (the moods set their own: 2.1–2.25, warmer), direction `normalize(0.38, 0.82, 0.42)`
   (kept from the spec, `SUN_DIR`) unless the level's mood sets `sunDir` (House, Downtown and Mexico
   do, about 32–35° up, so the dome's sun disc sits in view), positioned at
   `shadowCenter + dir × (radius × 2)`.
-- One `HemisphereLight`, sky `#BBD9EC`, ground `#8A8474`, intensity 0.85, and a `RoomEnvironment`
+- One `HemisphereLight`, sky `#AFCBE1`, ground `#626772`, intensity 1.0 (the moods set their own), and a `RoomEnvironment`
   PMREM at 0.35 so GLB metal does not read black.
 - No point lights, no ambient light.
 
@@ -464,6 +483,23 @@ freed, with whatever of it was already made.
   each level's mood sets (`fogNear`/`fogFar`, roughly 50–55 m to 180–260 m; default 50–190), so a
   grunt at 60 m stays clear. The view-distance setting ("normal" or "long", ×1.3) scales the fog
   range, the far plane (420 m at "normal") and the sky dome together; it never pulls the fog in.
+  **Haze** (R8, realistic tiers, `render/atmosphere.ts`): on top of it an aerial perspective whose
+  density falls off exponentially with height, `haze × exp(−falloff × (y − base))` per metre, integrated
+  in closed form along the view ray from `start` out, at least the play space's width (its bounds side to side: House and
+  Training 80 m, Downtown 110, its arena 140, Mexico 125), so a grunt anywhere straight across it wears none; it thickens with distance
+  and towards the ground and thins looking down from a roof or up at the skyline; towards the sun the
+  fog colour brightens by `glow` in the sun's hue (`pow(cos, 8)`). Per map in `palette.ts`
+  (`ATMOSPHERE`, on the mood's `realistic.atmosphere`; the arena its own entry): Downtown 0.006 /m (a clear
+  morning), House 0.009, Mexico 0.014 thinning slowest with height (a hot haze), Training 0.005. The view distance
+  starts it that much further out, at the same density. three's fog chunks are patched once
+  (`fogAmount()`, `fogTint()`, a world-space `vFogRay` varying), so every fogged material takes it; the
+  effect sprites and the grime decals call the same functions. The parameters are three shared uniforms
+  whose values are plain typed arrays, added to `UniformsLib.fog` and every `ShaderLib` entry with fog,
+  so one write reaches every program (three shares such a value by reference when it copies
+  uniforms). At zero haze (Low) the chunk takes the unpatched path: Low's fog is exactly as before. The
+  sky dome's horizon band takes the same glow, so far geometry still meets the sky without a seam.
+  `renderer.fogAt(distance, eyeY, pointY)` gives the shader's share on the CPU (the tier checks read a
+  60 m grunt's fog there).
 - **Sky**: one dome (`skyMat`, a `ShaderMaterial`) follows the camera. On Low it draws the
   horizon-to-zenith gradient per pixel and, when the mood sets `sunDisc`, a sun disc with glow
   along `sunDir`. With `SKY_MAP` defined (realistic, sky loaded) it draws `sky.webp` (an sRGB
@@ -632,6 +668,7 @@ The two-pass tone pipeline (`rendering-effects.md` §6.1–6.2) is replaced by:
    full size. A step is a few uniform and viewport writes. Targets reallocate only on a window,
    pixel-ratio or render-scale change; a pass switched off frees its targets (AO also its depth
    texture), and a frame allocates nothing. The rig is part of this pass (§3.4).
+   The depth texture is also kept while light shafts are on (below).
    **Soft particles** (R5, Graphics → Soft particles; High and Ultra): when the realistic effects
    have anything in `Renderer.fxScene` (smoke, dust, fire), that small scene is drawn after the
    scene into a layer of its own (`Composite.drawSoft`: a single-sampled half-float target,
@@ -659,6 +696,20 @@ The two-pass tone pipeline (`rendering-effects.md` §6.1–6.2) is replaced by:
      ambient light only and a sunlit wall or grunt keeps its brightness.
    - **Bloom** (on/off): a soft threshold at exposed brightness 1.1 into half resolution, then a
      dual-filter chain down to 1/32 and back up, added at 0.05.
+   - **Light shafts** (R8, Graphics → "Light shafts, lens dirt", Ultra's default; realistic tiers, and like the
+     soft particles not with MSAA on a GPU that keeps no MSAA depth): at a quarter of the scene
+     target's size, a mask of the open sky (depth at the far plane, four taps a texel) in a Gaussian
+     0.1 screen heights round the sun's place on the screen (the disc and its halo), then a radial
+     blur towards the sun in two passes (16 taps over the whole way, each 0.92 of the last; then 16
+     over a sixteenth). The last pass fades the rays with their distance from the sun on the screen
+     (a Gaussian 0.4 screen heights) and to 0.6 over a surface (the texel's own open sky, carried
+     through the passes in green), so they stay round the sun and never veil the frame. Added in the
+     tone pass before the exposure in the sun's hue, times the map's `shafts` strength
+     (`ATMOSPHERE`) and 0.3. It fades as the sun leaves the frame by half a screen and is off behind
+     the eye (no pass runs then). With bloom on it brings the **lens dirt**: a greyscale film of
+     smudges, specks and streaks (`lensDirt`, 320 × 180, made once), times the bloom's 1/8-resolution
+     level, added at 0.7, so a bright source (the sun, a muzzle flash, a blast) lights the specks
+     round it.
    - **Look pass.** Low: one full-screen triangle (orthographic camera, depth test off) that samples
      the target (through FXAA on Low), multiplies AO and adds bloom when on, tone-maps it (identity
      to 0.8, then a soft roll-off to white, so the flat palette keeps its values), applies the
@@ -669,10 +720,12 @@ The two-pass tone pipeline (`rendering-effects.md` §6.1–6.2) is replaced by:
      slow-motion desaturation `mix(col, lum * vec3(0.8,0.86,1.0), slow*0.55)`. The "sketch
      modulation" `scr` becomes a constant `1.0` (no texture). It ends with
      `#include <colorspace_fragment>` for the canvas, or encodes sRGB itself when SMAA follows.
-     Realistic: AO, bloom, the exposure (`1.2 × 2^mood.realistic.exposure`), **AgX** (with a mild
+     Realistic: AO, the soft particles' layer, bloom and the lens dirt, the light shafts, the
+     exposure (`1.2 × 2^mood.realistic.exposure`), **AgX** (with a mild
      punchy contrast; a colour that leaves the sRGB gamut moves towards grey at the same luminance
      until its smallest channel is 8 % of it, instead of being cut at 0), the mood's realistic
-     grade (`REAL_GRADE`, saturation 1.04–1.05, its contrast an S-curve that keeps black at black),
+     grade (`REAL_GRADE`, saturation 1.03–1.05, its contrast an S-curve that keeps black at black:
+     Downtown a clear cool morning, House a warm late afternoon, Mexico hot, Training neutral),
      sRGB with half a level of dither, into an 8-bit target.
    - **SMAA** (three's `SMAAPass`, anti-aliasing "SMAA" or "MSAA n× + SMAA") on the sRGB frame.
    - **Realistic final pass**: a light contrast-adaptive sharpen (AMD CAS, 0.35, its result kept
@@ -1556,7 +1609,9 @@ grunts (tests/tiers.shots.mjs), the walls and ground they are read against keep 
 ### 6.6 `render`
 
 **Files:** `src/render/index.js` (public), `palette.js`, `materials.js`, `prims.js`, `figure.js`,
-`postfx.js`, `quality.ts`, `shadows.ts` (cascades), `sky.ts` (sky streaming), `tactical.ts`,
+`postfx.js` (the pass chain, R8's light shafts and lens dirt), `atmosphere.ts` (R8: the haze's fog
+chunk patch, shared uniforms and CPU mirror), `quality.ts`, `shadows.ts` (cascades), `sky.ts` (sky
+streaming), `tactical.ts`,
 `weapons.ts` (the realistic tiers' first-person weapons and arms, R4, and `weapon-assets.json`),
 `operators.ts` (R7: the realistic operators' streamer `OperatorAssets`, `OperatorBody`, and
 `operator-assets.json`), `operator-motion.ts` (R7: the clips' library and blending), `fx.ts` (R5: the effect atlases' manifest `fx-assets.json` and streamer `FxAssets`, the effect
@@ -1658,10 +1713,11 @@ export class Renderer {
   readonly gpuBehind: boolean;                // streaming, with 6 frames unfinished on the GPU (vsync off): boot skips this one (render/pacing.ts)
   setLive(live: boolean): void;               // boot, every frame: a match is being played (no menu over it, or online); its first 3 s stay quiet
   prewarm(root: THREE.Object3D): void;        // compile a template's programs (the characters', a pickup's) for every look, and draw it once with the shadow maps, at the menu
-  applyQuality(values: GfxValues): void;      // live: look, pixel ratio, render scale, AA, AO, bloom, shadows, view distance
+  applyQuality(values: GfxValues): void;      // live: look, pixel ratio, render scale, AA, AO, bloom, light shafts, shadows, view distance
   setDynamicScale(scale: number): void;       // dynamic resolution: the drawn 0-1 share of each target
   setLevelShadow(center: THREE.Vector3, radius: number): void;
-  setMood(mood?: Mood): void;                 // sky, sun disc, light, fog range, grade, exposure; streams the sky
+  setMood(mood?: Mood): void;                 // sky, sun disc, light, fog range, haze and shafts (R8), grade, exposure; streams the sky
+  fogAt(distance: number, eyeY: number, pointY: number): number; // R8: the fog's share (linear and haze) the look in force draws on that ray
   prepareRig(root: THREE.Object3D): void;     // shadow flags, draw order, depth clear, once on attach
   setViewFov(fov: number): void;              // V8: scales the rig in camera space (§3.4); the player camera calls it
   render(time: number, fx: PostFX): void;     // called last, exactly once per frame

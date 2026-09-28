@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { boxGeo, cylGeo } from '../render/index';
-import { GRADE, REAL_GRADE } from '../render/palette';
+import { ATMOSPHERE, GRADE, REAL_GRADE } from '../render/palette';
 import type { BuildOpts, Gap, LevelBuilder, MarkerKind, StairOpts } from './build';
 
 /**
@@ -103,7 +103,7 @@ function markers(b: LevelBuilder, kind: MarkerKind, points: readonly Point[]) {
 
 export function buildHouse(b: LevelBuilder) {
   b.level.mood = { horizon: 0xf3caa4, zenith: 0x789ab9, fog: 0xe6cdb6, sun: 0xffdaa9, sunIntensity: 2.1, hemiIntensity: 1.05, hemiSky: 0xb4c6de, hemiGround: 0x9e907b,
-    fogNear: 50, fogFar: 180, sunDisc: true, sunDir: [150, 153, 160], grade: GRADE.house, sky: 'house', realistic: { exposure: -0.5, grade: REAL_GRADE.house } };
+    fogNear: 50, fogFar: 180, sunDisc: true, sunDir: [150, 153, 160], grade: GRADE.house, sky: 'house', realistic: { exposure: -0.5, grade: REAL_GRADE.house, atmosphere: ATMOSPHERE.house } };
   buildGround(b);
   buildBasement(b);
   buildFirst(b);

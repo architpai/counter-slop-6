@@ -235,6 +235,14 @@ function Graphics({ model, onAction }: { model: GfxModel; onAction: Act }) {
             <input type="checkbox" data-act="gfx" checked={values.softParticles}
               disabled={values.look !== 'realistic' || (model.msaaSoft === false && ANTIALIAS_SPEC[values.antialias].samples > 0)}
               onChange={event => set('softParticles', event.target.checked ? '1' : '0', event.nativeEvent)} /> Soft particles</label>
+          {/* Light shafts read the scene's depth like soft particles: the realistic look, and with MSAA a GPU that resolves its depth.
+              The lens dirt comes with them (both Ultra's alone), so the box names both. */}
+          <label className="graphics-check" title={values.look !== 'realistic' ? 'Medium, High and Ultra only'
+            : model.msaaSoft === false && ANTIALIAS_SPEC[values.antialias].samples > 0 ? 'Not with MSAA on this GPU'
+              : 'Sun shafts through gaps between buildings and trees, and lens dirt round bright lights with bloom on'}>
+            <input type="checkbox" data-act="gfx" checked={values.shafts}
+              disabled={values.look !== 'realistic' || (model.msaaSoft === false && ANTIALIAS_SPEC[values.antialias].samples > 0)}
+              onChange={event => set('shafts', event.target.checked ? '1' : '0', event.nativeEvent)} /> Light shafts, lens dirt</label>
           <label className="graphics-check"><input type="checkbox" data-act="gfxFps" checked={model.fpsCounter}
             onChange={event => onAction('gfxFps', event.target.checked ? '1' : '0', event.nativeEvent)} /> FPS counter</label>
           <button type="button" className="screen-button graphics-reset" data-act="gfxReset" disabled={model.choice === 'auto'}

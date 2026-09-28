@@ -1,7 +1,7 @@
 import { Vector3 } from 'three';
 import { TYPES } from '../enemies/types';
 import { makeNameTag } from '../render/figure';
-import { GRADE, REAL_GRADE } from '../render/palette';
+import { ATMOSPHERE, GRADE, REAL_GRADE } from '../render/palette';
 import type { EnemyKind } from '../types';
 import type { LevelBuilder } from './build';
 
@@ -13,7 +13,7 @@ export function buildTraining(b: LevelBuilder): void {
   b.level.bounds = { minX: -38, maxX: 38, minZ: -32, maxZ: 38 };
   b.level.playerStart.set(0, 0, 10);
   b.level.shadow = { center: new Vector3(0, 0, 2), radius: 53 };
-  b.level.mood = { horizon: 0xc7d7dc, zenith: 0x789baa, fog: 0xc7d7dc, fogNear: 50, fogFar: 200, grade: GRADE.training, sky: 'training', realistic: { grade: REAL_GRADE.training } };
+  b.level.mood = { horizon: 0xc7d7dc, zenith: 0x789baa, fog: 0xc7d7dc, fogNear: 50, fogFar: 200, grade: GRADE.training, sky: 'training', realistic: { grade: REAL_GRADE.training, atmosphere: ATMOSPHERE.training } };
   b.box(0, -1, 3, 76, 1, 70, { mat: 'paving', material: 'concrete' });
   b.box(0, 0, -31, 76, 8, 1, { mat: 'dark', material: 'painted-metal' });
   for (const x of [-37.5, 37.5]) b.box(x, 0, 3, 1, 3, 70, { mat: 'block', material: 'cast-concrete' });

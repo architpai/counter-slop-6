@@ -50,6 +50,13 @@ export interface GfxValues {
    * (render/index.ts `msaaDepthReadable`) dithers with MSAA on whatever this says.
    */
   softParticles: boolean;
+  /**
+   * Realistic look (R8): light shafts from the sun through the sky's gaps,
+   * and the lens dirt a bright light shows with bloom on. Like soft
+   * particles they read the scene's depth, so a GPU that keeps no MSAA
+   * depth draws none with MSAA on.
+   */
+  shafts: boolean;
   viewDistance: ViewDistance;
 }
 
@@ -114,13 +121,13 @@ export const EFFECTS_SCALE: Readonly<Record<EffectsDetail, number>> = { reduced:
 /** docs/VISUALS.md, "Quality system (Q)": only the rows that exist today. */
 export const PRESET_VALUES: Readonly<Record<PresetName, Readonly<GfxValues>>> = Object.freeze({
   low: Object.freeze({ look: 'lowpoly', renderScale: 0.75, pixelRatio: 1.5, dynamicRes: true, dynamicMin: 0.6,
-    fpsTarget: 0, antialias: 'fxaa', shadows: 'low', ao: 'off', bloom: false, textures: 'low', effects: 'reduced', softParticles: false, viewDistance: 'normal' }),
+    fpsTarget: 0, antialias: 'fxaa', shadows: 'low', ao: 'off', bloom: false, textures: 'low', effects: 'reduced', softParticles: false, shafts: false, viewDistance: 'normal' }),
   medium: Object.freeze({ look: 'realistic', renderScale: 1, pixelRatio: 1.5, dynamicRes: true, dynamicMin: 0.7,
-    fpsTarget: 0, antialias: 'msaa2smaa', shadows: 'medium', ao: 'off', bloom: true, textures: 'low', effects: 'full', softParticles: false, viewDistance: 'normal' }),
+    fpsTarget: 0, antialias: 'msaa2smaa', shadows: 'medium', ao: 'off', bloom: true, textures: 'low', effects: 'full', softParticles: false, shafts: false, viewDistance: 'normal' }),
   high: Object.freeze({ look: 'realistic', renderScale: 1, pixelRatio: 2, dynamicRes: true, dynamicMin: 0.7,
-    fpsTarget: 0, antialias: 'msaa2smaa', shadows: 'high', ao: 'half', bloom: true, textures: 'medium', effects: 'full', softParticles: true, viewDistance: 'normal' }),
+    fpsTarget: 0, antialias: 'msaa2smaa', shadows: 'high', ao: 'half', bloom: true, textures: 'medium', effects: 'full', softParticles: true, shafts: false, viewDistance: 'normal' }),
   ultra: Object.freeze({ look: 'realistic', renderScale: 1, pixelRatio: 2, dynamicRes: false, dynamicMin: 0.8,
-    fpsTarget: 0, antialias: 'msaa4smaa', shadows: 'ultra', ao: 'full', bloom: true, textures: 'high', effects: 'full', softParticles: true, viewDistance: 'long' }),
+    fpsTarget: 0, antialias: 'msaa4smaa', shadows: 'ultra', ao: 'full', bloom: true, textures: 'high', effects: 'full', softParticles: true, shafts: true, viewDistance: 'long' }),
 });
 
 // ------------------------------------------------------------------ storage
@@ -177,6 +184,7 @@ export function validValues(raw: unknown, base: Readonly<GfxValues>): GfxValues 
     textures: oneOf(TEXTURE_QUALITIES, value.textures, base.textures),
     effects: oneOf(EFFECTS, value.effects, base.effects),
     softParticles: typeof value.softParticles === 'boolean' ? value.softParticles : base.softParticles,
+    shafts: typeof value.shafts === 'boolean' ? value.shafts : base.shafts,
     viewDistance: oneOf(VIEW_DISTANCES, value.viewDistance, base.viewDistance),
   };
 }

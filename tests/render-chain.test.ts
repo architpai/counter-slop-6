@@ -44,12 +44,12 @@ function passes(renderer: Renderer): string[] {
 const bloom = ['post:bloom-prefilter', ...Array(4).fill('post:bloom-down'), ...Array(4).fill('post:bloom-up')];
 const expected: Record<PresetName, { config: Omit<PostConfig, 'samples'>; samples: number; chain: string[]; lights: number; soft: boolean }> = {
   // Low: the phase-1 single pass (FXAA, soft shoulder, grade, feedback), one shadow box.
-  low: { config: { look: 'lowpoly', fxaa: true, smaa: false, ao: 0, depth: false, bloom: false }, samples: 0, chain: ['post:composite'], lights: 1, soft: false },
-  medium: { config: { look: 'realistic', fxaa: false, smaa: true, ao: 0, depth: false, bloom: true }, samples: 2,
+  low: { config: { look: 'lowpoly', fxaa: true, smaa: false, ao: 0, depth: false, bloom: false, shafts: false }, samples: 0, chain: ['post:composite'], lights: 1, soft: false },
+  medium: { config: { look: 'realistic', fxaa: false, smaa: true, ao: 0, depth: false, bloom: true, shafts: false }, samples: 2,
     chain: [...bloom, 'post:agx', 'smaa', 'post:final'], lights: 1, soft: true },
-  high: { config: { look: 'realistic', fxaa: false, smaa: true, ao: 0.5, depth: true, bloom: true }, samples: 2,
+  high: { config: { look: 'realistic', fxaa: false, smaa: true, ao: 0.5, depth: true, bloom: true, shafts: false }, samples: 2,
     chain: ['post:gtao', 'post:ao-blur', ...bloom, 'post:agx', 'smaa', 'post:final'], lights: 2, soft: true },
-  ultra: { config: { look: 'realistic', fxaa: false, smaa: true, ao: 1, depth: true, bloom: true }, samples: 4,
+  ultra: { config: { look: 'realistic', fxaa: false, smaa: true, ao: 1, depth: true, bloom: true, shafts: true }, samples: 4,
     chain: ['post:gtao', 'post:ao-blur', ...bloom, 'post:agx', 'smaa', 'post:final'], lights: 3, soft: true },
 };
 
@@ -71,8 +71,8 @@ test('each preset reaches the renderer: passes, tone mapping, MSAA, AO depth, ca
     // composite (Low), AgX in its own pass (realistic).
     expect(passes(renderer), name).toEqual(want.chain);
     expect(renderer.post.target.samples).toBe(Math.min(want.samples, maxSamples));
-    // AO and the soft particles (High, Ultra) read the depth texture.
-    expect(renderer.post.target.depthTexture !== null).toBe(want.config.ao > 0 || want.config.depth);
+    // AO, the soft particles (High, Ultra) and the light shafts (Ultra) read the depth texture.
+    expect(renderer.post.target.depthTexture !== null).toBe(want.config.ao > 0 || want.config.depth || want.config.shafts);
     // One shadow light per box; cascades beyond the sun are dark and shadow-only.
     const lights = [renderer.sun, ...renderer.cascades];
     expect(lights).toHaveLength(want.lights);
@@ -147,7 +147,7 @@ test('dynamic resolution only moves viewports, a pass switched off frees its tar
   camera.position.z = 3;
   const before = three.info.memory.textures;
   const post = new Composite();
-  post.configure({ look: 'realistic', samples: 4, fxaa: false, smaa: true, ao: 1, depth: false, bloom: true });
+  post.configure({ look: 'realistic', samples: 4, fxaa: false, smaa: true, ao: 1, depth: false, bloom: true, shafts: false });
   const frame = (): void => {
     three.setRenderTarget(post.target);
     three.clear();
@@ -194,6 +194,8 @@ test('a reduced dynamic scale shows only this frame: nothing beyond the drawn co
   const post = new Composite();
   cleanup.push(() => post.dispose());
   post.resize(320, 200, 1.6);
+  // The sun ahead and a little up, over open sky: the realistic config draws its light shafts too.
+  post.setShafts(1, new THREE.Vector3(0.2, 0.3, -1), new THREE.Color(1, 0.9, 0.8));
   /** Clear the scene to `color`, run the chain and read the canvas back. */
   const draw = (color: number, scale: number): Uint8Array => {
     post.setScale(scale);
@@ -207,9 +209,9 @@ test('a reduced dynamic scale shows only this frame: nothing beyond the drawn co
     return pixels;
   };
   const configs: PostConfig[] = [
-    { look: 'realistic', samples: 4, fxaa: false, smaa: true, ao: 0.5, depth: false, bloom: true },
-    { look: 'lowpoly', samples: 0, fxaa: true, smaa: false, ao: 0, depth: false, bloom: false },
-    { look: 'lowpoly', samples: 0, fxaa: false, smaa: true, ao: 1, depth: false, bloom: true },
+    { look: 'realistic', samples: 4, fxaa: false, smaa: true, ao: 0.5, depth: false, bloom: true, shafts: true },
+    { look: 'lowpoly', samples: 0, fxaa: true, smaa: false, ao: 0, depth: false, bloom: false, shafts: false },
+    { look: 'lowpoly', samples: 0, fxaa: false, smaa: true, ao: 1, depth: false, bloom: true, shafts: false },
   ];
   for (const config of configs) {
     post.configure(config);

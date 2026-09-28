@@ -430,7 +430,7 @@ export function spriteMaterial(kind: SpriteKind): THREE.ShaderMaterial {
         #ifdef FIRE
         vec3 col = t.rgb * vColor.rgb * vColor.a * fade;
         #ifdef USE_FOG
-        col *= 1.0 - smoothstep(fogNear, fogFar, vFogDepth);
+        col *= 1.0 - fogAmount();
         #endif
         gl_FragColor = vec4(col, 0.0);
         #else
@@ -444,7 +444,7 @@ export function spriteMaterial(kind: SpriteKind): THREE.ShaderMaterial {
         float alpha = t.a * vColor.a * fade;
         vec3 col = t.rgb * vColor.rgb * vLight;
         #ifdef USE_FOG
-        col = mix(col, fogColor, smoothstep(fogNear, fogFar, vFogDepth));
+        col = mix(col, fogTint(), fogAmount());
         #endif
         #ifdef SOFT
         gl_FragColor = vec4(col * alpha, alpha);
@@ -557,13 +557,53 @@ export function lowFlashMaterial(): THREE.MeshBasicMaterial {
   });
 }
 
-const bolts = new Map<number, THREE.MeshBasicMaterial>();
-/** Enemy projectiles (V5): their tone a little over white's brightness, so the realistic tiers' bloom gives them a glow, and still their colour on Low. */
-export function boltMaterial(tone: number): THREE.MeshBasicMaterial {
-  const hex = TONE_HEX[tone] ?? TONE_HEX[TONE.HOSTILE];
-  let material = bolts.get(hex);
-  if (!material) bolts.set(hex, material = new THREE.MeshBasicMaterial({ name: 'fx:bolt', color: new THREE.Color(hex).multiplyScalar(1.35) }));
-  return material;
+let lowGlow: THREE.ShaderMaterial | undefined;
+/**
+ * The flat look's grenade fire (effects.ts `boom`): additive, so each blob
+ * fades out with its instance colour and never covers what is behind it.
+ * Brightest where the blob faces the eye and nothing at its rim, so blobs
+ * overlap into one glow: at one brightness to its edge, each showed as a
+ * faceted shell over the next. Front faces only: from inside one, at point
+ * blank, it draws nothing.
+ */
+export function lowGlowMaterial(): THREE.ShaderMaterial {
+  return lowGlow ??= new THREE.ShaderMaterial({
+    name: 'fx:flat-glow', blending: THREE.AdditiveBlending, transparent: true, depthWrite: false,
+    vertexShader: `
+      varying vec3 vColor, vNormal, vView;
+      void main() {
+        mat4 model = modelMatrix * instanceMatrix;
+        vec4 world = model * vec4(position, 1.0);
+        vNormal = mat3(model) * normal;
+        vView = cameraPosition - world.xyz;
+        vColor = instanceColor;
+        gl_Position = projectionMatrix * viewMatrix * world;
+      }
+    `,
+    fragmentShader: `
+      varying vec3 vColor, vNormal, vView;
+      void main() {
+        float facing = max(dot(normalize(vNormal), normalize(vView)), 0.0);
+        gl_FragColor = vec4(vColor * facing, 1.0);
+      }
+    `,
+  });
+}
+
+let bolts: THREE.MeshBasicMaterial | undefined;
+/**
+ * Enemy projectiles (V5, V19): one instanced draw for every bolt in flight
+ * (enemies/projectiles.ts), each instance's colour its tone a little over
+ * white's brightness (`boltColor`), so the realistic tiers' bloom gives them
+ * a glow, and still their colour on Low.
+ */
+export function boltMaterial(): THREE.MeshBasicMaterial {
+  return bolts ??= new THREE.MeshBasicMaterial({ name: 'fx:bolt' });
+}
+
+/** A bolt's instance colour for `tone` (linear, over white). */
+export function boltColor(tone: number, out: THREE.Color): THREE.Color {
+  return out.setHex(TONE_HEX[tone] ?? TONE_HEX[TONE.HOSTILE]).multiplyScalar(1.35);
 }
 
 let hazardSmoke: THREE.MeshBasicMaterial | undefined;
@@ -611,7 +651,12 @@ export function fxTemplate(look: 'lowpoly' | 'realistic', soft = false): THREE.G
   trace.instanceCount = 1;
   add(new THREE.Mesh(trace, tracerMaterial()));
   add(new THREE.Mesh(new THREE.PlaneGeometry(0.01, 0.01), lowFlashMaterial()));
-  add(new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.01, 0.01), boltMaterial(TONE.HOSTILE)));
+  // The bolts in flight and the flat grenade's fire, as their instanced meshes draw them: coloured instances, no shadows.
+  for (const material of [boltMaterial(), lowGlowMaterial()]) {
+    const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(0.01, 0.01, 0.01), material, 1);
+    mesh.setColorAt(0, new THREE.Color(1, 1, 1));
+    add(mesh);
+  }
   // Not effects, but first drawn in a fight: the unlit meshes (a thrown grenade's arc, lasers; enemy
   // bolts used to link this program at the first shot), an enemy's smoke grenade and a thrown grenade's flat-lit body.
   add(new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.01, 0.01), unlitMat(TONE_HEX[TONE.PRIMARY])));

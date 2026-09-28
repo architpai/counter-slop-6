@@ -7,7 +7,7 @@ import { OVERLAY_GAP, OVERLAY_SUNK, OVERLAY_THICK } from '../render/impacts';
 import type { SurfKey } from '../render/palette';
 import type { MaterialTag } from '../render/surfaces';
 import type { Box, World } from '../physics';
-import type { Breakable, BreakableKind, Level, LevelKey } from '../types';
+import type { Breakable, BreakableKind, Level, LevelKey, LevelSurface } from '../types';
 
 const surfaces: readonly SurfKey[] = ['block', 'hot', 'dark', 'accent', 'foliage', 'boss'];
 const yAxis = new THREE.Vector3(0, 1, 0);
@@ -153,6 +153,27 @@ function mergedColours(geometries: readonly THREE.BufferGeometry[]): Float32Arra
 }
 
 /** Duck-typed like the rest of three, so a mesh from any build still matches. */
+/**
+ * Pieces merged into one geometry (V19), each moved by its matrix first (a
+ * copy; the pieces are left as they are). Every piece keeps only the
+ * attributes all of them have, and goes non-indexed if any of them is.
+ */
+function mergeMoved(pieces: readonly { geometry: THREE.BufferGeometry; matrix: THREE.Matrix4 }[]): THREE.BufferGeometry {
+  const indexed = pieces.every(({ geometry }) => geometry.index !== null);
+  const names = Object.keys(pieces[0]!.geometry.attributes).filter(name => pieces.every(({ geometry }) => name in geometry.attributes));
+  const copies = pieces.map(({ geometry, matrix }) => {
+    const copy = new THREE.BufferGeometry();
+    for (const name of names) copy.setAttribute(name, geometry.getAttribute(name).clone());
+    if (indexed) copy.setIndex(geometry.index!.clone());
+    copy.applyMatrix4(matrix);
+    return indexed ? copy : copy.toNonIndexed();
+  });
+  const merged = mergeGeometries(copies, false);
+  for (const copy of copies) copy.dispose();
+  if (!merged) throw new Error('V19: pieces could not be merged');
+  return merged;
+}
+
 function isMesh(node: THREE.Object3D): node is THREE.Mesh {
   return 'isMesh' in node && node.isMesh === true;
 }
@@ -420,6 +441,120 @@ export class LevelBuilder {
   }
 
   /**
+   * Merge a posed hierarchy's meshes that move together (V19: Mexico's
+   * mariachis, about 23 meshes each): each goes, in its nearest `moving`
+   * ancestor's space (or the root's), into one mesh per such ancestor and
+   * material, so the pivots the animation turns still carry it. Level parts
+   * (`part`) merge per surface key and tag and stay level surfaces (the look
+   * swaps their materials); hidden meshes are left as they are. Call it once
+   * the root is in the level (`addObject` sets the shadow flags).
+   */
+  rigid(root: THREE.Object3D, moving: readonly THREE.Object3D[]): void {
+    root.updateWorldMatrix(true, true);
+    const anchors = new Set([root, ...moving]);
+    const bySurface = new Map(this.level.surfaces.map(surface => [surface.mesh, surface]));
+    const batches = new Map<string, { anchor: THREE.Object3D; meshes: THREE.Mesh[]; surface: LevelSurface | undefined }>();
+    const shown = (node: THREE.Object3D): boolean => {
+      for (let n: THREE.Object3D | null = node; n && n !== root.parent; n = n.parent) if (!n.visible) return false;
+      return true;
+    };
+    root.traverse(node => {
+      if (!isMesh(node) || !shown(node) || Array.isArray(node.material)) return;
+      let anchor: THREE.Object3D = node.parent ?? root;
+      while (!anchors.has(anchor) && anchor.parent) anchor = anchor.parent;
+      const surface = bySurface.get(node);
+      const look = surface ? `${surface.surf}|${surface.materials.join()}` : node.material.uuid;
+      const key = `${anchor.uuid}|${look}|${node.castShadow}${node.receiveShadow}`;
+      let batch = batches.get(key);
+      if (!batch) batches.set(key, batch = { anchor, meshes: [], surface });
+      batch.meshes.push(node);
+    });
+    const inverse = new THREE.Matrix4();
+    for (const { anchor, meshes, surface } of batches.values()) {
+      if (meshes.length < 2) continue;
+      inverse.copy(anchor.matrixWorld).invert();
+      const geometry = mergeMoved(meshes.map(mesh => ({ geometry: mesh.geometry, matrix: new THREE.Matrix4().multiplyMatrices(inverse, mesh.matrixWorld) })));
+      const first = meshes[0]!, merged = new THREE.Mesh(geometry, first.material);
+      merged.castShadow = first.castShadow;
+      merged.receiveShadow = first.receiveShadow;
+      anchor.add(merged);
+      for (const mesh of meshes) {
+        mesh.removeFromParent();
+        if (mesh.geometry.userData.shared !== true) mesh.geometry.dispose();
+      }
+      if (!surface) continue;
+      const gone = new Set<THREE.Object3D>(meshes);
+      this.level.surfaces = this.level.surfaces.filter(entry => !gone.has(entry.mesh));
+      this.level.surfaces.push({ ...surface, mesh: merged });
+    }
+  }
+
+  /**
+   * V19: every breakable prop's parts drawn as one mesh per surface key,
+   * with a group per tag (as the merged level), not one mesh a part (Mexico's
+   * 48 props are 249 parts). The parts stay in their props' groups, hidden,
+   * and stay level surfaces, so they wear the look in force: a break throws
+   * them as debris as before (game/breakables.ts), and when the group leaves
+   * the scene the batch drops that prop's triangles, its vertices collapsed
+   * onto one point (a partial buffer upload). Hits, break events and
+   * respawns (a level reload) never read a mesh.
+   */
+  _batchBreakables(): void {
+    const bySurface = new Map(this.level.surfaces.map(surface => [surface.mesh, surface]));
+    type Piece = { mesh: THREE.Mesh; prop: Breakable };
+    const batches = new Map<SurfKey, Map<MaterialTag, Piece[]>>();
+    for (const prop of this.level.breakables) {
+      prop.group.updateWorldMatrix(true, true);
+      for (const mesh of prop.group.children) {
+        const surface = isMesh(mesh) ? bySurface.get(mesh) : undefined, tag = surface?.materials[0];
+        if (!surface || !isMesh(mesh) || surface.materials.length !== 1 || !tag) continue;
+        let tags = batches.get(surface.surf);
+        if (!tags) batches.set(surface.surf, tags = new Map());
+        let pieces = tags.get(tag);
+        if (!pieces) tags.set(tag, pieces = []);
+        pieces.push({ mesh, prop });
+      }
+    }
+    const ranges = new Map<Breakable, { position: THREE.BufferAttribute; start: number; count: number }[]>();
+    for (const [surf, tags] of batches) {
+      const groups = [...tags.values()], pieces = groups.flat();
+      const geometry = mergeMoved(pieces.map(({ mesh }) => ({ geometry: mesh.geometry, matrix: mesh.matrixWorld })));
+      const position = geometry.getAttribute('position') as THREE.BufferAttribute;
+      let start = 0, vertex = 0;
+      groups.forEach((group, i) => {
+        const count = group.reduce((n, { mesh }) => n + (mesh.geometry.index?.count ?? mesh.geometry.getAttribute('position').count), 0);
+        geometry.addGroup(start, count, i);
+        start += count;
+      });
+      for (const { mesh, prop } of pieces) {
+        const count = mesh.geometry.getAttribute('position').count;
+        let list = ranges.get(prop);
+        if (!list) ranges.set(prop, list = []);
+        list.push({ position, start: vertex, count });
+        vertex += count;
+        mesh.visible = false;
+      }
+      const batch = this.addObject(new THREE.Mesh(geometry, surfMat(surf)));
+      batch.name = 'breakables';
+      this.level.surfaces.push({ mesh: batch, surf, materials: [...tags.keys()], static: false });
+    }
+    for (const [prop, list] of ranges) {
+      const parts = prop.group.children.filter(isMesh);
+      prop.group.addEventListener('removed', () => {
+        // A level being torn down removes the groups of props still standing: nothing to do.
+        if (prop.alive) return;
+        for (const { position, start, count } of list) {
+          const array = position.array, x = array[3 * start]!, y = array[3 * start + 1]!, z = array[3 * start + 2]!;
+          for (let i = start; i < start + count; i++) position.setXYZ(i, x, y, z);
+          position.addUpdateRange(3 * start, 3 * count);
+          position.needsUpdate = true;
+        }
+        for (const part of parts) part.visible = true;
+      });
+    }
+  }
+
+  /**
    * Merge the pieces, one mesh per surface key with one geometry group per
    * material tag. Low draws each mesh whole in its surface colour, one call as
    * before; the realistic tiers give the groups their tags' materials
@@ -449,6 +584,7 @@ export class LevelBuilder {
       }
       parts.clear();
     }
+    this._batchBreakables();
     this._listOverlays();
     this._tagBareColliders();
     this.world.finalize();

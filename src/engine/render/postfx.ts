@@ -29,6 +29,12 @@ export interface PostConfig {
    */
   depth: boolean;
   bloom: boolean;
+  /**
+   * Light shafts (R8, Graphics → Light shafts): rays from the sun through
+   * the sky's gaps, read from the scene's depth texture (kept for them as
+   * for AO); with bloom on, the lens dirt the bloom lights as well.
+   */
+  shafts: boolean;
 }
 
 /**
@@ -57,6 +63,42 @@ const BLOOM_LEVELS = 5;
 const SOFT_HALF_FROM = 1400;
 /** Contrast-adaptive sharpen after SMAA: 0 none, 1 the most CAS gives. */
 const SHARPEN = 0.35;
+/** Light shafts' targets against the scene target, per axis: a quarter (soft rays need no more). */
+const SHAFT_SCALE = 0.25;
+/**
+ * Radius of the sky round the sun that sends shafts, in screen heights (a
+ * Gaussian's): the disc and its bright halo only. A wider patch lays an even
+ * veil over the frame instead of rays, since every pixel's taps then find
+ * open sky.
+ */
+const SHAFT_RADIUS = 0.1;
+/**
+ * How far the rays reach from the sun on the screen, in screen heights (a
+ * Gaussian's radius): the blur averages every pixel's line to the sun, so
+ * without it a pixel across the frame still takes the open sky by the sun.
+ */
+const SHAFT_REACH = 0.4;
+/**
+ * A ray's share over a surface, against over open sky: a ray is the air lit
+ * in front of whatever is behind it, and reads best against dark steel or a
+ * canopy, but at full strength it lifted their darks the most (after AgX).
+ */
+const SHAFT_ON_SOLID = 0.6;
+/** Taps per blur pass, and each tap's weight against the one before on the first (long) pass. */
+const SHAFT_TAPS = 16;
+const SHAFT_DECAY = 0.92;
+/**
+ * A map's `shafts` strength times this, times the sun's colour (its
+ * irradiance over its peak), is the light a ray adds, in scene units (a white
+ * ground in full sun is 1).
+ */
+const SHAFT_GAIN = 0.3;
+/**
+ * The lens dirt's gain over the wide bloom (its 1/8 resolution level and
+ * below): specks a bright source lights nearby, the sun most. Subtle; the
+ * texture peaks at 1.
+ */
+const DIRT_STRENGTH = 0.7;
 
 /**
  * AO darkens ambient light only. Every opaque lit material writes the share of
@@ -222,7 +264,7 @@ type CompositeUniforms = FeedbackUniforms & GradeUniforms & AoLookupUniforms & B
 };
 /** The soft particles' layer (premultiplied) and whether this frame drew one. */
 type SoftUniforms = { soft: U<THREE.Texture>; softOn: U<number> };
-type ToneUniforms = GradeUniforms & AoLookupUniforms & BloomUniforms & RegionUniforms & SoftUniforms & {
+type ToneUniforms = GradeUniforms & AoLookupUniforms & BloomUniforms & RegionUniforms & SoftUniforms & ShaftUniforms & {
   image: U<THREE.Texture>;
   exposure: U<number>;
 };
@@ -232,6 +274,18 @@ type GtaoUniforms = RegionUniforms & {
   cameraNear: U<number>; cameraFar: U<number>; radiusScale: U<number>; radiusMax: U<number>;
 };
 type BlurUniforms = RegionUniforms & { image: U<THREE.Texture | null>; texel: U<THREE.Vector2> };
+/** The shafts' mask (from the scene's depth) and radial blur passes; `sunUv` is the sun on the screen. */
+type ShaftMaskUniforms = RegionUniforms & {
+  depth: U<THREE.Texture | null>; texel: U<THREE.Vector2>; sunUv: U<THREE.Vector2>; aspect: U<number>;
+};
+type ShaftBlurUniforms = RegionUniforms & {
+  image: U<THREE.Texture | null>; sunUv: U<THREE.Vector2>; span: U<number>; decay: U<number>; reach: U<number>; aspect: U<number>;
+};
+/** The shafts and lens dirt as the tone pass adds them. */
+type ShaftUniforms = {
+  shafts: U<THREE.Texture>; shaftMax: U<THREE.Vector2>; shaftColor: U<THREE.Color>;
+  dirt: U<THREE.Texture | null>; dirtBloom: U<THREE.Texture>; dirtMax: U<THREE.Vector2>;
+};
 type BloomPassUniforms = RegionUniforms & { image: U<THREE.Texture | null>; texel: U<THREE.Vector2> };
 
 const regionUniforms = (): RegionUniforms => ({ uvScale: { value: new THREE.Vector2(1, 1) }, uvMax: { value: new THREE.Vector2(1, 1) } });
@@ -271,7 +325,7 @@ export class Composite {
   readonly camera: THREE.OrthographicCamera;
   readonly triangle: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;
   /** The config in force; read by the renderer and the tests. */
-  config: PostConfig = { look: 'lowpoly', samples: 4, fxaa: false, smaa: false, ao: 0, depth: false, bloom: false };
+  config: PostConfig = { look: 'lowpoly', samples: 4, fxaa: false, smaa: false, ao: 0, depth: false, bloom: false, shafts: false };
   readonly _low: THREE.ShaderMaterial;
   readonly _tone: THREE.ShaderMaterial;
   readonly _final: THREE.ShaderMaterial;
@@ -287,6 +341,19 @@ export class Composite {
   readonly _prefilterUniforms: BloomPassUniforms & SoftUniforms & { exposure: U<number> };
   readonly _downUniforms: BloomPassUniforms;
   readonly _upUniforms: BloomPassUniforms;
+  readonly _shaftMask: THREE.ShaderMaterial;
+  readonly _shaftBlur: THREE.ShaderMaterial;
+  readonly _shaftMaskUniforms: ShaftMaskUniforms;
+  readonly _shaftBlurUniforms: ShaftBlurUniforms;
+  /** Light shafts (R8): the mask, then the blur's ping-pong; `[0]` holds the rays the tone pass adds. Allocated while shafts are on. */
+  readonly _shafts = [floatTarget(THREE.RGBAFormat, THREE.LinearFilter), floatTarget(THREE.RGBAFormat, THREE.LinearFilter)] as const;
+  /** The map's shaft strength (`Atmosphere.shafts`), where the sun is (world, towards it) and its hue, from the renderer. */
+  _shaftStrength = 0;
+  readonly _sunDir = new THREE.Vector3(0, 1, 0);
+  readonly _sunColor = new THREE.Color(1, 1, 1);
+  readonly _sunView = new THREE.Vector3();
+  /** The lens dirt (R8): made once while shafts and bloom are on (`lensDirt`), freed with them. */
+  _dirt: THREE.DataTexture | null = null;
   /** Raw GTAO, then its denoised copy; r is visibility, g the view depth in metres. */
   readonly _aoRaw = floatTarget(THREE.RGFormat, THREE.NearestFilter);
   readonly _aoBlur = floatTarget(THREE.RGFormat, THREE.NearestFilter);
@@ -404,7 +471,9 @@ export class Composite {
       }
     `);
 
-    this._toneUniforms = { ...grade, ...aoLookup, ...bloom, ...region, ...this._softUniforms, image: { value: this.target.texture }, exposure: { value: 1 } };
+    this._toneUniforms = { ...grade, ...aoLookup, ...bloom, ...region, ...this._softUniforms, image: { value: this.target.texture }, exposure: { value: 1 },
+      shafts: { value: this._shafts[0]!.texture }, shaftMax: { value: new THREE.Vector2(1, 1) }, shaftColor: { value: new THREE.Color(0, 0, 0) },
+      dirt: { value: null }, dirtBloom: { value: this._bloom[2]!.texture }, dirtMax: { value: new THREE.Vector2(1, 1) } };
     this._tone = makePostMaterial(this._toneUniforms, VERTEX, `
       #include <packing>
       uniform sampler2D image;
@@ -423,6 +492,15 @@ export class Composite {
       #endif
       #ifdef SOFT
       ${SOFT_GLSL}
+      #endif
+      #ifdef SHAFTS
+      uniform sampler2D shafts;
+      uniform vec2 shaftMax;
+      uniform vec3 shaftColor;
+      #endif
+      #if defined( DIRT ) && defined( BLOOM )
+      uniform sampler2D dirt, dirtBloom;
+      uniform vec2 dirtMax;
       #endif
 
       // AgX (Troy Sobotka's, in the common minimal fit): a log encoding over
@@ -464,6 +542,13 @@ export class Composite {
         #endif
         #ifdef BLOOM
         col += texture2D(bloom, min(uv, bloomMax)).rgb * bloomStrength;
+        #ifdef DIRT
+        // Lens dirt (R8): specks the wide glow round a bright source lights, the sun above all.
+        col += texture2D(dirtBloom, min(uv, dirtMax)).rgb * texture2D(dirt, vUv).r * ${DIRT_STRENGTH.toFixed(2)};
+        #endif
+        #endif
+        #ifdef SHAFTS
+        col += texture2D(shafts, min(uv, shaftMax)).r * shaftColor;
         #endif
         col = grade(agx(col * exposure));
         // sRGB out for SMAA and the sharpen, with half a level of dither against banding in the sky.
@@ -681,9 +766,60 @@ export class Composite {
     `);
     this._up.blending = THREE.AdditiveBlending;
 
+    // Light shafts (R8), at a quarter of the scene's size: the open sky round the sun, where the depth says sky
+    // (the rig and every surface block it), then blurred along the rays towards the sun in two passes, a long one
+    // and a short one that fills in between its taps (SHAFT_TAPS squared taps along each ray). The last pass
+    // fades them with the distance from the sun on the screen and over surfaces (SHAFT_REACH, SHAFT_ON_SOLID).
+    // Red is the rays, which the tone pass colours with the sun; green the texel's own open sky, carried through.
+    this._shaftMaskUniforms = { ...region, depth: { value: null },
+      texel: { value: new THREE.Vector2(1, 1) }, sunUv: { value: new THREE.Vector2(0.5, 0.5) }, aspect: { value: 1 } };
+    this._shaftMask = makePostMaterial(this._shaftMaskUniforms, VERTEX, `
+      uniform sampler2D depth;
+      uniform vec2 texel, sunUv;
+      uniform float aspect;
+      varying vec2 vUv;
+      ${REGION_GLSL}
+      float sky(vec2 uv) { return step(1.0, texture2D(depth, min(uv, uvMax)).x); }
+      void main() {
+        vec2 uv = vUv * uvScale;
+        // Four depth taps over this texel's footprint (four by four scene pixels): its share of open sky.
+        float open = 0.25 * (sky(uv + vec2(-1.5, -1.5) * texel) + sky(uv + vec2(1.5, -1.5) * texel)
+          + sky(uv + vec2(-1.5, 1.5) * texel) + sky(uv + vec2(1.5, 1.5) * texel));
+        vec2 d = (vUv - sunUv) * vec2(aspect, 1.0);
+        gl_FragColor = vec4(open * exp(-dot(d, d) / ${(SHAFT_RADIUS * SHAFT_RADIUS).toFixed(4)}), open, 0.0, 1.0);
+      }
+    `);
+    this._shaftBlurUniforms = { ...regionUniforms(), image: { value: null }, sunUv: { value: new THREE.Vector2(0.5, 0.5) },
+      span: { value: 1 }, decay: { value: SHAFT_DECAY }, reach: { value: 0 }, aspect: this._shaftMaskUniforms.aspect };
+    this._shaftBlur = makePostMaterial(this._shaftBlurUniforms, VERTEX, `
+      uniform sampler2D image;
+      uniform vec2 sunUv;
+      uniform float span, decay, reach, aspect;
+      varying vec2 vUv;
+      ${REGION_GLSL}
+      // Taps from this texel towards the sun over span of the way, each weighted decay times the last; the
+      // first is the texel itself, whose open sky passes through. With a reach (the last pass), the fades.
+      void main() {
+        vec2 step = (sunUv - vUv) * span / ${SHAFT_TAPS.toFixed(1)};
+        float sum = 0.0, w = 1.0, total = 0.0;
+        for (int i = 0; i < ${SHAFT_TAPS}; i++) {
+          sum += texture2D(image, min((vUv + step * float(i)) * uvScale, uvMax)).r * w;
+          total += w;
+          w *= decay;
+        }
+        float open = texture2D(image, min(vUv * uvScale, uvMax)).g, rays = sum / total;
+        if (reach > 0.0) {
+          vec2 d = (vUv - sunUv) * vec2(aspect, 1.0);
+          rays *= exp(-dot(d, d) / (reach * reach)) * mix(${SHAFT_ON_SOLID.toFixed(2)}, 1.0, open);
+        }
+        gl_FragColor = vec4(rays, open, 0.0, 1.0);
+      }
+    `);
+
     // Named for the three inspector and the pass-chain test.
     const names: [THREE.ShaderMaterial, string][] = [[this._low, 'composite'], [this._tone, 'agx'], [this._final, 'final'],
-      [this._gtao, 'gtao'], [this._blur, 'ao-blur'], [this._prefilter, 'bloom-prefilter'], [this._down, 'bloom-down'], [this._up, 'bloom-up']];
+      [this._gtao, 'gtao'], [this._blur, 'ao-blur'], [this._prefilter, 'bloom-prefilter'], [this._down, 'bloom-down'], [this._up, 'bloom-up'],
+      [this._shaftMask, 'shaft-mask'], [this._shaftBlur, 'shaft-blur']];
     for (const [material, name] of names) material.name = `post:${name}`;
     this.triangle = new THREE.Mesh(geometry, this._low);
     this.triangle.frustumCulled = false;
@@ -694,11 +830,14 @@ export class Composite {
   dispose(): void {
     this.target.dispose();
     this._depth?.dispose();
-    for (const target of [this._aoRaw, this._aoBlur, this._soft, this._ldr, this._ldr2, ...this._bloom]) target.dispose();
+    for (const target of [this._aoRaw, this._aoBlur, this._soft, this._ldr, this._ldr2, ...this._bloom, ...this._shafts]) target.dispose();
+    this._dirt?.dispose();
+    this._dirt = null;
     this._smaa?.dispose();
     this._smaa = null;
     this.triangle.geometry.dispose();
-    for (const material of [this._low, this._tone, this._final, this._gtao, this._blur, this._prefilter, this._down, this._up]) material.dispose();
+    for (const material of [this._low, this._tone, this._final, this._gtao, this._blur, this._prefilter, this._down, this._up, this._shaftMask,
+      this._shaftBlur]) material.dispose();
   }
 
   /**
@@ -725,6 +864,8 @@ export class Composite {
       h = Math.max(1, h >> 1);
       this._bloom[i]!.setSize(w, h);
     }
+    for (const target of this._shafts) target.setSize(Math.max(1, Math.round(width * SHAFT_SCALE)), Math.max(1, Math.round(height * SHAFT_SCALE)));
+    this._shaftMaskUniforms.aspect.value = aspect;
     this._applyScale();
   }
 
@@ -778,6 +919,13 @@ export class Composite {
     }
     const first = this._bloom[0]!, drawn = first.viewport;
     this.uniforms.bloomMax.value.set((drawn.z - 0.5) / first.width, (drawn.w - 0.5) / first.height);
+    const wide = this._bloom[2]!;
+    this._toneUniforms.dirtMax.value.set((wide.viewport.z - 0.5) / wide.width, (wide.viewport.w - 0.5) / wide.height);
+    const shaftWidth = Math.min(this._shafts[0].width, Math.max(1, Math.round(width * SHAFT_SCALE)));
+    const shaftHeight = Math.min(this._shafts[0].height, Math.max(1, Math.round(height * SHAFT_SCALE)));
+    for (const target of this._shafts) target.viewport.set(0, 0, shaftWidth, shaftHeight);
+    setRegion(this._shaftBlurUniforms, shaftWidth, shaftHeight, this._shafts[0]);
+    this._toneUniforms.shaftMax.value.copy(this._shaftBlurUniforms.uvMax.value);
   }
 
   /**
@@ -790,7 +938,7 @@ export class Composite {
   configure(config: PostConfig): void {
     const before = this.config;
     this.config = { ...config };
-    const depth = config.ao > 0 || config.depth, ao = config.ao > 0;
+    const depth = config.ao > 0 || config.depth || config.shafts, ao = config.ao > 0;
     if (this.target.samples !== config.samples || (this.target.depthTexture !== null) !== depth) {
       this.target.samples = config.samples;
       if (depth && !this._depth) {
@@ -803,7 +951,7 @@ export class Composite {
       if (!depth) this._depth = null;
       this.target.depthTexture = this._depth;
     }
-    this.uniforms.depth.value = this._gtaoUniforms.depth.value = this._depth;
+    this.uniforms.depth.value = this._gtaoUniforms.depth.value = this._shaftMaskUniforms.depth.value = this._depth;
     if (before.ao !== config.ao) {
       this._sizeAo();
       this._applyScale();
@@ -821,11 +969,19 @@ export class Composite {
     if (!ao) for (const target of [this._aoRaw, this._aoBlur]) target.dispose();
     if (!config.bloom) for (const target of this._bloom) target.dispose();
     if (!config.depth) this._soft.dispose();
+    if (!config.shafts) for (const target of this._shafts) target.dispose();
+    const dirt = config.shafts && config.bloom && realistic;
+    if (dirt && !this._dirt) this._dirt = lensDirt();
+    if (!dirt && this._dirt) {
+      this._dirt.dispose();
+      this._dirt = null;
+    }
+    this._toneUniforms.dirt.value = this._dirt;
     // `_ldr` feeds SMAA on the flat look and the final pass on the realistic one; `_ldr2` is SMAA's output there.
     if (!realistic && !config.smaa) this._ldr.dispose();
     if (!realistic || !config.smaa) this._ldr2.dispose();
     setDefines(this._low, { FXAA: config.fxaa, AO: ao, BLOOM: config.bloom, LDR_OUT: config.smaa });
-    setDefines(this._tone, { AO: ao, BLOOM: config.bloom, SOFT: config.depth });
+    setDefines(this._tone, { AO: ao, BLOOM: config.bloom, SOFT: config.depth, SHAFTS: config.shafts, DIRT: dirt });
     setDefines(this._prefilter, { SOFT: config.depth });
     setDefines(this._final, { FXAA: config.fxaa });
     // The Low composite and the realistic final pass both draw the feedback; only one runs.
@@ -848,6 +1004,34 @@ export class Composite {
     u.gain.value.fromArray(grade.gain);
     u.saturation.value = grade.saturation;
     u.contrast.value = grade.contrast;
+  }
+
+  /**
+   * Light shafts' strength on this map (`Atmosphere.shafts`, 0 for none) and
+   * the direction towards the sun, world space; drawn only while the config
+   * has them on, the look is realistic and the sun is near enough the view.
+   */
+  setShafts(strength: number, sunDir: THREE.Vector3, sunColor: THREE.Color): void {
+    this._shaftStrength = strength;
+    this._sunDir.copy(sunDir).normalize();
+    this._sunColor.copy(sunColor).multiplyScalar(1 / Math.max(sunColor.r, sunColor.g, sunColor.b, 1e-6));
+  }
+
+  /**
+   * How much of the map's shafts this view shows: where the sun lands on the
+   * screen (0-1 UV, into the mask and blur uniforms), fading as it leaves the
+   * frame by half a screen and to nothing behind the eye.
+   */
+  _aimShafts(camera: THREE.PerspectiveCamera): number {
+    const view = this._sunView.copy(this._sunDir).transformDirection(camera.matrixWorldInverse);
+    if (view.z > -0.05) return 0;
+    const p = camera.projectionMatrix.elements, w = -view.z;
+    const x = (p[0]! * view.x + p[8]! * view.z) / w * 0.5 + 0.5, y = (p[5]! * view.y + p[9]! * view.z) / w * 0.5 + 0.5;
+    this._shaftMaskUniforms.sunUv.value.set(x, y);
+    this._shaftBlurUniforms.sunUv.value.set(x, y);
+    const outside = Math.max(0, -x, x - 1, -y, y - 1);
+    const t = Math.min(1, outside / 0.5), facing = Math.min(1, (w - 0.05) / 0.2);
+    return (1 - t * t * (3 - 2 * t)) * facing;
   }
 
   /** The realistic look's exposure (a linear multiplier); Low has none. */
@@ -916,6 +1100,24 @@ export class Composite {
         this._pass(renderer, this._up, this._bloom[i - 1]!);
       }
     }
+    const strength = config.shafts && config.look === 'realistic' && this._shaftStrength > 0 ? this._shaftStrength * this._aimShafts(camera) : 0;
+    this._toneUniforms.shaftColor.value.copy(this._sunColor).multiplyScalar(strength * SHAFT_GAIN);
+    if (strength > 0) {
+      const [rays, spare] = this._shafts, source = this.target;
+      this._shaftMaskUniforms.texel.value.set(1 / source.width, 1 / source.height);
+      this._pass(renderer, this._shaftMask, rays);
+      const blur = this._shaftBlurUniforms;
+      blur.image.value = rays.texture;
+      blur.span.value = 1;
+      blur.decay.value = SHAFT_DECAY;
+      blur.reach.value = 0;
+      this._pass(renderer, this._shaftBlur, spare);
+      blur.image.value = spare.texture;
+      blur.span.value = 1 / SHAFT_TAPS;
+      blur.decay.value = 1;
+      blur.reach.value = SHAFT_REACH;
+      this._pass(renderer, this._shaftBlur, rays);
+    }
     const smaa = config.smaa ? this._smaa : null;
     if (config.look === 'realistic') {
       this._pass(renderer, this._tone, this._ldr);
@@ -964,4 +1166,43 @@ function setDefines(material: THREE.ShaderMaterial, flags: Record<string, boolea
     changed = true;
   }
   if (changed) material.needsUpdate = true;
+}
+
+/**
+ * The lens dirt (R8): a greyscale film of smudges, dust specks with a
+ * brighter rim, and a few wiper streaks, drawn once from a fixed seed
+ * (no image file; nothing downloaded). Peaks at 1.
+ */
+export function lensDirt(width = 320, height = 180): THREE.DataTexture {
+  const film = new Float32Array(width * height);
+  let seed = 0x5eed;
+  const random = (): number => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const splat = (cx: number, cy: number, rx: number, ry: number, angle: number, amount: number, rim: number): void => {
+    const reach = 2.5 * Math.max(rx, ry), c = Math.cos(angle), s = Math.sin(angle);
+    for (let y = Math.max(0, Math.floor(cy - reach)); y < Math.min(height, Math.ceil(cy + reach)); y++) {
+      for (let x = Math.max(0, Math.floor(cx - reach)); x < Math.min(width, Math.ceil(cx + reach)); x++) {
+        const dx = x - cx, dy = y - cy, u = (dx * c + dy * s) / rx, v = (dy * c - dx * s) / ry, d2 = u * u + v * v;
+        film[y * width + x]! += amount * (Math.exp(-d2) + rim * Math.exp(-8 * (Math.sqrt(d2) - 1) ** 2));
+      }
+    }
+  };
+  // Broad, faint smudges; then dust specks, the larger ones ringed; then a few long, thin streaks.
+  for (let i = 0; i < 14; i++) splat(random() * width, random() * height, 18 + random() * 30, 12 + random() * 24, random() * Math.PI, 0.12 + 0.12 * random(), 0);
+  for (let i = 0; i < 110; i++) {
+    const r = 1.2 + random() ** 3 * 9;
+    splat(random() * width, random() * height, r, r * (0.8 + 0.4 * random()), random() * Math.PI, 0.25 + 0.6 * random(), r > 5 ? 0.5 : 0);
+  }
+  for (let i = 0; i < 5; i++) splat(random() * width, random() * height, 40 + random() * 60, 1.5 + random() * 2, random() * Math.PI, 0.15 + 0.1 * random(), 0);
+  const peak = film.reduce((m, v) => Math.max(m, v), 1e-6);
+  const texture = new THREE.DataTexture(Uint8Array.from(film, v => Math.round(255 * Math.min(1, v / peak))), width, height, THREE.RedFormat);
+  texture.minFilter = texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = false;
+  texture.needsUpdate = true;
+  texture.name = 'lens-dirt';
+  return texture;
 }

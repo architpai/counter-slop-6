@@ -1,9 +1,9 @@
 import { Mesh, Vector3 } from 'three';
 import { clamp, damp, rand, alignSegment, wrapAngle } from '../util';
 import { seeThrough } from '../physics';
-import { boxGeo, unlitMat, TONE_HEX } from '../render/index';
+import { unlitMat, TONE_HEX } from '../render/index';
 import { bossThink } from './boss';
-import { spawnProjectile } from './projectiles';
+import { SEGMENT_BOX, spawnProjectile } from './projectiles';
 import { rollCooldown } from './types';
 import type { RangedType } from './types';
 import type { CoreParts, EyeAnchors } from './model';
@@ -204,7 +204,7 @@ function oneShot(m: EnemyManager, e: EnemyRecord, aim: Vector3, speed: number, t
 function laser(m: EnemyManager, e: EnemyRecord, aim: Vector3): void {
   const length = muzzle.distanceTo(aim);
   if (!e.laser) {
-    e.laser = new Mesh(boxGeo(1, 1, 1), unlitMat(TONE_HEX[1]));
+    e.laser = new Mesh(SEGMENT_BOX, unlitMat(TONE_HEX[1]));
     e.laser.name = 'sniper telegraph';
     m.ctx.scene.add(e.laser);
   }
