@@ -83,6 +83,8 @@ try {
   const lateId = (await read(late)).id;
   assert.equal((await read(late)).teams[lateId], 0);
   assert.equal((await read(late)).match.round, 1);
+  // A late join under software GL can take most of Blue's 30 s hold; refill it so round 1 lasts the next steps.
+  await host.evaluate(() => { window.__game.gs.teamMatch.flag.holdLeft = 30; });
 
   // A client cannot send host-only objective/score commands through real Net routing.
   await client.evaluate(() => {
