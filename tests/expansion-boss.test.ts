@@ -36,7 +36,7 @@ function setup(type: EnemyKind, distance = 10) {
       body: new Body(pos, stats.flying ? 0.45 : Math.min(0.33 * stats.scale, 0.9), (stats.flying ? 0.8 : 1.85) * stats.scale),
       center: pos.clone().add(new Vector3(0, stats.scale, 0)), attackCd: 0, specialCd: 12,
       aimT: 0, aimAmt: 0, aimPoint: null, aimWarned: false, chargeCount: 0, attackT: 0,
-      specialT: 0, actionPoint: null, rageT: 0, rageStacks: 0, retreatT: 0, weakT: 0, yankableT: 0,
+      losT: 0, hasLOS: false, specialT: 0, actionPoint: null, rageT: 0, rageStacks: 0, retreatT: 0, weakT: 0, yankableT: 0,
       flightPhase: 'orbit', orbitDir: 1, payload: kind === 'carrier', laser: null,
     } as unknown as EnemyRecord;
     enemy.body.onGround = !stats.flying; enemy.body.noSnap = !!stats.flying;

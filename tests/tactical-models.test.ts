@@ -1,6 +1,8 @@
 import { expect, test } from 'vitest';
 import { page } from 'vitest/browser';
-import { Box3, BoxGeometry, Mesh, MeshStandardMaterial, Object3D, Vector3 } from 'three';
+import { Box3, BoxGeometry, Mesh, MeshStandardMaterial, Object3D, Scene, Vector3 } from 'three';
+import { Effects } from '@/engine/effects';
+import { World } from '@/engine/physics';
 import { makeFigure, raycastFigure } from '@/engine/render/figure';
 import { makeModel, animate, syncModel, corpse } from '@/engine/enemies/model';
 import type { EnemyRecord } from '@/engine/enemies';
@@ -16,7 +18,7 @@ const mesh = (root: { getObjectByName(name: string): unknown }, name: string): M
   return object;
 };
 
-test('tactical assets preserve joints, head targets, materials and instance ownership', () => {
+test('tactical assets preserve joints, head targets, materials and shared geometry', () => {
   for (const stats of Object.values(TYPES)) {
     const type = stats.key;
     const { figure, hits } = makeModel(stats);
@@ -47,7 +49,8 @@ test('tactical assets preserve joints, head targets, materials and instance owne
       expect(bounds.max.y).toBeGreaterThan((stats.kind === 'humanoid' ? 1.8 : .7) * stats.scale);
       const shell = mesh(figure.root, 'mask-shell');
       const otherShell = mesh(other.root, 'mask-shell');
-      expect(shell.geometry).not.toBe(otherShell.geometry);
+      expect(shell.geometry).toBe(otherShell.geometry);
+      expect(shell.geometry.userData.shared).toBe(true);
       expect(shell.material).toBe(otherShell.material);
       expect(shell.material).toBeInstanceOf(MeshStandardMaterial);
       const original = shell.material;
@@ -59,7 +62,7 @@ test('tactical assets preserve joints, head targets, materials and instance owne
       let releases = 0;
       shell.geometry.addEventListener('dispose', () => releases++);
       figure.dispose(); figure.dispose();
-      expect(releases).toBe(1);
+      expect(releases).toBe(0);
       expect(otherShell.geometry.attributes.position?.count).toBeGreaterThan(0);
     } finally { figure.dispose(); other.dispose(); }
   }
@@ -107,9 +110,8 @@ test('expansion equipment follows the rig, state cues and visible hit regions', 
       if (stats.shield) {
         const target = figure.anchors.shield!.getWorldPosition(new Vector3());
         expect(raycastFigure(figure.root, target.add(new Vector3(0, 0, 5)), direction, 10)?.part).toBe('shield');
-        const shield = figure.dropShield()!;
+        expect(figure.dropShield()).not.toBeNull();
         expect(figure.anchors.shield).toBeUndefined();
-        shield.traverse(object => { if (object instanceof Mesh) object.geometry.dispose(); });
       }
       record.weakT = record.yankableT = record.guardT = 1;
       animate(record, 1 / 60);
@@ -118,6 +120,22 @@ test('expansion equipment follows the rig, state cues and visible hit regions', 
       if (type === 'parry') expect(figure.parts.foreR!.rotation.x).toBe(-1.15);
     } finally { figure.dispose(); }
   }
+});
+
+test('expired debris keeps the shared tactical geometry', () => {
+  const effects = new Effects(new Scene(), new World());
+  const { figure } = makeModel(TYPES.grunt);
+  const gib = figure.parts.foreR!;
+  const surface = mesh(gib, 'foreR-surface');
+  let releases = 0;
+  surface.geometry.addEventListener('dispose', () => releases++);
+  expect(surface.geometry.userData.shared).toBe(true);
+  effects.debris(gib, new Vector3(), new Vector3(), new Vector3(), { life: .01 });
+  effects.update(.05);
+  expect(gib.parent).toBeNull();
+  expect(releases).toBe(0);
+  expect(surface.geometry.attributes.position?.count).toBeGreaterThan(0);
+  figure.dispose();
 });
 
 test('render the tactical cast and exercise each animation rig', async () => {

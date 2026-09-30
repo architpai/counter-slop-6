@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { Object3D, Vector3 } from 'three';
 import { Spring, Spring3, Cooldown, clamp, damp, wrapAngle, angleLerp, alignSegment, round2 } from '@/engine/util';
-import { Body, EPS, World, seeThrough } from '@/engine/physics';
+import { Body, EPS, World, seeThrough, type Box } from '@/engine/physics';
 import { NavGrid } from '@/engine/nav';
 
 const assert = (cond: unknown, message: string): void => { expect(cond, message).toBeTruthy(); };
@@ -111,6 +111,64 @@ test('steps and ceilings', () => {
   ceilingWorld.moveBody(jumper, 0.05);
   assert(jumper.hitCeil && jumper.vel.y === 0 && !jumper.onGround, 'ceiling contact is kept across substeps');
   near(jumper.pos.y, 0.25, 'head rests flush below the ceiling');
+});
+
+test('ray acceleration matches a brute-force scan', () => {
+  let seed = 0x2f6e2b1;
+  const rnd = (): number => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
+  const span = (lo: number, hi: number): number => lo + rnd() * (hi - lo);
+  /** Plain slab scan over every box, the rules `World.raycast` pins. */
+  const brute = (w: World, o: Vector3, d: Vector3, maxDist: number): { box: Box; dist: number } | null => {
+    let best = maxDist, box: Box | null = null;
+    for (const b of w.boxes) {
+      let tmin = 0, tmax = best, entry = '', missed = false;
+      for (const axis of ['x', 'y', 'z'] as const) {
+        if (Math.abs(d[axis]) < 1e-9) {
+          if (o[axis] < b.min[axis] || o[axis] > b.max[axis]) { missed = true; break; }
+        } else {
+          let t1 = (b.min[axis] - o[axis]) / d[axis], t2 = (b.max[axis] - o[axis]) / d[axis];
+          if (t1 > t2) [t1, t2] = [t2, t1];
+          if (t1 > tmin) { tmin = t1; entry = axis; }
+          if (t2 < tmax) tmax = t2;
+          if (tmin > tmax) { missed = true; break; }
+        }
+      }
+      if (!missed && entry && tmin < best) { best = tmin; box = b; }
+    }
+    return box ? { box, dist: best } : null;
+  };
+
+  const world = new World();
+  for (let i = 0; i < 60; i++) {
+    const x = span(-80, 80), y = span(-10, 20), z = span(-80, 80);
+    world.addBox(v(x, y, z), v(x + span(0.5, 20), y + span(0.5, 20), z + span(0.5, 20)));
+  }
+  world.addBox(v(-80, -2, -80), v(80, -1, 80));            // floor slab over every cell
+  world.addBox(v(-40, 6, -8), v(40, 6.5, 8));              // long catwalk
+  world.addBox(v(8, 0, 8), v(16, 3, 16));                  // corners exactly on cell boundaries
+  world.addBox(v(-8.0001, 1, 7.999), v(0.001, 2, 24.001)); // straddles boundaries by a hair
+  world.finalize();
+  const late = world.addBox(v(30, 0, -60), v(34, 5, -56));
+  assert(world.raycast(v(32, 20, -58), v(0, -1, 0), 30)?.box === late, 'rays see boxes added after finalize');
+
+  for (let i = 0; i < 500; i++) {
+    const origin = v(span(-90, 90), span(-30, 40), span(-90, 90)), mode = i % 5;
+    const dir = mode === 0 ? v(0, rnd() < 0.5 ? -1 : 1, 0)
+      : mode === 1 ? v(span(-1, 1), span(-1e-6, 1e-6), span(-1, 1)).normalize()
+        : mode === 2 ? v(span(-1e-6, 1e-6), span(-1, 1), span(-1e-6, 1e-6)).normalize()
+          : v(span(-1, 1), span(-1, 1), span(-1, 1)).normalize();
+    const maxDist = span(1, 200), hit = world.raycast(origin, dir, maxDist), want = brute(world, origin, dir, maxDist);
+    if (!want) { assert(hit === null, `ray ${i} misses like the brute-force scan`); continue; }
+    assert(hit?.box === want.box, `ray ${i} hits the brute-force box`);
+    assert(Math.abs((hit?.dist ?? NaN) - want.dist) < 1e-6, `ray ${i} hits at the brute-force distance`);
+    assert((hit?.point.distanceTo(v().copy(origin).addScaledVector(dir, want.dist)) ?? 1) < 1e-6, `ray ${i} reports its hit point`);
+  }
+  for (let i = 0; i < 200; i++) {
+    const a = v(span(-90, 90), span(-30, 40), span(-90, 90)), b = v(span(-90, 90), span(-30, 40), span(-90, 90));
+    const dir = v().subVectors(b, a), dist = dir.length();
+    assert(world.lineOfSight(a, b) === (world.raycast(a, dir.multiplyScalar(1 / dist), dist) === null),
+      `line of sight ${i} agrees with the ray`);
+  }
 });
 
 test('nav grid nodes and A* paths', () => {

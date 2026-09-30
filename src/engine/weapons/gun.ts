@@ -75,6 +75,8 @@ export abstract class ViewModel<M extends WeaponModel = WeaponModel> {
     this._equipped = false;
     this._disposed = false;
     ctx.renderer.rig.add(this.root);
+    // Flags the rig meshes once; `?.` keeps stub renderers in tests working.
+    ctx.renderer.prepareRig?.(this.root);
   }
 
   equip() {
@@ -271,7 +273,8 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
   animate(st: WeaponState, dt: number) {
     if (this._disposed || !this._equipped) return;
     this._pose(st, dt);
-    this._fireT -= dt;
+    // Carry the residual so the rate of fire is frame-rate independent; clamp so idling banks no burst.
+    this._fireT = Math.max(this._fireT - dt, -dt);
     if (this._flashT > 0) {
       this._flashT -= dt;
       if (this._flashT <= 0) this._model.flash.visible = false;
@@ -310,7 +313,8 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
   _fire(st: WeaponState) {
     const s = this._stats, { effects, audio, input, game } = this._ctx;
     const followUp = this._player.headshotT > 0 ? 0.6 : 1;
-    this._fireT = s.fireInterval;
+    this._fireT += s.fireInterval;
+    const shot = s.magSize - this.mag; // 0 for the first round of a full magazine
     this.mag--;
     const spreadNow = this._spread;
     this._spread = Math.min(this._spread + s.spreadKick * followUp, s.spreadMax);
@@ -338,7 +342,8 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
     const k = s.modelKick;
     this.kickPos(rand(-k[0], k[0]) * followUp, rand(0.4 * k[1], k[1]) * followUp, k[2] * followUp);
     this.kickRot(k[3] * followUp, rand(-k[4], k[4]) * followUp, rand(-k[5], k[5]) * followUp);
-    this._player.recoil((s.camKick[0] * (st.aim ? 0.7 : 1) + rand(0, s.camKick[0] * 0.3)) * followUp, rand(-s.camKick[1], s.camKick[1]) * followUp);
+    // Yaw walks a fixed pattern the player can learn; only 30 % of the kick is noise.
+    this._player.recoil((s.camKick[0] * (st.aim ? 0.7 : 1) + rand(0, s.camKick[0] * 0.3)) * followUp, (Math.sin(shot * 0.9) * 0.7 + rand(-0.3, 0.3)) * s.camKick[1] * followUp);
     this._player.kickFov(s.fovKick);
     audio[s.fireCue]();
     input.rumble(0.15 + s.fovKick * 0.08, 0.5, 40 + s.fovKick * 15);

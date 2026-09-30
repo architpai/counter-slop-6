@@ -7,6 +7,7 @@ import type { GameState, GameStateName } from '@/engine/types';
 import { createTeamMatch, assignTeams } from '@/engine/game/team-rules';
 import type { OnlineMode, TeamMatch } from '@/engine/game/team-rules';
 import { teamLayout } from '@/engine/game/team-world';
+import { GUN_STATS } from '@/engine/weapons/stats';
 
 const assert = (cond: unknown, message: string): void => { expect(cond, message).toBeTruthy(); };
 const must = <T>(value: T | undefined | null, what: string): T => {
@@ -91,9 +92,15 @@ function setup(isHost = false, mode: OnlineMode = 'ffa') {
     ['host', { id: 'host', name: 'Host', kills: 7, deaths: 2 }],
     ['client', { id: 'client', name: 'Client', kills: 3, deaths: 5 }],
   ]);
+  const pickupItems: { id: number; mesh: { position: Vector3 } }[] = [];
+  const removePickup = vi.fn((rid: number) => {
+    const i = pickupItems.findIndex(p => p.id === rid);
+    if (i < 0) return false;
+    pickupItems.splice(i, 1); return true;
+  });
   const app = {
     ctx, gs, lobby, scores, settings: { name: id, mapKey: 'downtown' }, busy: false,
-    pickups: { spawn: noop, remove: () => false, clear: noop }, breakables: { breakProp: noop },
+    pickups: { items: pickupItems, spawn: noop, remove: removePickup, clear: noop }, breakables: { breakProp: noop },
     loadLevel(arena: boolean, key = 'downtown') { ctx.level.key = key; },
     resetRun() {
       player.reset(ctx.level.playerStart);
@@ -188,6 +195,23 @@ test('untrusted senders and network damage', async () => {
   } finally { t.ffa.leave(); }
 });
 
+test('host validates pickup take range', () => {
+  const t = setup(true);
+  setState(t.gs, 'play');
+  try {
+    t.app.pickups.items.push({ id: 1, mesh: { position: new Vector3(30, 0, 0) } });
+    t.remote.body.pos.set(0, 0, 0);
+    t.receive('take', { id: 1 }, 'client');
+    expect(t.app.pickups.remove).not.toHaveBeenCalled();
+    assert(!t.sent.some(m => m.type === 'taken'), 'a take from across the map is dropped');
+    t.remote.body.pos.set(29, 0, 0);
+    t.receive('take', { id: 1 }, 'client');
+    expect(t.app.pickups.remove).toHaveBeenCalledWith(1);
+    assert(t.sent.some(m => m.type === 'taken' && (m.data as { id: number }).id === 1),
+      'a take within range removes the pickup and confirms it');
+  } finally { t.ffa.leave(); }
+});
+
 test('a distant guard cannot replace a closer player hit', () => {
   const t = setup(); setState(t.gs, 'play');
   try {
@@ -231,7 +255,10 @@ test('PvP feedback distinguishes guards, headshots and confirmed local kills', (
     t.receive('pdead', { ...death, crit: 'invalid' });
     t.receive('pdead', { ...death, killer: null });
     expect(marker).not.toHaveBeenCalled();
-    t.receive('pdead', death);
+    // The same peer dying twice only counts once per respawn, so the second death needs the clock.
+    const clock = vi.spyOn(performance, 'now').mockReturnValue(performance.now() + 4000);
+    try { t.receive('pdead', death); }
+    finally { clock.mockRestore(); }
     expect(marker).toHaveBeenCalledExactlyOnceWith(true, true);
   } finally { t.ffa.leave(); }
 });
@@ -440,5 +467,52 @@ test('a new placement does not inherit elapsed time from a delayed host frame', 
     expect(s.flag.placed).toBe(0);
     expect(s.flag.holdLeft).toBe(30);
     expect(s.scores).toEqual([0, 0]);
+  } finally { t.ffa.leave(); }
+});
+
+test('network damage cannot exceed what the named weapon can do', () => {
+  const t = setup();
+  setState(t.gs, 'play');
+  const { pvp, pellets } = GUN_STATS.rifle, cap = pvp[0] * pvp[1] * pellets;
+  const hit = { amount: 5000, from: [3, 1, 0], by: 'host', crit: true, src: 'rifle' };
+  try {
+    t.receive('pdmg', hit);
+    assert(t.damage.length === 1 && must(t.damage[0], 'damage').amount === cap,
+      'an inflated packet lands for the weapon cap instead of its claim');
+    assert(t.ctx.player.lastHit?.amount === cap, 'the death report records the capped amount');
+    t.receive('pdmg', { ...hit, amount: 20, src: 'laser' });
+    assert(t.damage.length === 1, 'damage from a weapon that does not exist is dropped');
+  } finally { t.ffa.leave(); }
+});
+
+test('a repeated death report only counts once per respawn', () => {
+  const t = setup(true), { scores } = t;
+  setState(t.gs, 'play');
+  must(scores.get('client'), 'client score').deaths = 0;
+  must(scores.get('host'), 'host score').kills = 0;
+  const death = { killer: 'host', dir: null, over: false, how: 'MP5', crit: false };
+  const clock = vi.spyOn(performance, 'now').mockReturnValue(1000);
+  try {
+    t.receive('pdead', death);
+    clock.mockReturnValue(1100);
+    t.receive('pdead', death);
+    assert(must(scores.get('client'), 'client score').deaths === 1 && must(scores.get('host'), 'host score').kills === 1,
+      'a second death 0.1s later scores neither the death nor the kill again');
+  } finally { clock.mockRestore(); t.ffa.leave(); }
+});
+
+test('player-state packets are paced by a time accumulator, not frame rate', () => {
+  const t = setup();
+  setState(t.gs, 'play');
+  try {
+    for (let i = 0; i < 60; i++) t.ffa.update(1 / 144);
+    const hz144 = t.sent.filter(m => m.type === 'ps').length;
+    // ~0.417s at a 20Hz reset-to-zero accumulator (no carry) lands at 7; old code gave 20.
+    assert(hz144 >= 6 && hz144 <= 8, `144fps for ~0.417s sends ~7 ps packets at 20Hz, got ${hz144}`);
+    t.sent.length = 0;
+    for (let i = 0; i < 12; i++) t.ffa.update(1 / 30);
+    const hz30 = t.sent.filter(m => m.type === 'ps').length;
+    // 0.4s at 20Hz lands at 6 (1/30s dt does not divide 0.05s evenly); old code gave 4.
+    assert(hz30 >= 5 && hz30 <= 7, `30fps for 0.4s sends ~6 ps packets at 20Hz, got ${hz30}`);
   } finally { t.ffa.leave(); }
 });

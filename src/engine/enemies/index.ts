@@ -8,7 +8,7 @@ import { raycastFigure } from '../render/figure';
 import type { ToneId } from '../render/palette';
 import type { NavPath } from '../nav';
 import type { Ctx, Enemy, EnemyKind, EnemyState, HitInfo, Target } from '../types';
-import { TYPES, BOSS_ORDER } from './types';
+import { ENEMY_GRAVITY, TYPES, BOSS_ORDER } from './types';
 import type { EnemyType } from './types';
 import { makeModel, syncModel, flash, spawnPose, animate, corpse } from './model';
 import type { GroundJoints, EyeAnchors, HitSphere } from './model';
@@ -60,6 +60,7 @@ export interface EnemyRecord extends Enemy {
   pathIndex: number;
   pathT: number;
   pathGoal: Vector3 | null;
+  /** Line-of-sight throttle (see `see`); medics reuse it to hold a patient between searches. */
   losT: number;
   hasLOS: boolean;
   attackCd: number;
@@ -104,6 +105,8 @@ export interface EnemyRecord extends Enemy {
   /** Ranged: the spot to duck behind between bursts, and how long to keep trying. */
   cover: Vector3 | null;
   coverT: number;
+  /** Medic: the ally being healed, kept between throttled searches. */
+  patient: EnemyRecord | null;
   wantCover: boolean;
   specialT: number;
   specialCd: number;
@@ -137,6 +140,8 @@ export interface EnemyArcHit {
 }
 
 const GOLDEN = 2.39996;
+/** A* searches allowed across all enemies in one frame; the rest retry next frame. */
+export const PATH_BUDGET = 6;
 const STATE_CODE: Record<EnemyState, number> = { spawn: 0, hunt: 1, stunned: 2, dead: 3 };
 const STATE_NAME: readonly EnemyState[] = ['spawn', 'hunt', 'stunned', 'dead'];
 const up = new Vector3(0, 1, 0);
@@ -162,6 +167,8 @@ export class EnemyManager {
   ids: number;
   slots: number;
   sepT: number;
+  /** Remaining A* searches this frame. See `takePath`. */
+  pathBudget = PATH_BUDGET;
   alive: number;
   _steer: (e: EnemyRecord, goal: Vector3, speed: number, accel: number, dt: number) => void;
   _follow: (e: EnemyRecord, target: Vector3, speed: number, dt: number) => void;
@@ -219,7 +226,7 @@ export class EnemyManager {
       approachPoint: new Vector3(), keepMult: rand(0.75, 1.35), backoffT: 0, fuseT: -1, shieldHp: stats.shield ? 2 : 0,
       flightPhase: 'orbit', flightT: rand(0, 3), orbitDir: choose([-1, 1]), bossAttack: null, rootDetached: false,
       retargetT: 0, laser: null, chargeCount: 0, sprayCount: 0, hopT: 1, hopping: false, aimPoint: null, aimWarned: false,
-      diveHit: false, topple: null, snapOld: null, snapNew: null, target: null, cover: null, coverT: 0, wantCover: false,
+      diveHit: false, topple: null, snapOld: null, snapNew: null, target: null, cover: null, coverT: 0, wantCover: false, patient: null,
       specialT: 0, specialCd: type === 'aimbot' ? 12 : 3, actionPoint: null, weakT: 0, yankableT: 0,
       rageT: 0, rageStacks: 0, guardT: 0, boostT: 0, retreatT: 0, homeYaw: 0,
       payload: type === 'carrier', mutated: false, figure, root, hits,
@@ -260,6 +267,7 @@ export class EnemyManager {
 
   update(dt: number): void {
     const { world } = this.ctx;
+    this.pathBudget = PATH_BUDGET;
     const passive = this.ctx.game.mode === 'training';
     for (const e of this.list) {
       e.age += dt;
@@ -277,7 +285,7 @@ export class EnemyManager {
         e.target = null;
         e.body.vel.x = damp(e.body.vel.x, 0, 5, dt);
         e.body.vel.z = damp(e.body.vel.z, 0, 5, dt);
-        if (!e.stats.flying || e.state === 'stunned') e.body.vel.y -= 24 * dt;
+        if (!e.stats.flying || e.state === 'stunned') e.body.vel.y -= ENEMY_GRAVITY * dt;
         world.moveBody(e.body, dt);
         if (e.state === 'stunned' && e.age > e.stunDuration) e.state = 'hunt';
       } else if (expansionBossThink(this, e, dt)) {
@@ -289,7 +297,7 @@ export class EnemyManager {
           if (e.stats.flying) flyerThink(this, e, dt);
           else if (e.state !== 'stunned') { if (e.target?.alive) groundThink(this, e, dt); else wander(e, dt); }
         }
-        if (!e.stats.flying) e.body.vel.y -= 24 * dt;
+        if (!e.stats.flying) e.body.vel.y -= ENEMY_GRAVITY * dt;
         world.moveBody(e.body, dt);
       }
       if (e.body.pos.y < -6) { this.kill(e, { source: 'fall', dir: up.clone() }); continue; }

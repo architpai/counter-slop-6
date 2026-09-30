@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { LIGHT, SURF } from './palette';
 import { Composite } from './postfx';
 import { skyMat } from './materials';
@@ -6,10 +7,19 @@ import type { PostFX } from './postfx';
 import type { Mood } from '../types';
 
 export { TONE, TONE_HEX, WHITE_HEX, SMOKE_HEX, SURF } from './palette';
-export { surfMat, charMat, toneMat, unlitMat, setFlash, mergeByMaterial } from './materials';
+export { surfMat, charMat, toneMat, unlitMat, setFlash } from './materials';
 export { boxGeo, cylGeo, sphereGeo, coneGeo, torusGeo, starGeo, ringGeo } from './prims';
 export { makeFigure, makeWeaponProp, makeNameTag } from './figure';
 export type { PostFX } from './postfx';
+
+/** Half-width of the shadow box in metres; it follows the camera instead of covering the level. */
+const SHADOW_EXTENT = 35;
+/** Enough IBL to stop GLB metal reading as black, not enough to gloss up the toon look. */
+const ENV_INTENSITY = 0.35;
+const SUN_DIR = new THREE.Vector3(0.38, 0.82, 0.42).normalize();
+const _follow = new THREE.Vector3();
+const _offset = new THREE.Vector3();
+const _eye = new THREE.Vector3();
 
 export class Renderer {
   readonly three: THREE.WebGLRenderer;
@@ -25,9 +35,10 @@ export class Renderer {
   readonly _clearRigDepth: () => void;
   readonly _prepareRigMesh: (object: THREE.Object3D) => void;
   readonly _onResize: () => void;
+  _shadowRadius = 1;
 
   constructor(canvas: HTMLCanvasElement) {
-    this.three = new THREE.WebGLRenderer({ canvas, antialias: true, stencil: false, powerPreference: 'high-performance' });
+    this.three = new THREE.WebGLRenderer({ canvas, antialias: false, stencil: false, powerPreference: 'high-performance' });
     this.three.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     this.three.outputColorSpace = THREE.SRGBColorSpace;
     this.three.toneMapping = THREE.NoToneMapping;
@@ -38,6 +49,10 @@ export class Renderer {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(SURF.sky);
     this.scene.fog = new THREE.Fog(SURF.fog, 70, 300);
+    const pmrem = new THREE.PMREMGenerator(this.three);
+    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    this.scene.environmentIntensity = ENV_INTENSITY;
+    pmrem.dispose();
     this.sky = makeSkyDome();
     this.scene.add(this.sky);
     this.camera = new THREE.PerspectiveCamera(80, 1, 0.08, 420);
@@ -81,18 +96,32 @@ export class Renderer {
     this.post.resize(Math.floor(width * ratio), Math.floor(height * ratio), this.camera.aspect);
   }
 
+  /** The light's level-wide position and depth range; the ortho box itself follows the viewer. */
   setLevelShadow(center: THREE.Vector3, radius: number): void {
     radius = Math.max(1, radius);
-    this.sun.position.set(0.38, 0.82, 0.42).normalize().multiplyScalar(radius * 2).add(center);
-    this.sun.target.position.copy(center);
+    this._shadowRadius = radius;
+    const extent = Math.min(radius, SHADOW_EXTENT);
     const camera = this.sun.shadow.camera;
-    camera.left = camera.bottom = -radius;
-    camera.right = camera.top = radius;
+    camera.left = camera.bottom = -extent;
+    camera.right = camera.top = extent;
     camera.near = 0.1;
     camera.far = radius * 4;
     camera.updateProjectionMatrix();
+    this._aimShadow(center);
+  }
+
+  /** Re-centre the shadow box on `point`, snapped to the texel grid so it does not swim. */
+  _aimShadow(point: THREE.Vector3): void {
+    const texel = 2 * Math.min(this._shadowRadius, SHADOW_EXTENT) / this.sun.shadow.mapSize.x;
+    _follow.set(Math.round(point.x / texel) * texel, Math.round(point.y / texel) * texel, Math.round(point.z / texel) * texel);
+    this.sun.position.copy(_offset.copy(SUN_DIR).multiplyScalar(this._shadowRadius * 2)).add(_follow);
+    this.sun.target.position.copy(_follow);
     this.sun.target.updateMatrixWorld();
-    this.sun.shadow.needsUpdate = true;
+  }
+
+  /** Freeze the view-model flags once, on attach, instead of every frame. */
+  prepareRig(root: THREE.Object3D): void {
+    root.traverse(this._prepareRigMesh);
   }
 
   /** A level's sky and light. Called with `undefined` to restore the default. */
@@ -112,6 +141,8 @@ export class Renderer {
     this.sky.geometry.dispose();
     (this.sky.material as THREE.Material).dispose();
     this.post.dispose();
+    this.scene.environment?.dispose();
+    this.scene.environment = null;
     this.three.dispose();
     // Drop the WebGL context outright: browsers cap live contexts (~16), and a
     // StrictMode remount plus HMR burns through that cap fast.
@@ -119,9 +150,9 @@ export class Renderer {
   }
 
   render(time: number, fx: PostFX): void {
-    this.rig.traverse(this._prepareRigMesh);
     this._rigDepthCleared = false;
     this.sky.position.copy(this.camera.position);
+    this._aimShadow(this.camera.getWorldPosition(_eye));
     this.three.setRenderTarget(this.post.target);
     this.three.clear();
     this.three.render(this.scene, this.camera);

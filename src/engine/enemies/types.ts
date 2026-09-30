@@ -1,5 +1,8 @@
 import { rand } from '../util';
 import type { EnemyKind } from '../types';
+
+/** Downward acceleration for every enemy, grounded, stunned or falling. */
+export const ENEMY_GRAVITY = 24;
 import type { BlobKind, FigureKind, HatKind } from '../render/figure';
 import type { ToneId } from '../render/palette';
 

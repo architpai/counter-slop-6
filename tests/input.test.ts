@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from 'vitest';
+import { afterAll, beforeAll, expect, test, vi } from 'vitest';
 import { Input } from '@/engine/input';
 
 const assert = (cond: unknown, message: string): void => { expect(cond, message).toBeTruthy(); };
@@ -123,4 +123,33 @@ test('blur, typing in a field, and disposal', () => {
   key('keydown', 'KeyD');
   tick();
   assert(!input.down('right') && !input.anyPressed(), 'disposed input has no live listeners');
+});
+
+test('pointer lock retries on a user gesture, not on a timer', async () => {
+  const lockCanvas = document.createElement('canvas');
+  document.body.append(lockCanvas);
+  const lockInput = new Input(lockCanvas);
+  const stub = vi.fn(() => Promise.reject(new DOMException('denied', 'SecurityError')));
+  lockCanvas.requestPointerLock = stub as unknown as typeof lockCanvas.requestPointerLock;
+  const flush = async () => { for (let i = 0; i < 6; i++) await Promise.resolve(); };
+
+  vi.useFakeTimers();
+  try {
+    lockInput.requestLock();
+    await flush();
+    const afterFirstAttempt = stub.mock.calls.length;
+    assert(afterFirstAttempt > 0, 'requestPointerLock was attempted after requestLock()');
+
+    await vi.advanceTimersByTimeAsync(5000);
+    await flush();
+    assert(stub.mock.calls.length === afterFirstAttempt, 'no more attempts after 5s without a gesture');
+
+    lockCanvas.dispatchEvent(new MouseEvent('mousedown', { button: 0, bubbles: true }));
+    await flush();
+    assert(stub.mock.calls.length > afterFirstAttempt, 'a mousedown gesture retries the lock');
+  } finally {
+    vi.useRealTimers();
+    lockInput.dispose();
+    lockCanvas.remove();
+  }
 });

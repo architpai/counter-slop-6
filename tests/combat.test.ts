@@ -211,7 +211,7 @@ test('real gun rays keep close-range kill thresholds for recruits and 110 HP onl
   // boot.ts resetRun sets online health to 110, not the constructor's solo 120.
   victim.maxHp = 110;
   const cases = [
-    { kind: 'r4c', pve: [3, 2], pvp: [5, 3] },
+    { kind: 'r4c', pve: [4, 2], pvp: [5, 3] },
     { kind: 'rifle', pve: [5, 2], pvp: [7, 4] },
     { kind: 'pistol', pve: [3, 1], pvp: [4, 2] },
     { kind: 'sniper', pve: [1, 1], pvp: [2, 1] },
@@ -284,4 +284,39 @@ test('accepted gun headshots give a bounded screen wobble and a brief follow-up 
   p.onHeadshot({ ...head, source: 'focus' });
   p.onHeadshot({ ...head, part: 'torso' });
   expect(p.headshotT).toBe(0);
+});
+
+test('ADS look sensitivity tracks the aimed FOV, holo stays hip speed', () => {
+  const { p, ctx } = setup();
+  const r4c = p.weapon as Gun;
+  // `input.update` clears `look`, so write it after and read the yaw the same frame.
+  const yawDelta = (aiming: boolean): number => {
+    ctx.input.update(1 / 60);
+    ctx.input.look.x = 0.01;
+    p.aiming = aiming;
+    const before = p.yaw;
+    p.update(1 / 60);
+    return p.yaw - before;
+  };
+  const hip = yawDelta(false);
+  expect(hip).toBeCloseTo(0.01, 12);
+  r4c.setOptic('holo');
+  expect(yawDelta(true) / hip).toBeCloseTo(1, 6);
+  r4c.setOptic('acog');
+  const acog = Math.tan(38 * Math.PI / 360) / Math.tan(82 * Math.PI / 360) * ctx.input.acogScale;
+  expect(yawDelta(true) / hip).toBeCloseTo(acog, 6);
+});
+
+test('ground friction is independent of frame rate', () => {
+  const { p, ctx } = setup();
+  ctx.world.addBox(new Vector3(-100, -1, -100), new Vector3(100, 0, 100)); ctx.world.finalize();
+  const measure = (dt: number): number => {
+    p.reset(new Vector3()); ctx.input.update(dt); p.update(dt);
+    expect(p.body.onGround).toBe(true);
+    p.body.vel.set(10, 0, 0);
+    for (let i = 0; i < Math.round(1 / dt); i++) { ctx.input.update(dt); p.update(dt); }
+    return Math.hypot(p.body.vel.x, p.body.vel.z);
+  };
+  const slow = measure(1 / 20), fast = measure(1 / 120);
+  expect(Math.abs(slow - fast) / Math.max(slow, fast)).toBeLessThan(0.05);
 });

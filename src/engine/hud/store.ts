@@ -299,9 +299,11 @@ export class HudStore implements HudView {
    */
   setBreath(frac: number): void {
     const value = fraction(frac);
-    this.#breathPercent = Math.round(value * 100);
+    const percent = Math.round(value * 100);
+    const changed = percent !== this.#breathPercent;
+    this.#breathPercent = percent;
     this.#setVar('--breath', `${this.#breathPercent}%`);
-    this.#breathMeter?.setAttribute('aria-valuenow', String(this.#breathPercent));
+    if (changed) this.#breathMeter?.setAttribute('aria-valuenow', String(this.#breathPercent));
     const next: BreathState = { shown: value < 0.995, low: value < 0.2, percent: this.#breathPercent };
     if (next.shown === this.breath.shown && next.low === this.breath.low) return;
     this.breath = next;
@@ -351,7 +353,7 @@ export class HudStore implements HudView {
   }
 
   setFocusMeter(show: boolean, frac: number, ready: boolean, label: string): void {
-    this.#setVar('--focus', `${fraction(frac) * 100}%`);
+    this.#setVar('--focus', `${(fraction(frac) * 100).toFixed(1)}%`);
     const next: FocusState = { show: !!show, ready: !!ready, label: String(label ?? '') };
     if (next.show === this.focus.show && next.ready === this.focus.ready && next.label === this.focus.label) return;
     this.focus = next;

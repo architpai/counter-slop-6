@@ -1,5 +1,6 @@
 import { Vector3 } from 'three';
 import { clamp, damp, rand, Spring } from '../util';
+import { EYE_HEIGHT, CROUCH_EYE } from './movement';
 import type { Player } from './index';
 
 /** The camera fields `initCamera` installs on the player. */
@@ -13,7 +14,7 @@ export interface CameraState {
   fovKick: Spring;
   /** Landing dip; the weapon reads it through `WeaponState.landDip`. */
   landDip: Spring;
-  /** Eye offset above the feet, 1.6 standing and 0.88 crouched. */
+  /** Eye offset above the feet, EYE_HEIGHT standing and CROUCH_EYE crouched. */
   eyeHeight: number;
   /** Stair smoothing: the body pops up a step, the eye eases up after it. */
   stepOffset: number;
@@ -23,6 +24,9 @@ export interface CameraState {
   bobX: number;
   bobY: number;
 }
+
+/** Hip-fire vertical FOV. ADS look sensitivity scales against it. */
+export const HIP_FOV = 82;
 
 const target = new Vector3(0, 10, 0);
 
@@ -34,7 +38,7 @@ export function initCamera(p: Player): void {
   p.headshotSide = 1;
   p.fovKick = new Spring(220, 14);
   p.landDip = new Spring(170, 15);
-  p.eyeHeight = 1.6;
+  p.eyeHeight = EYE_HEIGHT;
   p.stepOffset = 0;
   p.bobPhase = p.bobAmt = p.stepDistance = 0;
   p.bobX = p.bobY = 0;
@@ -70,7 +74,7 @@ export function updateCamera(p: Player, dt: number): void {
   p.landDip.update(dt);
   p.stepOffset = damp(p.stepOffset, 0, 22, dt);
   if (p.alive) {
-    p.eyeHeight = damp(p.eyeHeight, p.crouching ? 0.88 : 1.6, 14, dt);
+    p.eyeHeight = damp(p.eyeHeight, p.crouching ? CROUCH_EYE : EYE_HEIGHT, 14, dt);
     p.roll = damp(p.roll, -p.move.x * 0.022 + (p.sliding ? -0.08 : 0), 9, dt);
   }
   const shake = Math.min(effects.shake, 1.2);
@@ -84,7 +88,7 @@ export function updateCamera(p: Player, dt: number): void {
     'YXZ',
   );
   const targetFov = p.aiming ? p.weapon.adsFov
-    : 82 + clamp((p.speed - 7) / 16, 0, 1) * 8 + (p.sprinting ? 3 : 0)
+    : HIP_FOV + clamp((p.speed - 7) / 16, 0, 1) * 8 + (p.sprinting ? 3 : 0)
       + (p.sliding ? 4 : 0) + (p.grapple.mode === 'on' ? 3 : 0) + p.fovKick.value;
   const fov = damp(camera.fov, targetFov, p.aiming || p.melee.active ? 16 : 8, dt);
   if (Math.abs(fov - camera.fov) > 0.01) {

@@ -93,7 +93,7 @@ test('loadout, view models and aim poses', () => {
   assert(loadout.map(w => w.kind).join(',') === 'r4c,rifle,shotgun,sniper,pistol', 'Loadout keeps five guns and independent melee');
   assert(melee instanceof Melee && melee.spreadPx === 4 && !melee.isGun, 'Melee exposes its independent state');
   const muzzleZ: Record<GunKind, number> = { r4c: -1.16, rifle: -0.96, pistol: -0.42, shotgun: -1.09, sniper: -1.60, revolver: -0.40 };
-  const expected: Record<GunKind, number[]> = { r4c: [30, 150, 300, 36, 38, 0.08], rifle: [30, 150, 300, 22, 38, 0.075], pistol: [15, 90, 180, 40, 62, 0.18], shotgun: [6, 36, 72, 19, 68, 0.78],
+  const expected: Record<GunKind, number[]> = { r4c: [30, 150, 300, 28, 38, 0.08], rifle: [30, 150, 300, 22, 38, 0.075], pistol: [15, 90, 180, 40, 62, 0.18], shotgun: [6, 36, 72, 19, 68, 0.78],
     sniper: [5, 25, 50, 150, 20, 0.20], revolver: [6, 36, 72, 62, 52, 0.30] };
   for (const gun of [r4c, rifle, pistol, shotgun, sniper, revolver]) {
     const stats = GUN_STATS[gun.kind], actual = [gun.mag, gun.reserve, stats.maxReserve, stats.damage, gun.adsFov, stats.fireInterval];
@@ -220,6 +220,36 @@ test('R4-C holds automatic fire at 80 ms and reloads at 2.2 seconds', () => {
   r4c.resetAmmo(); r4c.unequip();
 });
 
+test('automatic rate of fire is frame-rate independent', () => {
+  const held = { ...neutral, fire: true };
+  // 2 s of held fire at one frame rate, counted off the magazine. 2 / 0.08 = 25 shots either way.
+  const shots = (dt: number) => {
+    r4c.resetAmmo(); draw(r4c); r4c.resetAmmo();
+    for (let i = Math.round(2 / dt); i > 0; i--) r4c.animate(held, dt);
+    return r4c.magSize - r4c.mag;
+  };
+  const slow = shots(1 / 30), fast = shots(1 / 120);
+  expect(slow, '30 Hz shot count').toBeGreaterThanOrEqual(24);
+  expect(Math.abs(slow - fast), `30 Hz fired ${slow}, 120 Hz fired ${fast}`).toBeLessThanOrEqual(1);
+  r4c.resetAmmo(); r4c.unequip();
+});
+
+test('automatic yaw recoil walks a learnable pattern, not noise', () => {
+  const held = { ...neutral, fire: true }, band = 0.6 * GUN_STATS.r4c.camKick[1];
+  const magazine = (): number[] => {
+    r4c.resetAmmo(); draw(r4c); r4c.resetAmmo(); calls.length = 0;
+    while (r4c.mag > 0) r4c.animate(held, 1 / 60);
+    return named('recoil').map(call => num(call.args[1]) ?? NaN);
+  };
+  const a = magazine(), b = magazine();
+  expect(a).toHaveLength(r4c.magSize);
+  expect(b).toHaveLength(a.length);
+  // Two magazines only differ by the noise share, so the drift itself repeats shot for shot.
+  for (const [i, yaw] of a.entries()) expect(Math.abs(yaw - must(b[i], 'yaw')), `shot ${i}`).toBeLessThanOrEqual(band);
+  assert(a.some((yaw, i) => i > 0 && yaw * must(a[i - 1], 'yaw') < 0), 'The pattern drifts across zero instead of holding one side');
+  r4c.resetAmmo(); r4c.unequip();
+});
+
 test('accepted spread and recoil settings', () => {
   expect(GUN_STATS.rifle).toMatchObject({ hipSpread: 0.012, moveSpread: 0.0005, spreadKick: 0.005 });
   expect(GUN_STATS.pistol).toMatchObject({ hipSpread: 0.008, adsSpread: 0.002, spreadKick: 0.006,
@@ -294,9 +324,9 @@ test('real rays use separate PvE and PvP damage, headshots and distance falloff'
   const saved = { enemy: ctx.enemies.raycast, world: ctx.world.raycast, remote: ctx.game.raycastPlayers };
   const cases: [Gun, number, number, number, number, number][] = [
     // gun, metres, PvE body, PvE head, PvP body, PvP head
-    [r4c, 10, 36, 90, 26, 46.8],
-    [r4c, 38, 30, 75, 18.72, 33.696],
-    [r4c, 300, 19.8, 49.5, 11.7, 21.06],
+    [r4c, 10, 28, 70, 26, 46.8],
+    [r4c, 38, 28 * (5 / 6), 70 * (5 / 6), 18.72, 33.696],
+    [r4c, 300, 28 * 0.55, 70 * 0.55, 11.7, 21.06],
     [rifle, 10, 22, 57.2, 18, 32.4],
     [rifle, 300, 8.8, 22.88, 7.2, 12.96],
     [pistol, 12, 40, 104, 32, 64],
@@ -329,7 +359,7 @@ test('real rays use separate PvE and PvP damage, headshots and distance falloff'
     ctx.game.raycastPlayers = () => null;
     ctx.enemies.raycast = () => ({ enemy: boss, part: 'head', dist: 10, point: new Vector3(0, 0, -10) });
     calls.length = 0; r4c._ray(player.forward);
-    expect(must(last('enemyDamage'), 'boss damage')[1]).toBeCloseTo(36 * 1.5, 8);
+    expect(must(last('enemyDamage'), 'boss damage')[1]).toBeCloseTo(28 * 1.5, 8);
     calls.length = 0; sniper._ray(player.forward);
     expect(must(last('enemyDamage'), 'boss damage')[1]).toBeCloseTo(150 * 1.5, 8);
   } finally {

@@ -66,7 +66,7 @@ export const GUN_STATS: Record<GunKind, GunStats> = {
   r4c: {
     kind: 'r4c', name: 'R4-C', hint: 'auto · high damage · slow to aim and draw', scope: true,
     magSize: 30, startingReserve: 150, maxReserve: 300, fireInterval: 0.08, automatic: true,
-    damage: 36, headMult: 2.5, pellets: 1, hipSpread: 0.022, adsSpread: 0.0025,
+    damage: 28, headMult: 2.5, pellets: 1, hipSpread: 0.022, adsSpread: 0.0025,
     spreadKick: 0.007, spreadMax: 0.065, moveSpread: 0.0012, adsFov: 38, adsSpeed: 0.7, drawTime: 0.42,
     camKick: [0.0105, 0.0035], modelKick: [0.18, 0.3, 2.5, -3.3, 0.7, 1], fovKick: 1.1,
     reloadDuration: 2.2, reloadType: 'magazine', falloff: [28, 88, 0.55],

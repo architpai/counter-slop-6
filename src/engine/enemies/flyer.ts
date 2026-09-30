@@ -1,6 +1,7 @@
 import { Vector3 } from 'three';
 import { rand } from '../util';
 import { seeThrough } from '../physics';
+import { ENEMY_GRAVITY } from './types';
 import type { EnemyManager, EnemyRecord } from './index';
 import { spawnProjectile } from './projectiles';
 
@@ -21,7 +22,7 @@ export function flyerThink(m: EnemyManager, e: EnemyRecord, dt: number): void {
   const c = e.target.center, pos = e.body.pos;
   e.flightT -= dt; e.attackCd -= dt;
   if (e.flightPhase === 'stunned' || e.state === 'stunned') {
-    e.body.vel.y -= 20 * dt;
+    e.body.vel.y -= ENEMY_GRAVITY * dt;
     if (e.body.onGround || e.age > 2.2) { e.flightPhase = 'climb'; e.flightT = 1.2; e.state = 'hunt'; }
   } else if (e.flightPhase === 'orbit') {
     const angle = Math.atan2(pos.x - c.x, pos.z - c.z) + e.orbitDir * 0.45;

@@ -1,5 +1,6 @@
 import { Vector3 } from 'three';
 import { damp, rand, TAU } from '../util';
+import { stop } from './ai';
 import { spawnProjectile } from './projectiles';
 import { rollCooldown } from './types';
 import type { EyeAnchors } from './model';
@@ -19,11 +20,7 @@ export type LagSpikeAttack = Telegraph<'summon'> | { kind: 'spray'; t: number; s
 export type BossAttack = AdminAttack | HitboxAttack | LagSpikeAttack;
 
 const origin = new Vector3(), direction = new Vector3(), particlePos = new Vector3(), particleVel = new Vector3();
-
-function stop(e: EnemyRecord, rate: number, dt: number): void {
-  e.body.vel.x = damp(e.body.vel.x, 0, rate, dt);
-  e.body.vel.z = damp(e.body.vel.z, 0, rate, dt);
-}
+const down = new Vector3(0, -1, 0), landing = new Vector3();
 
 function hitRing(m: EnemyManager, e: EnemyRecord, radius: number, height: number, damage: number, force: number,
   absoluteHeight = false): void {
@@ -149,8 +146,16 @@ function lagspike(m: EnemyManager, e: EnemyRecord, dt: number, dist: number, dy:
       m.ctx.effects.bloodPool(e.body.pos, 3.5, 2); hitRing(m, e, 4.5, 2.5, 14, 8, true);
     }
     if (e.body.onGround && e.hopT <= 0 && dist > 4) {
-      e.hopT = rand(1.6, 2.4); e.body.vel.set(Math.sin(yaw) * 11, 13, Math.cos(yaw) * 11);
-      e.body.onGround = false; e.hopping = true;
+      // A hop at 11 m/s over 13 up under gravity 24 lands ~12 m out; check the landing has ground
+      // before committing, or a ledge turns the hop into a 'FELL OFF THE MAP'.
+      const clearLanding = [6, 12].every(k => {
+        landing.set(e.body.pos.x + Math.sin(yaw) * k, e.body.pos.y + 0.5, e.body.pos.z + Math.cos(yaw) * k);
+        return m.ctx.world.raycast(landing, down, 6);
+      });
+      if (clearLanding) {
+        e.hopT = rand(1.6, 2.4); e.body.vel.set(Math.sin(yaw) * 11, 13, Math.cos(yaw) * 11);
+        e.body.onGround = false; e.hopping = true;
+      } else { e.hopT = 0.3; e.slotT = 0; }
     }
     if (e.attackCd <= 0 && e.hasLOS) {
       if (e.sprayCount % 3 === 2) { e.bossAttack = { kind: 'summon', t: 0, fired: false }; e.sprayCount++; }

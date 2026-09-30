@@ -30,7 +30,17 @@ const PAD: readonly (Action | null)[] = [
 ];
 const PREVENT: ReadonlySet<string> = new Set(['Space', 'Tab', 'ArrowUp', 'ArrowDown']);
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
-const deadzone = (v: number) => Math.abs(v) < 0.14 ? 0 : (v - Math.sign(v) * 0.14) / 0.86;
+// Radial deadzone: scales the (x, y) vector so the dead zone is a circle, not a
+// per-axis notch (a per-axis zone clips diagonals early and shrinks the reachable
+// circle). Writes into module-level scratch to stay allocation-free per frame.
+let radialX = 0, radialY = 0;
+const radial = (x: number, y: number) => {
+  const m = Math.hypot(x, y);
+  if (m < 0.14) { radialX = 0; radialY = 0; return; }
+  const scale = clamp((m - 0.14) / 0.86, 0, 1) / m;
+  radialX = x * scale;
+  radialY = y * scale;
+};
 const curve = (v: number) => Math.sign(v) * Math.abs(v) ** 1.8;
 
 /** The parts of a focused node `editing` duck-types. Both may be absent. */
@@ -72,8 +82,6 @@ export class Input {
   #lockUsesPromise = false;
   #lockRaw = false;
   #lockAttempt = 0;
-  /** `Window.setTimeout` handle, a number. Never `NodeJS.Timeout`. */
-  #lockRetry: number | null = null;
   #disposed = false;
 
   readonly move: { x: number; y: number };
@@ -126,6 +134,7 @@ export class Input {
         return;
       }
       this.#setDevice('keyboard');
+      if (this.#lockWanted && !this.locked) this.requestLock();
       const action = KEYS[e.code];
       if (action) this.#keys.add(action);
       // An event without Shift must never leave sprint held, including Shift itself.
@@ -142,6 +151,7 @@ export class Input {
       this.anyInput = true;
       this.#setDevice('keyboard');
       if (editing(e.target) || editing(this.#doc.activeElement) || this.#menuTarget(e.target)) return;
+      if (this.#lockWanted && !this.locked) this.requestLock();
       const action = MOUSE[e.button];
       if (action) this.#mouse.add(action);
       if (e.button === 1 || e.button === 3 || e.button === 4) e.preventDefault();
@@ -153,8 +163,8 @@ export class Input {
     });
     this.#listen(this.#win, 'mousemove', e => {
       if (!this.locked || editing(this.#doc.activeElement)) return;
-      this.#dx += Math.abs(e.movementX) <= 400 ? e.movementX : 0;
-      this.#dy += Math.abs(e.movementY) <= 400 ? e.movementY : 0;
+      this.#dx += clamp(e.movementX, -400, 400);
+      this.#dy += clamp(e.movementY, -400, 400);
       if (this.#device === 'touch') this.#setDevice('keyboard');
       else this.#device = 'keyboard'; // Preserve the silent mouse/gamepad switch.
       this.anyInput = true;
@@ -184,7 +194,7 @@ export class Input {
       }
     });
     this.#listen(this.#doc, 'pointerlockchange', () => {
-      if (this.locked) this.#cancelRetry();
+      if (this.locked) this.#cancelPending();
       this.onLockChange?.(this.locked);
     });
     this.#listen(this.#doc, 'pointerlockerror', () => {
@@ -289,8 +299,10 @@ export class Input {
     }
     this.#padIndex = this.#pad.index;
     const axes = this.#pad.axes;
-    const lx = deadzone(axes[0] || 0), ly = deadzone(axes[1] || 0);
-    const rx = deadzone(axes[2] || 0), ry = deadzone(axes[3] || 0);
+    radial(axes[0] || 0, axes[1] || 0);
+    const lx = radialX, ly = radialY;
+    radial(axes[2] || 0, axes[3] || 0);
+    const rx = radialX, ry = radialY;
     const active = !!(lx || ly || rx || ry || this.#pad.buttons.some(b => b && (b.pressed || b.value > .35)));
     if (active) {
       this.anyInput = true;
@@ -333,7 +345,7 @@ export class Input {
     if (this.#disposed || this.usingTouch) return;
     this.#lockWanted = true;
     if (this.locked || this.#lockPending) return;
-    this.#cancelRetry();
+    this.#cancelPending();
     this.#tryLock(true);
   }
 
@@ -359,23 +371,19 @@ export class Input {
     if (attempt !== this.#lockAttempt || !this.#lockPending) return;
     this.#lockPending = false;
     if (!this.#lockWanted || this.#disposed || this.locked) return;
+    // Non-raw attempt also failed: wait for the next user gesture (mousedown/keydown)
+    // instead of retrying blind, since requestPointerLock needs a transient activation.
     if (this.#lockRaw) this.#tryLock(false);
-    else this.#lockRetry = this.#win.setTimeout(() => {
-      this.#lockRetry = null;
-      if (this.#lockWanted && !this.locked) this.requestLock();
-    }, 1200);
   }
 
-  #cancelRetry() {
-    if (this.#lockRetry !== null) this.#win.clearTimeout(this.#lockRetry);
-    this.#lockRetry = null;
+  #cancelPending() {
     this.#lockPending = false;
     this.#lockAttempt++;
   }
 
   exitLock() {
     this.#lockWanted = false;
-    this.#cancelRetry();
+    this.#cancelPending();
     if (this.#doc.pointerLockElement) {
       try {
         const result: unknown = this.#doc.exitPointerLock();
@@ -399,7 +407,7 @@ export class Input {
     this.touch.enabled = false;
     if (this.locked) this.exitLock();
     this.#lockWanted = false;
-    this.#cancelRetry();
+    this.#cancelPending();
     for (const remove of this.#listeners) remove();
     this.#listeners.length = 0;
     this.#clearRaw();

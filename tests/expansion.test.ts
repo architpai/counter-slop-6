@@ -2,7 +2,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { Group, Scene, Vector3 } from 'three';
 import { Body, World } from '@/engine/physics';
 import { NavGrid } from '@/engine/nav';
-import { EnemyManager, TYPES, BOSS_ORDER } from '@/engine/enemies';
+import { EnemyManager, PATH_BUDGET, TYPES, BOSS_ORDER } from '@/engine/enemies';
 import { syncModel } from '@/engine/enemies/model';
 import { specialThink } from '@/engine/enemies/specials';
 import { groundThink } from '@/engine/enemies/ai';
@@ -227,10 +227,47 @@ test('all new brains run with real physics without non-finite state and training
   expect(player.takeDamage).not.toHaveBeenCalled(); expect(m.projectiles).toHaveLength(0); expect(m.hazards.rings).toHaveLength(0);
 });
 
+test('a pack re-pathing on one frame spends at most the frame budget and drains over later frames', () => {
+  const { ctx, m, spawn } = setup();
+  const findPath = vi.spyOn(ctx.nav, 'findPath');
+  const pack = Array.from({ length: 12 }, (_, i) => spawn('grunt', new Vector3(-11 + i * 2, 0, -15)));
+  m.update(1 / 60);
+  expect(findPath.mock.calls.length).toBeGreaterThan(0);
+  expect(findPath.mock.calls.length).toBeLessThanOrEqual(PATH_BUDGET);
+  for (let i = 0; i < 10; i++) m.update(1 / 60);
+  expect(pack.every(e => !!e.path)).toBe(true);
+});
+
 test('ring placement rejects an enclosed safe pocket instead of counting standing still as escape', () => {
   const { ctx, player } = setup(); player.body.pos.set(0, 0, 0);
   ctx.world.addBox(new Vector3(-40, 0, -40), new Vector3(-1, 4, 40));
   ctx.world.addBox(new Vector3(1, 0, -40), new Vector3(40, 4, 40)); ctx.world.finalize(); ctx.nav.build();
   expect(hasRingEscape(ctx.nav, player as unknown as Target, [], ctx.world)).toBe(true);
   expect(hasRingEscape(ctx.nav, player as unknown as Target, [new Vector3(0, 0, -7), new Vector3(0, 0, 7)], ctx.world)).toBe(false);
+});
+
+test('lagspike probes the landing before hopping and skips a hop that would run off a ledge', () => {
+  const { ctx, m, player, spawn } = setup();
+  player.body.pos.set(0, 0, 20);
+  const e = spawn('lagspike', new Vector3(0, 0, 0));
+  ctx.world.clear();
+  ctx.world.addBox(new Vector3(-40, -1, -40), new Vector3(40, 0, 3)); ctx.world.finalize();
+  e.hopT = 0; e.body.onGround = true;
+  groundThink(m, e, 1 / 60);
+  expect(e.hopping).toBe(false); expect(e.body.vel.y).toBeLessThan(5);
+
+  ctx.world.clear();
+  ctx.world.addBox(new Vector3(-40, -1, -40), new Vector3(40, 0, 40)); ctx.world.finalize();
+  e.hopT = 0; e.body.onGround = true;
+  groundThink(m, e, 1 / 60);
+  expect(e.hopping).toBe(true); expect(e.body.vel.y).toBeCloseTo(13);
+});
+
+test('past wave 30 the plain mod ramps enemy speed and damage, capped at +60%', () => {
+  const { m, solo } = setup();
+  const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
+  solo.startWave(30); expect(m.mods.damage).toBe(1); expect(m.mods.speed).toBe(1);
+  solo.startWave(40); expect(m.mods.damage).toBeCloseTo(1.3); expect(m.mods.speed).toBeCloseTo(1.3);
+  solo.startWave(80); expect(m.mods.damage).toBe(1.6); expect(m.mods.speed).toBe(1.6);
+  randomSpy.mockRestore();
 });

@@ -3,6 +3,7 @@ import { alignSegment, clamp, damp, rand, round1, round2, wrapAngle } from './ut
 import { makeFigure, makeNameTag, cylGeo, sphereGeo, surfMat, setFlash, TONE, TONE_HEX } from './render/index';
 import type { Figure, FigureAnchorName, FigureAnchors, FigureParts } from './render/figure';
 import { raycastFigure } from './render/figure';
+import { PS_FLAG } from './types';
 import type { Ctx, Enemy, Snap, StatePacket, Target } from './types';
 import type { Player } from './player/index';
 import { GUN_LOADOUT } from './weapons/stats';
@@ -77,9 +78,9 @@ function cleanName(name: unknown): string {
 
 export function encodeState(p: Player): StatePacket {
   const grapple = p.grapple.mode !== 'idle';
-  const flags = (p.crouching ? 1 : 0) | (p.sliding ? 2 : 0) | (p.blocking ? 4 : 0) |
-    (p.aiming ? 8 : 0) | (p.body.onGround ? 16 : 0) | (p.firing ? 32 : 0) |
-    (p.alive ? 64 : 0) | (grapple ? 128 : 0) | (p.parryWindow ? 256 : 0) | (p.melee.active ? 512 : 0);
+  const flags = (p.crouching ? PS_FLAG.CROUCHING : 0) | (p.sliding ? PS_FLAG.SLIDING : 0) | (p.blocking ? PS_FLAG.BLOCKING : 0) |
+    (p.aiming ? PS_FLAG.AIMING : 0) | (p.body.onGround ? PS_FLAG.ON_GROUND : 0) | (p.firing ? PS_FLAG.FIRING : 0) |
+    (p.alive ? PS_FLAG.ALIVE : 0) | (grapple ? PS_FLAG.GRAPPLING : 0) | (p.parryWindow ? PS_FLAG.PARRY_WINDOW : 0) | (p.melee.active ? PS_FLAG.MELEE : 0);
   const { pos, vel } = p.body;
   const state = [round2(pos.x), round2(pos.y), round2(pos.z), round2(p.yaw), round2(p.pitch),
     p.wi, flags, Math.round(p.hp), round1(vel.x), round1(vel.y), round1(vel.z)];
@@ -235,24 +236,24 @@ export class RemotePlayer implements Target {
     this._a = this._b || { p: p.clone(), yaw, pitch: arr[4], t: now - 0.07 };
     this._b = { p, yaw, pitch: arr[4], t: now };
     const wi = arr[5] >= 0 && arr[5] < GUN_LOADOUT.length ? arr[5] : 0;
-    const melee = !!(arr[6] & 512);
+    const melee = !!(arr[6] & PS_FLAG.MELEE);
     if (this._figure && (wi !== this._wi || melee !== this.melee || !this._figure.parts.weapon?.parent)) {
       this._figure.setWeapon(melee ? 'knife' : GUN_LOADOUT[wi] ?? GUN_LOADOUT[0]);
       this._wi = wi;
     }
     this.melee = melee;
     const flags = arr[6];
-    this.crouching = !!(flags & 1);
-    this.sliding = !!(flags & 2);
-    this.blocking = !!(flags & 4);
-    this.aiming = !!(flags & 8);
-    this.body.onGround = !!(flags & 16);
-    this.firing = !!(flags & 32);
-    const alive = !!(flags & 64);
+    this.crouching = !!(flags & PS_FLAG.CROUCHING);
+    this.sliding = !!(flags & PS_FLAG.SLIDING);
+    this.blocking = !!(flags & PS_FLAG.BLOCKING);
+    this.aiming = !!(flags & PS_FLAG.AIMING);
+    this.body.onGround = !!(flags & PS_FLAG.ON_GROUND);
+    this.firing = !!(flags & PS_FLAG.FIRING);
+    const alive = !!(flags & PS_FLAG.ALIVE);
     if (this.alive && !alive) this.deadT = 0;
     this.alive = alive;
-    this.grappling = !!(flags & 128) && arr.length === 14;
-    this.parryWindow = !!(flags & 256);
+    this.grappling = !!(flags & PS_FLAG.GRAPPLING) && arr.length === 14;
+    this.parryWindow = !!(flags & PS_FLAG.PARRY_WINDOW);
     this.hp = arr[7];
     if (arr.length >= 11) this.body.vel.set(num(arr[8]), num(arr[9]), num(arr[10]));
     else this.body.vel.set(0, 0, 0);

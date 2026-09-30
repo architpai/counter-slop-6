@@ -42,6 +42,8 @@ export function loadTacticalModels(): Promise<void> {
         throw new Error(`Tactical asset is missing viewhand${side}`);
       }
     }
+    // One GPU buffer set per part, shared by every instance: disposers skip it.
+    gltf.scene.traverse(object => { if (object instanceof Mesh) object.geometry.userData.shared = true; });
     source = gltf.scene;
   }).catch((error: unknown) => {
     loading = null;
@@ -49,8 +51,8 @@ export function loadTacticalModels(): Promise<void> {
   });
 }
 
-/** Rigid garment sections fit the existing animated pivots. Geometry is instance-owned
- * because figure/debris disposal releases it; materials stay in the page-level cache. */
+/** Rigid garment sections fit the existing animated pivots. Geometry and materials stay
+ * page-level: only the node tree is per instance, so a spawn uploads nothing. */
 export function tacticalPart(kind: TacticalKind, part: string, color?: number): Object3D {
   const template = source?.getObjectByName(`${kind}__${part}-surface`);
   if (!template) throw new Error(`Load tactical models before creating ${kind}/${part}`);
@@ -59,7 +61,6 @@ export function tacticalPart(kind: TacticalKind, part: string, color?: number): 
     const name = typeof object.userData.name === 'string' ? object.userData.name : object.name;
     object.name = name.replace(`${kind}__`, '').replace(/\.\d+$/, '');
     if (!(object instanceof Mesh)) return;
-    object.geometry = object.geometry.clone();
     object.castShadow = object.receiveShadow = true;
     if (color !== undefined && object.material instanceof MeshStandardMaterial && object.material.name === 'player-mark') {
       let material = markings.get(color);

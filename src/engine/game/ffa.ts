@@ -4,6 +4,8 @@ import { RemotePlayer, encodeState } from '../players';
 import { validKey } from '../level/index';
 import { TONE } from '../render/index';
 import { GUN_STATS } from '../weapons/stats';
+import { MELEE_PVP_DAMAGE } from '../weapons/melee';
+import { GRENADE_PVP_MAX, MAX_THROW_SPEED } from '../player/grenades';
 import type { BoardRow, OnlineInfo } from '../hud/screens';
 import { advanceTeamMatch, assignTeams, createTeamMatch, dropFlag, interactFlag, isOnlineMode, isTeam, markDead, ONLINE_MODES, scoreTeam, TEAM_NAMES, TEAM_RULES, validTeamMatch, validTeams } from './team-rules';
 import type { OnlineMode, Point, Team, TeamMatch } from './team-rules';
@@ -13,7 +15,18 @@ import type { PeerMeta } from '../net';
 import type { App } from '../boot';
 
 const KILL_TARGET = 20, TIME_LIMIT = 480, RESPAWN = 3.5, SILENT_MS = 9000;
+// 20 Hz matches the 80 ms interpolation delay remotes render at (see players.ts).
+const PS_INTERVAL = 0.05;
+// Host trusts a `take` only within this radius of the sender's avatar. Generous
+// vs the 1.5 m local collect: remotes render ~80 ms behind. ponytail: shrink if stealable.
+const TAKE_RANGE = 4;
 const HOW: Record<string, string> = { r4c: 'R4-C', rifle: 'MP5', pistol: 'pistol', shotgun: 'shotgun', sniper: 'sniper', melee: 'knife', grenade: 'grenade', deflect: 'their own bullet' };
+
+/** Most one `pdmg` packet may claim per source: a point-blank headshot with every pellet. */
+const PVP_CAP: Record<string, number> = { melee: MELEE_PVP_DAMAGE, grenade: GRENADE_PVP_MAX };
+for (const [kind, g] of Object.entries(GUN_STATS)) PVP_CAP[kind] = g.pvp[0] * g.pvp[1] * g.pellets;
+/** When each peer last reported its own death, so one body cannot be counted every frame. */
+const lastDeath = new Map<string, number>();
 
 const obj = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
 const arr = (v: unknown): v is unknown[] => Array.isArray(v);
@@ -56,7 +69,7 @@ export function createFFA(app: App): FfaApi {
   const { ctx, gs, lobby, scores } = app;
   const { net, hud } = ctx;
   const d1 = new THREE.Vector3(), d2 = new THREE.Vector3(), d3 = new THREE.Vector3();
-  let tick = 0;
+  let psT = 0;
   let shotQueue: number[] = [];
   let boardShown = false;
   let timer: number | undefined = undefined;
@@ -286,7 +299,7 @@ export function createFFA(app: App): FfaApi {
   }
   function dispose(): void {
     window.clearTimeout(timer);
-    pendingHeadshots.clear(); ready.clear(); shotQueue = [];
+    pendingHeadshots.clear(); ready.clear(); shotQueue = []; lastDeath.clear();
     teamWorld?.dispose(); teamWorld = null;
   }
   function leave(reason = ''): void {
@@ -355,7 +368,7 @@ export function createFFA(app: App): FfaApi {
     dispose();
     gs.mode = 'ffa'; app.loadLevel(true, lobby.map ?? app.settings.mapKey); app.resetRun();
     gs.teamMatch = teamState; gs.matchT = teamState?.elapsed ?? 0;
-    lastClock = now(); syncT = 0; seenDead = false; deathMessage = '';
+    lastClock = now(); syncT = 0; psT = 0; seenDead = false; deathMessage = '';
     applyTeams();
     if (net.id) ready.add(net.id);
     if (teamState) teamWorld = createTeamWorld(ctx);
@@ -522,7 +535,6 @@ export function createFFA(app: App): FfaApi {
   function update(dt: number, t: number = now()): void {
     if (!net.active) return;
     for (const [id, hit] of pendingHeadshots) if (hit.until < t) pendingHeadshots.delete(id);
-    tick++;
     for (const r of ctx.remotes.values()) r.update(dt, t);
     if (inMatch()) {
       for (const [rid, r] of [...ctx.remotes]) {
@@ -533,7 +545,8 @@ export function createFFA(app: App): FfaApi {
         if (net.isHost) { net.close(rid); net.send('leave', { id: rid }); broadcastLobby(); sendScores(); }
       }
     }
-    if (tick % 3 === 0 && inMatch()) sendPlayerState();
+    psT += dt;
+    if (psT >= PS_INTERVAL && inMatch()) { psT = 0; sendPlayerState(); }
     if (shotQueue.length) {
       const player = ctx.player;
       if (player !== null) { net.broadcast('shots', { k: player.weapon.kind, e: shotQueue }); shotQueue = []; }
@@ -750,6 +763,8 @@ export function createFFA(app: App): FfaApi {
   net.on('taken', (d, from) => { if (fromHost(from) && obj(d) && int(d.id)) app.pickups.remove(d.id); });
   net.on('take', (d, from) => {
     if (!net.isHost || !roster(from) || !obj(d) || !int(d.id)) return;
+    const p = app.pickups.items.find(item => item.id === d.id), who = ctx.remotes.get(from);
+    if (!p || !who || p.mesh.position.distanceTo(who.body.pos) > TAKE_RANGE) return;
     if (app.pickups.remove(d.id)) net.send('taken', { id: d.id });
   });
   net.on('ps', (d, from) => {
@@ -769,9 +784,13 @@ export function createFFA(app: App): FfaApi {
     if (typeof amount !== 'number' || !(amount > 0 && amount <= 100000)) return;
     if (!(fromPos === null || triple(fromPos))) return;
     if (!str(src, 32) || typeof crit !== 'boolean') return;
+    // Falloff and pellet rounding are the sender's business, but no weapon may exceed its own best case.
+    const cap = PVP_CAP[src];
+    if (cap === undefined) return;
+    const dealt = Math.min(amount, cap);
     const pos = fromPos === null ? null : vec(fromPos);
-    p.lastHitBy = from; p.lastHit = { from: pos, crit, amount, src };
-    p.takeDamage(amount, pos);
+    p.lastHitBy = from; p.lastHit = { from: pos, crit, amount: dealt, src };
+    p.takeDamage(dealt, pos);
     if (crit && int(d.hitId)) net.sendTo(from, 'headshot', { hitId: d.hitId, ...roundTag() });
   });
   net.on('headshot', (d, from) => {
@@ -783,6 +802,9 @@ export function createFFA(app: App): FfaApi {
   });
   net.on('pdead', (d, from) => {
     if (!roster(from) || !obj(d)) return;
+    const t = now();
+    if (t - (lastDeath.get(from) ?? -Infinity) < RESPAWN) return;
+    lastDeath.set(from, t);
     if (gs.teamMatch && (!activeCombat() || d.round !== gs.teamMatch.round || Object.hasOwn(gs.teamMatch.dead, from))) return;
     const { killer, dir, over, how, crit } = d;
     if (!(killer === null || id(killer)) || !(dir === null || triple(dir, 1)) || typeof over !== 'boolean' || typeof crit !== 'boolean' || !(how === null || str(how, 64))) return;
@@ -802,6 +824,7 @@ export function createFFA(app: App): FfaApi {
     if (!roster(from) || !obj(d) || !activeCombat()) return;
     const { pos, vel } = d;
     if (!triple(pos) || !triple(vel)) return;
+    if (vec(vel).length() > MAX_THROW_SPEED * 1.1) return;
     const p = ctx.player;
     if (p === null) return;
     p.throwGrenade({ pos, vel });

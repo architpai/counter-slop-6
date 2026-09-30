@@ -6,9 +6,9 @@ import { makeLoadout, GUN_STATS, Melee } from '../weapons/index';
 import type { Gun, Weapon } from '../weapons/index';
 import { MAX_GRENADES } from '../types';
 import type { Ctx, Enemy, HitInfo, LastHit, Projectile, Target, WeaponState } from '../types';
-import { initCamera, updateBob, updateCamera, idleCamera } from './camera';
+import { initCamera, updateBob, updateCamera, idleCamera, HIP_FOV } from './camera';
 import type { CameraState } from './camera';
-import { initMovement, updateMovement, integrateMovement, AIR_JUMPS } from './movement';
+import { initMovement, updateMovement, integrateMovement, AIR_JUMPS, GRAVITY, STAND_HEIGHT, EYE_HEIGHT } from './movement';
 import type { MovementState } from './movement';
 import { initGrapple, updateGrapple, detachGrapple, updateBreath, updateGrappleVisual } from './grapple';
 import type { GrappleState } from './grapple';
@@ -77,7 +77,7 @@ export class Player implements Target {
 
   constructor(ctx: Ctx) {
     this.ctx = ctx;
-    this.body = new Body(ctx.level.playerStart, 0.35, 1.75, 0.55);
+    this.body = new Body(ctx.level.playerStart, 0.35, STAND_HEIGHT, 0.55);
     this._eye = new Vector3();
     this._center = new Vector3();
     this._forward = new Vector3(0, 0, -1);
@@ -155,7 +155,7 @@ export class Player implements Target {
     this.body.pos.copy(pos);
     this.body.vel.set(0, 0, 0);
     this.body.onGround = false;
-    this.body.height = 1.75;
+    this.body.height = STAND_HEIGHT;
     this.hp = this.maxHp;
     this.alive = true;
     this.yaw = this.pitch = this.roll = 0;
@@ -171,7 +171,7 @@ export class Player implements Target {
     this.dashCd = 0;
     this.airJumps = AIR_JUMPS;
     this.gravityScale = 1;
-    this.eyeHeight = 1.6;
+    this.eyeHeight = EYE_HEIGHT;
     this.stepOffset = 0;
     this.grenades = 3;
     for (const weapon of this.weapons) weapon.resetAmmo();
@@ -194,7 +194,7 @@ export class Player implements Target {
       this.pitch = damp(this.pitch, -0.35, 3, dt);
       this.body.vel.x = damp(this.body.vel.x, 0, 4, dt);
       this.body.vel.z = damp(this.body.vel.z, 0, 4, dt);
-      this.body.vel.y -= 26 * dt;
+      this.body.vel.y -= GRAVITY * dt;
       this.ctx.world.moveBody(this.body, dt);
       updateGrenades(this, dt, false);
       updateCamera(this, dt);
@@ -204,8 +204,10 @@ export class Player implements Target {
     this.ctx.renderer.rig.visible = true;
     const { input } = this.ctx;
     const optic = isGun(this.weapon) && this.weapon.scope ? this.weapon.scopeKind : null;
-    const sensitivity = !this.aiming ? 1 : optic === 'acog' ? 0.38 * input.acogScale
-      : optic === 'sniper' ? 0.38 * input.sniperScale : 0.62;
+    // Constant on-screen travel per mouse count: scale by the tangent ratio of the two FOVs.
+    const ratio = Math.tan(this.weapon.adsFov * Math.PI / 360) / Math.tan(HIP_FOV * Math.PI / 360);
+    const sensitivity = !this.aiming ? 1
+      : ratio * (optic === 'acog' ? input.acogScale : optic === 'sniper' ? input.sniperScale : 1);
     this.yaw += input.look.x * sensitivity;
     this.pitch = clamp(this.pitch + input.look.y * sensitivity, -1.5, 1.5);
     if (this.dashLock) {
