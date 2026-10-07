@@ -694,6 +694,7 @@ Delivery: the host sends to everyone; a client sends to the host, and with the r
 | `leave` | host → all | {id} | Section 17. |
 | `start` | host → all / one | {spawns {id→index}, map} or {late true, spawn index, map, broken [ids]} | Section 18. |
 | `startreq` | client → host | {} | Host starts if in state `lobby`. |
+| `teamreq` | client → host | { team } | Host moves the sender to that team if in state `lobby`, in a team mode, and the team has fewer than four players. |
 | `end` | host → all | {id, name} | End match. |
 | `backtolobby` | host → all | {} | Client goes to the lobby screen. |
 | `pickup` | host → all | {id, kind, pos [x,y,z]} | Client spawns the pickup with that id. |

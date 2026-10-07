@@ -14,7 +14,7 @@ import type { OnlineMode, Team } from '../game/team-rules';
  */
 export const UI_ACTIONS = [
   'start', 'online', 'back', 'quickPlay', 'create', 'join', 'joinCode',
-  'visibility', 'name', 'pickMap', 'onlineMode', 'mainMenu', 'startMatch',
+  'visibility', 'name', 'pickMap', 'onlineMode', 'team', 'mainMenu', 'startMatch',
   'leave', 'leaveMatch', 'sens', 'touchSens', 'resume', 'acogSens', 'sniperSens', 'optic', 'r4cOptic', 'training', 'invert', 'music',
   'gfxPreset', 'gfx', 'gfxFps', 'gfxReset', 'gfxLower',
 ] as const;

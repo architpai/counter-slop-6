@@ -120,6 +120,7 @@ export function createUI(app: App): UiApi {
       settings.mapKey = key; store.set(SKEY.MAP, key); redraw();
     },
     onlineMode: value => { if (isOnlineMode(value)) { app.ffa.selectMode(value); redraw(); } },
+    team: value => { if (value === '0' || value === '1') app.ffa.requestTeam(value === '0' ? 0 : 1); },
     mainMenu: () => app.mainMenu(),
     startMatch: () => {
       if (net.isHost) app.ffa.hostStart();
