@@ -29,8 +29,13 @@ try {
     g.gs.state = 'pause'; g.gs.mode = 'ffa'; g.enemies.clear(); g.gs.queue.length = 0;
     g.hud.update(10); g.ctx.audio.music(false);
     for (let i = 0; i < 90; i++) g.player.update(1 / 60);
+    // Only this drives the input frames. The paused boot loop still calls input.update on every
+    // animation frame, and one landing between a key press and rehaulFrame would use up the
+    // key's pressed edge before the player saw it.
+    const update = g.input.update.bind(g.input);
+    g.input.update = () => {};
     window.rehaulFrame = (n = 1) => {
-      for (let i = 0; i < n; i++) { g.input.update(1 / 60); g.player.update(1 / 60); }
+      for (let i = 0; i < n; i++) { update(1 / 60); g.player.update(1 / 60); }
     };
   });
   assert.equal(await page.evaluate(() => window.__game.player.weapon.kind), 'r4c');

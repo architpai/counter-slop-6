@@ -1,6 +1,7 @@
 import { afterAll, expect, test } from 'vitest';
 import { Box3, Mesh, Object3D, PerspectiveCamera, Scene, Vector3 } from 'three';
 import { encodeState, RemotePlayer } from '@/engine/players';
+import { usePropSource } from '@/engine/render/figure';
 import type { Ctx, Enemy, Player } from '@/engine/types';
 
 const assert = (cond: unknown, message: string): void => { expect(cond, message).toBeTruthy(); };
@@ -24,6 +25,9 @@ const ctx = {
   effects: {
     tracer: (from: Vector3, to: Vector3, tone?: number, thick?: number, life?: number) =>
       calls.tracers.push({ from: from.clone(), to: to.clone(), tone, thick, life }),
+    bulletTracer: (from: Vector3, to: Vector3, thick?: number, life?: number) =>
+      calls.tracers.push({ from: from.clone(), to: to.clone(), tone: 0, thick, life }),
+    muzzleFlash: () => {},
     debris: (mesh: Object3D, pos: Vector3, vel: Vector3, spin: Vector3, options?: unknown) => {
       scene.attach(mesh);
       calls.debris.push({ mesh, pos: pos.clone(), vel, spin, options });
@@ -199,9 +203,17 @@ test('shot batches, the muzzle flash and damage', () => {
 });
 
 test('death, ragdoll and respawn', () => {
+  // A worn operator (R7) mid-stride and aiming as it dies: its loops and aim fade as it lies, as an enemy corpse's.
+  const rig = must(must(remote._figure, 'figure').rig, 'rig');
+  rig.worn = true;
+  rig.motion.weights.idle = 0;
+  rig.motion.weights.run = 1;
+  rig.motion.aim = 1;
   remote.push(state(0, 0, 16), 4);
   remote.update(0.05, 4.08);
   assert(!remote.alive && must(remote._figure, 'figure').root.rotation.x > 0 && remote.deadT === 0.05, 'Dead flag starts the slump and dead timer.');
+  assert(rig.motion.weights.run < 0.7 && rig.motion.aim < 0.7, 'A dead remote operator lets go of its stride and aim.');
+  rig.worn = false;
   const tracers = calls.tracers.length;
   remote.shots('rifle', [1, 2, 3]);
   remote.takeDamage(12);
@@ -226,6 +238,28 @@ test('death, ragdoll and respawn', () => {
     'Respawn clears the old interpolation and uses the default gun for one packet.');
   remote.push(state(8, 0, 80, 2), 5.05);
   assert(remote._wi === 2, 'The packet after respawn applies the selected weapon.');
+});
+
+test('a ragdoll lets go of its figure: one prop listener per remote', () => {
+  const listeners = new Set<() => void>();
+  usePropSource({ prop: () => null, subscribeProps: listener => { listeners.add(listener); return () => { listeners.delete(listener); }; } });
+  const leak = new RemotePlayer(ctx, 'leak', 'leak');
+  try {
+    for (let i = 0; i < 5; i++) {
+      leak.push(state(20 + i), 10 + i);
+      leak.update(0, 10 + i);
+      expect(leak.alive && listeners.size, `life ${i}`).toBe(1);
+      const lent = calls.debris.length;
+      leak.ragdoll([0, 0, -1], true);
+      expect(listeners.size, `death ${i}`).toBe(0);
+      // Each piece handed to the debris gives its hold on the figure back once it is gone.
+      for (const { options } of calls.debris.slice(lent)) expect(typeof (options as { gone?: unknown }).gone).toBe('function');
+    }
+  } finally {
+    leak.dispose();
+    usePropSource(null);
+  }
+  expect(listeners.size).toBe(0);
 });
 
 test('disposal', () => {

@@ -1,6 +1,8 @@
 import { clamp, store, SKEY } from '../util';
 import { LEVELS, validKey } from '../level/index';
 import { isOnlineMode } from './team-rules';
+import { AMBIENT_OCCLUSION, ANTIALIAS, EFFECTS, FPS_TARGETS, SHADOWS, TEXTURE_QUALITIES, VIEW_DISTANCES, isPreset } from '../render/quality';
+import type { FpsTarget, PresetChoice } from '../render/quality';
 import type { ScreenView, UiAction } from '../hud/screens';
 import type { App } from '../boot';
 
@@ -16,11 +18,13 @@ export interface UiApi {
 }
 
 export function createUI(app: App): UiApi {
-  const { ctx, gs, lobby, settings } = app;
+  const { ctx, gs, lobby, settings, quality } = app;
   const { hud, net } = ctx;
   let joinCode = '';
+  const gfx = () => ({ choice: quality.choice, auto: quality.autoPreset, values: { ...quality.values }, fpsCounter: quality.fpsCounter,
+    msaaSoft: ctx.renderer?.msaaDepthReadable ?? true });
   const look = () => ({ sens: settings.sens, touchSens: settings.touchSens, touch: ctx.input.usingTouch, acogSens: settings.acogSens, sniperSens: settings.sniperSens,
-    invert: settings.invert, music: settings.music, confirmKey: hud.key('confirm') });
+    invert: settings.invert, music: settings.music, confirmKey: hud.key('confirm'), gfx: gfx() });
   const weapons = () => ({ optic: settings.optic, r4cOptic: settings.r4cOptic });
   function setOptic(field: 'optic' | 'r4cOptic', value: string | null): void {
     if (value !== 'acog' && value !== 'holo') return;
@@ -31,6 +35,26 @@ export function createUI(app: App): UiApi {
     settings[field] = clamp(Math.round((Number.isFinite(number) ? number : fallback) / 5) * 5, 25, 250);
     app.applyLook();
   }
+
+  /** One Advanced control: `key:value`. Unknown keys and values are ignored, never saved. */
+  function setGfx(value: string | null): void {
+    const [key = '', raw = ''] = String(value ?? '').split(':');
+    const listed = <T,>(list: readonly T[], item: unknown): item is T => list.includes(item as T);
+    const number = raw === '' ? Number.NaN : Number(raw);
+    if (key === 'renderScale' && Number.isFinite(number)) quality.set('renderScale', number / 100);
+    else if (key === 'dynamicRes') quality.set('dynamicRes', raw === '1');
+    else if (key === 'fpsTarget' && listed<FpsTarget>(FPS_TARGETS, number)) quality.set('fpsTarget', number);
+    else if (key === 'antialias' && listed(ANTIALIAS, raw)) quality.set('antialias', raw);
+    else if (key === 'shadows' && listed(SHADOWS, raw)) quality.set('shadows', raw);
+    else if (key === 'ao' && listed(AMBIENT_OCCLUSION, raw)) quality.set('ao', raw);
+    else if (key === 'bloom') quality.set('bloom', raw === '1');
+    else if (key === 'softParticles') quality.set('softParticles', raw === '1');
+    else if (key === 'shafts') quality.set('shafts', raw === '1');
+    else if (key === 'textures' && listed(TEXTURE_QUALITIES, raw)) quality.set('textures', raw);
+    else if (key === 'effects' && listed(EFFECTS, raw)) quality.set('effects', raw);
+    else if (key === 'viewDistance' && listed(VIEW_DISTANCES, raw)) quality.set('viewDistance', raw);
+  }
+  const isChoice = (value: unknown): value is PresetChoice => value === 'auto' || value === 'custom' || isPreset(value);
 
   const models = {
     main: () => ({ best: settings.best, mapKey: settings.mapKey, maps: LEVELS, ...look(), ...weapons() }),
@@ -111,6 +135,12 @@ export function createUI(app: App): UiApi {
     r4cOptic: value => setOptic('r4cOptic', value),
     invert: value => { settings.invert = value === '1'; app.applyLook(); },
     music: value => { app.setMusic(value === '1'); },
+    // Quality changes redraw through the subscription in `boot`, like every other listener.
+    gfxPreset: value => { if (isChoice(value)) quality.setPreset(value); },
+    gfx: value => setGfx(value),
+    gfxFps: value => quality.setFpsCounter(value === '1'),
+    gfxReset: () => quality.reset(),
+    gfxLower: value => app.answerQualityPrompt(value === 'yes'),
   };
   function onUiAction(act: UiAction, value: string | null, ev: Event): void { actions[act]?.(value, ev); }
 

@@ -8,3 +8,14 @@ test-results/
 .pi/
 AGENTS.md
 CLAUDE.md
+tools/textures/.build/
+tools/blender/materials/__pycache__/
+tools/lightmaps/.build/
+tools/weapons/.build/
+tools/blender/weapons/__pycache__/
+tools/effects/.build/
+tools/blender/effects/__pycache__/
+tools/characters/.build/
+tools/blender/characters/__pycache__/
+tools/props/.build/
+tools/blender/props/__pycache__/

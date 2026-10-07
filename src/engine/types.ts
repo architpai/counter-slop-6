@@ -14,6 +14,9 @@ import type * as THREE from 'three';
 import type { Body, Box, World } from './physics';
 import type { NavGrid } from './nav';
 import type { OnlineMode, Team, TeamMatch } from './game/team-rules';
+import type { SurfKey } from './render/palette';
+import type { MaterialTag } from './render/surfaces';
+import type { SurfaceOverlay } from './render/impacts';
 
 // Ported subsystems: real types.
 export type { Renderer } from './render/index';
@@ -190,6 +193,15 @@ export interface BoxData {
   tag?: unknown;
   /** Back-reference set by `level` for prop colliders. */
   breakable?: Breakable;
+  /**
+   * What the collider's piece is made of and its flat-palette key, written by
+   * the level builder (R5): a bullet's impact and hole follow them
+   * (render/impacts.ts). Absent on boxes nothing visible stands for.
+   */
+  material?: MaterialTag;
+  surf?: SurfKey;
+  /** Visible pieces with no collider laid on this one's faces (a path on the lawn): a hit under one shows it. */
+  overlays?: SurfaceOverlay[];
 }
 
 export interface RayHit {
@@ -216,6 +228,61 @@ export interface Mood {
   hemiIntensity?: number;
   hemiSky?: number;
   hemiGround?: number;
+  /** Linear fog range in metres, before the view-distance setting scales it. */
+  fogNear?: number;
+  fogFar?: number;
+  /** Draw a sun disc and glow in the sky dome. */
+  sunDisc?: boolean;
+  /**
+   * Towards the sun, any length: the disc and the shadow-casting light both use
+   * it. Keep it 30° or more above the horizon, or shadows outgrow the shadow box.
+   */
+  sunDir?: readonly [number, number, number];
+  /** Colour grade in the composite pass. */
+  grade?: Grade;
+  /**
+   * Realistic tiers: the folder under `public/sky/` with this map's Blender sky
+   * (tools/blender/sky.py), rendered for `sunDir`. It replaces the gradient,
+   * the sun and hemisphere colours and the fog colour on those tiers.
+   */
+  sky?: string;
+  /** The realistic tiers' own exposure and grade (the Blender skies are all clear daylight). */
+  realistic?: {
+    /** Exposure in stops on top of the default (render/index.ts REAL_EXPOSURE), per map mood. */
+    exposure?: number;
+    grade?: Grade;
+    /** Aerial perspective and light shafts (R8, render/atmosphere.ts); none without it. */
+    atmosphere?: Atmosphere;
+  };
+}
+
+/**
+ * A map's haze on the realistic tiers (R8, render/atmosphere.ts): density
+ * `haze × exp(−falloff × (y − base))` per metre, from `start` metres out.
+ */
+export interface Atmosphere {
+  /** Density per metre at the base height. */
+  haze: number;
+  /** Per metre of height: the haze thins by e over 1 / falloff metres up. */
+  falloff: number;
+  /** Height of the haze's base (the map's ground), metres; 0 by default. */
+  base?: number;
+  /** No haze nearer than this, so the play space's grunts keep the linear fog's clarity. */
+  start: number;
+  /** The fog colour's brightening straight towards the sun, as a share of its brightness, in the sun's hue. */
+  glow: number;
+  /** Light shafts' strength (Graphics → Light shafts); 0 draws none on this map. */
+  shafts: number;
+}
+
+/** A gentle per-mood colour grade, applied after tone mapping. Neutral is 0 / 1 / 1 / 1. */
+export interface Grade {
+  /** Added to the shadows, per channel, in the grade's square-root space: black stays black. */
+  lift: readonly [number, number, number];
+  /** Multiplies the highlights, per channel. */
+  gain: readonly [number, number, number];
+  saturation: number;
+  contrast: number;
 }
 
 export interface Bounds {
@@ -253,6 +320,103 @@ export interface Breakable {
   box: Box;
 }
 
+/** One level mesh in the surface palette (render/surfaces.ts). */
+export interface LevelSurface {
+  mesh: THREE.Mesh;
+  surf: SurfKey;
+  /**
+   * What the mesh is made of: one tag per geometry group, in group order, or
+   * a single tag for a mesh without groups. Null marks a flat-only group,
+   * hidden on the realistic tiers (`BuildOpts.flatOnly`).
+   */
+  materials: readonly (MaterialTag | null)[];
+  /**
+   * Part of the fixed level: the merged pieces and the fixed separate ones.
+   * These carry the baked lighting on the realistic tiers (render/lightmap.ts);
+   * movers and breakable props do not, and take the probe grid like characters.
+   */
+  static: boolean;
+  /** A piece the level moves (the drones, `BuildOpts.moving`): it casts no shadow on the realistic tiers. */
+  moving?: boolean;
+  /**
+   * Drawn on the realistic tiers only (`BuildOpts.realOnly`: bevelled trim,
+   * kerbs, backdrops); Low hides the whole mesh, so it looks as it always did.
+   */
+  realOnly?: boolean;
+  /**
+   * The realistic tiers' vertex colours (linear, per vertex of the geometry:
+   * per-building tints, the rock shells' strata), absent where all are
+   * white. Kept here, off the geometry: the renderer puts them on when a
+   * realistic look first goes on, so Low never uploads them.
+   */
+  colours?: Float32Array;
+}
+
+type Vec3 = readonly [number, number, number];
+
+/** Which kit a map dresses with (tools/blender/props/, `public/props/<family>.glb`). */
+export type PropFamily = 'downtown' | 'house' | 'mexico';
+
+/**
+ * One piece of the realistic tiers' detail kit on a map (docs/VISUALS.md,
+ * R6), placed by the map's dressing (level/dressing.ts). Visual only: no
+ * collider, no nav surface, nothing a bullet or a grapple hits.
+ */
+export interface PropPlacement {
+  /** The kit piece's name in `render/prop-assets.json`. */
+  piece: string;
+  x: number;
+  y: number;
+  z: number;
+  /** Radians about +y. */
+  yaw: number;
+  /** Per axis, in the piece's own frame. */
+  scale: Vec3;
+  /** An sRGB colour multiplied over the piece's own colours (paint variety); white keeps them. */
+  tint: number;
+  /** Signs and posters: the `signs` atlas cell their face shows. */
+  cell: number;
+}
+
+/** A sagging cable between two points (power and phone lines, bunting strings), made at load. */
+export interface CablePlacement {
+  from: Vec3;
+  to: Vec3;
+  /** How far the middle hangs below the straight line, in metres. */
+  sag: number;
+  radius: number;
+}
+
+/**
+ * A grime decal (V16): a quad of the `grime` atlas laid on a level face,
+ * multiplied over it (white leaves the face as it is), so it darkens the
+ * lit surface under it whatever the light.
+ */
+export interface DecalPlacement {
+  /** The `grime` atlas cell. */
+  cell: number;
+  /** Middle of the quad on the face. */
+  x: number;
+  y: number;
+  z: number;
+  /** The face it lies on, by its outward normal. */
+  facing: '+x' | '-x' | '+y' | '+z' | '-z';
+  width: number;
+  height: number;
+  /** Turn in the face's plane, radians (ground decals). */
+  turn: number;
+  /** 0-1: how far towards the cell's full darkness. */
+  strength: number;
+}
+
+/** A map's realistic-tier dressing: what `render/props.ts` builds once its kit has streamed in. */
+export interface LevelDressing {
+  family: PropFamily;
+  props: PropPlacement[];
+  cables: CablePlacement[];
+  decals: DecalPlacement[];
+}
+
 export interface Level {
   key: LevelKey;
   arena: boolean;
@@ -278,6 +442,19 @@ export interface Level {
   breakables: Breakable[];
   /** Everything to remove on rebuild. */
   meshes: THREE.Object3D[];
+  /**
+   * Every mesh in the flat surface palette, with what it is made of: the
+   * renderer gives each the look in force (Low's surface colour, or the
+   * realistic tiers' textured material for the tag).
+   */
+  surfaces: LevelSurface[];
+  /**
+   * The realistic tiers' kit props, cables and grime (R6, V16); null where a
+   * map has none (training). Made on its first read (level/index.ts: the
+   * renderer reads it on a realistic look's first frame), so a device that
+   * stays on Low never makes its tables.
+   */
+  readonly dressing: LevelDressing | null;
   /** Directional-light shadow fit. */
   shadow: { center: THREE.Vector3; radius: number };
   mood?: Mood;

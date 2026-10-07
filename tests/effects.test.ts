@@ -28,18 +28,36 @@ const matrix = new THREE.Matrix4(), position = new THREE.Vector3();
 const quaternion = new THREE.Quaternion(), scale = new THREE.Vector3();
 const box = (data: Box['data']): Box => ({ min: new THREE.Vector3(), max: new THREE.Vector3(), data, id: 0 });
 
+const tracers = (): THREE.Mesh<THREE.InstancedBufferGeometry> => {
+  const mesh = scene.getObjectByName('effects:tracers');
+  if (!(mesh instanceof THREE.Mesh)) throw new Error('no tracer pool');
+  return mesh as THREE.Mesh<THREE.InstancedBufferGeometry>;
+};
+
 test('tracer pools', () => {
-  assert(scene.children.length === 8, 'Effects has eight fixed instance pools');
+  assert(scene.children.length === 10, 'Effects has nine fixed instance pools (the flat grenade\'s fire among them) and the tracer ribbons');
   effects.tracer(origin, new THREE.Vector3(0, -10, 0));
   effects.tracer(origin, origin);
   effects.update(0.01);
-  assert(pool('strokes').count === 1, 'Zero-length tracer is ignored');
-  pool('strokes').getMatrixAt(0, matrix);
-  matrix.decompose(position, quaternion, scale);
-  assert(Math.abs(position.y + 5) < 1e-6 && Math.abs(scale.y - 10) < 1e-6, 'Downward tracer preserves midpoint and length');
-  assert(up.clone().applyQuaternion(quaternion).y < -0.99, 'Tracer supports the negative Y axis');
+  const geometry = tracers().geometry;
+  assert(geometry.instanceCount === 1, 'Zero-length tracer is ignored');
+  const start = geometry.getAttribute('iStart'), end = geometry.getAttribute('iEnd');
+  assert(start.getY(0) === 0 && Math.abs(end.getY(0) + 10) < 1e-6, 'A tracer runs from its start to its end, negative Y included');
+  assert(Math.abs(start.getW(0) - 0.022) < 1e-9 && end.getW(0) === 1, 'Its width is kept and it draws at full strength on its first frame');
+  effects.update(0.03);
+  assert(end.getW(0) > 0.4 && end.getW(0) < 0.6, 'It fades over its life');
   effects.update(0.1);
-  assert(pool('strokes').count === 0, 'Expired tracers are removed');
+  assert(geometry.instanceCount === 0 && !tracers().visible, 'Expired tracers are removed');
+  // The enemies' red is thinner and mostly solid, so it reads on sand and sky; the rest glow additively.
+  effects.tracer(origin, new THREE.Vector3(0, 0, -10), 1, 0.04);
+  effects.tracer(origin, new THREE.Vector3(0, 0, -10), 0, 0.04);
+  effects.update(0);
+  const tint = geometry.getAttribute('iColor');
+  assert(Math.abs(start.getW(0) - 0.03) < 1e-9 && tint.getW(0) > 0.5, 'Hostile tracers are a quarter thinner and solid');
+  assert(Math.abs(start.getW(1) - 0.04) < 1e-9 && tint.getW(1) > 0 && tint.getW(1) < tint.getW(0) && tint.getX(1) > 0,
+    'Other tracers glow in their colour round a lighter solid core');
+  effects.clear();
+  assert(geometry.instanceCount === 0, 'Clear removes tracers');
 });
 
 test('particle, decal and pool capacities', () => {
@@ -54,7 +72,8 @@ test('particle, decal and pool capacities', () => {
   assert(Math.abs(position.x - 260) < 1e-5, 'Hole ring overwrites the oldest mark');
   effects.shake = 0.7;
   effects.clear();
-  assert(scene.children.every(mesh => instanced(mesh) && mesh.count === 0) && effects.shake === 0.7, 'Clear resets pools and preserves shake');
+  assert(scene.children.every(mesh => instanced(mesh) ? mesh.count === 0 : tracers().geometry.instanceCount === 0) && effects.shake === 0.7,
+    'Clear resets pools and preserves shake');
 });
 
 test('emitters and particle collision', () => {
@@ -91,13 +110,15 @@ test('debris ownership and expiry', () => {
   parent.add(mesh);
   scene.updateMatrixWorld(true);
   const worldQuat = mesh.getWorldQuaternion(new THREE.Quaternion());
-  let disposed = false;
+  let disposed = false, gone = 0;
   mesh.geometry.addEventListener('dispose', () => { disposed = true; });
-  effects.debris(mesh, mesh.getWorldPosition(new THREE.Vector3()), origin, origin, { life: 0.02, blood: true });
+  effects.debris(mesh, mesh.getWorldPosition(new THREE.Vector3()), origin, origin, { life: 0.02, blood: true, gone: () => gone++ });
   assert(mesh.parent === scene && Math.abs(mesh.scale.x - 2) < 1e-9 && Math.abs(mesh.quaternion.dot(worldQuat)) > 0.99999,
     'Debris transfers ownership and preserves the world transform');
+  effects.debris(mesh, origin, origin, origin, { gone: () => gone++ });
+  assert(gone === 1, 'A piece refused (already debris) is given back at once');
   effects.update(0.03);
-  assert(mesh.parent === null && disposed, 'Debris expiry removes the mesh and releases its geometry');
+  assert(mesh.parent === null && disposed && gone === 2, 'Debris expiry removes the mesh, releases its geometry and tells its lender');
 
   const pieces: THREE.Object3D[] = [];
   for (let i = 0; i < 71; i++) {
@@ -113,5 +134,5 @@ test('debris ownership and expiry', () => {
   assert(Math.abs(effects.shake - 2) < 1e-10, 'Only explosion recipes add their specified shake');
   effects.clear();
   scene.remove(parent);
-  for (const mesh of scene.children) if (instanced(mesh)) mesh.geometry.dispose();
+  for (const mesh of scene.children) if (instanced(mesh) || mesh === tracers()) (mesh as THREE.Mesh).geometry.dispose();
 });

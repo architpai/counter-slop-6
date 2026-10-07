@@ -1,4 +1,5 @@
 import type { RifleOptic } from '../weapons/stats';
+import type { GfxValues, PresetChoice, PresetName } from '../render/quality';
 import type { OnlineMode, Team } from '../game/team-rules';
 
 /**
@@ -15,6 +16,7 @@ export const UI_ACTIONS = [
   'start', 'online', 'back', 'quickPlay', 'create', 'join', 'joinCode',
   'visibility', 'name', 'pickMap', 'onlineMode', 'mainMenu', 'startMatch',
   'leave', 'leaveMatch', 'sens', 'touchSens', 'resume', 'acogSens', 'sniperSens', 'optic', 'r4cOptic', 'training', 'invert', 'music',
+  'gfxPreset', 'gfx', 'gfxFps', 'gfxReset', 'gfxLower',
 ] as const;
 
 export type UiAction = (typeof UI_ACTIONS)[number];
@@ -31,9 +33,20 @@ export interface OnlineInfo {
 }
 
 export interface WeaponSettingsModel { optic: RifleOptic; r4cOptic: RifleOptic }
+/** The Graphics section. `gfx` actions carry `key:value`, for example `shadows:high`. */
+export interface GfxModel {
+  choice: PresetChoice;
+  /** What Auto resolves to on this device, shown as "Auto (High)". */
+  auto: PresetName;
+  values: GfxValues;
+  fpsCounter: boolean;
+  /** False: this GPU draws no soft particles with MSAA on (render/index.ts `msaaDepthReadable`); the smoke dithers. */
+  msaaSoft?: boolean;
+}
 export interface LookModel {
   sens: number; acogSens: number; sniperSens: number; touchSens?: number; touch?: boolean;
   invert: boolean; music: boolean; confirmKey: string;
+  gfx: GfxModel;
 }
 export interface MainModel extends LookModel, WeaponSettingsModel {
   best: number; mapKey: string;

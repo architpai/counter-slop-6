@@ -190,6 +190,75 @@ await page.locator('[data-act="start"]').click();
 assert.equal(await page.evaluate(() => window.__game.gs.wave), 1);
 console.log('  ok  checkpoints removed; old saves ignored, boss unlocks disabled, pause preserved, retries start at wave 1, best score retained');
 
+// Graphics presets reach the renderer live (render/quality.ts: SHADOW_SPEC, VIEW_SCALE), the
+// weapon rig draws at its own 65° FOV, and a shadow-filter change also reaches the enemy
+// materials that were off-scene when it happened (three never re-checks the filter by itself).
+const gfx = await page.evaluate(async () => {
+  const g = window.__game, r = g.ctx.renderer, three = r.three, gl = three.getContext();
+  const frames = n => new Promise(resolve => {
+    const tick = () => (--n <= 0 ? resolve() : requestAnimationFrame(tick));
+    requestAnimationFrame(tick);
+  });
+  const act = (name, value) => g.hud.onUiAction(name, value, new Event('click'));
+  const read = () => ({
+    samples: r.post.target.samples, fxaa: 'FXAA' in r.post.triangle.material.defines, cast: r.sun.castShadow,
+    map: r.sun.shadow.mapSize.x, soft: three.shadowMap.type === 2, every: r._shadowEvery,
+    look: r.post.config.look, smaa: r.post.config.smaa, ao: r.post.config.ao, bloom: r.post.config.bloom,
+    shadowMaps: 1 + r.cascades.length, far: r.camera.far, fogFar: g.ctx.scene.fog.far,
+  });
+  const presets = {};
+  for (const preset of ['low', 'medium', 'high', 'ultra']) {
+    act('gfxPreset', preset);
+    await frames(3);
+    presets[preset] = read();
+  }
+  act('gfx', 'shadows:off');
+  await frames(3);
+  const off = { cast: r.sun.castShadow, map: r.sun.shadow.map };
+  // At the hip the rig is scaled by tan(world / 2) / tan(65° / 2); at full ADS it is the world FOV.
+  const tan = deg => Math.tan(deg * Math.PI / 360);
+  const hip = { scale: r.rig.scale.x, expected: tan(r.camera.fov) / tan(65), aim: g.player.weapon.aimAmt };
+  r.setViewFov(r.camera.fov);
+  const ads = r.rig.scale.x;
+  // A grunt drawn on High (PCFSoft), cleared, then High -> Low (PCF) while no enemy is in the scene.
+  const programs = enemy => {
+    const materials = new Set();
+    enemy.root.traverse(o => { if (o.isMesh) for (const m of [o.material].flat()) materials.add(m); });
+    return [...materials].map(m => {
+      const program = three.properties.get(m).currentProgram;
+      return { material: m, soft: program ? gl.getShaderSource(program.fragmentShader).includes('#define SHADOWMAP_TYPE_PCF_SOFT') : null };
+    });
+  };
+  const place = () => {
+    const at = g.player.body.pos.clone().add(g.player.forward.clone().setY(0).normalize().multiplyScalar(4));
+    return g.enemies.spawn('grunt', at);
+  };
+  act('gfxPreset', 'high');
+  g.enemies.clear();
+  const first = place();
+  await frames(4);
+  const before = programs(first);
+  g.enemies.clear();
+  await frames(2);
+  act('gfxPreset', 'low');
+  await frames(2);
+  const second = place();
+  await frames(4);
+  const after = programs(second);
+  const shared = after.filter(a => before.some(b => b.material === a.material));
+  // An open "Lower quality?" offer is answered by any change, so it cannot apply a stale target.
+  g.hud.setQualityPrompt('high');
+  act('gfxPreset', 'medium');
+  const promptAfterChange = g.hud.qualityPrompt;
+  g.enemies.clear();
+  act('gfxReset', null);
+  return {
+    presets, off, hip, ads, promptAfterChange,
+    softBefore: before.filter(p => p.soft).length, drawnAfter: after.filter(p => p.soft !== null).length,
+    softAfter: after.filter(p => p.soft).length, shared: shared.length,
+  };
+});
+
 // StrictMode alone does not exercise dispose(): the `cancelled` guard usually
 // wins the race against the dynamic import. HMR and route changes do exercise
 // it, so drive it by hand.
@@ -234,6 +303,31 @@ check(driven.magazine === '30', `HUD magazine reflects engine state (${driven.ma
 check(driven.hp === '120', `HUD health reflects engine state (${driven.hp})`);
 check(hudWork.frames > 0 && hudWork.renders < Math.max(5, hudWork.frames / 5),
   `HUD React work stays far below frame count (${hudWork.renders} renders / ${hudWork.frames} frames)`);
+{
+  const expected = {
+    low: { look: 'lowpoly', samples: 0, fxaa: true, smaa: false, ao: 0, bloom: false, cast: true, map: 2048, soft: false, every: 2, shadowMaps: 1 },
+    medium: { look: 'realistic', samples: 2, fxaa: false, smaa: true, ao: 0, bloom: true, cast: true, map: 2048, soft: true, every: 1, shadowMaps: 1 },
+    high: { look: 'realistic', samples: 2, fxaa: false, smaa: true, ao: 0.5, bloom: true, cast: true, map: 2048, soft: true, every: 1, shadowMaps: 2 },
+    ultra: { look: 'realistic', samples: 4, fxaa: false, smaa: true, ao: 1, bloom: true, cast: true, map: 2048, soft: true, every: 1, shadowMaps: 3 },
+  };
+  for (const [preset, want] of Object.entries(expected)) {
+    const got = gfx.presets[preset];
+    const wrong = Object.keys(want).filter(key => got[key] !== want[key]);
+    check(wrong.length === 0, `${preset} preset reaches the renderer${wrong.length ? `; wrong: ${wrong.map(k => `${k}=${got[k]}`).join(', ')}` : ''}`);
+  }
+  const { high, ultra } = gfx.presets;
+  check(high.far === 420 && Math.abs(ultra.far - 546) < 1e-6 && Math.abs(ultra.fogFar / high.fogFar - 1.3) < 1e-6,
+    `long view distance scales far plane and fog (far ${high.far} -> ${ultra.far}, fog ${high.fogFar} -> ${ultra.fogFar})`);
+  check(!gfx.off.cast && gfx.off.map === null, 'shadows off stops casting and frees the map');
+  check(gfx.hip.aim === 0 && Math.abs(gfx.hip.scale - gfx.hip.expected) < 1e-3,
+    `weapon rig draws at 65° (scale ${gfx.hip.scale.toFixed(4)}, expected ${gfx.hip.expected.toFixed(4)})`);
+  check(Math.abs(gfx.ads - 1) < 1e-9, `the rig matches the world FOV at full ADS (scale ${gfx.ads})`);
+  // Since V15 each figure wears its own copies of the cached materials (their hit tint), so the
+  // second grunt shares none with the first; its copies must still take the new filter.
+  check(gfx.softBefore > 0 && gfx.drawnAfter > 0 && gfx.softAfter === 0,
+    `a shadow-filter change reaches the enemy materials (${gfx.shared} shared, ${gfx.softAfter} still PCFSoft of ${gfx.drawnAfter})`);
+  check(gfx.promptAfterChange === null, 'a preset change answers the open "Lower quality?" offer');
+}
 check(teardown.live === 0, `dispose() drops the instance count (got ${teardown.live})`);
 check(teardown.frozen, 'dispose() stops the frame loop');
 check(teardown.idempotent, 'dispose() is idempotent');

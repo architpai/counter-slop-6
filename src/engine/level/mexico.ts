@@ -1,6 +1,8 @@
 import * as THREE from 'three';
-import { TONE, TONE_HEX, makeFigure, surfMat, unlitMat, SURF } from '../render/index';
+import { TONE, TONE_HEX, makeFigure } from '../render/index';
+import { ATMOSPHERE, GRADE, REAL_GRADE } from '../render/palette';
 import type { SurfKey } from '../render/palette';
+import type { MaterialTag } from '../render/surfaces';
 import type { BreakableKind } from '../types';
 import type { FigureParts } from '../render/figure';
 import type { BuildOpts, LevelBuilder } from './build';
@@ -15,66 +17,87 @@ type HumanoidJoints = Required<Pick<FigureParts,
   'head' | 'torso' | 'gunMount' | 'upperL' | 'upperR' | 'foreL' | 'foreR'>>;
 
 type Point = readonly [number, number, number];
-type Box6 = readonly [number, number, number, number, number, number];
+export type Box6 = readonly [number, number, number, number, number, number];
 
-const ORANGE: BuildOpts = { mat: 'accent' };
-const TERRACOTTA: BuildOpts = { mat: 'roof' };
-const ROCK: BuildOpts = { mat: 'sandstone' };
-const WHITE: BuildOpts = { mat: 'siding' };
-const DARK_VISUAL: BuildOpts = { tone: TONE.DARK, noCollide: true };
+const ORANGE: BuildOpts = { mat: 'accent', material: 'stucco' };
+const TERRACOTTA: BuildOpts = { mat: 'roof', material: 'terracotta' };
+const ROOF_TILES: BuildOpts = { mat: 'roof', material: 'roof-tile' };
+const ROCK: BuildOpts = { mat: 'sandstone', material: 'sandstone' };
+const WHITE: BuildOpts = { mat: 'siding', material: 'stucco' };
+const DARK_VISUAL: BuildOpts = { tone: TONE.DARK, noCollide: true, material: 'wood' };
+const WINDOW: BuildOpts = { tone: TONE.DARK, noCollide: true, material: 'glass' };
 const HALF_PI = Math.PI / 2;
+
+/** The distant mesas beyond the perimeter: x, z, width, height (V14). */
+export const MESAS: readonly (readonly [number, number, number, number])[] = [
+  [-120, -160, 60, 30], [40, -190, 90, 36], [150, -120, 70, 26], [-170, 60, 50, 24], [160, 90, 80, 30], [-60, 190, 100, 34],
+];
 
 /** Fixed pseudo-random offsets so every peer builds the same colliders (levels.md §7). */
 const JITTER = [-1.1, 0.7, 0.2, -0.6, 1.0, -0.3, 0.9, -0.9, 0.4, -1.2] as const;
 const jitter = (i: number) => JITTER[((i % JITTER.length) + JITTER.length) % JITTER.length] ?? 0;
 
-export function buildMexico(b: LevelBuilder) {
-  b.level.key = 'mexico';
-  b.level.playerStart.set(0, 0, 16);
-  b.level.bounds = { minX: -62, maxX: 62, minZ: -62, maxZ: 62 };
-  b.level.mood = { horizon: 0xf2dfbc, zenith: 0x579cc4, fog: 0xeddbba, sun: 0xffefd1, sunIntensity: 2.25, hemiIntensity: 1.05, hemiSky: 0xbddbeb, hemiGround: 0xb69d79 };
-  b.box(0, -1, 0, 134, 1, 134, { mat: 'sand' });
-  b.collider(0, 62, 0, 164, 6, 164, { noNav: true, noGrapple: true });
+/**
+ * The perimeter's stepped rock stacks: three tiers each, `[x, y, z, w, h, d]`
+ * (y the tier's foot), jittered by the fixed offsets so every peer builds the
+ * same colliders. The realistic tiers draw faceted shells over them (mexico-dressing.ts).
+ */
+export const ROCK_STACKS: readonly (readonly Box6[])[] = (() => {
+  const stacks: Box6[][] = [];
   let k = 0;
   for (let i = -2; i <= 2; i++) {
     for (const [x, z, w, d] of [[24 * i, -62, 19, 8], [24 * i, 62, 19, 8],
       [-62, 24 * i, 8, 19], [62, 24 * i, 8, 19]] as const) {
-      b.box(x, 0, z, w, 11, d, ROCK);
-      b.box(x + jitter(k), 11, z + jitter(k + 3), 0.78 * w, 7, 0.78 * d, ROCK);
-      b.box(x + jitter(k + 5), 18, z + jitter(k + 7), 0.5 * w, 5, 0.5 * d, ROCK);
+      stacks.push([[x, 0, z, w, 11, d], [x + jitter(k), 11, z + jitter(k + 3), 0.78 * w, 7, 0.78 * d],
+        [x + jitter(k + 5), 18, z + jitter(k + 7), 0.5 * w, 5, 0.5 * d]]);
       k++;
     }
   }
+  return stacks;
+})();
+
+export function buildMexico(b: LevelBuilder) {
+  b.level.key = 'mexico';
+  b.level.playerStart.set(0, 0, 16);
+  b.level.bounds = { minX: -62, maxX: 62, minZ: -62, maxZ: 62 };
+  // The sun sits about 32° up, ahead and right of the spawn view, where the old sun sphere stood.
+  b.level.mood = { horizon: 0xf2dfbc, zenith: 0x579cc4, fog: 0xeddbba, sun: 0xffefd1, sunIntensity: 2.25, hemiIntensity: 1.05, hemiSky: 0xbddbeb, hemiGround: 0xb69d79,
+    fogNear: 55, fogFar: 260, sunDisc: true, sunDir: [70, 105, -150], grade: GRADE.mexico, sky: 'mexico', realistic: { exposure: -0.15, grade: REAL_GRADE.mexico, atmosphere: ATMOSPHERE.mexico } };
+  b.box(0, -1, 0, 134, 1, 134, { mat: 'sand', material: 'sand' });
+  b.collider(0, 62, 0, 164, 6, 164, { noNav: true, noGrapple: true });
+  // The flat look's boxes; the realistic tiers draw faceted, banded shells over the same colliders (mexico-dressing.ts).
+  for (const stack of ROCK_STACKS) for (const tier of stack) b.box(...tier, { ...ROCK, flatOnly: true });
   for (let i = -2; i <= 1; i++) {
     const q = 24 * i + 12;
     for (const [x, z] of [[q, -57], [q, 57], [-57, q], [57, q]] as const) b.marker('spawns', x, 0, z);
   }
 
-  b.slab(-24, -24, 24, 24, 0.15, 0.15, { mat: 'paving' });
-  const joints: BuildOpts = { mat: 'sand', noCollide: true };
+  b.slab(-24, -24, 24, 24, 0.15, 0.15, { mat: 'paving', material: 'paving' });
+  // Flat look only: the paving texture has its own joints.
+  const joints: BuildOpts = { mat: 'sand', noCollide: true, material: 'sand', flatOnly: true };
   for (let p = -24; p <= 24; p += 4) {
     b.box(p, 0.151, 0, 0.04, 0.005, 48, joints);
     b.box(0, 0.151, p, 48, 0.005, 0.04, joints);
   }
   for (const side of [-1, 1]) {
-    b.box(side * 23.5, 0.157, 0, 0.5, 0.005, 47, { mat: 'adobe', noCollide: true });
-    b.box(0, 0.157, side * 23.5, 47, 0.005, 0.5, { mat: 'adobe', noCollide: true });
+    b.box(side * 23.5, 0.157, 0, 0.5, 0.005, 47, { mat: 'adobe', noCollide: true, material: 'terracotta' });
+    b.box(0, 0.157, side * 23.5, 47, 0.005, 0.5, { mat: 'adobe', noCollide: true, material: 'terracotta' });
   }
-  b.mesh(new THREE.RingGeometry(7.7, 8, 48).rotateX(-HALF_PI), [0, 0.163, 0], { mat: 'roof', noCollide: true });
+  b.mesh(new THREE.RingGeometry(7.7, 8, 48).rotateX(-HALF_PI), [0, 0.163, 0], { mat: 'roof', noCollide: true, material: 'terracotta' });
   b.cylinder(0, 0, 0, 5.5, 1.1, WHITE);
   b.cylinder(0, 1.1, 0, 1.2, 2.6, WHITE);
   b.cylinder(0, 3.7, 0, 2.4, 0.5, WHITE);
   b.sphere(0, 5.4, 0, 0.7, WHITE);
-  b.cylinder(0, 1.06, 0, 5.1, 0.08, { noCollide: true, segments: 20, surface: 'water' });
+  b.cylinder(0, 1.06, 0, 5.1, 0.08, { noCollide: true, segments: 20, surface: 'water', material: 'water' });
   for (let k = 0; k < 8; k++) {
     const a = k * Math.PI / 4;
     const geo = new THREE.CylinderGeometry(0.06, 0.06, 2.6, 6).rotateZ(-0.35).rotateY(-a);
-    b.mesh(geo, [1.7 * Math.cos(a), 5, 1.7 * Math.sin(a)], { surface: 'water' });
+    b.mesh(geo, [1.7 * Math.cos(a), 5, 1.7 * Math.sin(a)], { surface: 'water', material: 'spray' });
   }
   b.ring(0, 7.2, 0);
   b.cylinder(0, 13, 0, 8, 0.45, ORANGE);
   b.cylinder(0, 13.45, 0, 3.2, 3, ORANGE);
-  b.cylinder(0, 13.65, 0, 3.3, 0.5, { noCollide: true, segments: 16, tone: TONE.BOSS });
+  b.cylinder(0, 13.65, 0, 3.3, 0.5, { noCollide: true, segments: 16, tone: TONE.BOSS, material: 'fabric' });
   for (let k = 0; k < 6; k++) {
     const a = k * Math.PI / 3;
     b.ring(7.2 * Math.cos(a), 12.2, 7.2 * Math.sin(a));
@@ -99,7 +122,7 @@ export function buildMexico(b: LevelBuilder) {
   }
   for (const [x, z, w, d] of [[-12, -12, 8, 0.5], [12, -12, 8, 0.5],
     [-30, 34, 0.5, 8], [30, 34, 0.5, 8]] as const) b.box(x, 0, z, w, 1.1, d, TERRACOTTA);
-  b.cylinder(-14, 0, 8, 1.3, 1, ROCK);
+  b.cylinder(-14, 0, 8, 1.3, 1, { ...ROCK, material: 'stucco' });
   b.box(-14, 1, 8, 0.15, 2, 0.15, DARK_VISUAL);
   b.box(-14, 3, 8, 2.2, 0.3, 0.3, DARK_VISUAL);
 
@@ -117,34 +140,24 @@ export function buildMexico(b: LevelBuilder) {
     [-30, 0, 46], [30, 0, 46], [0, 13.45, -5.8], [-8, 30.6, 44]];
   for (const p of arenaSpawns) b.marker('arenaSpawns', ...p);
 
-  const glow = (mesh: THREE.Mesh) => {
-    mesh.material = unlitMat(SURF.accent);
-    mesh.castShadow = mesh.receiveShadow = false;
-  };
-  glow(b.sphere(70, 95, -150, 14, { ...ORANGE, separate: true }));
-  for (let i = 0; i < 12; i++) {
-    const a = i * Math.PI / 6;
-    glow(b.mesh(new THREE.BoxGeometry(7, 0.9, 0.9), [70 + 21 * Math.cos(a), 95 + 21 * Math.sin(a), -150],
-      { ...ORANGE, separate: true, rotation: new THREE.Euler(0, 0, a) }));
-  }
-  for (const [x, z, w, h] of [[-120, -160, 60, 30], [40, -190, 90, 36],
-    [150, -120, 70, 26], [-170, 60, 50, 24], [160, 90, 80, 30], [-60, 190, 100, 34]] as const) {
-    b.box(x, 0, z, w, h, 30, { ...ROCK, noCollide: true });
-    b.box(x, h, z, 0.6 * w, 0.5 * h, 22, { ...ROCK, noCollide: true });
+  // The flat look's stepped mesas; the realistic tiers show faceted Blender ones in their place (mexico-dressing.ts).
+  for (const [x, z, w, h] of MESAS) {
+    b.box(x, 0, z, w, h, 30, { ...ROCK, noCollide: true, flatOnly: true });
+    b.box(x, h, z, 0.6 * w, 0.5 * h, 22, { ...ROCK, noCollide: true, flatOnly: true });
   }
   b.planes(3, 30, 26, { scale: 1.4, radiusStep: 8, heightStep: 6, speed: 0.11 });
 }
 
 function bandstand(b: LevelBuilder) {
   b.cylinder(0, 0, -26, 6.5, 1.2, WHITE);
-  b.stairs(0, 0, -19.5, '-z', 4, 4.5, { rise: 0.3, run: 0.5, mat: 'paving' });
+  b.stairs(0, 0, -19.5, '-z', 4, 4.5, { rise: 0.3, run: 0.5, mat: 'paving', material: 'paving' });
   for (let k = 0; k < 8; k++) {
     const a = k * Math.PI / 4 + Math.PI / 8;
     b.cylinder(5.6 * Math.cos(a), 1.2, -26 + 5.6 * Math.sin(a), 0.22, 4.2,
-      { mat: 'wood', noCollide: true });
+      { mat: 'wood', noCollide: true, material: 'painted-wood' });
   }
-  b.mesh(new THREE.ConeGeometry(7.6, 3.2, 8), [0, 7, -26], TERRACOTTA);
-  b.cylinder(0, 5.4, -26, 7.6, 0.3, { segments: 8, noCollide: true, mat: 'wood' });
+  b.mesh(new THREE.ConeGeometry(7.6, 3.2, 8), [0, 7, -26], ROOF_TILES);
+  b.cylinder(0, 5.4, -26, 7.6, 0.3, { segments: 8, noCollide: true, mat: 'wood', material: 'painted-wood' });
   b.collider(0, 5.4, -26, 9, 0.5, 9, { noNav: true });
   b.ring(0, 9.4, -26);
   for (const [x, z, yaw, trumpet] of [[-2.6, -27.5, 0.4, false], [0, -28.5, 0, true],
@@ -155,25 +168,27 @@ function bandstand(b: LevelBuilder) {
     const parts = figure.parts as HumanoidJoints;
     root.position.set(x, 1.2, z);
     root.rotation.y = yaw;
-    parts.head.add(part(new THREE.CylinderGeometry(0.62, 0.62, 0.05, 8), 0, 0.5, 0, 'accent'),
-      part(new THREE.CylinderGeometry(0.22, 0.26, 0.28, 8), 0, 0.66, 0, 'accent'),
-      part(new THREE.TorusGeometry(0.24, 0.03, 6, 12).rotateX(HALF_PI), 0, 0.56, 0, 'boss'));
+    parts.head.add(part(b, new THREE.CylinderGeometry(0.62, 0.62, 0.05, 8), 0, 0.5, 0, 'accent', 'fabric'),
+      part(b, new THREE.CylinderGeometry(0.22, 0.26, 0.28, 8), 0, 0.66, 0, 'accent', 'fabric'),
+      part(b, new THREE.TorusGeometry(0.24, 0.03, 6, 12).rotateX(HALF_PI), 0, 0.56, 0, 'boss', 'fabric'));
     if (trumpet) {
       parts.gunMount.add(
-        part(new THREE.CylinderGeometry(0.035, 0.035, 0.55, 8).rotateX(HALF_PI), 0, 0.02, 0.25, 'accent'),
-        part(new THREE.CylinderGeometry(0.14, 0.05, 0.16, 8).rotateX(HALF_PI), 0, 0.02, 0.55, 'accent'));
+        part(b, new THREE.CylinderGeometry(0.035, 0.035, 0.55, 8).rotateX(HALF_PI), 0, 0.02, 0.25, 'accent', 'painted-metal'),
+        part(b, new THREE.CylinderGeometry(0.14, 0.05, 0.16, 8).rotateX(HALF_PI), 0, 0.02, 0.55, 'accent', 'painted-metal'));
       parts.upperR.rotation.x = -1.6;
       parts.upperL.rotation.set(-1.5, 0.4, 0);
       parts.foreL.rotation.x = -0.4;
       parts.head.rotation.x = -0.25;
     } else {
-      parts.gunMount.add(part(new THREE.BoxGeometry(0.34, 0.12, 0.5), 0, 0.02, 0.05, 'accent'),
-        part(new THREE.BoxGeometry(0.06, 0.05, 0.7), 0, 0.06, 0.55, 'dark'));
+      parts.gunMount.add(part(b, new THREE.BoxGeometry(0.34, 0.12, 0.5), 0, 0.02, 0.05, 'accent', 'painted-wood'),
+        part(b, new THREE.BoxGeometry(0.06, 0.05, 0.7), 0, 0.06, 0.55, 'dark', 'painted-wood'));
       parts.upperR.rotation.x = -0.9;
       parts.upperL.rotation.set(-1, 0.5, 0);
       parts.foreL.rotation.x = -0.9;
     }
     b.addObject(root);
+    // One mesh per material on each pivot the band moves (V19): 23 meshes a musician were 23 draws.
+    b.rigid(root, [parts.torso, trumpet ? parts.head : parts.foreR]);
     b.level.animated.push({ mesh: root, update(t: number) {
       const s = Math.sin(6 * t + x);
       root.position.y = 1.2 + 0.08 * Math.max(0, s);
@@ -191,45 +206,49 @@ function church(b: LevelBuilder) {
     [-10, 30.6, 46, 0.3, 3, 0.3], [-10, 32.4, 46, 1.6, 0.3, 0.3],
     [10, 0, 46, 6, 15, 6], [10, 20.8, 46, 0.3, 2, 0.3]];
   for (const box of shell) b.box(...box, WHITE);
-  b.slab(-7, 33.5, 7, 36.5, 0.8, 0.8, { mat: 'paving' });
+  b.slab(-7, 33.5, 7, 36.5, 0.8, 0.8, { mat: 'paving', material: 'paving' });
   for (const x of [-3.2, 3.2]) b.box(x, 0, 35.8, 0.5, 5.4, 0.5, DARK_VISUAL);
-  b.mesh(new THREE.TorusGeometry(3.2, 0.25, 6, 16, Math.PI), [0, 5.4, 35.8], { tone: TONE.DARK });
-  for (const x of [-8, 8]) for (const y of [3, 7]) b.box(x, y, 35.9, 1.6, 2.2, 0.3, DARK_VISUAL);
+  b.mesh(new THREE.TorusGeometry(3.2, 0.25, 6, 16, Math.PI), [0, 5.4, 35.8], { tone: TONE.DARK, material: 'wood' });
+  for (const x of [-8, 8]) for (const y of [3, 7]) b.box(x, y, 35.9, 1.6, 2.2, 0.3, WINDOW);
   for (const x of [-12.5, -7.5]) for (const z of [43.5, 48.5]) b.box(x, 26, z, 0.6, 4, 0.6, WHITE);
-  b.sphere(-10, 28.2, 46, 0.95, ORANGE);
+  b.sphere(-10, 28.2, 46, 0.95, { ...ORANGE, material: 'painted-metal' });
   b.ring(-10, 27.4, 42.2);
   b.ring(-10, 33.8, 46);
   for (const y of [8, 15, 21]) b.box(-10, y, 42.4, 6, 0.4, 1.3, TERRACOTTA);
   for (const y of [11, 18, 24]) b.box(-13.6, y, 46, 1.3, 0.4, 6, TERRACOTTA);
-  b.sphere(10, 17.4, 46, 3.6, TERRACOTTA);
+  b.sphere(10, 17.4, 46, 3.6, ROOF_TILES);
   b.collider(10, 15, 46, 6, 5, 6, { noNav: true });
   b.ring(10, 21.6, 46);
   for (const y of [6, 11]) b.box(13.6, y, 46, 1.3, 0.4, 6, TERRACOTTA);
 }
 
 function houses(b: LevelBuilder) {
-  const walls: readonly BuildOpts[] = [{ mat: 'adobe' }, WHITE, { mat: 'plaster' }];
+  const walls: readonly BuildOpts[] = [{ mat: 'adobe', material: 'adobe' }, WHITE, { mat: 'plaster', material: 'stucco' }];
+  // A shade of lime wash of its own for each house on the realistic tiers (V16); the east row's barely off white, as the
+  // long views' grunts stand against it (the readability guardrail).
+  const tints = [0xfff8f0, 0xf6f8ff, 0xfff6f4, 0xfbfaf8, 0xffffff, 0xffffff];
   let n = 0;
   for (const [x, z, w, d, h, tone, side] of [
     [-40, -20, 11, 9, 6, TONE.HEAL, 1], [-40, -4, 9, 8, 5, TONE.BOSS, 1],
     [-40, 14, 12, 10, 7.5, TONE.ACCENT, 1], [40, -18, 12, 9, 7, TONE.BOSS, -1],
     [40, 0, 9, 8, 5.5, TONE.HEAL, -1], [40, 16, 11, 10, 6.5, TONE.ACCENT, -1],
   ] as const) {
-    b.box(x, 0, z, w, h, d, walls[n++ % walls.length]);
-    b.box(x, h, z, w + 0.6, 0.35, d + 0.6, TERRACOTTA);
-    b.rail(x - w / 2, z - d / 2, x + w / 2, z - d / 2, h + 0.35, { mat: 'wood' });
+    b.box(x, 0, z, w, h, d, { ...walls[n % walls.length], tint: tints[n] });
+    n++;
+    b.box(x, h, z, w + 0.6, 0.35, d + 0.6, ROOF_TILES);
+    b.rail(x - w / 2, z - d / 2, x + w / 2, z - d / 2, h + 0.35, { mat: 'wood', material: 'wood' });
     const doorX = x + side * (w / 2 + 0.01);
-    b.box(doorX, 0, z, 0.15, 2.6, 1.4, { tone, noCollide: true });
+    b.box(doorX, 0, z, 0.15, 2.6, 1.4, { tone, noCollide: true, material: 'painted-wood' });
     b.box(doorX, 2.6, z, 0.15, 0.3, 1.8, DARK_VISUAL);
     for (const s of [-1, 1]) {
-      b.box(doorX, 0, z + s * 0.82, 0.18, 2.6, 0.16, { mat: 'roof', noCollide: true });
-      b.box(doorX, 1.5, z + s * 0.32 * d, 0.18, 0.1, 1.35, { mat: 'roof', noCollide: true });
-      b.box(doorX, 1.6, z + s * 0.32 * d, 0.12, 1.1, 1.1, DARK_VISUAL);
+      b.box(doorX, 0, z + s * 0.82, 0.18, 2.6, 0.16, { mat: 'roof', noCollide: true, material: 'painted-wood' });
+      b.box(doorX, 1.5, z + s * 0.32 * d, 0.18, 0.1, 1.35, { mat: 'roof', noCollide: true, material: 'terracotta' });
+      b.box(doorX, 1.6, z + s * 0.32 * d, 0.12, 1.1, 1.1, WINDOW);
     }
     // The flight lands level with the roof slab and clears its 0.3 overhang, so the nav grid links the two.
     const top = h + 0.35, steps = Math.round(top / 0.3);
     b.stairs(x - side * (w / 2 + 0.3), 0, z + d / 2 + 1.2, side > 0 ? '+x' : '-x', steps, 1.6,
-      { rise: top / steps, run: 0.42, mat: 'paving' });
+      { rise: top / steps, run: 0.42, mat: 'paving', material: 'stucco' });
     b.box(x, h + 0.35, z + d / 2 - 1.2, 2.2, 0.9, 1.4, TERRACOTTA);
     b.ring(x, h + 3.2, z);
   }
@@ -244,9 +263,9 @@ function banner(b: LevelBuilder, from: Point, to: Point, n: number) {
     const x = from[0] + dx * i, z = from[2] + dz * i;
     const y = from[1] + (to[1] - from[1]) * t - 1.2 * Math.sin(Math.PI * t);
     if (i < n) b.mesh(new THREE.BoxGeometry(Math.hypot(dx, dz) + 0.05, 0.05, 0.05),
-      [x + dx / 2, y, z + dz / 2], { tone: TONE.DARK, rotation });
+      [x + dx / 2, y, z + dz / 2], { tone: TONE.DARK, rotation, material: 'fabric' });
     if (i % 2) b.mesh(new THREE.BoxGeometry(0.7, 0.55, 0.02), [x, y - 0.32, z],
-      { tone: [TONE.BOSS, TONE.HEAL, TONE.ACCENT][i % 3], rotation });
+      { tone: [TONE.BOSS, TONE.HEAL, TONE.ACCENT][i % 3], rotation, material: 'fabric' });
     if (i === Math.floor(n / 2)) b.ring(x, y - 1.2, z);
   }
 }
@@ -254,11 +273,11 @@ function banner(b: LevelBuilder, from: Point, to: Point, n: number) {
 function market(b: LevelBuilder) {
   for (const [x, z, w, d] of [[-20, 22, 4.5, 2.4], [-13, 22, 4.5, 2.4],
     [20, 22, 4.5, 2.4], [13, 22, 4.5, 2.4], [-24, -12, 2.4, 4.5], [26, -8, 2.4, 4.5]] as const) {
-    b.box(x, 0, z, w, 0.9, d, { surface: 'wood' });
+    b.box(x, 0, z, w, 0.9, d, { surface: 'wood', material: 'planks' });
     for (const sx of [-1, 1]) for (const sz of [-1, 1])
       b.box(x + sx * (w / 2 - 0.15), 0, z + sz * (d / 2 - 0.15), 0.14, 2.9, 0.14, DARK_VISUAL);
     for (let i = 0; i < 5; i++) b.box(x, 2.92, z - (d + 0.6) / 2 + (i + 0.5) * (d + 0.6) / 5,
-      w + 0.6, 0.06, (d + 0.6) / 5, { tone: i % 2 ? TONE.BOSS : TONE.ACCENT, noCollide: true });
+      w + 0.6, 0.06, (d + 0.6) / 5, { tone: i % 2 ? TONE.BOSS : TONE.ACCENT, noCollide: true, material: 'fabric' });
     b.collider(x, 2.9, z, w + 0.6, 0.12, d + 0.6, { noNav: true });
   }
   for (const [x, y, z] of [[-20, 1.3, 22], [13, 1.3, 22], [-24, 1.3, -12], [26, 1.3, -8],
@@ -279,67 +298,68 @@ function market(b: LevelBuilder) {
 // is a type floor for the other kinds, not a real default.
 function prop(b: LevelBuilder, kind: BreakableKind, x: number, y: number, z: number, height = 0) {
   const parts: THREE.Mesh[] = [];
-  const box = (w: number, h: number, d: number, px: number, py: number, pz: number, surface: SurfKey) =>
-    parts.push(part(new THREE.BoxGeometry(w, h, d), px, py, pz, surface));
+  const box = (w: number, h: number, d: number, px: number, py: number, pz: number, surface: SurfKey, material: MaterialTag) =>
+    parts.push(part(b, new THREE.BoxGeometry(w, h, d), px, py, pz, surface, material));
   const cylinder = (rt: number, rb: number, h: number, px: number, py: number, pz: number,
-    surface: SurfKey, seg = 8, rotZ = 0) =>
-    parts.push(part(new THREE.CylinderGeometry(rt, rb, h, seg).rotateZ(rotZ), px, py, pz, surface));
-  const torus = (r: number, tube: number, py: number, surface: SurfKey) =>
-    parts.push(part(new THREE.TorusGeometry(r, tube, 6, 12).rotateX(HALF_PI), 0, py, 0, surface));
+    surface: SurfKey, material: MaterialTag, seg = 8, rotZ = 0) =>
+    parts.push(part(b, new THREE.CylinderGeometry(rt, rb, h, seg).rotateZ(rotZ), px, py, pz, surface, material));
+  const torus = (r: number, tube: number, py: number, surface: SurfKey, material: MaterialTag) =>
+    parts.push(part(b, new THREE.TorusGeometry(r, tube, 6, 12).rotateX(HALF_PI), 0, py, 0, surface, material));
   let w: number, h: number, d: number, hp = 1, tone: number = TONE.ACCENT;
   if (kind === 'potS' || kind === 'potL') {
     const big = kind === 'potL';
     const radius = big ? 0.55 : 0.4, visualH = big ? 1.2 : 0.85;
     w = d = big ? 1.2 : 0.9;
     h = big ? 1.3 : 0.9;
-    cylinder(0.75 * radius, radius, visualH, 0, visualH / 2, 0, 'roof', 9);
-    torus(big ? 0.396 : 0.288, 0.05, visualH, 'dark');
-    torus(big ? 0.539 : 0.392, 0.04, big ? 0.54 : 0.38, 'paving');
+    cylinder(0.75 * radius, radius, visualH, 0, visualH / 2, 0, 'roof', 'terracotta', 9);
+    torus(big ? 0.396 : 0.288, 0.05, visualH, 'dark', 'terracotta');
+    torus(big ? 0.539 : 0.392, 0.04, big ? 0.54 : 0.38, 'paving', 'terracotta');
   } else if (kind === 'crate') {
     w = h = d = 1.1; hp = 30; tone = TONE.PRIMARY;
-    box(1.1, 1.1, 1.1, 0, 0.55, 0, 'block');
-    for (const py of [0.2, 0.9]) box(1.14, 0.12, 0.12, 0, py, 0.56, 'dark');
+    box(1.1, 1.1, 1.1, 0, 0.55, 0, 'block', 'planks');
+    for (const py of [0.2, 0.9]) box(1.14, 0.12, 0.12, 0, py, 0.56, 'dark', 'steel');
   } else if (kind === 'barrel') {
     w = d = 1.1; h = 1.2; hp = 30;
-    cylinder(0.5, 0.45, 1.2, 0, 0.6, 0, 'accent', 10);
-    for (const py of [0.25, 0.95]) torus(0.5, 0.04, py, 'dark');
+    cylinder(0.5, 0.45, 1.2, 0, 0.6, 0, 'accent', 'painted-metal', 10);
+    for (const py of [0.25, 0.95]) torus(0.5, 0.04, py, 'dark', 'steel');
   } else if (kind === 'cactus') {
     w = d = 0.9; h = height; hp = 40; tone = TONE.HEAL;
-    cylinder(0.28, 0.34, h, 0, h / 2, 0, 'foliage');
-    cylinder(0.16, 0.18, 0.9, 0.6, 0.55 * h, 0, 'foliage');
-    cylinder(0.17, 0.17, 0.7, 0.35, 0.38 * h, 0, 'foliage', 8, HALF_PI);
-    cylinder(0.14, 0.16, 0.7, -0.55, 0.7 * h, 0, 'foliage');
-    cylinder(0.15, 0.15, 0.6, -0.3, 0.55 * h, 0, 'foliage', 8, HALF_PI);
-    parts.push(part(new THREE.SphereGeometry(0.16, 8, 6), 0, h + 0.05, 0, 'boss'));
+    cylinder(0.28, 0.34, h, 0, h / 2, 0, 'foliage', 'cactus');
+    cylinder(0.16, 0.18, 0.9, 0.6, 0.55 * h, 0, 'foliage', 'cactus');
+    cylinder(0.17, 0.17, 0.7, 0.35, 0.38 * h, 0, 'foliage', 'cactus', 8, HALF_PI);
+    cylinder(0.14, 0.16, 0.7, -0.55, 0.7 * h, 0, 'foliage', 'cactus');
+    cylinder(0.15, 0.15, 0.6, -0.3, 0.55 * h, 0, 'foliage', 'cactus', 8, HALF_PI);
+    parts.push(part(b, new THREE.SphereGeometry(0.16, 8, 6), 0, h + 0.05, 0, 'boss', 'flowers'));
   } else {
     w = 1.1; h = 0.9; d = 0.6; tone = TONE.BOSS;
-    box(0.9, 0.5, 0.45, 0, 0.55, 0, 'boss');
-    for (const px of [-0.3, 0, 0.3]) box(0.1, 0.52, 0.47, px, 0.55, 0, px === 0 ? 'accent' : 'foliage');
-    box(0.34, 0.3, 0.3, 0.6, 0.72, 0, 'boss');
-    for (const pz of [-0.1, 0.1]) box(0.1, 0.22, 0.08, 0.62, 0.95, pz, 'accent');
-    for (const px of [-0.3, 0.3]) for (const pz of [-0.15, 0.15]) box(0.12, 0.34, 0.12, px, 0.15, pz, 'boss');
-    box(0.03, 2.2, 0.03, 0, 1.85, 0, 'dark');
+    // Crêpe paper over a card frame: fabric reads closest.
+    box(0.9, 0.5, 0.45, 0, 0.55, 0, 'boss', 'fabric');
+    for (const px of [-0.3, 0, 0.3]) box(0.1, 0.52, 0.47, px, 0.55, 0, px === 0 ? 'accent' : 'foliage', 'fabric');
+    box(0.34, 0.3, 0.3, 0.6, 0.72, 0, 'boss', 'fabric');
+    for (const pz of [-0.1, 0.1]) box(0.1, 0.22, 0.08, 0.62, 0.95, pz, 'accent', 'fabric');
+    for (const px of [-0.3, 0.3]) for (const pz of [-0.15, 0.15]) box(0.12, 0.34, 0.12, px, 0.15, pz, 'boss', 'fabric');
+    box(0.03, 2.2, 0.03, 0, 1.85, 0, 'dark', 'wood');
   }
   b.breakable(kind, x, y, z, w, h, d, parts, { hp, tone });
 }
 
-function part(geometry: THREE.BufferGeometry, x: number, y: number, z: number, surface: SurfKey) {
-  const mesh = new THREE.Mesh(geometry, surfMat(surface));
+function part(b: LevelBuilder, geometry: THREE.BufferGeometry, x: number, y: number, z: number, surface: SurfKey, material: MaterialTag) {
+  const mesh = b.part(geometry, surface, material);
   mesh.position.set(x, y, z);
-  mesh.castShadow = mesh.receiveShadow = true;
   return mesh;
 }
 
 function tacoCart(b: LevelBuilder) {
-  b.box(24, 0, 4, 3.2, 1.3, 1.6, ORANGE);
-  b.box(24, 1.3, 4, 3.4, 0.9, 1.8, WHITE);
-  for (const x of [22.5, 25.5]) b.box(x, 0, 4, 0.14, 3.6, 0.14, DARK_VISUAL);
+  const cart: BuildOpts = { material: 'painted-metal' };
+  b.box(24, 0, 4, 3.2, 1.3, 1.6, { ...ORANGE, ...cart });
+  b.box(24, 1.3, 4, 3.4, 0.9, 1.8, { ...WHITE, ...cart });
+  for (const x of [22.5, 25.5]) b.box(x, 0, 4, 0.14, 3.6, 0.14, { ...DARK_VISUAL, material: 'steel' });
   for (let i = 0; i < 4; i++) b.box(24, 3.59, 3 + 0.55 * i, 3.6, 0.06, 0.55,
-    { noCollide: true, tone: i % 2 ? TONE.HEAL : TONE.ACCENT });
+    { noCollide: true, tone: i % 2 ? TONE.HEAL : TONE.ACCENT, material: 'fabric' });
   for (const x of [23.1, 24.9]) b.mesh(new THREE.CylinderGeometry(0.34, 0.34, 0.14, 8).rotateZ(HALF_PI),
-    [x, 0.34, 3.1], { tone: TONE.DARK });
+    [x, 0.34, 3.1], { tone: TONE.DARK, material: 'plastic' });
   b.mesh(new THREE.CylinderGeometry(0.7, 0.7, 0.35, 12, 1, false, -HALF_PI, Math.PI).rotateX(HALF_PI),
-    [24, 4.6, 4], ORANGE);
-  b.box(24, 4.55, 4, 1.3, 0.14, 0.3, { noCollide: true, tone: TONE.HEAL });
+    [24, 4.6, 4], { ...ORANGE, material: 'painted-wood' });
+  b.box(24, 4.55, 4, 1.3, 0.14, 0.3, { noCollide: true, tone: TONE.HEAL, material: 'painted-wood' });
   b.box(24, 4.71, 4, 1.1, 0.1, 0.2, DARK_VISUAL);
 }

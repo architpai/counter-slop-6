@@ -17,6 +17,7 @@ A tactical survival shooter, allegedly. Runs in the browser, no install.
 - Rifle, shotgun, sniper, katana. Grenades. Grapple, slide, wall jump, double jump, air dash.
 - Enemies lead their shots, take cover between bursts, fan out and dodge grenades.
 - Mouse + keyboard or controller.
+- Graphics presets (Settings → Graphics, auto-picked for your device): Low keeps the flat low-poly look for phones; Medium, High and Ultra go realistic (self-made Blender textures, baked light, haze, light shafts on Ultra), each setting adjustable under Advanced.
 
 ## Controls
 

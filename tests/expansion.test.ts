@@ -30,14 +30,14 @@ function setup() {
   const noop = () => {};
   const level: Level = { key: 'downtown', arena: false, playerStart: body.pos.clone(), bounds,
     spawns: [new Vector3(20, 0, 0), new Vector3(-20, 0, 0)], snipers: [new Vector3(20, 0, 0)],
-    pickups: [], rings: [], movers: [], animated: [], breakables: [], meshes: [], arenaSpawns: [], teamSpawns: [],
+    pickups: [], rings: [], movers: [], animated: [], breakables: [], meshes: [], surfaces: [], dressing: null, arenaSpawns: [], teamSpawns: [],
     shadow: { center: new Vector3(), radius: 40 } };
   const gs = makeGameState(); gs.state = 'play';
   const ctx = { world, scene, nav, bossNav: nav, level, player,
     game: { targets: () => [player], get mode() { return gs.mode; }, addScore: noop, hitstop: noop, isOnline: () => false },
     net: { active: false },
     effects: { shake: 0, strokeBurst: noop, tracer: noop, blood: noop, sparks: noop, debris: noop, bloodPool: noop,
-      fountain: noop, explosion: noop, particle: noop, bulletImpact: noop, smoke: noop },
+      fountain: noop, explosion: noop, particle: noop, bulletImpact: noop, smoke: noop, muzzleFlash: noop },
     audio: new Proxy({}, { get: () => noop }),
     hud: { setBoss: noop, hitmarker: noop, setModifier: noop, message: vi.fn(), key: () => 'F', tip: noop, setWave: noop, setTimer: noop },
     input: { rumble: noop, pressed: () => false },

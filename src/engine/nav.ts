@@ -32,7 +32,7 @@ export const NAV_CLEARANCE = 0.42;
 export const BOSS_CLEARANCE = 0.95;
 export const BOSS_HEADROOM = 5.1;
 /** Headroom of the walker grid: 1.85 m nodes, 1.7 m links (a stair tread must not read as a ceiling). */
-const HEADROOM = 1.85;
+export const NAV_HEADROOM = 1.85;
 const directions: readonly (readonly [number, number])[] = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 const finiteVector = (v: Vector3 | null | undefined) => v && Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
 
@@ -86,7 +86,7 @@ export class NavGrid {
 
   readonly nodes: NavNode[];
 
-  constructor(world: World, bounds: Bounds, cell = 1, clearance = NAV_CLEARANCE, headroom = HEADROOM) {
+  constructor(world: World, bounds: Bounds, cell = 1, clearance = NAV_CLEARANCE, headroom = NAV_HEADROOM) {
     this.#world = world;
     this.#bounds = { ...bounds };
     this.#cell = cell;

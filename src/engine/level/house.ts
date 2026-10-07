@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { SURF, boxGeo, cylGeo, sphereGeo, unlitMat } from '../render/index';
+import { boxGeo, cylGeo } from '../render/index';
+import { ATMOSPHERE, GRADE, REAL_GRADE } from '../render/palette';
 import type { BuildOpts, Gap, LevelBuilder, MarkerKind, StairOpts } from './build';
 
 /**
@@ -39,7 +40,8 @@ const slab = (b: LevelBuilder, x1: number, z1: number, x2: number, z2: number, t
 function wall(b: LevelBuilder, axis: 'x' | 'z', a1: number, a2: number, fixed: number, base: number, height: number, thickness: number, gaps: readonly Gap[] = [], opts?: BuildOpts) {
   b.wall(axis, sc(a1), sc(a2), sc(fixed), sc(base), sc(height), sc(thickness), scaleGaps(gaps), opts);
   if (opts?.mat !== 'siding' && opts?.mat !== 'plaster') return;
-  const trim: BuildOpts = { mat: opts.mat === 'siding' ? 'plaster' : 'siding', noCollide: true };
+  // Painted boards: the skirting inside, the trim round the openings outside.
+  const trim: BuildOpts = { mat: opts.mat === 'siding' ? 'plaster' : 'siding', noCollide: true, material: 'painted-wood' };
   // Follow the same openings as the wall; trim never narrows a playable doorway.
   b.wall(axis, sc(a1), sc(a2), sc(fixed), sc(base), sc(0.14), sc(thickness + 0.04), scaleGaps(gaps), trim);
   const strip = (a: number, y: number, w: number, h: number) => box(b,
@@ -64,13 +66,14 @@ const mesh = (b: LevelBuilder, geometry: THREE.BufferGeometry, pos: readonly [nu
   b.mesh(geometry.scale(S, S, S), [sc(pos[0]), sc(pos[1]), sc(pos[2])], opts);
 const ring = (b: LevelBuilder, x: number, y: number, z: number) => b.ring(sc(x), sc(y), sc(z));
 
-const siding: BuildOpts = { mat: 'siding' };
-const plaster: BuildOpts = { mat: 'plaster' };
-const wood: BuildOpts = { mat: 'wood' };
-const concrete: BuildOpts = { mat: 'blockAlt' };
-const dark: BuildOpts = { mat: 'dark' };
-const metal: BuildOpts = { mat: 'metal' };
-const ceiling: BuildOpts = { mat: 'plaster', noCollide: true };
+const siding: BuildOpts = { mat: 'siding', material: 'siding' };
+const plaster: BuildOpts = { mat: 'plaster', material: 'plaster' };
+const wood: BuildOpts = { mat: 'wood', material: 'wood' };
+const boards: BuildOpts = { mat: 'wood', material: 'planks' };
+const concrete: BuildOpts = { mat: 'blockAlt', material: 'concrete' };
+const dark: BuildOpts = { mat: 'dark', material: 'plastic' };
+const metal: BuildOpts = { mat: 'metal', material: 'steel' };
+const ceiling: BuildOpts = { mat: 'plaster', noCollide: true, material: 'plaster' };
 
 const H = 3.3;                      // clear height of every storey
 const HX = H + 0.3;                 // exterior walls also hide the edge of the slab above
@@ -99,7 +102,8 @@ function markers(b: LevelBuilder, kind: MarkerKind, points: readonly Point[]) {
 }
 
 export function buildHouse(b: LevelBuilder) {
-  b.level.mood = { horizon: 0xf3caa4, zenith: 0x789ab9, fog: 0xe6cdb6, sun: 0xffdaa9, sunIntensity: 2.1, hemiIntensity: 1.05, hemiSky: 0xb4c6de, hemiGround: 0x9e907b };
+  b.level.mood = { horizon: 0xf3caa4, zenith: 0x789ab9, fog: 0xe6cdb6, sun: 0xffdaa9, sunIntensity: 2.1, hemiIntensity: 1.05, hemiSky: 0xb4c6de, hemiGround: 0x9e907b,
+    fogNear: 50, fogFar: 180, sunDisc: true, sunDir: [150, 153, 160], grade: GRADE.house, sky: 'house', realistic: { exposure: -0.5, grade: REAL_GRADE.house, atmosphere: ATMOSPHERE.house } };
   buildGround(b);
   buildBasement(b);
   buildFirst(b);
@@ -138,16 +142,18 @@ function buildGround(b: LevelBuilder) {
   // Lawn everywhere except the house, the driveway pit and the basement stairwell.
   let lawn: Rect[] = [[-62, -62, 62, 62]];
   for (const hole of [[-10, -6, 10, 8], [10, -0.3, 17.3, 15.3], [-13.9, 4.2, -10, 12.1]] as const) lawn = cut(lawn, hole);
-  for (const [x1, z1, x2, z2] of lawn) box(b, (x1 + x2) / 2, -1, (z1 + z2) / 2, x2 - x1, 1, z2 - z1, { mat: 'lawn' });
+  for (const [x1, z1, x2, z2] of lawn) box(b, (x1 + x2) / 2, -1, (z1 + z2) / 2, x2 - x1, 1, z2 - z1, { mat: 'lawn', material: 'grass' });
   // Streets and paths sit a hair above the lawn.
-  const path: BuildOpts = { mat: 'road', noCollide: true };
+  const path: BuildOpts = { mat: 'road', noCollide: true, material: 'asphalt' };
   box(b, 0, 0, 34, 124, 0.05, 8, path);
   box(b, 34, 0, 0, 8, 0.05, 124, path);
   box(b, 13.5, 0, 22.5, 6, 0.05, 15, path);
-  box(b, -1, 0, 20.5, 2, 0.05, 20, { mat: 'plaster', noCollide: true });
-  for (let z = 12; z < 30; z += 2) box(b, -1, 0.05, z, 2, 0.008, 0.04, { mat: 'ground', noCollide: true });
-  for (let x = -60; x < 60; x += 6) box(b, x + 1.5, 0.05, 34, 3, 0.02, 0.2, dark);
-  for (let z = -60; z < 60; z += 6) box(b, 34, 0.05, z + 1.5, 0.2, 0.02, 3, dark);
+  box(b, -1, 0, 20.5, 2, 0.05, 20, { mat: 'plaster', noCollide: true, material: 'concrete' });
+  // Expansion joints, sealed with bitumen.
+  for (let z = 12; z < 30; z += 2) box(b, -1, 0.05, z, 2, 0.008, 0.04, { mat: 'ground', noCollide: true, material: 'asphalt' });
+  const lines: BuildOpts = { ...dark, material: 'road-paint' };
+  for (let x = -60; x < 60; x += 6) box(b, x + 1.5, 0.05, 34, 3, 0.02, 0.2, lines);
+  for (let z = -60; z < 60; z += 6) box(b, 34, 0.05, z + 1.5, 0.2, 0.02, 3, lines);
   // Invisible bounds: the street is the edge of the map.
   const shell: BuildOpts = { noNav: true, noShoot: true, noGrapple: true };
   for (const sign of [-1, 1]) {
@@ -159,7 +165,8 @@ function buildGround(b: LevelBuilder) {
 // ------------------------------------------------------------- basement
 
 function buildBasement(b: LevelBuilder) {
-  slab(b, -10, -6, 10, 8, B, 0.4, { mat: 'road' });
+  const floor: BuildOpts = { mat: 'road', material: 'concrete' };
+  slab(b, -10, -6, 10, 8, B, 0.4, floor);
   wall(b, 'x', -10, 10, -6, B, HX, 0.3, [], concrete);
   wall(b, 'x', -10, 10, 8, B, HX, 0.3, [], concrete);
   wall(b, 'z', -6, 8, -10, B, HX, 0.3, [door(5)], concrete);
@@ -168,17 +175,17 @@ function buildBasement(b: LevelBuilder) {
   wall(b, 'z', -6, 8, 3, B, H, 0.3, [door(3), door(-5)], plaster);
   wall(b, 'x', -10, 10, 1, B, H, 0.3, [door(-9), [-6, -4.2, 0, H], door(-1), door(5.5)], plaster);
   // Back-hall stairs: bottom in the training room, top in the 1F back hall.
-  stairs(b, -5.1, B, 1.1, '-z', 10, 1.6, { rise: 0.36, run: 0.45, mat: 'road' });
+  stairs(b, -5.1, B, 1.1, '-z', 10, 1.6, { rise: 0.36, run: 0.45, ...floor });
 
   // Sunken driveway east of the garage, ramping up to the street.
-  slab(b, 10, 0, 17, 9, B, 0.4, { mat: 'road' });
-  stairs(b, 13.5, B, 9, '+z', 12, 7, { rise: 0.3, run: 0.5, mat: 'road' });
+  slab(b, 10, 0, 17, 9, B, 0.4, floor);
+  stairs(b, 13.5, B, 9, '+z', 12, 7, { rise: 0.3, run: 0.5, ...floor });
   box(b, 17.15, B, 7.5, 0.3, 3.6, 15.3, concrete);
   box(b, 13.5, B, -0.15, 7.3, 3.6, 0.3, concrete);
   box(b, 10.15, B, 11.5, 0.3, 3.6, 7.3, concrete);
   // Stair well outside the training room, front-left corner.
-  slab(b, -13.6, 4.5, -10, 7.5, B, 0.4, { mat: 'road' });
-  stairs(b, -11.8, B, 7.5, '+z', 10, 3.2, { rise: 0.36, run: 0.45, mat: 'road' });
+  slab(b, -13.6, 4.5, -10, 7.5, B, 0.4, floor);
+  stairs(b, -11.8, B, 7.5, '+z', 10, 3.2, { rise: 0.36, run: 0.45, ...floor });
   box(b, -13.75, B, 8.25, 0.3, 3.6, 7.8, concrete);
   box(b, -11.8, B, 4.35, 3.9, 3.6, 0.3, concrete);
   rail(b, -13.9, 4.2, -13.9, 12.1, 0, wood);
@@ -191,7 +198,7 @@ function buildFirst(b: LevelBuilder) {
   let floor: Rect[] = [[-10, -6, 10, 8]];
   floor = cut(floor, [-6, -3.4, -4.2, 1.1]);
   for (const [x1, z1, x2, z2] of floor) {
-    slab(b, x1, z1, x2, z2, F1, 0.3, wood);
+    slab(b, x1, z1, x2, z2, F1, 0.3, boards);
     slab(b, x1, z1, x2, z2, F1 - 0.3, 0.02, ceiling);
   }
   rail(b, -6, -3.4, -6, 1.1, F1, wood);
@@ -206,16 +213,16 @@ function buildFirst(b: LevelBuilder) {
   stairs(b, 2, F1, 6.3, '-z', 10, 1.6, { rise: 0.36, run: 0.5, mat: 'wood' });
 
   // Rear deck and front porch.
-  slab(b, -10, -9, -2, -6, 0.3, 0.3, wood);
+  slab(b, -10, -9, -2, -6, 0.3, 0.3, boards);
   rail(b, -10, -9, -2, -9, 0.3, wood);
   rail(b, -2, -9, -2, -6, 0.3, wood);
-  box(b, 0, 0, 9.25, 6, 0.05, 2.5, { mat: 'plaster', noCollide: true });
-  slab(b, -3.3, 8, 3.3, 10.8, F2, 0.3, wood);
+  box(b, 0, 0, 9.25, 6, 0.05, 2.5, { mat: 'plaster', noCollide: true, material: 'paving' });
+  slab(b, -3.3, 8, 3.3, 10.8, F2, 0.3, boards);
   for (const x of [-3, 3]) box(b, x, 0, 10.5, 0.3, F2, 0.3, wood);
   rail(b, -3.3, 10.8, 3.3, 10.8, F2, wood);
   rail(b, -3.3, 8, -3.3, 10.8, F2, wood);
   rail(b, 3.3, 8, 3.3, 10.8, F2, wood);
-  box(b, -0.9, 0, 8.6, 0.6, 1.1, 0.4, { mat: 'metal', noCollide: true }); // mailbox by the door? no: a boot rack
+  box(b, -0.9, 0, 8.6, 0.6, 1.1, 0.4, { mat: 'metal', noCollide: true, material: 'steel' }); // mailbox by the door? no: a boot rack
 }
 
 // ------------------------------------------------------------- second floor
@@ -224,7 +231,7 @@ function buildSecond(b: LevelBuilder) {
   let floor: Rect[] = [[-10, -6, 10, 8]];
   floor = cut(floor, [1.1, 1.3, 3, 6.3]);
   for (const [x1, z1, x2, z2] of floor) {
-    slab(b, x1, z1, x2, z2, F2, 0.3, wood);
+    slab(b, x1, z1, x2, z2, F2, 0.3, boards);
     slab(b, x1, z1, x2, z2, F2 - 0.3, 0.02, ceiling);
   }
   rail(b, 1.1, 1.3, 1.1, 6.3, F2, wood);
@@ -246,7 +253,7 @@ function buildRoof(b: LevelBuilder) {
   for (const side of [-1, 1]) {
     // Visual slope, then invisible steps so the roof is walkable (snipers, grapples).
     mesh(b, boxGeo(21.4, 0.3, length + 0.2), [0, EAVE + rise / 2, 1 + side * half / 2],
-      { mat: 'shingle', rotation: new THREE.Euler(side * pitch, 0, 0) });
+      { mat: 'shingle', material: 'shingles', rotation: new THREE.Euler(side * pitch, 0, 0) });
     const steps = 8, run = half / steps;
     for (let i = 0; i < steps; i++) {
       const z = 1 + side * (half - (i + 0.5) * run);
@@ -259,33 +266,36 @@ function buildRoof(b: LevelBuilder) {
     gable.rotateY(Math.PI / 2);
     mesh(b, gable, [x, 0, 0], { ...siding, separate: true });
   }
-  box(b, 6, EAVE, -2, 1.2, 4.6, 1.2, concrete);
+  box(b, 6, EAVE, -2, 1.2, 4.6, 1.2, { ...concrete, material: 'brick' });
   ring(b, 6, 12.2, -2);
 }
 
 // ------------------------------------------------------------ furniture
 
 function buildFurniture(b: LevelBuilder) {
-  const cloth: BuildOpts = { mat: 'blockAlt' };
-  const white: BuildOpts = { mat: 'plaster' };
+  const cloth: BuildOpts = { mat: 'blockAlt', material: 'fabric' };
+  const bedding: BuildOpts = { mat: 'plaster', material: 'fabric' };
+  const white: BuildOpts = { mat: 'plaster', material: 'painted-metal' };
+  const porcelain: BuildOpts = { mat: 'plaster', material: 'plastic' };
+  const cabinets: BuildOpts = { mat: 'plaster', material: 'painted-wood' };
   // basement
   box(b, -7, B, 4.5, 0.5, 0.5, 1.6, dark);                 // weight bench
   mesh(b, cylGeo(0.05, 2.2, 6, 'x'), [-7, B + 1.1, 4.9], metal);
   for (const x of [-8, -6]) mesh(b, cylGeo(0.22, 0.12, 8, 'x'), [x, B + 1.1, 4.9], dark);
   box(b, -9.6, B, 6.5, 0.5, 2, 2.4, metal);               // rack
-  mesh(b, cylGeo(0.3, 1.2, 8, 'y'), [-6, B + 1.9, 7], { mat: 'hot' }); // punching bag
+  mesh(b, cylGeo(0.3, 1.2, 8, 'y'), [-6, B + 1.9, 7], { mat: 'hot', material: 'fabric' }); // punching bag
   for (const x of [-9.4, -8.6]) box(b, x, B, -4.6, 0.7, 0.9, 0.7, white); // washer, dryer
   box(b, -9.6, B, -1, 0.5, 2, 3, metal);
   mesh(b, cylGeo(0.6, 2.4, 10, 'y'), [-1, B + 1.2, -5], metal); // boiler
   collider(b, -1, B, -5, 1.2, 2.4, 1.2);
   box(b, 2.2, B, -4.5, 0.6, 1.6, 0.6, white);              // water heater
-  const car = { mat: 'hot' } as const;
+  const car = { mat: 'hot', material: 'painted-metal' } as const;
   box(b, 6.5, B + 0.35, 4.7, 1.9, 0.75, 4.2, car);
-  box(b, 6.5, B + 1.1, 4.4, 1.6, 0.6, 2, dark);
+  box(b, 6.5, B + 1.1, 4.4, 1.6, 0.6, 2, { ...dark, material: 'glass' });
   collider(b, 6.5, B, 4.7, 1.9, 1.6, 4.2);
   for (const z of [3.2, 6.2]) for (const x of [5.5, 7.5]) mesh(b, cylGeo(0.35, 0.3, 8, 'x'), [x, B + 0.35, z], dark);
   box(b, 6, B, 7.55, 5, 0.9, 0.8, wood);                  // garage workbench
-  box(b, 6.5, B, -2.5, 1.6, 0.9, 4, siding);               // the boat
+  box(b, 6.5, B, -2.5, 1.6, 0.9, 4, { mat: 'siding', material: 'plastic' }); // the boat
   box(b, 6.5, B + 0.9, -2.5, 1.2, 0.3, 3, dark);
   box(b, 9.6, B, -4, 0.5, 2, 3, metal);
   for (const [x, z] of [[4, -5.2], [4, -4], [5.2, -5.2]] as const) box(b, x, B, z, 1, 1, 1, wood);
@@ -297,28 +307,30 @@ function buildFurniture(b: LevelBuilder) {
   box(b, 7, F1, 5, 2, 0.8, 1, wood);                      // desk
   box(b, 7, F1, 3.7, 0.5, 0.5, 0.5, dark);
   box(b, 9.65, F1, 2.2, 0.5, 2.2, 1.6, wood);             // bookshelf
-  box(b, -0.5, F1, -2.5, 2.4, 0.95, 1.1, white);          // kitchen island
-  box(b, -1, F1, -5.55, 5, 0.9, 0.6, white);
+  box(b, -0.5, F1, -2.5, 2.4, 0.95, 1.1, cabinets);       // kitchen island
+  box(b, -1, F1, -5.55, 5, 0.9, 0.6, cabinets);
   box(b, 2.5, F1, -5.4, 0.9, 1.9, 0.8, metal);            // fridge
   box(b, 6.5, F1, -2.5, 2.6, 0.78, 1.2, wood);            // dining table
   for (const [x, z] of [[5.5, -3.6], [7.5, -3.6], [5.5, -1.4], [7.5, -1.4]] as const) box(b, x, F1, z, 0.45, 0.45, 0.45, dark);
   box(b, -9.65, F1, -5.2, 0.5, 1, 1.2, wood);             // hall bench
   // second floor
-  box(b, -7, F2, 5.2, 2, 0.6, 2.2, white);                // master bed
+  box(b, -7, F2, 5.2, 2, 0.6, 2.2, bedding);              // master bed
   box(b, -7, F2, 6.4, 2.1, 1.2, 0.2, wood);
   box(b, -9.65, F2, 2, 0.5, 1, 1.6, wood);
-  box(b, 7.5, F2, 5.5, 1.2, 0.55, 2, { mat: 'boss' });    // kid's bed, pink
+  box(b, 7.5, F2, 5.5, 1.2, 0.55, 2, { mat: 'boss', material: 'fabric' }); // kid's bed, pink
   box(b, 9.65, F2, 3, 0.5, 0.8, 1.4, wood);
-  box(b, 5.5, F2, 7.3, 0.8, 0.6, 0.8, { mat: 'accent' }); // toy box
-  box(b, -8.5, F2, -5.1, 1.7, 0.6, 0.8, white);           // tub
-  box(b, -9.5, F2, -2.5, 0.5, 0.8, 0.7, white);           // toilet
-  box(b, -6.5, F2, -5.5, 0.6, 0.9, 0.5, white);           // sink
+  box(b, 5.5, F2, 7.3, 0.8, 0.6, 0.8, { mat: 'accent', material: 'plastic' }); // toy box
+  box(b, -8.5, F2, -5.1, 1.7, 0.6, 0.8, porcelain);       // tub
+  box(b, -9.5, F2, -2.5, 0.5, 0.8, 0.7, porcelain);       // toilet
+  box(b, -6.5, F2, -5.5, 0.6, 0.9, 0.5, porcelain);       // sink
   box(b, 7, F2, -5.3, 3, 0.9, 0.8, wood);                 // workbench
   box(b, 9.65, F2, -3, 0.5, 2, 2, metal);
-  box(b, 5, F2, -1, 1.2, 0.7, 0.5, { mat: 'accent' });    // sawhorse
+  box(b, 5, F2, -1, 1.2, 0.7, 0.5, { mat: 'accent', material: 'painted-wood' }); // sawhorse
   box(b, -0.5, F2, -5.55, 1.6, 0.9, 0.5, wood);           // rear hall console
   // Rugs and tiled floors: a colour per room so you know where you are.
-  const rug = (x: number, y: number, z: number, w: number, d: number, mat: BuildOpts['mat']) => box(b, x, y, z, w, 0.03, d, { mat, noCollide: true });
+  // The kitchen and the bathroom are tiled (the plaster-coloured ones); the rest are rugs.
+  const rug = (x: number, y: number, z: number, w: number, d: number, mat: BuildOpts['mat']) =>
+    box(b, x, y, z, w, 0.03, d, { mat, noCollide: true, material: mat === 'plaster' ? 'tile' : 'fabric' });
   rug(-7, F1, 4, 4, 3.2, 'hot');
   rug(6.5, F1, -2.5, 4.5, 3.6, 'accent');
   rug(6.5, F1, 4.5, 3.6, 3, 'foliage');
@@ -333,8 +345,8 @@ function buildFurniture(b: LevelBuilder) {
 // ------------------------------------------------------------------ yard
 
 function tree(b: LevelBuilder, x: number, z: number, s = 1) {
-  cylinder(b, x, 0, z, 0.35 * s, 3.2 * s, { segments: 7, mat: 'wood' });
-  const leaf: BuildOpts = { mat: 'foliage', noCollide: true };
+  cylinder(b, x, 0, z, 0.35 * s, 3.2 * s, { segments: 7, mat: 'wood', material: 'bark' });
+  const leaf: BuildOpts = { mat: 'foliage', noCollide: true, material: 'foliage' };
   sphere(b, x, 4.3 * s, z, 2.3 * s, { ...leaf, segments: 8 });
   sphere(b, x + 1.3 * s, 3.6 * s, z + 0.6 * s, 1.5 * s, { ...leaf, segments: 7 });
   sphere(b, x - 1.1 * s, 3.9 * s, z - 0.9 * s, 1.6 * s, { ...leaf, segments: 7 });
@@ -348,8 +360,8 @@ function fenceRun(b: LevelBuilder, x1: number, z1: number, x2: number, z2: numbe
     const lo = cuts[i], hi = cuts[i + 1];
     if (lo === undefined || hi === undefined || hi - lo < 0.1) continue;
     const mid = (lo + hi) / 2;
-    if (alongX) box(b, mid, 0, fixed, hi - lo, 1.8, 0.1, wood);
-    else box(b, fixed, 0, mid, 0.1, 1.8, hi - lo, wood);
+    if (alongX) box(b, mid, 0, fixed, hi - lo, 1.8, 0.1, boards);
+    else box(b, fixed, 0, mid, 0.1, 1.8, hi - lo, boards);
     for (let p = lo; p <= hi; p += 2.5) {
       if (alongX) box(b, p, 0, fixed, 0.15, 2, 0.15, { ...wood, noCollide: true });
       else box(b, fixed, 0, p, 0.15, 2, 0.15, { ...wood, noCollide: true });
@@ -363,19 +375,19 @@ function buildYard(b: LevelBuilder) {
   fenceRun(b, -22, -24, -22, 12, [[6, 8]]);
   fenceRun(b, 22, -24, 22, 12, [[-8, -6]]);
   // The summer house: a sniper's shed at the bottom of the garden.
-  wall(b, 'x', 2, 10, -20, 0, 2.6, 0.2, [], wood);
-  wall(b, 'x', 2, 10, -14, 0, 2.6, 0.2, [door(5)], wood);
-  wall(b, 'z', -20, -14, 2, 0, 2.6, 0.2, [window(-18, 1.5)], wood);
-  wall(b, 'z', -20, -14, 10, 0, 2.6, 0.2, [], wood);
-  slab(b, 1.7, -20.3, 10.3, -13.7, 2.9, 0.3, { mat: 'shingle' });
-  box(b, 2.5, 2.9, -19.5, 0.1, 2.6, 0.1, dark);
+  wall(b, 'x', 2, 10, -20, 0, 2.6, 0.2, [], boards);
+  wall(b, 'x', 2, 10, -14, 0, 2.6, 0.2, [door(5)], boards);
+  wall(b, 'z', -20, -14, 2, 0, 2.6, 0.2, [window(-18, 1.5)], boards);
+  wall(b, 'z', -20, -14, 10, 0, 2.6, 0.2, [], boards);
+  slab(b, 1.7, -20.3, 10.3, -13.7, 2.9, 0.3, { mat: 'shingle', material: 'shingles' });
+  box(b, 2.5, 2.9, -19.5, 0.1, 2.6, 0.1, { ...dark, material: 'steel' });
   ring(b, 2.5, 5.7, -19.5);
-  box(b, -6, 0, -14, 1.8, 0.75, 1, wood);                  // picnic table
-  for (const z of [-14.9, -13.1]) box(b, -6, 0, z, 1.8, 0.45, 0.3, wood);
-  for (const x of [11, 12]) mesh(b, cylGeo(0.4, 1, 8, 'y'), [x, 0.5, -7.5], metal); // bins
+  box(b, -6, 0, -14, 1.8, 0.75, 1, boards);                // picnic table
+  for (const z of [-14.9, -13.1]) box(b, -6, 0, z, 1.8, 0.45, 0.3, boards);
+  for (const x of [11, 12]) mesh(b, cylGeo(0.4, 1, 8, 'y'), [x, 0.5, -7.5], { ...metal, material: 'corrugated' }); // bins
   collider(b, 11.5, 0, -7.5, 2, 1, 1);
-  box(b, -11.5, 0, 12.5, 0.15, 1.1, 0.15, dark);          // mailbox
-  box(b, -11.5, 1.1, 12.5, 0.4, 0.3, 0.6, { mat: 'hot' });
+  box(b, -11.5, 0, 12.5, 0.15, 1.1, 0.15, { ...dark, material: 'steel' }); // mailbox
+  box(b, -11.5, 1.1, 12.5, 0.4, 0.3, 0.6, { mat: 'hot', material: 'painted-metal' });
   tree(b, -18, -8, 1.5);
   ring(b, -18, 7.5, -8);
   tree(b, 17, -18, 1.1);
@@ -383,28 +395,32 @@ function buildYard(b: LevelBuilder) {
   tree(b, -14, 22, 1.1);
   tree(b, 26, -8, 1);
   for (const [x, z] of [[-8, 9.5], [-5.5, 9.5], [5.5, 9.5], [8, 9.5], [-11, 2], [-11, -1], [-11, -4]] as const) {
-    sphere(b, x, 0.6, z, 0.8, { mat: 'foliage', segments: 7, noCollide: true });
+    sphere(b, x, 0.6, z, 0.8, { mat: 'foliage', segments: 7, noCollide: true, material: 'foliage' });
   }
-  for (const [x, z] of [[-6.5, 10.8], [7, 10.8]] as const) box(b, x, 0, z, 3, 0.25, 0.8, { mat: 'hot', noCollide: true });
+  for (const [x, z] of [[-6.5, 10.8], [7, 10.8]] as const) box(b, x, 0, z, 3, 0.25, 0.8, { mat: 'hot', noCollide: true, material: 'flowers' });
   // Construction site scaffold up the street: a perch with a view of the front.
   for (const [x, z] of [[20, 22], [24, 22], [20, 26], [24, 26]] as const) box(b, x, 0, z, 0.2, 6, 0.2, metal);
-  slab(b, 19.5, 21.5, 24.5, 26.5, 6, 0.2, metal);
-  slab(b, 19.5, 21.5, 24.5, 26.5, 3, 0.2, metal);
+  // Scaffold boards on a steel frame.
+  slab(b, 19.5, 21.5, 24.5, 26.5, 6, 0.2, { ...metal, material: 'planks' });
+  slab(b, 19.5, 21.5, 24.5, 26.5, 3, 0.2, { ...metal, material: 'planks' });
   rail(b, 19.5, 26.5, 24.5, 26.5, 6, metal);
   rail(b, 24.5, 21.5, 24.5, 26.5, 6, metal);
   ring(b, 22, 7.5, 24);
-  box(b, 27, 0, 21, 3, 1.4, 4, { mat: 'wood', noNav: true }); // lumber
-  sphere(b, 26, 0.2, 15.5, 2.2, { mat: 'ground', segments: 8 });  // sand pile
+  box(b, 27, 0, 21, 3, 1.4, 4, { mat: 'wood', noNav: true, material: 'planks' }); // lumber
+  sphere(b, 26, 0.2, 15.5, 2.2, { mat: 'ground', segments: 8, material: 'sand' });  // sand pile
 }
 
 // --------------------------------------------------------- neighbourhood
 
 function neighbour(b: LevelBuilder, x: number, z: number, w: number, d: number, h: number, mat: BuildOpts['mat']) {
-  box(b, x, 0, z, w, h, d, { mat, noCollide: true });
+  const material = mat === 'siding' ? 'siding' : mat === 'blockAlt' ? 'brick' : 'stucco';
+  // A shade of its own for each neighbour on the realistic tiers (V16).
+  const tint = [0xfaf4ec, 0xf2f6f9, 0xf8f8f0, 0xfbf2f0][Math.abs(Math.round(x + z)) % 4];
+  box(b, x, 0, z, w, h, d, { mat, noCollide: true, material, tint });
   const rise = 2.6, half = d / 2 + 0.5, pitch = Math.atan2(rise, half), length = Math.hypot(half, rise);
   for (const side of [-1, 1]) {
     mesh(b, boxGeo(w + 1, 0.3, length), [x, h + rise / 2, z + side * half / 2],
-      { mat: 'shingle', noCollide: true, rotation: new THREE.Euler(side * pitch, 0, 0) });
+      { mat: 'shingle', noCollide: true, material: 'shingles', rotation: new THREE.Euler(side * pitch, 0, 0) });
   }
 }
 
@@ -418,20 +434,11 @@ function buildNeighbourhood(b: LevelBuilder) {
   neighbour(b, 16, -48, 12, 10, 3.5, 'siding');
   for (const [x, z, s] of [[-42, 36, 1.4], [-42, -38, 1.2], [36, -44, 1.5], [-10, -42, 1.1], [42, 44, 1.3]] as const) tree(b, x, z, s);
   // The river and its docks, east of the side street.
-  box(b, 68, -1.2, 0, 60, 0.8, 130, { mat: 'water', noCollide: true });
-  slab(b, 38, -3, 50, 3, 0.25, 0.25, wood);
+  box(b, 68, -1.2, 0, 60, 0.8, 130, { mat: 'water', noCollide: true, material: 'water' });
+  slab(b, 38, -3, 50, 3, 0.25, 0.25, boards);
   for (const [x, z] of [[39, -2.6], [39, 2.6], [49, -2.6], [49, 2.6]] as const) box(b, x, -1, z, 0.3, 1.5, 0.3, { ...wood, noCollide: true });
-  box(b, 46, 0.25, -1.2, 3, 0.6, 1.2, { mat: 'siding', noCollide: true });   // moored boat
-  // A low evening sun and a few clouds, unlit against the dome.
-  const glow = (mesh: THREE.Mesh, color: number) => {
-    mesh.material = unlitMat(color);
-    mesh.castShadow = false;
-  };
-  glow(sphere(b, 150, 52, 160, 14, { segments: 12, separate: true, noCollide: true }), SURF.accent);
-  for (const [x, y, z, s] of [[-80, 70, 150, 1.2], [60, 78, 190, 1.4], [-160, 62, 20, 1], [120, 66, -140, 1.1]] as const) {
-    for (let i = 0; i < 5; i++) {
-      glow(mesh(b, sphereGeo((4 + i % 3) * s, 8), [x + (i - 2) * 5 * s, y + 2 * s * Math.sin(1.7 * i), z],
-        { separate: true, noCollide: true }), SURF.cloud);
-    }
-  }
+  box(b, 46, 0.25, -1.2, 3, 0.6, 1.2, { mat: 'siding', noCollide: true, material: 'plastic' });   // moored boat
+  // An evening sun, as low as the shadow box allows (the dome's disc, see the mood), and a few clouds.
+  b.clouds(([[-80, 70, 150, 1.2], [60, 78, 190, 1.4], [-160, 62, 20, 1], [120, 66, -140, 1.1]] as const)
+    .map(([x, y, z, s]) => [sc(x), sc(y), sc(z), sc(s)] as const), 5);
 }

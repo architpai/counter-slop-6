@@ -4,10 +4,10 @@ import { Box3, BoxGeometry, Mesh, MeshStandardMaterial, Object3D, Scene, Vector3
 import { Effects } from '@/engine/effects';
 import { World } from '@/engine/physics';
 import { makeFigure, raycastFigure } from '@/engine/render/figure';
-import { makeModel, animate, syncModel, corpse } from '@/engine/enemies/model';
+import { makeModel, animate, syncModel, corpse, killPose, SINK } from '@/engine/enemies/model';
 import type { EnemyRecord } from '@/engine/enemies';
 import { TYPES } from '@/engine/enemies/types';
-import { Renderer, setFlash, surfMat } from '@/engine/render';
+import { Renderer, surfMat } from '@/engine/render';
 import { TACTICAL_MODELS } from '@/engine/render/tactical';
 import type { EnemyKind } from '@/engine/types';
 
@@ -47,18 +47,19 @@ test('tactical assets preserve joints, head targets, materials and shared geomet
         expect(Math.abs(foot.min.y), `${type} feet meet the floor`).toBeLessThan(.06 * stats.scale);
       }
       expect(bounds.max.y).toBeGreaterThan((stats.kind === 'humanoid' ? 1.8 : .7) * stats.scale);
-      const shell = mesh(figure.root, 'mask-shell');
-      const otherShell = mesh(other.root, 'mask-shell');
+      // The mask is merged into the head's part (V12); each figure wears its own copy of the one material (V15).
+      const face = TACTICAL_MODELS[type].some(part => part === 'head') ? 'head-surface' : 'torso-surface';
+      const shell = mesh(figure.root, face);
+      const otherShell = mesh(other.root, face);
       expect(shell.geometry).toBe(otherShell.geometry);
       expect(shell.geometry.userData.shared).toBe(true);
-      expect(shell.material).toBe(otherShell.material);
+      expect(shell.material).not.toBe(otherShell.material);
       expect(shell.material).toBeInstanceOf(MeshStandardMaterial);
+      expect((shell.material as MeshStandardMaterial).customProgramCacheKey()).toBe((otherShell.material as MeshStandardMaterial).customProgramCacheKey());
       const original = shell.material;
-      setFlash(figure.root, true);
-      expect(shell.material).not.toBe(original);
-      expect(otherShell.material).toBe(original);
-      setFlash(figure.root, false);
+      figure.setTint(1, 0xff4757);
       expect(shell.material).toBe(original);
+      figure.setTint(0, 0xff4757);
       let releases = 0;
       shell.geometry.addEventListener('dispose', () => releases++);
       figure.dispose(); figure.dispose();
@@ -67,8 +68,7 @@ test('tactical assets preserve joints, head targets, materials and shared geomet
     } finally { figure.dispose(); other.dispose(); }
   }
   const player = makeFigure({ kind: 'humanoid', tactical: 'player', color: 0x4c7dff });
-  expect(player.root.getObjectByName('clown-nose')).toBeUndefined();
-  expect(player.root.getObjectByName('goggle-lens')).toBeDefined();
+  expect(player.root.getObjectByName('head-surface')).toBeDefined();
   player.dispose();
   const decorative = makeFigure({ kind: 'humanoid', hat: 'cap' });
   expect(decorative.root.userData.tactical).toBeUndefined();
@@ -79,15 +79,16 @@ test('tactical assets preserve joints, head targets, materials and shared geomet
 test('expansion equipment follows the rig, state cues and visible hit regions', () => {
   for (const type of ['medic', 'breacher', 'carrier', 'turret', 'packleader', 'smoker', 'rubberbander', 'sapper', 'parry', 'aimbot', 'ragequit', 'moderator'] as const) {
     const stats = TYPES[type];
-    const { figure, hits } = makeModel(stats);
-    const record = { stats, figure, root: figure.root, type, body: { vel: new Vector3(), onGround: true },
+    const { figure, hits, nodes } = makeModel(stats);
+    const record = { stats, figure, root: figure.root, type, nodes, body: { vel: new Vector3(), onGround: true },
       walkAmt: 0, phase: 0, age: 1, flinch: 0, aimAmt: 0, fuseT: -1, attackT: 0, shieldHp: stats.shield ? 2 : 0,
       state: 'hunt', target: null, yaw: 0, hits, center: new Vector3(), bossAttack: null,
       payload: true, weakT: 0, yankableT: 0, guardT: 0 } as unknown as EnemyRecord;
     try {
       figure.root.scale.setScalar(stats.scale);
-      const equipment = figure.root.getObjectByName(`equipment-${type}`)!;
-      expect(equipment, type).toBeDefined();
+      // The nodes the game moves stay nodes of their own in the merged parts (render/tactical.ts `TACTICAL_NODES`).
+      const equipment = type === 'carrier' ? nodes.payload : type === 'moderator' ? nodes.ring : type === 'aimbot' ? nodes.vent : undefined;
+      if (['carrier', 'moderator', 'aimbot'].includes(type)) expect(equipment, type).toBeDefined();
       animate(record, 1 / 60);
       const direction = new Vector3(0, 0, -1);
       if (type === 'moderator' || stats.kind === 'humanoid' && !stats.shield) {
@@ -96,12 +97,12 @@ test('expansion equipment follows the rig, state cues and visible hit regions', 
         expect(hit?.part, `${type} head ray`).toBe('head');
       }
       if (type === 'carrier') {
-        const target = equipment.localToWorld(new Vector3(0, -.38, -.08));
+        const target = equipment!.localToWorld(new Vector3(0, -.38, -.08));
         const origin = target.add(new Vector3(0, 0, 5));
         expect(raycastFigure(figure.root, origin, direction, 10)?.part).toBe('torso');
         record.payload = false;
         animate(record, 1 / 60);
-        expect(equipment.visible).toBe(false);
+        expect(equipment!.visible).toBe(false);
         expect(raycastFigure(figure.root, origin, direction, 10)).toBeNull();
       }
       if (type === 'ragequit') {
@@ -115,8 +116,8 @@ test('expansion equipment follows the rig, state cues and visible hit regions', 
       }
       record.weakT = record.yankableT = record.guardT = 1;
       animate(record, 1 / 60);
-      if (type === 'aimbot') expect(figure.root.getObjectByName('aimbot-vent')!.rotation.x).toBe(-.65);
-      if (type === 'moderator') expect(equipment.scale.x).toBe(1.12);
+      if (type === 'aimbot') expect(equipment!.rotation.x).toBe(-.65);
+      if (type === 'moderator') expect(equipment!.scale.x).toBe(1.12);
       if (type === 'parry') expect(figure.parts.foreR!.rotation.x).toBe(-1.15);
     } finally { figure.dispose(); }
   }
@@ -138,6 +139,7 @@ test('expired debris keeps the shared tactical geometry', () => {
   figure.dispose();
 });
 
+// It draws the whole cast twice under software GL: about 35 s alone, near twice that beside the other render tests.
 test('render the tactical cast and exercise each animation rig', async () => {
   await page.viewport(1440, 900);
   const canvas = document.createElement('canvas');
@@ -180,9 +182,9 @@ test('render the tactical cast and exercise each animation rig', async () => {
         renderer.camera.updateProjectionMatrix();
         renderer.render(0, fx);
         await page.screenshot({ path: `.vitest/tactical-${row.name}.png` });
-        for (const { type, figure, hits } of models) {
-          const record = { stats: TYPES[type], figure, root: figure.root, type, body: { vel: new Vector3(3, 0, 3), onGround: true },
-            walkAmt: 0, phase: 0, age: 1, flinch: 0, aimAmt: 1, fuseT: -1, attackT: 0, shieldHp: TYPES[type].shield ? 2 : 0,
+        for (const { type, figure, hits, nodes } of models) {
+          const record = { stats: TYPES[type], figure, root: figure.root, type, nodes, body: { vel: new Vector3(3, 0, 3), onGround: true },
+            walkAmt: 0, phase: 0, age: 1, flinch: 0, flashT: 0, aimAmt: 1, fuseT: -1, attackT: 0, shieldHp: TYPES[type].shield ? 2 : 0,
             state: 'hunt', target: null, yaw: 0, hits, center: new Vector3(), bossAttack: null,
             payload: true, weakT: 0, yankableT: 0, guardT: 0 } as unknown as EnemyRecord;
           for (let i = 0; i < 45; i++) animate(record, 1 / 60);
@@ -204,10 +206,14 @@ test('render the tactical cast and exercise each animation rig', async () => {
           }
           for (const hit of hits) expect(hit.center.toArray().every(Number.isFinite)).toBe(true);
           figure.root.traverse(part => expect(part.matrixWorld.elements.every(Number.isFinite)).toBe(true));
-          record.deadT = 0; record.topple = { axis: 'x', sign: 1, t: 0 };
+          const stand = figure.root.position.clone();
+          record.deadT = 0; record.death = { dir: new Vector3(0, 0, 1), from: stand, yaw: 0, slide: .5, tilt: Math.PI / 2, sink: SINK * TYPES[type].scale, seed: .3, pose: killPose(figure) };
           corpse(record, .2);
-          expect(figure.root.rotation.x).toBeGreaterThan(0);
-          figure.root.rotation.x = 0;
+          // Falling along the hit (+z): the body's up leans that way.
+          expect(new Vector3(0, 1, 0).applyQuaternion(figure.root.quaternion).z).toBeGreaterThan(0);
+          figure.root.rotation.set(0, -.12, 0);
+          figure.root.position.copy(stand);
+          animate(record, 1 / 60);
         }
         renderer.render(1, fx);
         await page.screenshot({ path: `.vitest/tactical-${row.name}-action.png` });
@@ -218,4 +224,5 @@ test('render the tactical cast and exercise each animation rig', async () => {
     renderer.dispose();
     canvas.remove();
   }
-});
+// About 10 s alone; the full parallel suite slows its renders about threefold.
+}, 120_000);

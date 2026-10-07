@@ -2,7 +2,9 @@ import { Vector3 } from 'three';
 import { clamp, damp, easeInOut, rand } from '../util';
 import { TONE } from '../render/index';
 import { ViewModel } from './gun';
-import { makeMeleeModel, smearThreshold } from './models';
+import { makeMeleeModel, makeRealMeleeModel, smearThreshold } from './models';
+import type { WeaponModel } from './models';
+import type { WeaponAssets } from '../render/weapons';
 import type { Ctx, Enemy, HitInfo, Player, WeaponState } from '../types';
 import type { Weapon } from './index';
 
@@ -11,6 +13,8 @@ const GUARD_ROT = new Vector3(1.40, 0.30, 1.24);
 
 /** Flat damage of one blade hit on another player. No falloff, no headshot bonus. */
 export const MELEE_PVP_DAMAGE = 55;
+/** Seconds one slash takes; the Blender knife's slash clips are this long too. */
+export const SLASH_TIME = 0.27;
 
 
 /** The blade state `resetAmmo` owns, which the constructor calls. */
@@ -66,6 +70,14 @@ export class Melee extends ViewModel implements Weapon {
     this._arcB = new Vector3();
     this._hitDir = new Vector3();
     this.resetAmmo();
+    this._syncLook();
+  }
+
+  _buildReal(assets: WeaponAssets): WeaponModel | null { return makeRealMeleeModel(assets); }
+
+  /** A new model shows the blade's blood from the next frame; until then its smears stay hidden. */
+  _wore(model: WeaponModel): void {
+    for (const smear of model.bloodSmears) smear.visible = false;
   }
 
   get active() { return this._slashT > 0 || this.blocking || this._blockAmt > 0.1; }
@@ -104,7 +116,7 @@ export class Melee extends ViewModel implements Weapon {
 
   startSlash(st: WeaponState) {
     if (this._disposed || st.blockFire || this.cooldown > 0 || this._slashT > 0) return;
-    this._slashT = 0.27;
+    this._slashT = SLASH_TIME;
     this.blocking = false;
     this.root.visible = true;
     this._hitDone = false;
@@ -133,6 +145,11 @@ export class Melee extends ViewModel implements Weapon {
 
   animate(st: WeaponState, dt: number) {
     if (this._disposed || !this._equipped) return;
+    this._update(st, dt);
+    this._applyClip();
+  }
+
+  _update(st: WeaponState, dt: number) {
     if (st.blockFire) {
       this._cancel();
       return;
@@ -163,6 +180,8 @@ export class Melee extends ViewModel implements Weapon {
       r.x += (GUARD_ROT.x - r.x) * b;
       r.y += (GUARD_ROT.y - r.y) * b;
       r.z += (GUARD_ROT.z - r.z) * b;
+      // A Blender knife raises its fist and grip into view as it comes to guard; a slash below takes over.
+      if (this._has('guard')) this._want('guard', b);
     }
     if (this._parrySwing > 0) {
       const f = Math.sin(Math.min(1, this._parrySwing) * Math.PI) * this._parryDir;
@@ -172,13 +191,15 @@ export class Melee extends ViewModel implements Weapon {
     }
     if (this._slashT > 0) {
       this._slashT = Math.max(0, this._slashT - dt);
-      const t = 1 - this._slashT / 0.27, e = easeInOut(t), side = this.combo % 2 ? 1 : -1;
+      const t = 1 - this._slashT / SLASH_TIME, e = easeInOut(t), side = this.combo % 2 ? 1 : -1;
       this.root.rotation.z += side * (1.3 - 2.7 * e);
       this.root.rotation.x += 0.7 - 1.5 * e;
       this.root.rotation.y += side * (-0.35 + 0.8 * e);
       this.root.position.x += side * (0.2 - 0.45 * e);
       this.root.position.y += 0.14 - 0.24 * e;
       this.root.position.z -= 0.12 * Math.sin(t * Math.PI);
+      // A Blender knife adds its wrist snap on top of the arc.
+      if (this._has('slash')) this._want(side > 0 ? 'slash' : 'slash-back', t);
       if (t > 0.32 && !this._hitDone) {
         this._hitDone = true;
         this._hit(side);

@@ -1,9 +1,9 @@
 import { Mesh, Vector3 } from 'three';
 import { Body, seeThrough } from '../physics';
 import { alignSegment, clamp, damp, rand, TAU } from '../util';
-import { boxGeo, unlitMat, TONE, TONE_HEX } from '../render/index';
+import { unlitMat, TONE, TONE_HEX } from '../render/index';
 import { see, stop } from './ai';
-import { spawnProjectile } from './projectiles';
+import { SEGMENT_BOX, spawnProjectile } from './projectiles';
 import { ENEMY_GRAVITY, TYPES } from './types';
 import type { EnemyManager, EnemyRecord } from './index';
 
@@ -38,7 +38,7 @@ function carrier(m: EnemyManager, e: EnemyRecord): void {
 function sniperLaser(m: EnemyManager, e: EnemyRecord): void {
   if (!e.aimPoint) return;
   if (!e.laser) {
-    e.laser = new Mesh(boxGeo(1, 1, 1), unlitMat(TONE_HEX[TONE.HOSTILE]));
+    e.laser = new Mesh(SEGMENT_BOX, unlitMat(TONE_HEX[TONE.HOSTILE]));
     e.laser.name = 'aimbot locked laser';
     m.ctx.scene.add(e.laser);
   }

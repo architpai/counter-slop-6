@@ -1,8 +1,9 @@
 import { Mesh, Object3D, Vector3 } from 'three';
 import { alignSegment, clamp, damp, rand, round1, round2, wrapAngle } from './util';
-import { makeFigure, makeNameTag, cylGeo, sphereGeo, surfMat, setFlash, TONE, TONE_HEX } from './render/index';
+import { makeFigure, makeNameTag, cylGeo, sphereGeo, surfMat, TONE, TONE_HEX } from './render/index';
 import type { Figure, FigureAnchorName, FigureAnchors, FigureParts } from './render/figure';
-import { raycastFigure } from './render/figure';
+import { flashAmount, raycastFigure } from './render/figure';
+import { STILL, type MotionInput } from './render/operator-motion';
 import { PS_FLAG } from './types';
 import type { Ctx, Enemy, Snap, StatePacket, Target } from './types';
 import type { Player } from './player/index';
@@ -43,6 +44,9 @@ type ValidState = readonly [number, number, number, number, number, number, numb
 const HIT_RADII: Record<HitJoint, number> = { head: 0.195, torso: 0.33, hips: 0.20, armL: 0.11, armR: 0.11,
   foreL: 0.10, foreR: 0.10, legL: 0.13, legR: 0.13, shinL: 0.11, shinR: 0.11 };
 const LIMBS: readonly (keyof RemoteJoints)[] = ['upperL', 'upperR', 'foreL', 'foreR', 'thighL', 'thighR', 'shinL', 'shinR'];
+/** A shot's flash on the shooter's figure, in seconds (its hit tint, V15). */
+const FLASH_TIME = 0.08;
+const toneHex = (tone: number): number => TONE_HEX[tone] ?? TONE_HEX[TONE.HOSTILE];
 const target = new Vector3();
 const hand = new Vector3();
 const muzzle = new Vector3();
@@ -121,6 +125,8 @@ export class RemotePlayer implements Target {
   _pitch: number;
   _phase: number;
   _walk: number;
+  /** What a worn operator's clips are told each step (R7), reused. */
+  readonly _motion: MotionInput = { ...STILL, still: false };
   _flashT: number;
   _wi: number;
   _disposed: boolean;
@@ -297,7 +303,7 @@ export class RemotePlayer implements Target {
         this._tag.rotation.y = -this._figure.root.rotation.y +
           Math.atan2(viewer.x - this.body.pos.x, viewer.z - this.body.pos.z);
       }
-      setFlash(this._figure.root, this._flashT > 0, this._tone);
+      this._figure.setTint(flashAmount(this._flashT, FLASH_TIME), toneHex(this._tone));
     }
     const ropeVisible = !!this._figure && this.alive && this.grappling;
     this._rope.visible = this._hookMesh.visible = ropeVisible;
@@ -330,6 +336,8 @@ export class RemotePlayer implements Target {
     this._figure.setEyes(!this.alive);
     if (!this.alive) {
       root.rotation.x = damp(root.rotation.x, Math.PI / 2, 5, dt);
+      // A worn operator's loops and aim fade out as it lies, as an enemy corpse's do (enemies/model.ts `corpse`).
+      if (this._figure.rig?.worn) this._figure.rig.motion.update(dt, STILL);
       return;
     }
     root.rotation.x = damp(root.rotation.x, 0, 8, dt);
@@ -359,6 +367,15 @@ export class RemotePlayer implements Target {
     }
     p.torso.rotation.set(-0.2 * w + (this.sliding ? 0.5 : 0) + (this.crouching ? 0.25 : 0), -0.3 * aim, 0);
     p.head.rotation.x = clamp(-this._pitch, -0.7, 0.7) * 0.7;
+    // A worn operator's clips (R7): the figure's +x is the player's left, as the root turns half round.
+    if (!this._figure.rig?.worn) return;
+    const lateral = sp > 0.2 ? (this.body.vel.x * -Math.cos(this._yaw) + this.body.vel.z * Math.sin(this._yaw)) / sp : 0;
+    const gun = GUN_LOADOUT[this._wi] ?? GUN_LOADOUT[0];
+    const input = this._motion;
+    input.speed = sp; input.phase = this._phase; input.lateral = lateral; input.aim = aim;
+    input.carry = blade ? 'blade' : gun === 'pistol' ? 'pistol' : 'long';
+    input.onGround = this.body.onGround; input.crouch = this.crouching || this.sliding;
+    this._figure.rig.motion.update(dt, input);
   }
 
   raycast(origin: Vector3, direction: Vector3, max: number) {
@@ -383,16 +400,20 @@ export class RemotePlayer implements Target {
     const thick = kind === 'r4c' ? 0.024 : kind === 'shotgun' ? 0.014 : kind === 'sniper' ? 0.03 : 0.02;
     for (let i = 0; i < ends.length; i += 3) {
       endpoint.set(num(ends[i]), num(ends[i + 1]), num(ends[i + 2]));
-      this._ctx.effects.tracer(muzzle, endpoint, TONE.PRIMARY, thick, 0.06);
+      this._ctx.effects.bulletTracer(muzzle, endpoint, thick, 0.06);
     }
+    // Seen side-on: the realistic tiers' flipbook flash and light, the flat look's strokes.
+    endpoint.set(num(ends[0]), num(ends[1]), num(ends[2])).sub(muzzle);
+    if (endpoint.lengthSq() > 1e-6) this._ctx.effects.muzzleFlash(muzzle, endpoint.normalize(), kind === 'shotgun' || kind === 'sniper' ? 1.4 : 1);
     this.flash();
+    this._figure.rig?.motion.trigger('fire');
     this._ctx.audio.remoteShot(kind === 'r4c' || kind === 'shotgun' || kind === 'sniper' || kind === 'pistol' ? kind : 'rifle', muzzle);
   }
 
   flash(): void {
     if (this._disposed || !this._figure) return;
-    this._flashT = 0.08;
-    setFlash(this._figure.root, true, this._tone);
+    this._flashT = FLASH_TIME;
+    this._figure.setTint(flashAmount(FLASH_TIME, FLASH_TIME), toneHex(this._tone));
   }
 
   ragdoll(dir: unknown, over: unknown): void {
@@ -406,7 +427,7 @@ export class RemotePlayer implements Target {
     this._removeTag();
     this._rope.visible = this._hookMesh.visible = false;
     const figure = this._figure;
-    setFlash(figure.root, false, this._tone);
+    figure.setTint(0, toneHex(this._tone));
     figure.setEyes(true);
     figure.root.updateMatrixWorld(true);
     const { effects } = this._ctx;
@@ -418,7 +439,7 @@ export class RemotePlayer implements Target {
         const vel = d.clone().multiplyScalar(rand(4, 8)).add(extra);
         vel.y += rand(2, 5);
         effects.debris(obj, pos, vel, new Vector3(rand(-8, 8), rand(-8, 8), rand(-8, 8)),
-          { radius, blood: true, life: rand(7, 10) });
+          { radius, blood: true, life: rand(7, 10), gone: figure.lend(obj) });
       };
       detach('head', new Vector3(rand(-2, 2), 3, rand(-2, 2)), 0.25);
       if (rand() < 0.5) detach(rand() < 0.5 ? 'upperL' : 'upperR', new Vector3(rand(-3, 3), 2, rand(-3, 3)), 0.12);
@@ -430,9 +451,11 @@ export class RemotePlayer implements Target {
     const vel = d.clone().multiplyScalar(rand(5, 8)).addScaledVector(this.body.vel, 0.4);
     vel.y += rand(3.5, 5.5);
     effects.debris(figure.root, this.body.pos.clone(), vel, new Vector3(rand(-4.5, 4.5), rand(-3, 3), rand(-4.5, 4.5)),
-      { radius: 0.55, blood: true, life: 8 });
+      { radius: 0.55, blood: true, life: 8, gone: figure.lend(figure.root) });
     effects.blood(this.center, d, 1.3);
     effects.bloodPool(this.body.pos, rand(1.2, 1.8));
+    // The debris owns the body now; the figure lets go of the rest (its props' source).
+    figure.dispose();
     this._figure = null;
     this._flashT = 0;
     this._placeHits();

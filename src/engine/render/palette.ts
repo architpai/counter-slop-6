@@ -1,3 +1,6 @@
+import type { Atmosphere, Grade } from '../types';
+import type { MaterialTag } from './surfaces';
+
 export const TONE = Object.freeze({ PRIMARY: 0, HOSTILE: 1, DARK: 2, ACCENT: 3, HEAL: 4, BOSS: 5 } as const);
 /** Tone ids stay 0-5 (§3.1), so they double as the index into every tone table. */
 export type ToneId = (typeof TONE)[keyof typeof TONE];
@@ -15,6 +18,26 @@ export const SURF = Object.freeze({
 });
 export type SurfKey = keyof typeof SURF;
 
+/**
+ * Realistic tiers (R2): the albedo each material tag averages to, sRGB. The
+ * texture set brings the detail and the tint scales its mean to this colour.
+ * Natural materials use plausible albedos (asphalt dark, grass and concrete
+ * mid-dark, sand light), so a sunlit street no longer glows like the flat
+ * palette; `null` keeps the piece's own surface colour, for paint, plaster,
+ * render, paving, fabric and the like, so a map's colour scheme survives (and
+ * for a fountain's jets, `spray`, which keep their teal at any distance, where
+ * glossy dark water would read black). Contrast
+ * inside each texture stays moderate, so enemies read against every wall.
+ */
+export const MATERIAL_COLOR = Object.freeze({
+  concrete: 0x928f88, 'cast-concrete': 0x9a978f, brick: 0x85523f, plaster: null, stucco: null, adobe: null,
+  siding: null, asphalt: 0x4e4f50, 'road-paint': null, paving: null, tile: null, wood: 0x8a6446, bark: 0x5c4c3e,
+  'painted-wood': null, planks: 0x8f6c4d, plastic: null, 'painted-metal': null, steel: 0x8e9397, 'tread-plate': 0x898d90,
+  rust: 0x7a4a33, corrugated: null, glass: 0x2c3438, sand: 0xc6ae8a, sandstone: 0xb07d5a, terracotta: 0xae6242,
+  'roof-tile': 0xa55a3b, shingles: null, grass: 0x61793f, fabric: null, foliage: 0x506f3c,
+  flowers: null, cactus: 0x5e7a4b, water: 0x3f7a78, spray: null,
+} as const satisfies Record<MaterialTag, number | null>);
+
 /** Shared finishes for the weapon-mounted sights and their aiming overlays. */
 export const OPTIC_COLOR = Object.freeze({
   acogBody: '#353633', acogRim: '#615e54',
@@ -27,3 +50,64 @@ export const SMOKE_HEX = 0xdde4ec;
 // Private lighting colours and gradient levels.
 export const LIGHT = Object.freeze({ sun: 0xffefd6, sky: 0xafcbe1, ground: 0x626772, zenith: 0x5294b7 });
 export const TOON_STEPS = Object.freeze([64, 160, 255]);
+
+/**
+ * Per-mood colour grades (V4), applied after tone mapping. The numbers stay
+ * small on purpose: the flat palette must still read as itself. Lift works in
+ * the shader's square-root space, so black stays black and a dark colour moves
+ * a few levels at most.
+ */
+export const GRADE = Object.freeze({
+  neutral: { lift: [0, 0, 0], gain: [1, 1, 1], saturation: 1, contrast: 1 },
+  /** Cool morning: blue in the shadows, warm sunlit faces. */
+  downtown: { lift: [0.006, 0.012, 0.03], gain: [1.02, 1, 0.97], saturation: 1.03, contrast: 1.06 },
+  /** Low evening sun: warm throughout. */
+  house: { lift: [0.02, 0.01, 0], gain: [1.02, 0.99, 0.95], saturation: 1.03, contrast: 1.04 },
+  /** Sun-baked: warmer and a touch more saturated. */
+  mexico: { lift: [0.016, 0.008, 0], gain: [1.02, 1, 0.95], saturation: 1.08, contrast: 1.05 },
+  training: { lift: [0, 0.004, 0.012], gain: [1, 1, 1], saturation: 1, contrast: 1.03 },
+} as const satisfies Record<string, Grade>);
+
+/**
+ * Grades for the realistic look (R1), applied after AgX. The physical skies
+ * are all clear daylight at 30-55 degrees of sun, so each map's mood (a cool
+ * morning, a warm afternoon, a sun-baked plaza) comes from here, the mood's
+ * exposure and the fog haze (render/index.ts). Saturation stays close to 1:
+ * the sky-lit shade is already blue, and more of it turned grey concrete navy
+ * and dark paint black. Downtown takes no warm gain, as its sun is warm
+ * already; a stronger warm gain than House's turns its lawn to straw.
+ * Retuned with R8's haze in (all content in): Mexico a little less orange (its
+ * haze and the glow round the sun warm it now), Training neutral (no tint at
+ * all); Downtown's clear cool morning and House's warm late afternoon read
+ * right as they were (a cooler Downtown gain cost its 60 m grunt's mask
+ * contrast, the readability guardrail).
+ */
+export const REAL_GRADE = Object.freeze({
+  downtown: { lift: [0.004, 0.008, 0.016], gain: [1, 1, 1], saturation: 1.04, contrast: 1.08 },
+  house: { lift: [0.02, 0.01, 0], gain: [1.06, 1, 0.9], saturation: 1.05, contrast: 1.06 },
+  mexico: { lift: [0.018, 0.008, 0], gain: [1.08, 1.01, 0.87], saturation: 1.04, contrast: 1.06 },
+  training: { lift: [0, 0, 0], gain: [1, 1, 1], saturation: 1.03, contrast: 1.06 },
+} as const satisfies Record<string, Grade>);
+
+/**
+ * The realistic tiers' haze and light shafts per map (R8, render/atmosphere.ts):
+ * none nearer than `start`, at least the play space's width (its bounds, side
+ * to side), so a grunt anywhere straight across it, and the walls and ground
+ * he is read against, stay as clear as the linear fog leaves them (the
+ * readability guardrail: from 60 m, the far walls behind the 60 and 70 m
+ * grunts hazed their masks and chests by 2-3 luma; from 80 m on Mexico, a
+ * 110 m grunt dissolved into the mesas behind him). Past it, the backdrops
+ * and the few long diagonals thicken, densest at the ground. Downtown a clear
+ * cool morning (thin haze, and no glow: any lightened the far wall behind its
+ * 60 m grunt; its arena, wider, from further out), House a warm late
+ * afternoon (a warm glow, the strongest shafts through the trees), Mexico a
+ * hot haze (the densest, slowest to thin with height, the widest glow),
+ * Training neutral.
+ */
+export const ATMOSPHERE = Object.freeze({
+  downtown: { haze: 0.006, falloff: 0.04, start: 110, glow: 0, shafts: 0.5 },
+  arena: { haze: 0.006, falloff: 0.04, start: 140, glow: 0, shafts: 0.5 },
+  house: { haze: 0.009, falloff: 0.045, start: 80, glow: 0.35, shafts: 0.7 },
+  mexico: { haze: 0.014, falloff: 0.025, start: 125, glow: 0.45, shafts: 0.45 },
+  training: { haze: 0.005, falloff: 0.05, start: 80, glow: 0.1, shafts: 0.3 },
+} as const satisfies Record<string, Atmosphere>);

@@ -1,0 +1,145 @@
+{
+ "version": 1,
+ "atlases": {
+  "fire": {
+   "cols": 8,
+   "rows": 4,
+   "alpha": false,
+   "srgb": true,
+   "layout": {
+    "fireball": [
+     0,
+     16
+    ],
+    "flashFront": [
+     16,
+     4
+    ],
+    "flashSide": [
+     20,
+     4
+    ],
+    "spark": [
+     24,
+     4
+    ],
+    "glow": [
+     28,
+     1
+    ]
+   },
+   "bytes": {
+    "512": 17768,
+    "1024": 52922,
+    "2048": 138568
+   }
+  },
+  "smoke": {
+   "cols": 8,
+   "rows": 6,
+   "alpha": true,
+   "srgb": true,
+   "layout": {
+    "smoke": [
+     0,
+     16
+    ],
+    "dust": [
+     16,
+     16
+    ],
+    "chips": [
+     32,
+     8
+    ],
+    "splinters": [
+     40,
+     4
+    ],
+    "shards": [
+     44,
+     4
+    ]
+   },
+   "bytes": {
+    "512": 50572,
+    "1024": 126542,
+    "2048": 373866
+   }
+  },
+  "decals": {
+   "cols": 4,
+   "rows": 4,
+   "alpha": true,
+   "srgb": true,
+   "layout": {
+    "metal": [
+     0,
+     2
+    ],
+    "masonry": [
+     2,
+     3
+    ],
+    "wood": [
+     5,
+     3
+    ],
+    "glass": [
+     8,
+     2
+    ],
+    "soil": [
+     10,
+     2
+    ],
+    "scorch": [
+     12,
+     1
+    ]
+   },
+   "bytes": {
+    "512": 20306,
+    "1024": 55399,
+    "2048": 136567
+   }
+  },
+  "decals-normal": {
+   "cols": 4,
+   "rows": 4,
+   "alpha": false,
+   "srgb": false,
+   "layout": {
+    "metal": [
+     0,
+     2
+    ],
+    "masonry": [
+     2,
+     3
+    ],
+    "wood": [
+     5,
+     3
+    ],
+    "glass": [
+     8,
+     2
+    ],
+    "soil": [
+     10,
+     2
+    ],
+    "scorch": [
+     12,
+     1
+    ]
+   },
+   "bytes": {
+    "512": 2952,
+    "1024": 7212,
+    "2048": 18358
+   }
+  }
+ }
+}

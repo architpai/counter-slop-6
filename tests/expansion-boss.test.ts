@@ -3,7 +3,7 @@ import { Scene, Vector3 } from 'three';
 import type { EnemyManager, EnemyRecord } from '@/engine/enemies/index';
 import { TYPES } from '@/engine/enemies/types';
 import { expansionBossThink } from '@/engine/enemies/expansion-boss';
-import { updateProjectiles } from '@/engine/enemies/projectiles';
+import { SEGMENT_BOX, updateProjectiles } from '@/engine/enemies/projectiles';
 import { Body, World } from '@/engine/physics';
 import type { EnemyKind, Target } from '@/engine/types';
 
@@ -71,6 +71,8 @@ test('aimbot tracks .7 seconds, locks .3, fires two fixed-point shots and expose
   frame(0.4); target.center.x = 3; frame(0.3);
   const locked = e.aimPoint!.clone();
   expect(e.aimWarned).toBe(true); expect(e.laser?.visible).toBe(true);
+  // The laser is the shared unit box, stretched: nothing to free when it goes (each used to leak its own).
+  expect(e.laser?.geometry).toBe(SEGMENT_BOX);
   target.center.x = 12; frame(0.29);
   expect(m.projectiles).toHaveLength(0); expect(e.aimPoint).toEqual(locked);
   frame(0.01); expect(m.projectiles).toHaveLength(1);

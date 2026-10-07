@@ -86,6 +86,12 @@
 .touch-mode .screen-panel { width: min(940px, 100%); max-width: 100%; max-height: 100%; overflow: auto; overscroll-behavior: contain; padding: 20px; cursor: auto; }
 .touch-mode .screen-panel :is(button, input:not([type="checkbox"]):not([type="radio"]), select, summary), .touch-mode .settings-row, .touch-mode .visibility-options label { min-height: 44px; }
 .touch-mode .screen-panel :is(button, select) { min-width: 44px; }
+/* In play the top band between the HP card and the wave count is free; the control columns are not. */
+.touch-mode .fps-counter { top: 4px; bottom: auto; }
+.touch-mode .quality-prompt { top: 28px; width: max-content; max-width: calc(100% - 400px); padding: 6px 10px; gap: 6px 10px; font-size: 13px; }
+.touch-mode .quality-prompt span { flex-basis: 100%; text-align: center; }
+.touch-mode .screen-panel .quality-prompt { max-width: none; width: auto; }
+.touch-mode .quality-prompt button { min-height: 44px; min-width: 44px; }
 .touch-mode .screen-prompt { font-size: 18px; animation: none; }
 .touch-mode .screen-footer { font-size: 13px; }
 .touch-mode .screen-controls { font-size: 14px; }

@@ -1,29 +1,83 @@
-import { Mesh, Vector3 } from 'three';
+import { BoxGeometry, Color, DynamicDrawUsage, InstancedMesh, Object3D, Vector3 } from 'three';
 import { clamp, alignSegment } from '../util';
 import { seeThrough } from '../physics';
-import { boxGeo, unlitMat, TONE, TONE_HEX } from '../render/index';
+import { TONE } from '../render/index';
+import { boltColor, boltMaterial } from '../render/fx';
+import type { Scene } from 'three';
 import type { Projectile, Target } from '../types';
 import type { EnemyManager, EnemyRecord } from './index';
 
-/** The runtime projectile: the replicated record plus its segment mesh. */
+/** The runtime projectile: the replicated record plus the enemy that fired it. */
 export interface ProjectileRecord extends Projectile {
   owner: EnemyRecord | null;
-  mesh: Mesh;
 }
 
 const MAX = 240;
+/**
+ * The bolts' drawn width over their `thickness` (V5): a third thinner than
+ * before, now that they glow. Hit tests use their own radii, not this.
+ */
+const BOLT_WIDTH = 0.65;
+/**
+ * One unit box for every bolt and aiming laser, stretched along its segment
+ * (each projectile used to make its own and never free it; each sniper's and
+ * the aimbot's laser did too, until the soak test found them).
+ */
+export const SEGMENT_BOX = new BoxGeometry(1, 1, 1);
+SEGMENT_BOX.userData.shared = true;
+/**
+ * Every bolt in flight is an instance of one mesh per scene (V19): one draw,
+ * and nothing made per shot. Laid out once a frame, at the end of the update
+ * (`drawBolts`): the enemies fire before it and every hit and deflection
+ * comes inside it, and a replicated bolt shows from the next frame's.
+ */
+const boltMeshes = new WeakMap<Scene, InstancedMesh>();
+const place = new Object3D(), tint = new Color();
 const half = new Vector3(), a = new Vector3(), b = new Vector3(), seg = new Vector3(), sample = new Vector3();
 const closest = new Vector3(), dir = new Vector3(), away = new Vector3();
 // `hitsTarget` needs a scratch of its own: `segmentHits` writes through `sample`,
 // so passing `sample` in as `point` would alias the value being measured.
 const feet = new Vector3();
 
-function draw(p: ProjectileRecord): void {
-  const speed = p.vel.length();
-  if (speed < 1e-5) { p.mesh.visible = false; return; }
-  const len = p.blast ? p.thickness : clamp(speed * 0.02, 0.35, 0.9);
-  half.copy(p.vel).multiplyScalar(len / speed / 2);
-  alignSegment(p.mesh, a.subVectors(p.pos, half), b.addVectors(p.pos, half), p.thickness);
+function boltsIn(scene: Scene): InstancedMesh {
+  let mesh = boltMeshes.get(scene);
+  if (!mesh) {
+    mesh = new InstancedMesh(SEGMENT_BOX, boltMaterial(), MAX);
+    mesh.name = 'projectiles';
+    mesh.frustumCulled = false;
+    mesh.count = 0;
+    mesh.instanceMatrix.setUsage(DynamicDrawUsage);
+    mesh.setColorAt(0, tint.setRGB(1, 1, 1));
+    mesh.instanceColor!.setUsage(DynamicDrawUsage);
+    boltMeshes.set(scene, mesh);
+  }
+  if (mesh.parent !== scene) scene.add(mesh);
+  return mesh;
+}
+
+/** Lay every bolt in flight out as an instance: a segment along its velocity, in its tone. */
+function drawBolts(m: EnemyManager): void {
+  const mesh = boltsIn(m.ctx.scene);
+  let n = 0;
+  for (const p of m.projectiles) {
+    const speed = p.vel.length();
+    if (speed < 1e-5) continue;
+    const len = p.blast ? p.thickness : clamp(speed * 0.02, 0.35, 0.9);
+    half.copy(p.vel).multiplyScalar(len / speed / 2);
+    alignSegment(place, a.subVectors(p.pos, half), b.addVectors(p.pos, half), p.thickness * BOLT_WIDTH);
+    if (!place.visible) continue;
+    place.updateMatrix();
+    mesh.setMatrixAt(n, place.matrix);
+    mesh.setColorAt(n++, boltColor(p.tone, tint));
+  }
+  mesh.count = n;
+  mesh.visible = n > 0;
+  mesh.instanceMatrix.clearUpdateRanges();
+  mesh.instanceMatrix.addUpdateRange(0, 16 * n);
+  mesh.instanceMatrix.needsUpdate = true;
+  mesh.instanceColor!.clearUpdateRanges();
+  mesh.instanceColor!.addUpdateRange(0, 3 * n);
+  mesh.instanceColor!.needsUpdate = true;
 }
 
 export function spawnProjectile(m: EnemyManager, pos: Vector3, direction: Vector3, speed: number, damage: number,
@@ -32,19 +86,25 @@ export function spawnProjectile(m: EnemyManager, pos: Vector3, direction: Vector
   const p: ProjectileRecord = {
     id: id ?? m.ids++, pos: pos.clone(), prev: pos.clone(), vel: direction.clone().normalize().multiplyScalar(speed),
     damage, owner, life: 4, deflected: false, tone, thickness, origin: pos.clone(), blast,
-    mesh: new Mesh(boxGeo(1, 1, 1), unlitMat(TONE_HEX[tone] ?? TONE_HEX[TONE.HOSTILE])),
   };
-  p.mesh.name = 'projectile';
-  m.ctx.scene.add(p.mesh);
-  draw(p);
+  if (owner) owner.shots++;
   m.projectiles.push(p);
   if (id == null) m.onFire?.(p);
   return p;
 }
 
 export function removeProjectile(m: EnemyManager, index: number): void {
-  const [p] = m.projectiles.splice(index, 1);
-  p?.mesh.removeFromParent();
+  m.projectiles.splice(index, 1);
+}
+
+/** Every bolt gone at once (a match's end or reset), off the screen now: no update may follow under the menu. */
+export function clearProjectiles(m: EnemyManager): void {
+  m.projectiles.length = 0;
+  const mesh = boltMeshes.get(m.ctx.scene);
+  if (mesh) {
+    mesh.count = 0;
+    mesh.visible = false;
+  }
 }
 
 // Closest point on segment prev->pos to `point`, distance compared against r.
@@ -79,7 +139,6 @@ export function deflect(m: EnemyManager, p: ProjectileRecord, perfect: boolean):
   // the guards below are there for the type.
   const player = m.ctx.player;
   p.deflected = true; p.tone = TONE.PRIMARY; p.damage *= perfect ? 3.5 : 2.2; p.life = 3;
-  p.mesh.material = unlitMat(TONE_HEX[TONE.PRIMARY]);
   let target: EnemyRecord | null = perfect && p.owner?.alive ? p.owner : null;
   if (!target && player) target = m.nearestVisible(player.eye, player.forward, Math.cos(0.7), 70) || (p.owner?.alive ? p.owner : null);
   const speed = p.vel.length() * 1.6;
@@ -112,11 +171,11 @@ export function updateProjectiles(m: EnemyManager, dt: number): void {
     p.pos.addScaledVector(p.vel, dt);
     seg.subVectors(p.pos, p.prev);
     const len = seg.length();
-    if (len < 1e-6) { draw(p); continue; }
+    if (len < 1e-6) continue;
     const wall = world.raycast(p.prev, dir.copy(seg).divideScalar(len), len, seeThrough);
     if (wall) {
       if (p.blast) burst(m, p, wall.point);
-      else { effects.bulletImpact(wall.point, wall.normal, p.tone); if (Math.random() < 0.5) audio.bulletImpact(wall.point); }
+      else { effects.bulletImpact(wall.point, wall.normal, wall.box.data, dir); if (Math.random() < 0.5) audio.bulletImpact(wall.point); }
       removeProjectile(m, i); continue;
     }
     let consumed = false;
@@ -146,6 +205,7 @@ export function updateProjectiles(m: EnemyManager, dt: number): void {
         consumed = true;
       }
     }
-    if (consumed) removeProjectile(m, i); else draw(p);
+    if (consumed) removeProjectile(m, i);
   }
+  drawBolts(m);
 }
