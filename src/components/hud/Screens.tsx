@@ -278,6 +278,21 @@ function Settings({ model, onAction }: { model: SettingsModel; onAction: Act }) 
   );
 }
 
+/** The pinned start wave. Hidden until the first boss wave is cleared. */
+function StartWave({ model, onAction }: { model: { checkpoint: number; startWave: number }; onAction: Act }) {
+  // ponytail: a native select with at most 1,000 checkpoints (wave 5,001); add a search field if runs pass that.
+  const n = Math.min(1000, Math.floor(count(model.checkpoint) / 5));
+  if (!n) return null;
+  return (
+    <label className="start-wave" data-ui-block="">start each run at
+      <select data-act="startWave" value={String(model.startWave)}
+        onChange={event => onAction('startWave', event.target.value, event.nativeEvent)}>
+        {Array.from({ length: n + 1 }, (_, i) => <option value={i * 5 + 1} key={i}>WAVE {i * 5 + 1}</option>)}
+      </select>
+    </label>
+  );
+}
+
 function Maps({ model, onAction, disabled = false, previews = false }: { model: MapsModel; onAction: Act; disabled?: boolean; previews?: boolean }) {
   const choices = list(model.maps);
   if (choices.length < 2) return null;
@@ -373,10 +388,11 @@ function MainScreen({ model, pad, onAction }: { model: MainModel; pad: boolean; 
         {currentPage === 'play' ? <>
           <Maps model={model} onAction={onAction} previews />
           <div className="screen-actions launch-actions" data-ui-block="">
-            <Button act="start" text="START SOLO" primary sub="survive the waves" onAction={onAction} />
+            <Button act="start" text="START SOLO" primary sub={count(model.startWave) > 1 ? `from wave ${count(model.startWave)}` : 'survive the waves'} onAction={onAction} />
             <Button act="online" text="PLAY ONLINE" sub="solo deathmatch · team modes · up to 8" onAction={onAction} />
             <Button act="training" text="TRAINING GROUND" sub="inspect models · passive targets" onAction={onAction} />
           </div>
+          <StartWave model={model} onAction={onAction} />
           <p className="screen-footer">{count(model.best) > 0 ? `Personal best · ${count(model.best)}` : 'One more wave. One more try.'}</p>
         </> : currentPage === 'controls' ? <>
           <Controls pad={pad} touch={model.touch} />
@@ -428,6 +444,7 @@ function LobbyScreen({ model, onAction }: { model: LobbyModel; onAction: Act }) 
   const players = list(model.players);
   const teamMode = modeChoice(model.mode).key !== 'ffa';
   const ready = !teamMode || TEAMS.every(team => players.some(player => player.team === team));
+  const selfTeam = players.find(player => player.self)?.team;
   return (
     <>
       <Title text="LOBBY" sub={`${modeChoice(model.mode).name} · ${players.length}/8 players`} />
@@ -446,6 +463,8 @@ function LobbyScreen({ model, onAction }: { model: LobbyModel; onAction: Act }) 
           return <section className="team-roster" data-team={team} key={team} aria-label={`${TEAM_NAMES[team]} team roster`}>
             <h3>{TEAM_NAMES[team]} TEAM <span>{members.length}/4</span></h3>
             <LobbyRoster players={members} />
+            {selfTeam === team ? null : <Button act="team" value={String(team)} text={`JOIN ${TEAM_NAMES[team]}`}
+              disabled={members.length >= 4} onAction={onAction} />}
           </section>;
         })}
       </div> : <LobbyRoster players={players} />}
@@ -455,7 +474,7 @@ function LobbyScreen({ model, onAction }: { model: LobbyModel; onAction: Act }) 
       </div>
       <Status text={model.status} />
       <p className="screen-footer">{teamMode
-        ? ready ? 'Anyone can start · teams assigned by the host · up to 4v4' : 'Need at least 2 players, with one on each team.'
+        ? ready ? 'Anyone can start · select your team · up to 4v4' : 'Need at least 2 players, with one on each team.'
         : `anyone can start · ${players.length < 2 ? 'people can still join once it is running' : `${players.length} players in`}`}</p>
     </>
   );
@@ -513,8 +532,9 @@ function DeadScreen({ model, onAction }: { model: DeadModel; onAction: Act }) {
     <>
       <Title text="ELIMINATED" />
       <p className="screen-stats">you survived <b>{waves}</b> {waves === 1 ? 'wave' : 'waves'} · <b>{count(model.kills)}</b> kills · score <b>{count(model.score)}</b> · {model.newBest ? <b>NEW BEST</b> : `best ${count(model.best)}`}</p>
+      <StartWave model={model} onAction={onAction} />
       <MainMenu onAction={onAction} />
-      <Prompt confirmKey={model.confirmKey} end="TO RESTART AT WAVE 1" start="CLICK" />
+      <Prompt confirmKey={model.confirmKey} end={`TO RESTART AT WAVE ${count(model.startWave)}`} start="CLICK" />
     </>
   );
 }

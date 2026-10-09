@@ -58,6 +58,8 @@ test('team lobbies show named rosters and need both sides; solo start stays avai
   expect(host.querySelector('[aria-label="RED team roster"]')?.textContent).toContain('RED TEAM 1/4');
   expect(host.querySelector('[aria-label="BLUE team roster"]')?.textContent).toContain('Blue player');
   expect(host.querySelector('img')).toBeNull();
+  const join = [...host.querySelectorAll<HTMLButtonElement>('button[data-act="team"]')];
+  expect(join.map(button => button.textContent)).toEqual(['JOIN BLUE']);
   expect(action('startMatch').disabled).toBe(false);
   expect(modeButtons().every(button => !button.disabled)).toBe(true);
   model.isPublic = true; show();

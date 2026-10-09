@@ -184,6 +184,10 @@ export function createSolo(app: App): SoloApi {
     if (!gs.queue.length && enemies.alive === 0) {
       gs.intermission = 8; ctx.hud.message(`WAVE ${gs.wave} CLEARED`, `catch your breath · +${200 * gs.wave}`, 2.5);
       app.addScore(200 * gs.wave); ctx.audio.waveClear(); player.heal(40);
+      // A cleared boss wave unlocks a start at the wave after it.
+      if (gs.wave % 5 === 0 && gs.wave > app.settings.checkpoint) {
+        app.saveCheckpoint(gs.wave); ctx.hud.kill(`CHECKPOINT · WAVE ${gs.wave + 1}`);
+      }
     }
     ctx.hud.setWave(gs.wave, enemies.alive + gs.queue.length);
   }

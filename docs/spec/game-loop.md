@@ -694,6 +694,7 @@ Delivery: the host sends to everyone; a client sends to the host, and with the r
 | `leave` | host → all | {id} | Section 17. |
 | `start` | host → all / one | {spawns {id→index}, map} or {late true, spawn index, map, broken [ids]} | Section 18. |
 | `startreq` | client → host | {} | Host starts if in state `lobby`. |
+| `teamreq` | client → host | { team } | Host moves the sender to that team if in state `lobby`, in a team mode, and the team has fewer than four players. |
 | `end` | host → all | {id, name} | End match. |
 | `backtolobby` | host → all | {} | Client goes to the lobby screen. |
 | `pickup` | host → all | {id, kind, pos [x,y,z]} | Client spawns the pickup with that id. |
@@ -855,5 +856,5 @@ Sounds triggered by this subsystem: wave start, wave clear, boss roar, kill (str
 | Audio | init, resume, set listener, set tune, music on(flag), music playing, set intensity, reel loop(flag), and the one-shot sounds of section 33. |
 | Renderer | scene, camera, render(time, {hurt, flash, slow, lowHp}). |
 
-A debug handle on the window exposes the context, game state, player, enemies, nav, world, level, HUD, effects, input, network, remotes, lobby, scores, and the run-control functions, plus `jumpToWave(n)` — a debug-only restart of the solo run at wave n that no UI reaches. On `localhost` / `127.0.0.1` / `[::1]` only, the query string `?wave=n` makes every solo start (START SOLO, retry after death) begin at wave n instead of 1; any other host ignores it (checkpoints and wave-skip buttons are gone; this is how late waves get tested). It has no gameplay effect.
+A debug handle on the window exposes the context, game state, player, enemies, nav, world, level, HUD, effects, input, network, remotes, lobby, scores, and the run-control functions, plus `jumpToWave(n)` — a debug-only restart of the solo run at wave n that no UI reaches. On `localhost` / `127.0.0.1` / `[::1]` only, the query string `?wave=n` makes every solo start (START SOLO, retry after death) begin at wave n instead of 1; any other host ignores it (players reach late waves through checkpoints, see `combat-rehaul.md`; this is how any wave gets tested). It has no gameplay effect.
 

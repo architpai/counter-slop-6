@@ -14,7 +14,7 @@ All times are seconds. These are initial playtest values, not measured balance r
 
 The online screen selects a mode before quick play or lobby creation. Code joins follow the host's mode. Quick play searches only the selected mode. The host can change mode in a private lobby. Public lobby modes stay fixed to their discovery slot. Players can leave and create another public mode without losing their name or weapon settings.
 
-The host assigns balanced teams, with a maximum of four players per team. Team matches need at least one player per team; they do not wait for eight. Late joiners enter the smaller team. Existing players do not change teams during a match. Team kill totals and flag points are match totals: a player's departure does not remove earned team points. No classes, ability loadouts, bots, ranked play, or party system are added.
+The host assigns balanced teams, with a maximum of four players per team. Team matches need at least one player per team; they do not wait for eight. Late joiners enter the smaller team. In the lobby, each player can move to the other team with JOIN RED / JOIN BLUE if that team has fewer than four players; the host applies the request (`teamreq`) and keeps the selections when a player leaves and between matches. Existing players do not change teams during a match. Team kill totals and flag points are match totals: a player's departure does not remove earned team points. No classes, ability loadouts, bots, ranked play, or party system are added.
 
 ## 2. Shared team combat and respawn
 

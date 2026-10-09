@@ -14,9 +14,10 @@ import type { OnlineMode, Team } from '../game/team-rules';
  */
 export const UI_ACTIONS = [
   'start', 'online', 'back', 'quickPlay', 'create', 'join', 'joinCode',
-  'visibility', 'name', 'pickMap', 'onlineMode', 'mainMenu', 'startMatch',
+  'visibility', 'name', 'pickMap', 'onlineMode', 'team', 'mainMenu', 'startMatch',
   'leave', 'leaveMatch', 'sens', 'touchSens', 'resume', 'acogSens', 'sniperSens', 'optic', 'r4cOptic', 'training', 'invert', 'music',
   'gfxPreset', 'gfx', 'gfxFps', 'gfxReset', 'gfxLower',
+  'startWave',
 ] as const;
 
 export type UiAction = (typeof UI_ACTIONS)[number];
@@ -49,7 +50,7 @@ export interface LookModel {
   gfx: GfxModel;
 }
 export interface MainModel extends LookModel, WeaponSettingsModel {
-  best: number; mapKey: string;
+  best: number; checkpoint: number; startWave: number; mapKey: string;
   maps: MapChoice[];
 }
 export interface LobbyModel extends WeaponSettingsModel {
@@ -64,7 +65,8 @@ export interface OnlineModel { name: string; isPublic: boolean; status: string; 
 export interface PauseModel extends LookModel, WeaponSettingsModel { wave: number; score: number; training: boolean }
 export interface MenuModel extends LookModel, WeaponSettingsModel, OnlineInfo { code: string; rows: BoardRow[] }
 export interface DeadModel   { waves: number; kills: number; score: number; best: number;
-                               newBest: boolean; confirmKey: string }
+                               newBest: boolean; checkpoint: number; startWave: number;
+                               confirmKey: string }
 export interface OverModel extends OnlineInfo { youWin: boolean; winnerName: string; rows: BoardRow[] }
 export interface BoardModel extends OnlineInfo { rows: BoardRow[]; code: string }
 /** Solo: top 3 + self. Teams: team scores, objective status and self K/D. */
