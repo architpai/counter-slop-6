@@ -320,6 +320,33 @@ test.each(['tdm', 'flag'] as const)('%s blocks friendly damage and rope cuts at 
   } finally { t.ffa.leave(); }
 });
 
+test('the host moves a lobby player to the requested team, but not into a full team, a match or solo mode', () => {
+  const t = setup(true, 'tdm');
+  try {
+    const own = t.lobby.teams.host ?? 0, other = own === 0 ? 1 : 0;
+    t.receive('teamreq', { team: own });
+    expect(t.lobby.teams.client).toBe(own);
+    expect(t.sent.at(-1)).toMatchObject({ type: 'lobby', data: { teams: { host: own, client: own } } });
+    t.ffa.hostStart(); // One empty team: no match.
+    expect(t.gs.state).toBe('lobby');
+    expect(t.lobby.status).toBe('team modes need a player on each team');
+    t.ffa.requestTeam(other);
+    expect(t.lobby.teams.host).toBe(other);
+    (t.ctx.net.onPeerLeave as (id: string) => void)('stranger'); // A leave keeps the selected teams.
+    expect(t.lobby.teams).toMatchObject({ host: other, client: own });
+    for (const id of ['a', 'b', 'c']) { t.lobby.players.set(id, id); t.lobby.teams[id] = own; }
+    t.receive('teamreq', { team: own }, 'host'); t.receive('teamreq', { team: own }, 'stranger');
+    expect(t.lobby.teams.host).toBe(other);
+    expect(t.lobby.teams.stranger).toBeUndefined();
+    t.ffa.hostStart();
+    t.receive('teamreq', { team: other });
+    expect(t.lobby.teams.client).toBe(own);
+  } finally { t.ffa.leave(); }
+  const solo = setup(true);
+  solo.receive('teamreq', { team: 1 });
+  expect(solo.lobby.teams).toEqual({});
+});
+
 test('team host grants a wave, rejects duplicate deaths and keeps cumulative scores after leave', () => {
   const t = setup(true, 'tdm');
   try {

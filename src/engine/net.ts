@@ -1,7 +1,7 @@
 import Peer from 'peerjs';
 import type { DataConnection, PeerError, PeerOptions } from 'peerjs';
 import type { Envelope } from './types';
-import { isOnlineMode, validTeams, validTeamMatch } from './game/team-rules';
+import { isOnlineMode, isTeam, validTeams, validTeamMatch } from './game/team-rules';
 import type { OnlineMode } from './game/team-rules';
 
 export const NET = Object.freeze({
@@ -23,7 +23,7 @@ interface Welcome { hostId: string; code: string; isPublic: boolean }
 interface Attempt { conn: DataConnection; id: string; code: string; failed: boolean; welcome: Welcome | null }
 
 const HOST = new Set(['lobby', 'leave', 'start', 'end', 'backtolobby', 'score', 'pickup', 'taken', 'refused', 'teamstate']);
-const REQUEST = new Set(['startreq', 'take']);
+const REQUEST = new Set(['startreq', 'take', 'teamreq']);
 const ADDRESSED = new Set(['pdmg', 'headshot', 'parry', 'cut']);
 const BROADCAST = new Set(['ps', 'shots', 'pdead', 'nade', 'brk']);
 const TYPES = new Set(['welcome', ...HOST, ...REQUEST, ...ADDRESSED, ...BROADCAST]);
@@ -65,6 +65,7 @@ function validPayload(type: string, d: unknown): boolean {
       optional(d, 'mode', isOnlineMode) && optional(d, 'teams', validTeams);
     case 'leave': return fields(d, ['id']) && peerId(d.id);
     case 'startreq': case 'backtolobby': return empty(d);
+    case 'teamreq': return fields(d, ['team']) && isTeam(d.team);
     case 'cut': return fields(d, [], ['round']) && optional(d, 'round', integer);
     case 'start': return fields(d, [], ['spawns', 'spawn', 'map', 'late', 'broken', 'mode', 'teams', 'teamState']) &&
       optional(d, 'mode', isOnlineMode) && optional(d, 'teams', validTeams) && optional(d, 'teamState', validTeamMatch) &&

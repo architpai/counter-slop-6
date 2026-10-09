@@ -153,6 +153,8 @@ test('wire bounds cover team snapshots, mode selection, round-tagged state and d
   expect(validEnvelope({ t: 'lobby', d: { hostId: 'host', players: [], isPublic: false, mode: 'flag', teams: {} }, from: 'host' })).toBe(true);
   expect(validEnvelope({ t: 'ps', d: { round: 1, state: [0, 0, 0, 0, 0, 0, 80, 100] }, relay: true })).toBe(true);
   expect(validEnvelope({ t: 'ps', d: { round: -1, state: [] }, relay: true })).toBe(false);
+  expect(validEnvelope({ t: 'teamreq', d: { team: 1 }, relay: false })).toBe(true);
+  expect(validEnvelope({ t: 'teamreq', d: { team: 2 }, relay: false })).toBe(false);
   expect(validEnvelope({ t: 'pdead', d: { killer: null, dir: null, over: false, how: null, crit: false, round: 1 }, relay: true })).toBe(true);
   for (const [type, data] of [
     ['pdmg', { amount: 20, from: null, by: 'host', src: 'rifle' }],

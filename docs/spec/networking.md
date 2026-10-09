@@ -266,6 +266,7 @@ Direction key: H = host, C = client, A = all other peers. "C→A" means the clie
 | `lobby` | H → A | any roster or map change; every join; every leave; every timeout drop | `{ players: [{id, name}...], hostId, isPublic, map }` |
 | `leave` | H → A | a client connection dropped or was timed out | `{ id }` |
 | `startreq` | C → H | client pressed START MATCH in the lobby | `{}` |
+| `teamreq` | C → H | client pressed JOIN RED / JOIN BLUE in a team lobby | `{ team: 0 \| 1 }` |
 | `start` | H → A | host starts the match | `{ spawns: { <peerId>: <spawnIndex>, ... }, map }` |
 | `start` | H → one C | a client joined while a match is running | `{ late: true, spawn: <spawnIndex>, map, broken: [<breakableId>...] }` |
 | `end` | H → A | a player reached the kill target, or the time limit passed | `{ id, name }` of the winner |

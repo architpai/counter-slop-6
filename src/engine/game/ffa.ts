@@ -40,6 +40,7 @@ const cleanName = (v: unknown): string => (typeof v === 'string' ? v.trim().slic
 
 export interface FfaApi {
   selectMode(mode: OnlineMode): void;
+  requestTeam(team: Team): void;
   onlineInfo(): OnlineInfo;
   dispose(): void;
   create(isPublic: boolean): Promise<void>;
@@ -134,6 +135,17 @@ export function createFFA(app: App): FfaApi {
     lobby.teams = value === 'ffa' ? {} : assignTeams([...lobby.players.keys()]);
     applyTeams();
     if (gs.state === 'lobby') broadcastLobby();
+  }
+  /** A player's own choice of side, in the lobby only. The host applies it; a full side refuses. */
+  function setTeam(rid: string, team: unknown): void {
+    if (!net.isHost || gs.state !== 'lobby' || mode() === 'ffa' || !isTeam(team) || !lobby.players.has(rid) ||
+        teamOf(rid) === team || Object.values(lobby.teams).filter(t => t === team).length >= 4) return;
+    lobby.teams[rid] = team;
+    applyTeams(); broadcastLobby();
+  }
+  function requestTeam(team: Team): void {
+    if (!net.isHost) net.send('teamreq', { team });
+    else if (net.id) setTeam(net.id, team);
   }
   const nameOf = (rid: string): string | undefined => scores.get(rid)?.name ?? lobby.players.get(rid) ?? ctx.remotes.get(rid)?.name;
 
@@ -293,7 +305,7 @@ export function createFFA(app: App): FfaApi {
   function peerLeft(pid: string): void {
     const name = nameOf(pid) ?? 'someone';
     removeRemote(pid);
-    if (!inMatch() && mode() !== 'ffa') { lobby.teams = assignTeams([...lobby.players.keys()]); applyTeams(); }
+    if (!inMatch() && mode() !== 'ffa') { lobby.teams = assignTeams([...lobby.players.keys()], lobby.teams); applyTeams(); }
     broadcastLobby();
     if (inMatch()) { hud.kill(`${name} left`); sendScores(); sendTeamState(); }
   }
@@ -315,7 +327,7 @@ export function createFFA(app: App): FfaApi {
   }
   function lobbyScreen(): void {
     dispose(); gs.teamMatch = null;
-    if (net.isHost && mode() !== 'ffa') lobby.teams = assignTeams([...lobby.players.keys()]);
+    if (net.isHost && mode() !== 'ffa') lobby.teams = assignTeams([...lobby.players.keys()], lobby.teams);
     applyTeams();
     app.loadLevel(true, lobby.map ?? app.settings.mapKey); app.resetRun();
     gs.state = 'lobby'; gs.over = null; gs.menu = false;
@@ -344,11 +356,11 @@ export function createFFA(app: App): FfaApi {
   }
   function hostStart(): void {
     if (!net.isHost || gs.state !== 'lobby') return;
-    if (mode() !== 'ffa' && lobby.players.size < 2) {
-      lobby.status = 'team modes need at least two players'; app.showScreen('lobby'); return;
+    lobby.teams = mode() === 'ffa' ? {} : assignTeams([...lobby.players.keys()], lobby.teams);
+    if (mode() !== 'ffa' && new Set(Object.values(lobby.teams)).size < 2) {
+      lobby.status = 'team modes need a player on each team'; app.showScreen('lobby'); return;
     }
     dispose();
-    lobby.teams = mode() === 'ffa' ? {} : assignTeams([...lobby.players.keys()], lobby.teams);
     applyTeams(); broadcastLobby();
     scores.clear();
     for (const [pid, name] of lobby.players) scores.set(pid, { id: pid, name, kills: 0, deaths: 0 });
@@ -698,6 +710,7 @@ export function createFFA(app: App): FfaApi {
     if (inMatch()) hud.kill(`${name} left`);
     if (gs.state === 'lobby') app.showScreen('lobby');
   });
+  net.on('teamreq', (d, from) => { if (obj(d)) setTeam(from, d.team); });
   net.on('startreq', (d, from) => { if (net.isHost && lobby.players.has(from) && gs.state === 'lobby') hostStart(); });
   net.on('start', (d, from) => {
     if (!fromHost(from) || !obj(d) || (gs.state !== 'lobby' && gs.state !== 'start' && !d.late)) return;
@@ -859,7 +872,7 @@ export function createFFA(app: App): FfaApi {
   net.onDisconnect = () => leave('the host left the lobby');
 
   return {
-    selectMode, onlineInfo, dispose,
+    selectMode, requestTeam, onlineInfo, dispose,
     create, join, quickPlay, hostStart, leave, lobbyScreen, broadcastLobby,
     localDeath, updateDying, updateOver, update, refreshScoreHud, showBoard, boardRows,
     targets, canHurt, raycastPlayers, playersInArc, hitPlayer, cutRopes, onShot,

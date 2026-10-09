@@ -444,6 +444,7 @@ function LobbyScreen({ model, onAction }: { model: LobbyModel; onAction: Act }) 
   const players = list(model.players);
   const teamMode = modeChoice(model.mode).key !== 'ffa';
   const ready = !teamMode || TEAMS.every(team => players.some(player => player.team === team));
+  const selfTeam = players.find(player => player.self)?.team;
   return (
     <>
       <Title text="LOBBY" sub={`${modeChoice(model.mode).name} · ${players.length}/8 players`} />
@@ -462,6 +463,8 @@ function LobbyScreen({ model, onAction }: { model: LobbyModel; onAction: Act }) 
           return <section className="team-roster" data-team={team} key={team} aria-label={`${TEAM_NAMES[team]} team roster`}>
             <h3>{TEAM_NAMES[team]} TEAM <span>{members.length}/4</span></h3>
             <LobbyRoster players={members} />
+            {selfTeam === team ? null : <Button act="team" value={String(team)} text={`JOIN ${TEAM_NAMES[team]}`}
+              disabled={members.length >= 4} onAction={onAction} />}
           </section>;
         })}
       </div> : <LobbyRoster players={players} />}
@@ -471,7 +474,7 @@ function LobbyScreen({ model, onAction }: { model: LobbyModel; onAction: Act }) 
       </div>
       <Status text={model.status} />
       <p className="screen-footer">{teamMode
-        ? ready ? 'Anyone can start · teams assigned by the host · up to 4v4' : 'Need at least 2 players, with one on each team.'
+        ? ready ? 'Anyone can start · select your team · up to 4v4' : 'Need at least 2 players, with one on each team.'
         : `anyone can start · ${players.length < 2 ? 'people can still join once it is running' : `${players.length} players in`}`}</p>
     </>
   );

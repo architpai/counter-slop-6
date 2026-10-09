@@ -292,6 +292,7 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .team-roster { min-width: 0; padding-left: 10px; border-left: 2px solid var(--team-color); }
 .team-roster h3 { display: flex; justify-content: space-between; gap: 10px; margin: 0 0 6px; font-size: 14px; letter-spacing: 1px; color: var(--team-color); }
 .team-roster h3 span { color: var(--fg-dim); }
+.team-roster .screen-button { margin-top: 6px; padding: 6px 12px; font-size: 14px; }
 .team-roster .lobby-players, .team-roster .score-rows { min-width: 0; margin: 0; font-size: 15px; }
 .team-roster :is(.lobby-players, .score-rows) > div { gap: 10px; padding: 6px 4px; border-radius: 2px; }
 .team-roster .self { box-shadow: inset 2px 0 var(--team-color); }
