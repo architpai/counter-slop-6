@@ -259,6 +259,8 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .dim { color: var(--fg-dim); }
 .map-picker { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
 .map-picker h3 { margin: 0 0 8px; font-size: 17px; font-weight: 500; color: var(--fg-dim); }
+.start-wave { display: block; margin-top: 12px; font-size: 17px; color: var(--fg-dim); }
+.start-wave select { margin-left: 8px; font-size: 16px; }
 .map-choice { display: inline-flex; flex-direction: column; margin: 4px; max-width: 100%; font-size: 19px; }
 .map-choice.selected { color: var(--fg); background: #22394b; border-color: #91b1ff; }
 .map-previews { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0; border: 0; }

@@ -14,7 +14,9 @@ page.on('requestfailed', r => errors.push(`request failed: ${r.url()}`));
 page.on('response', r => r.status() >= 400 && errors.push(`HTTP ${r.status()} ${r.url()}`));
 page.on('pageerror', e => errors.push(String(e)));
 
-// Old saves must not restore wave selection or skip the start of a run.
+// A saved checkpoint (boss wave 5 cleared) unlocks a start at wave 6 and nothing else. A saved
+// start wave that is not unlocked falls back to wave 1.
+await page.addInitScript(() => localStorage.getItem('cs6_start_wave') ?? localStorage.setItem('cs6_start_wave', '11'));
 await page.addInitScript(() => localStorage.setItem('cs6_checkpoint', '5'));
 await page.goto(url, { waitUntil: 'networkidle' });
 await page.waitForFunction(() => window.__game !== undefined, null, { timeout: 30_000 });
@@ -56,10 +58,13 @@ const report = await page.evaluate(async () => {
   };
 });
 
-assert.equal(await page.locator('[data-act="checkpoint"], .checkpoints').count(), 0);
-// `jumpToWave` stays: debug only, no UI reaches it (game-loop.md §34). What must be gone is the
-// checkpoint UI above and any saved wave unlock, both still asserted here.
-assert.equal(await page.evaluate(() => 'beginAtWave' in window.__game), false);
+const startWave = page.locator('select[data-act="startWave"]');
+assert.deepEqual(await startWave.locator('option').allInnerTexts(), ['WAVE 1', 'WAVE 6']);
+assert.equal(await startWave.inputValue(), '1');
+// `jumpToWave` stays debug only: no UI reaches it (game-loop.md §34). Players pin a start wave
+// through the `startWave` UI action, which refuses a wave that is not unlocked.
+await page.evaluate(() => window.__game.hud.onUiAction?.('startWave', '11', new Event('change')));
+assert.equal(await startWave.inputValue(), '1');
 
 // Phase 8: screens are React components wired to real callbacks. Click the
 // actual START button rather than calling the engine, because the risk in
@@ -152,8 +157,8 @@ const hudWork = await page.evaluate(async () => {
 const shot = await page.screenshot();
 const blank = shot.length < 8000;
 
-// Reach a boss-wave boundary without playing ten waves. It must not save an
-// unlock. Pause keeps the run; death and returning to the menu both reset it.
+// Reach a boss-wave boundary without playing ten waves. The start of a boss wave must not
+// save an unlock; clearing it does. Pause keeps the run; death and the menu both reset it.
 await page.evaluate(() => {
   const g = window.__game;
   g.gs.mode = 'solo'; g.gs.state = 'play';
@@ -166,29 +171,55 @@ assert.equal(await page.evaluate(() => window.__game.hud.killFeed.some(row => ro
 await page.keyboard.down('KeyP');
 await page.waitForFunction(() => window.__game.gs.state === 'pause');
 await page.keyboard.up('KeyP');
-await page.evaluate(() => window.__game.hud.onUiAction?.('checkpoint', '5', new Event('click')));
-assert.equal(await page.evaluate(() => window.__game.gs.state), 'pause');
 await page.mouse.click(20, 20);
 await page.waitForFunction(() => window.__game.gs.state === 'play');
 assert.equal(await page.evaluate(() => window.__game.gs.wave), 10);
-await page.evaluate(() => {
+await page.evaluate(() => { const g = window.__game; g.enemies.clear(); g.gs.queue.length = 0; });
+await page.waitForFunction(() => localStorage.getItem('cs6_checkpoint') === '10');
+assert.equal(await page.evaluate(() => window.__game.hud.killFeed.some(row => row.text === 'CHECKPOINT · WAVE 11')), true);
+const cleared = await page.evaluate(() => {
   const g = window.__game;
   g.player.takeDamage(100000); g.gs.deathT = 2;
+  return g.gs.score;
 });
+assert.ok(cleared >= 2700, `wave-clear bonus counted (${cleared})`);
 await page.waitForFunction(() => window.__game.gs.state === 'dead');
-assert.equal(await page.locator('[data-act="checkpoint"], .checkpoints').count(), 0);
-assert.match(await page.locator('.screen-prompt').innerText(), /RESTART AT WAVE 1/);
-assert.equal(await page.evaluate(() => Number(localStorage.getItem('cs6_best'))), 700);
+assert.deepEqual(await startWave.locator('option').allInnerTexts(), ['WAVE 1', 'WAVE 6', 'WAVE 11']);
+assert.match(await page.locator('.screen-prompt').innerText(), /RESTART AT WAVE 1$/);
+await startWave.selectOption('6');
+assert.match(await page.locator('.screen-prompt').innerText(), /RESTART AT WAVE 6$/);
+await startWave.selectOption('1');
+assert.match(await page.locator('.screen-prompt').innerText(), /RESTART AT WAVE 1$/);
+assert.match(await page.locator('.screen-stats').innerText(), /NEW BEST/); // Survives the redraws above.
+assert.equal(await page.evaluate(() => Number(localStorage.getItem('cs6_best'))), cleared);
 await page.mouse.click(20, 20);
 await page.waitForFunction(() => window.__game.gs.state === 'play');
 assert.equal(await page.evaluate(() => window.__game.gs.wave), 1);
 assert.equal(await page.evaluate(() => window.__game.gs.score), 0);
 await page.evaluate(() => window.__game.hud.onUiAction?.('mainMenu', null, new Event('click')));
 await page.waitForFunction(() => window.__game.gs.state === 'start');
-assert.equal(await page.locator('[data-act="checkpoint"], .checkpoints').count(), 0);
+// Pin wave 11: START SOLO and the retry after death both start there, with score 0.
+await startWave.selectOption('11');
+assert.equal(await page.evaluate(() => localStorage.getItem('cs6_start_wave')), '11');
+assert.match(await page.locator('[data-act="start"]').innerText(), /from wave 11/);
+await page.locator('[data-act="start"]').click();
+assert.deepEqual(await page.evaluate(() => { const g = window.__game.gs; return [g.state, g.wave, g.score]; }), ['play', 11, 0]);
+await page.evaluate(() => { const g = window.__game; g.player.takeDamage(100000); g.gs.deathT = 2; });
+await page.waitForFunction(() => window.__game.gs.state === 'dead');
+assert.match(await page.locator('.screen-prompt').innerText(), /RESTART AT WAVE 11$/);
+await page.mouse.click(20, 20);
+await page.waitForFunction(() => window.__game.gs.state === 'play');
+assert.equal(await page.evaluate(() => window.__game.gs.wave), 11);
+// Unpin on the death screen, so the remaining checks run from wave 1.
+await page.evaluate(() => { const g = window.__game; g.player.takeDamage(100000); g.gs.deathT = 2; });
+await page.waitForFunction(() => window.__game.gs.state === 'dead');
+await startWave.selectOption('1');
+assert.match(await page.locator('.screen-prompt').innerText(), /RESTART AT WAVE 1$/);
+await page.evaluate(() => window.__game.hud.onUiAction?.('mainMenu', null, new Event('click')));
+await page.waitForFunction(() => window.__game.gs.state === 'start');
 await page.locator('[data-act="start"]').click();
 assert.equal(await page.evaluate(() => window.__game.gs.wave), 1);
-console.log('  ok  checkpoints removed; old saves ignored, boss unlocks disabled, pause preserved, retries start at wave 1, best score retained');
+console.log('  ok  checkpoints: saved on boss clear only, pinned start wave used by start and retry, locked waves refused, pause preserved, best score retained');
 
 // Graphics presets reach the renderer live (render/quality.ts: SHADOW_SPEC, VIEW_SCALE), the
 // weapon rig draws at its own 65° FOV, and a shadow-filter change also reaches the enemy

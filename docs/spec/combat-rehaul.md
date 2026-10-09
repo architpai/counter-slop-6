@@ -4,7 +4,11 @@ This change replaces the old loadout, katana controls, rifle sight, face models,
 
 ## Solo run progression
 
-Every new solo run starts at wave 1, including retries after death and starts after returning to the main menu or reloading the page. Checkpoint buttons, boss-wave unlocks, checkpoint persistence and wave-skip entry points have been removed. Old saved checkpoint values are ignored. Pause/resume keeps the current run, and personal-best scores remain saved. This replaces checkpoint behaviour in the older subsystem specifications.
+A solo run starts at the pinned start wave. The default is wave 1. START SOLO, the main-screen click, and the retry after death all use it. Pause/resume keeps the current run, and personal-best scores remain saved.
+
+Checkpoints unlock later start waves. When the player clears a boss wave n (5, 10, 15, …) that is higher than the saved checkpoint, the game stores n in `cs6_checkpoint` and shows the kill feed line "CHECKPOINT · WAVE n+1". The start of a boss wave saves nothing. There is no upper limit.
+
+When a checkpoint is saved, the main screen (play page) and the death screen show a drop-down list "start each run at" with WAVE 1 and one entry for each cleared boss wave: WAVE 6, WAVE 11, WAVE 16, … The selection is the pin: the game stores it in `cs6_start_wave` and uses it for every new solo run until the player changes it. START SOLO then shows "from wave n", and the death prompt shows "TO RESTART AT WAVE n". Each run starts with a full reset and score 0. The `startWave` UI action refuses a wave that is not unlocked, and a stored value that is not unlocked counts as wave 1. There is one personal best for all runs. This replaces checkpoint behaviour in the older subsystem specifications, which saved the checkpoint at the start of the boss wave and showed one button for each checkpoint.
 
 ## Loadout and controls
 

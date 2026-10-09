@@ -20,7 +20,7 @@ export interface UiApi {
 export function createUI(app: App): UiApi {
   const { ctx, gs, lobby, settings, quality } = app;
   const { hud, net } = ctx;
-  let joinCode = '';
+  let joinCode = '', newBest = false;
   const gfx = () => ({ choice: quality.choice, auto: quality.autoPreset, values: { ...quality.values }, fpsCounter: quality.fpsCounter,
     msaaSoft: ctx.renderer?.msaaDepthReadable ?? true });
   const look = () => ({ sens: settings.sens, touchSens: settings.touchSens, touch: ctx.input.usingTouch, acogSens: settings.acogSens, sniperSens: settings.sniperSens,
@@ -57,7 +57,7 @@ export function createUI(app: App): UiApi {
   const isChoice = (value: unknown): value is PresetChoice => value === 'auto' || value === 'custom' || isPreset(value);
 
   const models = {
-    main: () => ({ best: settings.best, mapKey: settings.mapKey, maps: LEVELS, ...look(), ...weapons() }),
+    main: () => ({ best: settings.best, checkpoint: settings.checkpoint, startWave: settings.startWave, mapKey: settings.mapKey, maps: LEVELS, ...look(), ...weapons() }),
     online: () => ({ name: settings.name, mode: lobby.mode, isPublic: lobby.isPublic, status: lobby.status, busy: app.busy, code: joinCode }),
     lobby: () => ({
       code: net.code ?? lobby.code ?? '', mode: lobby.mode, isPublic: lobby.isPublic, isHost: net.isHost, mapKey: lobby.map ?? settings.mapKey, maps: LEVELS, ...weapons(),
@@ -67,9 +67,8 @@ export function createUI(app: App): UiApi {
     menu: () => ({ code: net.code ?? lobby.code ?? '', rows: app.ffa.boardRows(), ...app.ffa.onlineInfo(), ...look(), ...weapons() }),
     matchOn: () => ({ confirmKey: hud.key('confirm'), ...app.ffa.onlineInfo() }),
     dead: () => {
-      const newBest = gs.score > settings.best;
-      if (newBest) { settings.best = gs.score; store.set(SKEY.BEST, gs.score); }
-      return { waves: gs.wave, kills: gs.kills, score: gs.score, best: settings.best, newBest, confirmKey: hud.key('confirm') };
+      if (gs.score > settings.best) { settings.best = gs.score; store.set(SKEY.BEST, gs.score); newBest = true; }
+      return { waves: gs.wave, kills: gs.kills, score: gs.score, best: settings.best, newBest, checkpoint: settings.checkpoint, startWave: settings.startWave, confirmKey: hud.key('confirm') };
     },
     over: () => ({
       youWin: gs.over?.id === (lobby.mode === 'tdm' || lobby.mode === 'flag' ? `team:${lobby.teams[net.id ?? '']}` : net.id),
@@ -79,6 +78,8 @@ export function createUI(app: App): UiApi {
 
   function showScreen(kind: ScreenName): void {
     ctx.input.clearTouch(); ctx.input.touch.enabled = false;
+    // The death screen can redraw (start-wave select); "NEW BEST" must outlive the save in `models.dead`.
+    if (kind === 'dead' && app.screen !== 'dead') newBest = false;
     app.screen = kind;
     switch (kind) {
       case 'main': hud.showScreen({ kind, model: models.main() }); break;
@@ -101,6 +102,7 @@ export function createUI(app: App): UiApi {
 
   const actions: Record<UiAction, (value: string | null, ev: Event) => void> = {
     start: () => app.beginSolo(),
+    startWave: value => { app.setStartWave(Number(value)); redraw(); },
     resume: () => app.resume(),
     training: () => app.beginTraining(),
     online: () => { lobby.status = ''; showScreen('online'); },

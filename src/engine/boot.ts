@@ -35,6 +35,10 @@ export interface Settings {
   mapKey: LevelKey;
   best: number;
   music: boolean;
+  /** Highest boss wave cleared in solo (a multiple of 5); a run can start at any unlocked one + 1. */
+  checkpoint: number;
+  /** The pinned first wave of every new solo run: 1, or the wave after a cleared boss wave. */
+  startWave: number;
   name: string;
   sens: number;
   touchSens: number;
@@ -68,6 +72,7 @@ export interface App {
   pickups: PickupsApi;
   breakables: BreakablesApi;
   addScore(points: number, label?: string | null): void;
+  saveCheckpoint(n: number): void;
   solo: SoloApi;
   training: TrainingApi;
   endFocus(): void;
@@ -79,6 +84,7 @@ export interface App {
   beginCommon(): void;
   beginSolo(): void;
   beginTraining(): void;
+  setStartWave(n: number): void;
   pause(): void;
   resume(): void;
   mainMenu(): void;
@@ -149,6 +155,8 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
   const settings: Settings = {
     mapKey: validKey(store.getStr(SKEY.MAP, 'downtown')),
     best: store.getNum(SKEY.BEST, 0),
+    checkpoint: store.getNum(SKEY.CHECKPOINT, 0),
+    startWave: store.getNum(SKEY.START_WAVE, 1),
     music: store.getStr(SKEY.MUSIC, '1') !== '0',
     name: store.getStr(SKEY.NAME, '').trim().slice(0, 14) || `recruit${randInt(10, 99)}`,
     sens: clamp(store.getNum(SKEY.SENS, 100), 25, 250),
@@ -314,6 +322,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
   app.pickups = createPickups(ctx);
   app.breakables = createBreakables(ctx, app.pickups);
   app.addScore = game.addScore;
+  app.saveCheckpoint = n => { settings.checkpoint = n; store.set(SKEY.CHECKPOINT, n); };
   app.solo = createSolo(app);
   app.training = createTraining(app);
   app.endFocus = app.solo.endFocus;
@@ -361,9 +370,13 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
   app.beginSolo = () => {
     const reset = gs.mode !== 'solo' || gs.state === 'start' || gs.state === 'dead';
     gs.mode = 'solo'; loadLevel(false, settings.mapKey); app.beginCommon();
-    if (reset) { app.resetRun(); app.solo.startWave(devWave); }
+    if (reset) { app.resetRun(); app.solo.startWave(devWave > 1 ? devWave : settings.startWave); }
     gs.state = 'play';
   };
+  // A run can start at wave 1, or at the wave after a cleared boss wave. Anything else is refused.
+  const unlocked = (n: number) => n === 1 || (Number.isInteger(n) && n >= 6 && (n - 1) % 5 === 0 && n - 1 <= settings.checkpoint);
+  if (!unlocked(settings.startWave)) settings.startWave = 1;
+  app.setStartWave = n => { if (unlocked(n)) { settings.startWave = n; store.set(SKEY.START_WAVE, n); } };
   app.beginTraining = () => {
     gs.mode = 'training'; loadLevel(false); app.resetRun(); app.training.reset();
     app.beginCommon(); gs.state = 'play';

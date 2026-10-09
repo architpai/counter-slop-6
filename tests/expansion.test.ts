@@ -39,20 +39,32 @@ function setup() {
     effects: { shake: 0, strokeBurst: noop, tracer: noop, blood: noop, sparks: noop, debris: noop, bloodPool: noop,
       fountain: noop, explosion: noop, particle: noop, bulletImpact: noop, smoke: noop, muzzleFlash: noop },
     audio: new Proxy({}, { get: () => noop }),
-    hud: { setBoss: noop, hitmarker: noop, setModifier: noop, message: vi.fn(), key: () => 'F', tip: noop, setWave: noop, setTimer: noop },
+    hud: { kill: vi.fn(), setBoss: noop, hitmarker: noop, setModifier: noop, message: vi.fn(), key: () => 'F', tip: noop, setWave: noop, setTimer: noop },
     input: { rumble: noop, pressed: () => false },
   } as unknown as Ctx;
   const m = ctx.enemies = new EnemyManager(ctx);
   const pickups = { spawn: noop };
   const props = createBreakables(ctx, pickups as never); ctx.game.breakHit = props.hit;
-  const solo = createSolo({ ctx, gs, pickups, addScore: noop } as unknown as App);
+  const settings = { checkpoint: 0 };
+  const solo = createSolo({ ctx, gs, pickups, addScore: noop, settings, saveCheckpoint: (n: number) => { settings.checkpoint = n; } } as unknown as App);
   const spawn = (type: EnemyKind, pos = new Vector3()) => {
     const e = m.spawn(type, pos); e.state = 'hunt'; e.age = 1; e.body.onGround = !e.stats.flying;
     e.target = player as unknown as Target; e.root.scale.setScalar(e.stats.scale); syncModel(e); return e;
   };
   cleanups.push(() => { m.clear(); world.clear(); });
-  return { ctx, m, player, gs, solo, spawn, props };
+  return { ctx, m, player, gs, solo, spawn, props, settings };
 }
+
+test('a checkpoint is saved when a boss wave is cleared, not when it starts', () => {
+  const { solo, gs, m, ctx, settings } = setup();
+  const clear = (wave: number) => { solo.startWave(wave); m.clear(); gs.queue.length = 0; solo.update(0.016); };
+  solo.startWave(5); expect(settings.checkpoint).toBe(0);
+  clear(4); expect(settings.checkpoint).toBe(0);
+  clear(10); expect(settings.checkpoint).toBe(10);
+  expect(vi.mocked(ctx.hud.kill).mock.lastCall?.[0]).toBe('CHECKPOINT · WAVE 11');
+  clear(5); expect(settings.checkpoint).toBe(10);
+  expect(ctx.hud.kill).toHaveBeenCalledTimes(1);
+});
 
 test('roster keeps unlocking, six bosses repeat at 30 waves, mutation messages avoid boss waves', () => {
   expect(ROSTER.filter(([, wave]) => wave > 15).map(([type]) => type)).toEqual(['smoker', 'parry', 'rubberbander', 'sapper']);
