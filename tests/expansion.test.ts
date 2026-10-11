@@ -46,7 +46,7 @@ function setup() {
   const pickups = { spawn: noop };
   const props = createBreakables(ctx, pickups as never); ctx.game.breakHit = props.hit;
   const settings = { checkpoint: 0 };
-  const solo = createSolo({ ctx, gs, pickups, addScore: noop, settings, saveCheckpoint: (n: number) => { settings.checkpoint = n; } } as unknown as App);
+  const solo = createSolo({ ctx, gs, pickups, addScore: noop, settings, coop: { players: () => 1, active: () => false }, saveCheckpoint: (n: number) => { settings.checkpoint = n; } } as unknown as App);
   const spawn = (type: EnemyKind, pos = new Vector3()) => {
     const e = m.spawn(type, pos); e.state = 'hunt'; e.age = 1; e.body.onGround = !e.stats.flying;
     e.target = player as unknown as Target; e.root.scale.setScalar(e.stats.scale); syncModel(e); return e;

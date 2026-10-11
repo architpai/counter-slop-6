@@ -24,7 +24,7 @@ interface Welcome { hostId: string; code: string; isPublic: boolean }
 interface Attempt { conn: DataConnection; id: string; code: string; failed: boolean; welcome: Welcome | null }
 
 const HOST = new Set(['lobby', 'leave', 'start', 'end', 'backtolobby', 'score', 'pickup', 'taken', 'refused', 'teamstate', 'coop']);
-const REQUEST = new Set(['startreq', 'take', 'teamreq']);
+const REQUEST = new Set(['startreq', 'take', 'teamreq', 'cpts']);
 const ADDRESSED = new Set(['pdmg', 'headshot', 'parry', 'cut']);
 const BROADCAST = new Set(['ps', 'shots', 'pdead', 'nade', 'brk']);
 const TYPES = new Set(['welcome', ...HOST, ...REQUEST, ...ADDRESSED, ...BROADCAST]);
@@ -78,6 +78,7 @@ function validPayload(type: string, d: unknown): boolean {
       optional(d, 'broken', a => array(a) && a.length <= 4096 && a.every(integer));
     case 'teamstate': return validTeamMatch(d);
     case 'coop': return validCoopState(d);
+    case 'cpts': return fields(d, ['n']) && integer(d.n) && d.n >= 1 && d.n <= 100000;
     case 'end': return fields(d, ['id', 'name']) && peerId(d.id) && text(d.name, 14);
     case 'score': return rows(d, true);
     case 'ps': return fields(d, ['round', 'state']) ? integer(d.round) && array(d.state) && validPayload('ps', d.state) : array(d) && [8, 11, 14].includes(d.length) &&

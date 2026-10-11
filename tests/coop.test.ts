@@ -265,3 +265,95 @@ test('a co-op lobby refuses a start with more than four players', () => {
   expect(host.gs.state).toBe('lobby');
   expect(host.lobby.status).toContain('4 players');
 });
+
+// ---------------------------------------------------------------- waves
+
+/** Wave rolls without their random modifier, so a count is the formula alone. */
+const steady = (): void => { vi.spyOn(Math, 'random').mockReturnValue(0); };
+
+test.each([[1, 18, 10], [2, 27, 13], [4, 45, 19]])('wave 8 for %i players queues %i enemies with %i alive together', (players, queued, alive) => {
+  steady();
+  const t = party(players), { host } = t;
+  host.settings.startWave = 8;
+  t.start();
+  expect(host.gs.wave).toBe(8);
+  expect(host.gs.queue.length).toBe(queued);
+  expect(host.gs.maxAlive).toBe(alive);
+  // Ammo and health at the wave start grow with the party, in the solo ratio.
+  expect(host.app.pickups.items.length).toBe(7 + 3 * (players - 1));
+});
+
+test('the count alive together stops at the hard cap, and the spawn interval shortens with the party', () => {
+  steady();
+  const t = party(4), { host } = t;
+  host.settings.startWave = 20;
+  t.start();
+  expect(host.gs.maxAlive).toBe(COOP.ALIVE_CAP);
+  t.run(1.1);
+  expect(host.enemies.alive).toBe(1);
+  expect(host.gs.spawnT).toBeLessThanOrEqual(0.7 / 1.75);
+  expect(host.gs.spawnT).toBeGreaterThan(0.2);
+});
+
+test('a boss has more health for each added player, and normal enemies do not', () => {
+  steady();
+  const t = party(2), { host } = t;
+  host.settings.startWave = 5;
+  t.start(); t.run(3);
+  const boss = host.enemies.list.find(e => e.stats.boss), other = host.enemies.list.find(e => !e.stats.boss);
+  expect(boss, 'the boss is the first spawn of a boss wave').toBeDefined();
+  expect(boss!.maxHp).toBe(Math.round(boss!.stats.hp * 1.6));
+  expect(other!.maxHp).toBe(other!.stats.hp);
+});
+
+test('spawn points stay away from every living player, not only the host', () => {
+  const t = party(2), { host, ann } = t;
+  t.start();
+  // Ann stands on a spawn point; her state packet moves her avatar on the host.
+  ann.player.body.pos.set(30, 0, -20);
+  t.run(0.2);
+  for (let i = 0; i < 40; i++) {
+    const spot = host.app.solo.spawnPosition('grunt');
+    expect(spot.distanceTo(ann.player.body.pos)).toBeGreaterThan(14);
+    expect(spot.distanceTo(host.player.body.pos)).toBeGreaterThan(14);
+  }
+});
+
+test('clients read wave start, wave clear and the next wave from the host state', () => {
+  steady();
+  const t = party(2), { host, ann } = t;
+  host.settings.startWave = 5;
+  t.start(); ann.player.hp = 50;
+  expect(ann.gs.wave).toBe(5);
+  expect(ann.hud.message).toHaveBeenCalledWith('WAVE 5', expect.stringContaining('IS COMING'), 3);
+  expect(ann.player.grenades).toBe(2);
+  expect(ann.hud.setWave).toHaveBeenLastCalledWith(5, host.gs.queue.length);
+  // The wave is cleared on the host: nothing queued, nothing alive.
+  host.gs.queue.length = 0;
+  t.run(0.1);
+  expect(host.gs.intermission).toBeGreaterThan(0);
+  expect(ann.gs.intermission).toBeGreaterThan(0);
+  expect(ann.hud.message).toHaveBeenCalledWith('WAVE 5 CLEARED', expect.any(String), 2.5);
+  expect(ann.player.hp, 'the wave-clear heal reaches the client').toBe(90);
+  expect(ann.app.saveCheckpoint, 'a cleared boss wave is a checkpoint for each player').toHaveBeenCalledWith(5);
+  expect(ann.hud.setTimer).toHaveBeenLastCalledWith(expect.stringContaining('next wave in'));
+  t.run(8.2);
+  expect(host.gs.wave).toBe(6);
+  expect(ann.gs.wave).toBe(6);
+  expect(ann.hud.message).toHaveBeenCalledWith('WAVE 6', expect.any(String), 2.6);
+  expect(ann.player.grenades).toBe(3);
+  expect(t.hub.dropped).toEqual([]);
+});
+
+test('points from every peer go into one team score', () => {
+  steady();
+  const t = party(3), { host, ann } = t, bob = t.peers[2]!;
+  t.start();
+  ann.ctx.game.addScore(100); bob.ctx.game.addScore(40); host.ctx.game.addScore(7);
+  expect(ann.gs.score, 'a client sees its own points at once').toBe(100);
+  t.run(0.6);
+  for (const p of t.peers) expect(p.gs.score, p.id).toBe(147);
+  expect(validEnvelope({ t: 'cpts', d: { n: 0 }, relay: false })).toBe(false);
+  expect(validEnvelope({ t: 'cpts', d: { n: 100001 }, relay: false })).toBe(false);
+  expect(t.hub.dropped).toEqual([]);
+});

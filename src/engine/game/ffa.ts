@@ -404,11 +404,12 @@ export function createFFA(app: App): FfaApi {
     faceCenter();
     player.shieldT = late ? 2 : 0;
     app.beginCommon(); gs.state = 'play';
-    if (run) app.coop.begin(run, index ?? 0);
     refreshScoreHud();
     const choice = ONLINE_MODES.find(m => m.key === mode()) ?? ONLINE_MODES[0];
     hud.message(choice.name.toUpperCase(), late ? 'you joined a match in progress' : choice.blurb, 3);
     if (teamState) sendPlayerState();
+    // After the mode message: the first wave's own message replaces it on the host.
+    if (run) app.coop.begin(run, index ?? 0);
     hud.tip(ctx.input.usingTouch ? 'Open Menu for the scoreboard. The match keeps running.' : `hold ${hud.key('score')} for the scoreboard`, 5);
     window.clearTimeout(timer);
     timer = window.setTimeout(() => {
@@ -576,6 +577,7 @@ export function createFFA(app: App): FfaApi {
       const player = ctx.player;
       if (player !== null) { net.broadcast('shots', { k: player.weapon.kind, e: shotQueue }); shotQueue = []; }
     }
+    if (coop()) app.coop.update(dt);
     if (gs.teamMatch) {
       const elapsed = Math.max(0, t - lastClock); lastClock = t;
       updateTeam(elapsed);

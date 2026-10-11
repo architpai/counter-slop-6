@@ -27,7 +27,7 @@ All times are seconds. All scale values are initial playtest values, not measure
 
 | Value | Solo | Co-op |
 |---|---|---|
-| Enemies in a wave | `min(4 + 1.7n, 28)`, boss wave `min(6 + n, 14)` | solo × `(1 + 0.5x)`, rounded |
+| Enemies in a wave | `min(4 + 1.7n, 28)` rounded, boss wave `min(6 + n, 14)` | solo count × `(1 + 0.5x)`, rounded |
 | Enemies alive together | `min(4 + floor(0.8n), 16)`, SWARM `+3` and cap 20 | solo `+ 3x`, hard cap 24 |
 | Spawn interval | `max(0.7, 2.2 − 0.13n)` | solo ÷ `(1 + 0.25x)` |
 | Boss health | type health × endless factor | solo × `(1 + 0.6x)` |

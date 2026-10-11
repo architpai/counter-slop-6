@@ -252,7 +252,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     hitstop(d, s) { gs.hitstopT = Math.max(gs.hitstopT, d); gs.hitstopScale = s; },
     addScore(points, label = null) {
       const awarded = Math.round(points * (1 + 0.25 * Math.min(gs.combo, 9)));
-      gs.score += awarded;
+      gs.score += awarded; app.coop.points(awarded);
       if (label) hud.kill(label, awarded);
       hud.setScore(gs.score, gs.combo);
     },
@@ -541,6 +541,8 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
       app.pickups.update(sdt);
       app.ffa.update(dt, nowMs / 1000);
       if (gs.state === 'play' && gs.mode === 'solo') app.solo.update(sdt);
+      // Co-op: the host runs the wave director, also while its own player is down.
+      else if (app.coop.directing()) app.solo.update(dt);
       if (gs.state === 'play' && gs.mode === 'training') app.training.update(sdt);
       if (game.isOnline() && !app.coop.active()) app.pickups.arenaUpdate(dt);
       if (gs.comboT > 0) { gs.comboT -= sdt; if (gs.comboT <= 0) { gs.combo = 0; hud.setScore(gs.score, 0); } }
