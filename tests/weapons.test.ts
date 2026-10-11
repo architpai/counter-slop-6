@@ -79,7 +79,7 @@ const gunAt = (i: number): Gun => {
   if (!(weapon instanceof Gun)) throw new Error(`slot ${i} is not a gun`);
   return weapon;
 };
-const r4c = gunAt(0), rifle = gunAt(1), shotgun = gunAt(2), sniper = gunAt(3), pistol = gunAt(4);
+const r4c = gunAt(0), rifle = gunAt(1), shotgun = gunAt(2), sniper = gunAt(3), pistol = gunAt(4), lmg = gunAt(5);
 const melee = new Melee(engineCtx, enginePlayer);
 const all = [...loadout, revolver, melee];
 const step = (weapon: { animate(st: WeaponState, dt: number): void }, duration: number, state: WeaponState = neutral) => {
@@ -91,12 +91,12 @@ const draw = (weapon: { equip(): void; animate(st: WeaponState, dt: number): voi
 afterAll(() => { for (const weapon of all) weapon.dispose(); });
 
 test('loadout, view models and aim poses', () => {
-  assert(loadout.map(w => w.kind).join(',') === 'r4c,rifle,shotgun,sniper,pistol', 'Loadout keeps five guns and independent melee');
+  assert(loadout.map(w => w.kind).join(',') === 'r4c,rifle,shotgun,sniper,pistol,lmg', 'Loadout keeps six guns and independent melee');
   assert(melee instanceof Melee && melee.spreadPx === 4 && !melee.isGun, 'Melee exposes its independent state');
-  const muzzleZ: Record<GunKind, number> = { r4c: -1.16, rifle: -0.96, pistol: -0.42, shotgun: -1.09, sniper: -1.60, revolver: -0.40 };
+  const muzzleZ: Record<GunKind, number> = { r4c: -1.16, rifle: -0.96, pistol: -0.42, shotgun: -1.09, sniper: -1.60, lmg: -1.32, revolver: -0.40 };
   const expected: Record<GunKind, number[]> = { r4c: [30, 150, 300, 28, 38, 0.08], rifle: [30, 150, 300, 22, 38, 0.075], pistol: [15, 90, 180, 40, 62, 0.18], shotgun: [6, 36, 72, 19, 68, 0.78],
-    sniper: [5, 25, 50, 150, 20, 0.20], revolver: [6, 36, 72, 62, 52, 0.30] };
-  for (const gun of [r4c, rifle, pistol, shotgun, sniper, revolver]) {
+    sniper: [5, 25, 50, 150, 20, 0.20], lmg: [100, 200, 300, 26, 58, 0.085], revolver: [6, 36, 72, 62, 52, 0.30] };
+  for (const gun of [r4c, rifle, pistol, shotgun, sniper, lmg, revolver]) {
     const stats = GUN_STATS[gun.kind], actual = [gun.mag, gun.reserve, stats.maxReserve, stats.damage, gun.adsFov, stats.fireInterval];
     assert(actual.every((v, i) => near(v, must(expected[gun.kind][i], 'expected value'))), `${gun.kind} uses the documented combat values`);
     assert(!gun.root.visible && gun.root.scale.toArray().every(v => v === 0.46), `${gun.kind} starts hidden at scale 0.46`);
@@ -291,6 +291,30 @@ test('R4-C holds automatic fire at 80 ms and reloads at 2.2 seconds', () => {
   r4c.animate({ ...neutral, fire: true }, 0);
   expect(r4c.mag).toBe(29);
   r4c.resetAmmo(); r4c.unequip();
+});
+
+test('the LMG fires a 100-round box at 85 ms a shot and takes 3.6 seconds to change it', () => {
+  lmg.resetAmmo(); lmg.equip(); calls.length = 0;
+  expect([lmg.mag, lmg.reserve, lmg.scope]).toEqual([100, 200, false]);
+  step(lmg, 0.5, fire);
+  expect(lmg.mag, 'no shot before the 0.65 s draw is 85 % done').toBe(100);
+  step(lmg, 0.2, neutral);
+  expect(lmg.drawn).toBe(true);
+  // A held trigger empties the box with no reload: 100 shots, 8.5 s.
+  lmg.resetAmmo(); calls.length = 0;
+  step(lmg, 100 * 0.085 - 0.02, { ...fire, firePressed: false });
+  expect(lmg.mag).toBe(0);
+  expect(named('tracer')).toHaveLength(100);
+  lmg.startReload();
+  step(lmg, 3.59, neutral);
+  expect(lmg.reloading).toBe(true);
+  step(lmg, 0.02, neutral);
+  expect([lmg.mag, lmg.reserve, lmg.reloading]).toEqual([100, 100, false]);
+  // The last box is what the reserve has left.
+  lmg.reserve = 40; lmg.mag = 0; lmg.startReload();
+  step(lmg, 3.61, neutral);
+  expect([lmg.mag, lmg.reserve]).toEqual([40, 0]);
+  lmg.resetAmmo(); lmg.unequip();
 });
 
 test('automatic rate of fire is frame-rate independent', () => {

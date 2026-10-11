@@ -13,7 +13,7 @@ const DARK = TONE_HEX[TONE.DARK], ACCENT = TONE_HEX[TONE.ACCENT];
 export type FigureKind = 'humanoid' | 'blob' | 'flyer';
 export type BlobKind = 'bomber' | 'hitbox' | 'lagspike';
 export type HatKind = 'none' | 'cap' | 'band' | 'helmet' | 'hood' | 'crown';
-export type WeaponPropKind = 'none' | 'r4c' | 'rifle' | 'pistol' | 'shotgun' | 'sniper' | 'blade' | 'knife' | 'hammer';
+export type WeaponPropKind = 'none' | 'r4c' | 'rifle' | 'pistol' | 'shotgun' | 'sniper' | 'lmg' | 'blade' | 'knife' | 'hammer';
 export type ClownMask = Exclude<TacticalKind, 'player'>;
 
 export interface FigureOpts {
@@ -420,6 +420,15 @@ function weaponProp(kind: WeaponPropKind, color: number): THREE.Group {
     barrel(0.025, 0.95, 0, 0.05, 0.72);
     addBox(0.06, 0.07, 0.22, 0, 0.13, 0.06, DARK);
     addBox(0.04, 0.13, 0.11, 0, -0.08, 0.02, DARK);
+  } else if (kind === 'lmg') {
+    // A deep receiver, the box under it, a long shrouded barrel.
+    addBox(0.12, 0.17, 0.46, 0, 0.03, 0.10, DARK);
+    addBox(0.105, 0.13, 0.26, 0, 0.03, 0.44, DARK);
+    barrel(0.03, 0.22, 0, 0.06, 0.66);
+    addBox(0.17, 0.22, 0.19, -0.015, -0.16, 0.20);
+    addBox(0.085, 0.13, 0.26, 0, 0.01, -0.24, DARK);
+    addBox(0.095, 0.19, 0.035, 0, -0.01, -0.38, DARK);
+    addBox(0.06, 0.15, 0.075, 0, -0.10, -0.03, DARK).rotation.x = -0.3;
   } else if (kind === 'r4c') {
     addBox(0.10, 0.14, 0.44, 0, 0.025, 0.12, DARK);
     addBox(0.10, 0.11, 0.32, 0, 0.03, 0.44, DARK);

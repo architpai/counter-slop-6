@@ -122,27 +122,27 @@ test('melee is independent of all five guns, empty ammo, aim and reload', () => 
   expect(p.weapon.kind).toBe('pistol');
 });
 
-test('five digit slots, Digit6 melee and wheel wrap use the same loadout order', () => {
+test('six digit slots and wheel wrap use the same loadout order, and melee keeps the slot', () => {
   const { p, frame, key } = setup();
-  const kinds = ['r4c', 'rifle', 'shotgun', 'sniper', 'pistol'];
+  const kinds = ['r4c', 'rifle', 'shotgun', 'sniper', 'pistol', 'lmg'];
   for (const [slot, kind] of kinds.entries()) {
     key(`Digit${slot + 1}`, true); frame(); key(`Digit${slot + 1}`, false); frame();
     expect(p.wi).toBe(slot);
     expect(p.weapon.kind).toBe(kind);
     expect(p.melee.active).toBe(false);
   }
-  key('Digit6', true); frame();
-  expect(p.wi).toBe(4);
+  key('KeyV', true); frame();
+  expect(p.wi).toBe(5);
   expect(p.melee.active).toBe(true);
-  key('Digit6', false);
+  key('KeyV', false);
   for (let i = 0; i < 60; i++) frame();
   window.dispatchEvent(new WheelEvent('wheel', { deltaY: 1 })); frame();
   expect(p.wi).toBe(0);
   expect(p.weapon.kind).toBe('r4c');
   frame();
   window.dispatchEvent(new WheelEvent('wheel', { deltaY: -1 })); frame();
-  expect(p.wi).toBe(4);
-  expect(p.weapon.kind).toBe('pistol');
+  expect(p.wi).toBe(5);
+  expect(p.weapon.kind).toBe('lmg');
 });
 
 test('holding melee guards without stealing aim, and death cancels pending contact', () => {

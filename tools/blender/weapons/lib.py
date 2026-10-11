@@ -324,6 +324,22 @@ def cut(target, *cutters, union=False):
     return target
 
 
+def weld(obj, distance=1e-5):
+    """
+    Merge vertices closer than `distance` and drop the edges and faces that
+    leaves empty. An exact boolean can leave slivers a few microns long; the
+    bevel modifier then writes vertices at 1e15 m (the LMG's flash-hider slots).
+    """
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=distance)
+    bmesh.ops.dissolve_degenerate(bm, edges=bm.edges, dist=distance)
+    bm.to_mesh(obj.data)
+    bm.free()
+    obj.data.update()
+    return obj
+
+
 def join(name, objects, parent=None):
     """Join meshes into one object named `name` (their materials kept per face)."""
     objects = [o for o in objects if o is not None]
@@ -756,15 +772,22 @@ def _fcurves(action):
 def _gpu(scene):
     scene.render.engine = 'CYCLES'
     prefs = bpy.context.preferences.addons['cycles'].preferences
-    try:
-        prefs.compute_device_type = 'METAL'
+    scene.cycles.device = 'CPU'
+    # Apple's GPUs first, then an NVIDIA card (the Windows build machine); a build without one bakes on the CPU.
+    # CYCLES_DEVICE=CPU (or OPTIX, CUDA, METAL) picks one: a card another job has filled bakes black.
+    wanted = os.environ.get('CYCLES_DEVICE', '').upper()
+    for kind in ([wanted] if wanted else ['METAL', 'OPTIX', 'CUDA']):
+        try:
+            prefs.compute_device_type = kind
+        except (TypeError, ValueError):
+            continue
         prefs.get_devices()
-        gpus = [d for d in prefs.devices if d.type == 'METAL']
+        if not any(d.type == kind for d in prefs.devices):
+            continue
         for d in prefs.devices:
-            d.use = d.type == 'METAL'
-        scene.cycles.device = 'GPU' if gpus else 'CPU'
-    except (TypeError, ValueError):
-        scene.cycles.device = 'CPU'
+            d.use = d.type == kind
+        scene.cycles.device = 'GPU'
+        break
     scene.cycles.use_denoising = False
 
 
@@ -861,6 +884,8 @@ def bake(name, objects, opts):
         return _pixels(image, size)[:, :, :3]
 
     albedo = np.clip(emit('ALBEDO'), 0, 1)
+    if float(albedo.max()) <= 0:
+        raise RuntimeError(f'{name}: the bake came back black (a GPU out of memory does that); set CYCLES_DEVICE=CPU')
     rough = np.clip(emit('ROUGH')[:, :, 0], 0, 1)
     metal = np.clip(emit('METAL')[:, :, 0], 0, 1)
     for mat in materials:
@@ -948,6 +973,9 @@ def assemble(weapons):
         for obj in w.parts.values():
             if obj.type == 'MESH':
                 apply_all(obj)
+                # A modifier on a degenerate mesh can write garbage far away; it must not reach a bake or the glb.
+                if any(abs(c) > 10 for v in obj.data.vertices for c in v.co):
+                    raise ValueError(f'{obj.name}: a vertex is more than 10 m out; weld the piece before its bevel (lib.weld)')
         w.rest = {o.name: o.matrix_basis.copy() for o in [w.root, *w.root.children_recursive]}
         _write_clips(w)
 

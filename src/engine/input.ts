@@ -8,7 +8,7 @@ export type InputDevice = 'keyboard' | 'gamepad' | 'touch';
  */
 export type Action =
   | 'forward' | 'back' | 'left' | 'right' | 'jump' | 'sprint' | 'crouch' | 'reload'
-  | 'grapple' | 'melee' | 'slot1' | 'slot2' | 'slot3' | 'slot4' | 'slot5' | 'pause'
+  | 'grapple' | 'melee' | 'slot1' | 'slot2' | 'slot3' | 'slot4' | 'slot5' | 'slot6' | 'pause'
   | 'confirm' | 'grenade' | 'dash' | 'music' | 'talk' | 'score' | 'fire' | 'aim'
   | 'nextWeapon' | 'prevWeapon';
 
@@ -18,7 +18,7 @@ const KEYS: Record<string, Action> = {
   Space: 'jump', ShiftLeft: 'sprint', ShiftRight: 'sprint',
   ControlLeft: 'crouch', KeyC: 'crouch', KeyR: 'reload',
   KeyQ: 'grapple', KeyE: 'grapple', KeyF: 'melee', KeyV: 'melee',
-  Digit1: 'slot1', Digit2: 'slot2', Digit3: 'slot3', Digit4: 'slot4', Digit5: 'slot5', Digit6: 'melee',
+  Digit1: 'slot1', Digit2: 'slot2', Digit3: 'slot3', Digit4: 'slot4', Digit5: 'slot5', Digit6: 'slot6',
   Escape: 'pause', KeyP: 'pause', Enter: 'confirm', KeyG: 'grenade',
   KeyX: 'dash', AltLeft: 'dash', KeyM: 'music', KeyT: 'talk', Tab: 'score',
 };

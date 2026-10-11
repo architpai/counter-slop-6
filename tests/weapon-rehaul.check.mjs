@@ -81,7 +81,7 @@ try {
   await page.evaluate(() => window.rehaulFrame(60));
   assert.equal(await page.evaluate(() => window.__game.player.weapon.root.visible), true);
 
-  for (const [key, kind] of [['1', 'r4c'], ['2', 'rifle'], ['3', 'shotgun'], ['4', 'sniper'], ['5', 'pistol']]) {
+  for (const [key, kind] of [['1', 'r4c'], ['2', 'rifle'], ['3', 'shotgun'], ['4', 'sniper'], ['5', 'pistol'], ['6', 'lmg']]) {
     await page.keyboard.down(key); await page.evaluate(() => window.rehaulFrame(60)); await page.keyboard.up(key);
     assert.equal(await page.evaluate(() => window.__game.player.weapon.kind), kind);
     await shot(kind);
@@ -127,5 +127,5 @@ try {
     await shot(`mask-${kind}`);
   }
   assert.deepEqual(errors, []);
-  console.log('OK R4-C and MP5/ACOG, independent melee, five gun slots, wheel wrap, sniper scope, semiauto pistol and 10 mask portraits');
+  console.log('OK R4-C and MP5/ACOG, independent melee, six gun slots, wheel wrap, sniper scope, semiauto pistol and 10 mask portraits');
 } finally { await browser.close(); }

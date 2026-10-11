@@ -14,7 +14,7 @@ import type { LoadTexture, SetMaps } from './textures';
  * the Textures setting shows. Made by `tools/weapons/build.mjs` from the
  * Blender scripts in `tools/blender/weapons/`. Low loads none of it.
  */
-export const WEAPON_SETS = ['hands', 'optics', 'r4c', 'mp5', 'shotgun', 'sniper', 'pistol', 'knife'] as const;
+export const WEAPON_SETS = ['hands', 'optics', 'r4c', 'mp5', 'shotgun', 'sniper', 'lmg', 'pistol', 'knife'] as const;
 export type WeaponSet = (typeof WEAPON_SETS)[number];
 export const WEAPONS_GLB = '/models/weapons.glb';
 

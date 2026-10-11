@@ -22,7 +22,7 @@ const PS_INTERVAL = 0.05;
 // Host trusts a `take` only within this radius of the sender's avatar. Generous
 // vs the 1.5 m local collect: remotes render ~80 ms behind. ponytail: shrink if stealable.
 const TAKE_RANGE = 4;
-const HOW: Record<string, string> = { r4c: 'R4-C', rifle: 'MP5', pistol: 'pistol', shotgun: 'shotgun', sniper: 'sniper', melee: 'knife', grenade: 'grenade', deflect: 'their own bullet' };
+const HOW: Record<string, string> = { r4c: 'R4-C', rifle: 'MP5', pistol: 'pistol', shotgun: 'shotgun', sniper: 'sniper', lmg: 'LMG', melee: 'knife', grenade: 'grenade', deflect: 'their own bullet' };
 
 /** Most one `pdmg` packet may claim per source: a point-blank headshot with every pellet. */
 const PVP_CAP: Record<string, number> = { melee: MELEE_PVP_DAMAGE, grenade: GRENADE_PVP_MAX };
