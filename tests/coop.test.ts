@@ -26,9 +26,12 @@ interface Mail { to: string; type: string; data: unknown; from: string }
  */
 function makeHub() {
   const nets = new Map<string, ReturnType<typeof join>>();
+  /** Peers with a connection to the host. A peer outside it hears nothing. */
+  const linked = new Set(['host']);
   const queue: Mail[] = [], dropped: string[] = [];
   const post = (envelope: Record<string, unknown>, mail: Omit<Mail, 'data'>, data: unknown): void => {
     if (!validEnvelope(envelope)) { dropped.push(mail.type); return; }
+    if (!linked.has(mail.to) || !linked.has(mail.from)) return;
     queue.push({ ...mail, data: JSON.parse(JSON.stringify(data)) as unknown });
   };
   function join(id: string, isHost: boolean) {
@@ -72,7 +75,7 @@ function makeHub() {
     }
     return seen;
   }
-  return { join, flush, dropped, queue };
+  return { join, flush, dropped, queue, linked };
 }
 
 const cleanups: (() => void)[] = [];
@@ -150,7 +153,8 @@ function makePeer(hub: ReturnType<typeof makeHub>, id: string, ids: string[], la
     input: { rumble: noop, pressed: () => false, down: () => false, locked: true, usingGamepad: true, usingTouch: false, exitLock: noop, requestLock: noop },
   } as unknown as Ctx;
   const enemies = ctx.enemies = new EnemyManager(ctx);
-  const lobby = { mode: 'coop' as const, teams: {}, players: new Map(ids.map(pid => [pid, pid])), hostId: 'host', code: 'ABCDE', isPublic: false, status: '', map: 'downtown' };
+  // The host's lobby fills through the join path; a client's comes with the host's lobby message.
+  const lobby = { mode: 'coop' as const, teams: {}, players: new Map((isHost ? ['host'] : ids).map(pid => [pid, pid])), hostId: 'host', code: 'ABCDE', isPublic: false, status: '', map: 'downtown' };
   const settings = { name: id, mapKey: 'downtown', startWave: 1, checkpoint: 0 };
   const app = {
     ctx, gs, lobby, scores: new Map(), settings, busy: false, screen: null,
@@ -172,13 +176,13 @@ function makePeer(hub: ReturnType<typeof makeHub>, id: string, ids: string[], la
   return { id, app, ctx, gs, net, lobby, enemies, player, remotes, hud, screens, loads, damage, settings };
 }
 
-/** A lobby of `count` peers, the first of them the host. */
-function party(count = 2) {
+/** `count` peers, the first of them the host, with `inLobby` of them in the lobby at the start. */
+function party(count = 2, inLobby = count) {
   const hub = makeHub(), land = yard(), ids = ['host', 'ann', 'bob', 'cat'].slice(0, count);
   const peers = ids.map(id => makePeer(hub, id, ids, land));
   // The real join path: the host adds each avatar and tells the lobby.
-  for (const id of ids.slice(1)) (peers[0]!.net.onPeerJoin as (id: string, meta: { name: string }) => void)(id, { name: id });
-  hub.flush();
+  const join = (id: string): void => { hub.linked.add(id); (peers[0]!.net.onPeerJoin as (id: string, meta: { name: string }) => void)(id, { name: id }); hub.flush(); };
+  for (const id of ids.slice(1, inLobby)) join(id);
   let time = 100;
   /** One frame on every peer, the way `boot` steps a live match, then the mail. */
   const tick = (dt = 0.05): void => {
@@ -193,7 +197,7 @@ function party(count = 2) {
   };
   const run = (seconds: number, dt = 0.05): void => { for (let t = 0; t < seconds; t += dt) tick(dt); };
   const start = (): void => { peers[0]!.app.ffa.hostStart(); hub.flush(); };
-  return { hub, peers, host: peers[0]!, ann: peers[1]!, tick, run, start };
+  return { hub, peers, host: peers[0]!, ann: peers[1]!, tick, run, start, join };
 }
 
 // ---------------------------------------------------------------- rules
@@ -548,4 +552,161 @@ test('leaving a run turns the mirror off, so solo enemies think again', () => {
   ann.app.ffa.leave();
   expect(ann.enemies.mirror).toBe(false);
   expect(ann.app.coop.state).toBeNull();
+});
+
+// ---------------------------------------------------------------- down, return, end
+
+/** A run whose first wave has nothing left to spawn, so the wave clears as soon as the test lets it. */
+function quietWave(count = 2) {
+  steady();
+  const t = party(count);
+  t.start();
+  const queued = t.host.gs.queue.splice(0);
+  const clearWave = (): void => {
+    t.host.gs.queue.length = 0;
+    for (const e of [...t.host.enemies.list]) if (e.alive) t.host.enemies.kill(e, { source: 'fall' });
+    t.run(0.15);
+  };
+  return { ...t, clearWave, hold: () => { t.host.gs.queue.push(...queued); } };
+}
+
+test('a player who goes down in a wave watches a teammate and returns at the wave clear', () => {
+  const t = quietWave(), { host, ann } = t;
+  t.hold();
+  ann.player.body.pos.set(9, 0, 9);
+  ann.player.takeDamage(999);
+  expect(ann.gs.state).toBe('dying');
+  t.run(0.2);
+  expect(host.app.coop.state!.dead).toEqual(['ann']);
+  expect(ann.app.coop.isDown('ann')).toBe(true);
+  expect(host.hud.kill).toHaveBeenCalledWith('ann is down');
+  expect(host.app.scores.get('ann')?.deaths).toBe(1);
+  expect(host.remotes.get('ann')!.alive, 'enemies ignore a player who is down').toBe(false);
+  // No timed respawn in a wave.
+  t.run(5);
+  expect(ann.gs.state).toBe('dying');
+  expect(ann.hud.message).toHaveBeenCalledWith('DOWN', 'spectating host · back at the wave clear', 1.1);
+  expect(host.gs.over, 'one player up keeps the run alive').toBeNull();
+  t.clearWave();
+  expect(host.app.coop.state!.dead).toEqual([]);
+  expect(ann.gs.state).toBe('play');
+  expect(ann.player.alive).toBe(true);
+  expect(ann.player.hp).toBe(ann.player.maxHp);
+  expect(ann.player.body.pos.toArray(), 'back at the start slot').toEqual([1.6, 0, 15]);
+  expect(t.hub.dropped).toEqual([]);
+});
+
+test('the host keeps the waves going while its own player is down, and returns at the wave clear', () => {
+  const t = quietWave(), { host, ann } = t;
+  t.hold();
+  host.player.takeDamage(999);
+  expect(host.gs.state).toBe('dying');
+  expect(host.app.coop.directing()).toBe(true);
+  t.run(1.5);
+  expect(host.enemies.alive, 'the director still spawns').toBeGreaterThan(0);
+  expect(ann.app.coop.state!.dead).toEqual(['host']);
+  expect(ann.hud.kill).toHaveBeenCalledWith('host is down');
+  t.clearWave();
+  expect(host.gs.state).toBe('play');
+  expect(host.player.alive).toBe(true);
+});
+
+test('a player who goes down between waves returns on a short timer and does not end the run', () => {
+  const t = quietWave(), { host, ann } = t;
+  t.clearWave();
+  expect(host.gs.intermission).toBeGreaterThan(0);
+  ann.player.takeDamage(999); host.player.takeDamage(999);
+  t.run(0.3);
+  expect(host.app.coop.state!.dead).toEqual([]);
+  expect(host.gs.over).toBeNull();
+  t.run(COOP.RESPAWN);
+  expect(ann.gs.state).toBe('play');
+  expect(host.gs.state).toBe('play');
+  expect(host.app.scores.get('ann')?.deaths).toBe(1);
+});
+
+test('the run ends when every player is down in the same wave, and all return to the lobby', () => {
+  const t = quietWave(), { host, ann } = t;
+  t.hold();
+  ann.ctx.game.addScore(250);
+  t.run(0.6);
+  ann.player.takeDamage(999); t.run(0.2);
+  expect(host.gs.over).toBeNull();
+  host.player.takeDamage(999); t.hub.flush();
+  for (const p of t.peers) {
+    expect(p.gs.state, p.id).toBe('over');
+    expect(p.gs.over).toEqual({ id: 'coop', name: 'WAVE 1' });
+    expect(p.screens.at(-1)).toBe('over');
+    expect(p.app.coop.info()).toEqual({ mode: 'coop', status: 'WAVE 1 · team score 250' });
+    expect(p.app.ffa.boardRows().map(row => [row.id, row.deaths]).sort()).toEqual([['ann', 1], ['host', 1]]);
+  }
+  host.app.ffa.updateOver(8.1); t.hub.flush();
+  for (const p of t.peers) {
+    expect(p.gs.state, p.id).toBe('lobby');
+    expect(p.app.coop.state).toBeNull();
+    expect(p.enemies.mirror).toBe(false);
+  }
+  expect(host.net.accepting).toBe(true);
+  expect(t.hub.dropped).toEqual([]);
+});
+
+test('a player who leaves is taken off the down list; the run ends only if no one who stays is up', () => {
+  const t = quietWave(3), { host, ann } = t, bob = t.peers[2]!;
+  const leave = (id: string): void => { (host.net.onPeerLeave as (id: string) => void)(id); t.hub.flush(); };
+  t.hold();
+  ann.player.takeDamage(999); t.run(0.2);
+  expect(host.app.coop.state!.dead).toEqual(['ann']);
+  leave('ann');
+  expect(host.app.coop.state!.dead).toEqual([]);
+  expect(host.gs.over).toBeNull();
+  expect(host.app.coop.players(), 'the next wave is scaled for the players who stay').toBe(2);
+  // The host goes down, then the last player who is up leaves.
+  host.player.takeDamage(999); t.run(0.2);
+  expect(host.gs.over).toBeNull();
+  leave('bob');
+  expect(host.gs.state).toBe('over');
+  expect(bob.id).toBe('bob');
+});
+
+test('the lobby is open between waves only, and a late join gets the run and its enemies', () => {
+  steady();
+  const t = party(2, 1), { host, ann } = t;
+  t.start();
+  expect(host.app.coop.players()).toBe(1);
+  expect(host.net.accepting, 'closed while a wave runs').toBe(false);
+  expect(host.net.busyReason).toContain('between waves');
+  t.run(1.3);
+  const real = host.enemies.list[0]!;
+  // A join that lands in a wave all the same (it was accepted a moment before the wave started).
+  t.join('ann');
+  expect(ann.gs.state).toBe('play');
+  expect(ann.app.coop.active()).toBe(true);
+  expect(ann.enemies.mirror).toBe(true);
+  expect(ann.enemies.byId.get(real.id)?.type).toBe(real.type);
+  expect(ann.player.body.pos.toArray()).toEqual([1.6, 0, 15]);
+  expect(ann.app.scores.get('ann')).toMatchObject({ kills: 0, deaths: 0 });
+  // The wave clears: the lobby opens, and the next wave is scaled for two.
+  host.enemies.damage(real, 999, { part: 'torso', source: 'rifle' });
+  host.gs.queue.length = 0; t.run(0.2);
+  expect(host.net.accepting, 'open in the intermission').toBe(true);
+  expect(ann.enemies.byId.get(real.id)?.alive ?? false).toBe(false);
+  t.run(8.2);
+  expect(host.gs.wave).toBe(2);
+  expect(ann.gs.wave).toBe(2);
+  expect(host.gs.queue.length + host.enemies.alive).toBe(Math.round(Math.round(4 + 1.7 * 2) * 1.5));
+  expect(host.net.accepting).toBe(false);
+  expect(t.hub.dropped).toEqual([]);
+});
+
+test('a join in an intermission announces no wave that the player missed', () => {
+  steady();
+  const t = party(2, 1), { host, ann } = t;
+  t.start();
+  host.gs.queue.length = 0; t.run(0.2);
+  expect(host.gs.intermission).toBeGreaterThan(0);
+  t.join('ann'); t.run(0.3);
+  expect(ann.gs.wave).toBe(1);
+  expect(ann.hud.message).not.toHaveBeenCalledWith('WAVE 1', expect.anything(), expect.anything());
+  t.run(8.2);
+  expect(ann.hud.message).toHaveBeenCalledWith('WAVE 2', expect.any(String), 2.6);
 });

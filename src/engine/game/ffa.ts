@@ -59,6 +59,9 @@ export interface FfaApi {
   refreshScoreHud(): void;
   /** Host: send the score rows to every peer. */
   sendScores(): void;
+  endMatch(winner: { id: string; name: string }): void;
+  /** Put the local player back in play at its mode's spawn. */
+  respawn(protect?: boolean): void;
   showBoard(on: boolean): void;
   boardRows(): BoardRow[];
   targets(): Target[];
@@ -181,6 +184,7 @@ export function createFFA(app: App): FfaApi {
     ready.delete(rid);
     ctx.remotes.get(rid)?.dispose();
     ctx.remotes.delete(rid); lobby.players.delete(rid); scores.delete(rid);
+    if (coop()) app.coop.left(rid);
   }
 
   // ---- scores
@@ -310,6 +314,7 @@ export function createFFA(app: App): FfaApi {
     net.sendTo(pid, 'start', { late: true, spawn: run ? lobby.players.size - 1 : farthestIndex(), map: lobby.map ?? app.settings.mapKey,
       mode: mode(), teams: lobby.teams ?? {}, ...(gs.teamMatch ? { teamState: gs.teamMatch } : {}), ...(run ? { coop: run } : {}),
       broken: ctx.level.breakables.filter(b => !b.alive).map(b => b.id) });
+    if (run) app.coop.joined(pid);
     sendScores();
     if (gs.over) net.sendTo(pid, 'end', gs.over);
     hud.kill(`${name} joined`);
@@ -517,25 +522,39 @@ export function createFFA(app: App): FfaApi {
     gs.respawnT = gs.teamMatch ? TEAM_RULES.WAVE - gs.teamMatch.elapsed % TEAM_RULES.WAVE : RESPAWN;
     gs.state = 'dying'; gs.deathT = 0;
     if (!ctx.input.usingTouch) { gs.menu = false; hud.hideScreen(); }
+    if (coop()) { hud.kill('you are down'); if (net.id !== null) app.coop.down(net.id); return; }
     if (net.isHost && net.id !== null) tally(net.id, killer);
     const row = killer ? scores.get(killer) : null;
     hud.kill(row ? `eliminated by ${row.name}${how ? ` · ${how}${h?.crit ? ' headshot' : ''}` : ''}` : 'eliminated');
   }
+  /** The camera of a player who waits: behind and above `target`, pulled in front of a wall. */
+  function watch(target: THREE.Vector3): void {
+    if (!ctx.camera || !ctx.renderer) return;
+    d1.set(0, 2.5, 4).normalize();
+    const wall = ctx.world.raycast(target, d1, 4.72);
+    ctx.camera.position.copy(target).addScaledVector(d1, wall ? Math.max(0.1, wall.dist - 0.2) : 4.72);
+    ctx.camera.lookAt(target); ctx.camera.fov = 82; ctx.camera.updateProjectionMatrix(); ctx.camera.updateMatrixWorld();
+    ctx.renderer.rig.visible = false;
+  }
   function updateDying(dt: number): void {
+    if (coop()) {
+      // Down in a wave: back at the wave clear (the co-op state says when). Down between waves: a short timer.
+      const waiting = net.id !== null && app.coop.isDown(net.id);
+      if (!waiting && (gs.respawnT -= dt) <= 0) { respawn(false); return; }
+      const mate = [...ctx.remotes.values()].find(r => r.alive);
+      watch(mate?.center ?? d2.copy(ctx.level.playerStart).setY(ctx.level.playerStart.y + 1.5));
+      const main = waiting ? 'DOWN' : String(Math.max(1, Math.ceil(gs.respawnT)));
+      const sub = `${mate ? `spectating ${mate.name}` : 'no one is up'} · ${waiting ? 'back at the wave clear' : 'back in a moment'}`;
+      if (deathMessage !== main + sub) { hud.message(main, sub, 1.1); deathMessage = main + sub; }
+      return;
+    }
     if (gs.teamMatch) {
       const state = gs.teamMatch;
       const until = net.id ? state.dead[net.id] : undefined;
       gs.respawnT = until === undefined ? Math.max(0, gs.respawnT - dt) : Math.max(0, until - state.elapsed);
       const team = teamOf(net.id);
       const mate = [...ctx.remotes.values()].find(r => r.alive && teamOf(r.id) === team);
-      if (ctx.camera && ctx.renderer && isTeam(team)) {
-        const target = mate?.center ?? vec(teamLayout(ctx.level).bases[team]).add(new THREE.Vector3(0, 1.5, 0));
-        d1.set(0, 2.5, 4).normalize();
-        const wall = ctx.world.raycast(target, d1, 4.72);
-        ctx.camera.position.copy(target).addScaledVector(d1, wall ? Math.max(0.1, wall.dist - 0.2) : 4.72);
-        ctx.camera.lookAt(target); ctx.camera.fov = 82; ctx.camera.updateProjectionMatrix(); ctx.camera.updateMatrixWorld();
-        ctx.renderer.rig.visible = false;
-      }
+      if (isTeam(team)) watch(mate?.center ?? vec(teamLayout(ctx.level).bases[team]).add(new THREE.Vector3(0, 1.5, 0)));
       const main = gs.respawnT > 0 ? String(Math.ceil(gs.respawnT)) : 'WAIT';
       const sub = `${mate ? `spectating ${mate.name}` : 'team wiped'} · next respawn wave`;
       if (deathMessage !== main + sub) { hud.message(main, sub, 1.1); deathMessage = main + sub; }
@@ -550,7 +569,7 @@ export function createFFA(app: App): FfaApi {
   function respawn(protect = true): void {
     const p = ctx.player;
     if (p === null) return;
-    p.reset(gs.teamMatch ? teamSpawn(net.id) : arenaSpawn()); p.name = app.settings.name; p.lastHitBy = p.lastHit = null;
+    p.reset(gs.teamMatch ? teamSpawn(net.id) : coop() ? app.coop.slot() : arenaSpawn()); p.name = app.settings.name; p.lastHitBy = p.lastHit = null;
     faceCenter();
     gs.state = 'play'; p.shieldT = protect ? 2 : 0; deathMessage = '';
     if (gs.teamMatch) sendPlayerState();
@@ -848,6 +867,7 @@ export function createFFA(app: App): FfaApi {
     const killerId = killer !== null && scores.has(killer) && opponents(killer, from) ? killer : null;
     if (gs.teamMatch && net.isHost && !r?.alive) return;
     if (r) { r.ragdoll(dir, over); ctx.audio.enemyDie(r.center); }
+    if (coop()) { hud.kill(`${victim} is down`); app.coop.down(from); return; }
     const howText = how ? ` · ${how}${crit ? ' headshot' : ''}` : '';
     if (killerId === net.id) { gs.kills++; hud.hitmarker(true, crit); app.addScore(100, `ELIMINATED ${victim}${howText}`); ctx.audio.kill(true); }
     else {
@@ -897,7 +917,7 @@ export function createFFA(app: App): FfaApi {
   return {
     selectMode, requestTeam, onlineInfo, dispose,
     create, join, quickPlay, hostStart, leave, lobbyScreen, broadcastLobby,
-    localDeath, updateDying, updateOver, update, refreshScoreHud, sendScores, showBoard, boardRows,
+    localDeath, updateDying, updateOver, update, refreshScoreHud, sendScores, endMatch, respawn, showBoard, boardRows,
     targets, canHurt, raycastPlayers, playersInArc, hitPlayer, cutRopes, onShot,
   };
 }

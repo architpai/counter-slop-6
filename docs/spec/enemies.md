@@ -762,7 +762,15 @@ Scores awarded by other systems for interacting with enemies: shield break +40 "
 
 ## 17. Network replication
 
-Designed contract for host-authoritative enemies. In the design the hooks exist and are complete, but the shipped online mode is player-versus-player with no enemies, so nothing wires them; an implementation that adds co-op must follow this contract.
+Contract for host-authoritative enemies. The PvP online modes have no enemies. Co-op survival uses this contract; [Online co-op survival](online-coop.md) defines the messages and these differences:
+
+- The snapshot row has a twelfth field, shield health. The host owns the shield plate; a mirror reports shield hits and drops the plate when the field is zero.
+- A mirror runs a death with the `on kill` callback, not silently: the callback rewards the local player only when the death message names that player as the attacker.
+- A detonation (17.5 with an explosion scale, or a bomber death) hurts only the local player of the machine that runs it. The host does not send that damage.
+- Spawns are sent after the wave director has set a boss's scaled health, and carry the maximum health.
+- Projectiles and client hits are sent in one batch for each frame.
+- A grapple yank on a mirror is a request to the host.
+- Enemies update with real frame time on every peer; hit-stop does not slow them.
 
 ### 17.1 Roles
 

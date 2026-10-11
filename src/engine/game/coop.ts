@@ -28,6 +28,14 @@ export interface CoopApi {
   /** Host: an enemy hurt or pushed a remote player. Only that player's machine applies it. */
   hurt(id: string, amount: number, from: THREE.Vector3 | null): void;
   push(id: string, dir: THREE.Vector3, amount: number): void;
+  /** A player's health is gone. The host counts it; in a wave the player waits for the wave clear. */
+  down(id: string): void;
+  /** True while `id` waits for the wave clear. */
+  isDown(id: string): boolean;
+  /** Host: a player left the run. */
+  left(id: string): void;
+  /** Host: a player joined a live run; it needs the enemies that are already out. */
+  joined(id: string): void;
   /** Once a frame while the run is live, with real frame time. */
   update(dt: number): void;
   reset(): void;
@@ -50,6 +58,8 @@ export function createCoop(app: App): CoopApi {
   const min = new THREE.Vector3(), max = new THREE.Vector3(), unit = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
   let state: CoopState | null = null;
   let mySlot = 0, syncT = 0, snapT = 0, sent = '', scoresDirty = false;
+  /** Host: whether the last synced frame was an intermission. Null before the first one. */
+  let resting: boolean | null = null;
   /** Host: spawns and shots of this frame, sent after the director has set their final values. */
   const spawned: EnemyRecord[] = [];
   let shots: number[][] = [];
@@ -76,7 +86,8 @@ export function createCoop(app: App): CoopApi {
 
   function begin(next: CoopState, index: number): void {
     state = structuredClone(next); mySlot = index; syncT = snapT = 0; sent = ''; pending = 0;
-    spawned.length = 0; shots = []; hits = []; scoresDirty = false;
+    spawned.length = 0; shots = []; hits = []; scoresDirty = false; resting = null;
+    if (net.isHost) net.busyReason = 'a wave is running · try again between waves';
     const enemies = ctx.enemies;
     if (enemies !== null) { enemies.mirror = !net.isHost; if (!net.isHost) enemies.setMutations(state.wave); }
     // A join in an intermission has missed this wave's start; the next one is announced.
@@ -94,6 +105,14 @@ export function createCoop(app: App): CoopApi {
     s.score = Math.max(0, Math.round(gs.score));
     s.label = app.solo.intro.label.slice(0, 96); s.sub = app.solo.intro.sub.slice(0, 96);
     s.speed = enemies.mods.speed; s.damage = enemies.mods.damage;
+    const rest = s.inter > 0;
+    if (rest !== resting) {
+      // The lobby is open between waves only: a join then needs no enemy catch-up worth the name.
+      net.accepting = rest;
+      // A wave clear brings back every player who is down, the host's own included.
+      if (rest && resting !== null) { s.dead = []; if (gs.state === 'dying') app.ffa.respawn(false); }
+      resting = rest;
+    }
     // Wave start, wave clear and the down list go out at once; the counters ride the timer.
     const edge = `${s.wave}/${s.inter > 0}/${s.dead.join()}`;
     if (syncT > 0 && edge === sent) return;
@@ -126,7 +145,7 @@ export function createCoop(app: App): CoopApi {
     const enemies = ctx.enemies;
     if (enemies === null) return;
     // A spawn goes out here, not from `onSpawn`: the director scales a boss's health after the spawn call.
-    for (const e of spawned) if (e.alive) net.send('espawn', { id: e.id, type: e.type, pos: e.body.pos.toArray().map(round2), hp: Math.max(1, e.maxHp) });
+    for (const e of spawned) if (e.alive) net.send('espawn', espawn(e));
     spawned.length = 0;
     for (const rows of chunks(shots.filter(row => row.every(Number.isFinite)), COOP.SHOT_ROWS)) net.send('eproj', rows);
     shots = [];
@@ -150,6 +169,35 @@ export function createCoop(app: App): CoopApi {
     if (row) { row.kills++; scoresDirty = true; }
     if (by === net.id) app.solo.reward(e, info, overkill);
     app.solo.drop(e);
+  }
+  const espawn = (e: EnemyRecord) => ({ id: e.id, type: e.type, pos: e.body.pos.toArray().map(round2), hp: Math.max(1, e.maxHp) });
+  function joined(id: string): void {
+    if (!directing() || ctx.enemies === null) return;
+    for (const e of ctx.enemies.list) if (e.alive && !spawned.includes(e)) net.sendTo(id, 'espawn', espawn(e));
+  }
+  function isDown(id: string): boolean { return state !== null && state.dead.includes(id); }
+  function finish(): void {
+    const result = { id: 'coop', name: `WAVE ${gs.wave}` };
+    // The last state first, so every result screen shows the final score.
+    sent = ''; sync();
+    net.send('end', result); app.ffa.endMatch(result);
+  }
+  const wiped = (s: CoopState): boolean => [...lobby.players.keys()].every(id => s.dead.includes(id));
+  function down(id: string): void {
+    const s = state;
+    if (s === null || !directing() || !lobby.players.has(id) || s.dead.includes(id)) return;
+    const row = scores.get(id);
+    if (row) { row.deaths++; scoresDirty = true; }
+    // Between waves nothing can end the run: the player returns on its own short timer.
+    if (gs.intermission > 0) return;
+    s.dead.push(id);
+    if (wiped(s)) finish(); else sync();
+  }
+  function left(id: string): void {
+    const s = state;
+    if (s === null || !directing()) return;
+    s.dead = s.dead.filter(other => other !== id);
+    if (s.dead.length && wiped(s)) finish(); else sync();
   }
   function hurt(id: string, amount: number, from: THREE.Vector3 | null): void {
     if (directing() && amount > 0) net.sendTo(id, 'edmg', { amount: Math.min(100000, round1(amount)), from: from ? from.toArray().map(round1) : null, push: null });
@@ -246,6 +294,8 @@ export function createCoop(app: App): CoopApi {
     if (enemies !== null) { enemies.mods.speed = s.speed; enemies.mods.damage = s.damage; }
     if (s.inter <= 0 && s.wave > announced) { announced = s.wave; waveStart(s); }
     if (s.inter > 0 && prev.inter <= 0 && s.wave === prev.wave) waveClear(s);
+    const me = net.id;
+    if (me !== null && gs.state === 'dying' && prev.dead.includes(me) && !s.dead.includes(me)) app.ffa.respawn(false);
   }
   net.on('coop', (d, from) => {
     const prev = state;
@@ -280,11 +330,12 @@ export function createCoop(app: App): CoopApi {
   }
 
   function reset(): void {
-    state = null; mySlot = 0; pending = 0; announced = 0; sent = ''; scoresDirty = false;
+    state = null; mySlot = 0; pending = 0; announced = 0; sent = ''; scoresDirty = false; resting = null;
+    if (net.isHost && net.active) { net.accepting = true; net.busyReason = 'that lobby is closed'; }
     spawned.length = 0; shots = []; hits = [];
     // Solo and training enemies think for themselves.
     if (ctx.enemies !== null) ctx.enemies.mirror = false;
   }
 
-  return { active, directing, players, get state() { return state; }, begin, slot, info, points, onKill, hurt, push, update, reset };
+  return { active, directing, players, get state() { return state; }, begin, slot, info, points, onKill, hurt, push, down, isDown, left, joined, update, reset };
 }
