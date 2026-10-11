@@ -214,7 +214,7 @@ function model(name: string): Draft {
 }
 
 export function makeGunModel(kind: GunKind): GunModel {
-  if (!['r4c', 'rifle', 'pistol', 'shotgun', 'sniper', 'revolver'].includes(kind)) throw new RangeError(`Unknown gun kind: ${kind}`);
+  if (!['r4c', 'rifle', 'pistol', 'shotgun', 'sniper', 'lmg', 'revolver'].includes(kind)) throw new RangeError(`Unknown gun kind: ${kind}`);
   const result = model(kind), { root, parts } = result;
   let muzzlePos: Triple, ejectPos: Triple, leftHand: THREE.Object3D;
   if (kind === 'rifle' || kind === 'r4c') {
@@ -283,6 +283,31 @@ export function makeGunModel(kind: GunKind): GunModel {
     hand(root, 'right-hand', [0.02, -0.15, 0.14], [0.5, -0.6, 1]);
     leftHand = hand(root, 'left-hand', [-0.05, -0.08, kind === 'r4c' ? -0.50 : -0.38], [-0.35, -0.9, 0.9]);
     muzzlePos = kind === 'r4c' ? [0, 0.02, -1.16] : [0, 0.015, -0.96]; ejectPos = [0.06, 0.02, 0.02];
+  } else if (kind === 'lmg') {
+    box(root, 'receiver', [0.12, 0.17, 0.52], [0, 0, 0], DARK);
+    box(root, 'feed-cover', [0.125, 0.04, 0.46], [0, 0.10, 0.01], PRIMARY);
+    box(root, 'rear-sight', [0.04, 0.045, 0.03], [0, 0.135, 0.17], DARK);
+    // The 100-round box hangs under the feed tray, with its belt up the left side.
+    parts.mag = remember(group(root, 'magazine', [-0.02, -0.085, -0.15]));
+    box(parts.mag, 'ammo-box', [0.19, 0.27, 0.22], [0, -0.135, 0], DARK);
+    box(parts.mag, 'ammo-box-base', [0.20, 0.03, 0.23], [0, -0.275, 0], PRIMARY);
+    box(parts.mag, 'belt', [0.03, 0.16, 0.10], [-0.065, 0.07, 0.01], DARK, [0, 0, -0.35]);
+    box(root, 'handguard', [0.105, 0.15, 0.42], [0, -0.01, -0.48], DARK);
+    for (let i = 0; i < 5; i++) box(root, `heat-vent-${i}`, [0.11, 0.02, 0.035], [0, 0.07, -0.64 + i * 0.075], PRIMARY);
+    cylinder(root, 'barrel', 0.026, 0.56, [0, 0.03, -0.97], DARK);
+    cylinder(root, 'flash-hider', 0.034, 0.09, [0, 0.03, -1.27], PRIMARY);
+    box(root, 'gas-block', [0.06, 0.10, 0.07], [0, 0.02, -0.95], DARK);
+    box(root, 'front-sight', [0.012, 0.11, 0.02], [0, 0.10, -0.95], DARK);
+    for (const side of [-1, 1]) box(root, `bipod-${side}`, [0.018, 0.018, 0.34], [side * 0.03, -0.06, -1.10], DARK);
+    box(root, 'carry-handle', [0.03, 0.03, 0.20], [-0.07, 0.10, -0.38], DARK);
+    box(root, 'stock', [0.085, 0.16, 0.36], [0, -0.01, 0.44], DARK, [0.05, 0, 0]);
+    box(root, 'stock-pad', [0.095, 0.24, 0.035], [0, -0.03, 0.63], PRIMARY);
+    box(root, 'grip', [0.06, 0.18, 0.08], [0, -0.17, 0.16], DARK, [0.3, 0, 0]);
+    box(root, 'trigger-guard', [0.045, 0.025, 0.12], [0, -0.115, 0.07], PRIMARY);
+    box(root, 'charging-handle', [0.035, 0.03, 0.05], [-0.075, 0.02, 0.02], PRIMARY);
+    hand(root, 'right-hand', [0.02, -0.17, 0.17], [0.5, -0.6, 1]);
+    leftHand = hand(root, 'left-hand', [-0.05, -0.10, -0.46], [-0.35, -0.9, 0.9]);
+    muzzlePos = [0, 0.03, -1.32]; ejectPos = [0.065, -0.02, -0.06];
   } else if (kind === 'pistol') {
     box(root, 'frame', [0.065, 0.12, 0.24], [0, 0, 0], DARK);
     parts.slide = remember(box(root, 'slide', [0.07, 0.075, 0.30], [0, 0.065, -0.10], PRIMARY));
@@ -405,7 +430,7 @@ function smearsOn(parent: THREE.Object3D, bloodSmears: THREE.Mesh[]): void {
 // ---------------------------------------------------------------- Blender models (R4)
 
 /** The Blender model of each gun kind; the revolver is not issued and keeps its flat model on every tier. */
-export const REAL_GUN: Readonly<Partial<Record<GunKind, string>>> = { r4c: 'r4c', rifle: 'mp5', shotgun: 'shotgun', sniper: 'sniper', pistol: 'pistol' };
+export const REAL_GUN: Readonly<Partial<Record<GunKind, string>>> = { r4c: 'r4c', rifle: 'mp5', shotgun: 'shotgun', sniper: 'sniper', pistol: 'pistol', lmg: 'lmg' };
 
 /**
  * Camera-space hip pose of each Blender model, `[position, rotation]`, and
@@ -430,6 +455,8 @@ const REAL_REST: Readonly<Record<string, readonly [Triple, Triple, number | null
   shotgun: [[0.14, -0.12, -0.25], [-0.06, 0.04, 0], -0.17],
   sniper: [[0.15, -0.13, -0.26], [-0.06, 0.04, 0], -0.23],
   pistol: [[0.12, -0.095, -0.33], [-0.04, 0.05, 0], -0.43],
+  // A cheek weld on the fixed stock: the front post 0.57 m out, the rear notch 14 cm ahead of the eye.
+  lmg: [[0.15, -0.13, -0.27], [-0.06, 0.04, 0], -0.20],
   knife: [[0.20, -0.18, -0.28], [0.35, 0.10, -0.45], null],
 };
 
@@ -450,7 +477,7 @@ export const REAL_AIM_DEPTH = 1.5;
  * hand across, the MP5's and the pistol's smaller, the shotgun's and the
  * sniper's big. The flat guns scale theirs by `GunStats.flashScale`.
  */
-const REAL_FLASH: Readonly<Partial<Record<GunKind, number>>> = { r4c: 1.1, rifle: 0.85, pistol: 0.8, shotgun: 1.6, sniper: 1.45 };
+const REAL_FLASH: Readonly<Partial<Record<GunKind, number>>> = { r4c: 1.1, rifle: 0.85, pistol: 0.8, shotgun: 1.6, sniper: 1.45, lmg: 1.2 };
 
 /** Moving parts of the Blender models, by the flat models' names for them. */
 const REAL_PARTS = [['mag', 'magazine'], ['bolt', 'bolt'], ['slide', 'slide'], ['foreEnd', 'fore-end'], ['trigger', 'trigger']] as const;

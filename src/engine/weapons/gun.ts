@@ -22,7 +22,7 @@ const TRIGGER_TRAVEL = 0.3;
  */
 const HIP_FLASH = 0.7;
 /** A realistic tier's casing for each gun (effects-real.ts `SHELL_SIZE`); the MP5 fires 9 mm like the pistol. */
-const SHELL_KIND: Readonly<Partial<Record<GunKind, ShellKind>>> = { r4c: 'rifle', rifle: 'pistol', pistol: 'pistol', sniper: 'sniper', shotgun: 'shotgun' };
+const SHELL_KIND: Readonly<Partial<Record<GunKind, ShellKind>>> = { r4c: 'rifle', rifle: 'pistol', pistol: 'pistol', sniper: 'sniper', shotgun: 'shotgun', lmg: 'rifle' };
 /** Shots in a row, at least, before the powder smoke of a burst wisps off the barrel once it ends (R5). */
 const WISP_AFTER = 3;
 

@@ -150,11 +150,11 @@ test('optional triples, weapon fallback and the name tag', () => {
   assert(remote._tagName === '<script>name', 'A bounded name change rebuilds the canvas label.');
 });
 
-test('remote slots render five guns with a distinct R4-C prop and independent melee', () => {
+test('remote slots render six guns with a distinct R4-C prop and independent melee', () => {
   const target = new RemotePlayer(ctx, 'loadout', 'loadout');
   const sizes: Vector3[] = [];
   try {
-    for (const [slot, kind] of ['r4c', 'rifle', 'shotgun', 'sniper', 'pistol'].entries()) {
+    for (const [slot, kind] of ['r4c', 'rifle', 'shotgun', 'sniper', 'pistol', 'lmg'].entries()) {
       target.push(state(0, 0, 80, slot), 1 + slot);
       expect(target._wi).toBe(slot);
       const prop = must(target._figure?.parts.weapon, 'remote weapon');

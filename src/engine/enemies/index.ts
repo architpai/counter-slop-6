@@ -404,7 +404,7 @@ export class EnemyManager {
     // Co-op host: another player's hit. It moves health here, and its feedback plays on that player's machine.
     const remote = info.by != null;
     if (e.type === 'parry' && e.guardT > 0 && e.state === 'hunt' && info.dir
-      && ['r4c', 'rifle', 'shotgun', 'sniper', 'revolver', 'pistol'].includes(info.source ?? '')
+      && ['r4c', 'rifle', 'shotgun', 'sniper', 'revolver', 'pistol', 'lmg'].includes(info.source ?? '')
       && info.dir.dot(scratch.set(Math.sin(e.yaw), 0, Math.cos(e.yaw))) < -0.5) {
       effects.sparks(point, scratch.copy(dir).negate(), TONE.ACCENT, 6, 6); if (!remote) hud.hitmarker(false, false, true);
       // One reflected projectile per 0.2 s, not one per shotgun pellet.

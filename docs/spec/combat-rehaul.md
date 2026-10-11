@@ -22,6 +22,36 @@ When a checkpoint is saved, the main screen (play page) and the death screen sho
 - Knife damage is 75 against enemies, 55 against players. Range is 2.1 with a 0.8-radian half-angle and an obstruction check. Rope range is 2.4; breakable range is 2.2. Swing/cooldown are 0.27/0.33 seconds. Airborne/sprint lunge is 3.5; a grounded strike steps 1.6. Existing parry and focus rewards remain; focus uses the independent knife, without a forced slot switch.
 - The HUD always shows gun ammunition. A separate unlimited-melee hint sits below the five gun rows. It does not replace the ammo display.
 
+## LMG (slot 6)
+
+This section adds a sixth gun and replaces the statements above that the loadout has five guns and that **6** is a melee key.
+
+- Slots **1–6**: R4-C, MP5, shotgun, sniper, pistol, LMG. `GUN_LOADOUT` has the LMG last, so the first five slot numbers on the wire do not change. Wheel and controller next/previous cycle all six.
+- **6** selects the LMG. Melee keeps **F/V**, mouse forward, **RB/R1** and D-pad down.
+- The LMG uses kind `lmg`: a belt-fed gun in the Minimi pattern with a 100-round box, iron sights (no optic choice, no scope overlay), a bipod folded under the barrel and a fixed stock. It reuses the R4-C's `shot` audio cue locally and online, and ejects rifle brass.
+- Role: sustained fire. One box fires for 8.5 s without a reload. It pays for that in each handling stat.
+
+| Stat | LMG | R4-C | MP5 |
+|---|---:|---:|---:|
+| Magazine / reserve at start / maximum | 100 / 200 / 300 | 30 / 150 / 300 | 30 / 150 / 300 |
+| PvE body damage × head multiplier | 26 × 2.2 | 28 × 2.5 | 22 × 2.6 |
+| Shot interval | 0.085 s | 0.08 s | 0.075 s |
+| Theoretical body DPS | 305.9 | 350 | 293.3 |
+| Reload | 3.6 s | 2.2 s | 1.65 s |
+| Draw time | 0.65 s | 0.42 s | 0.22 s |
+| Walk speed while aiming (`adsSpeed`) | 0.5 | 0.7 | 1.0 |
+| Hip / ADS spread | 0.034 / 0.006 | 0.022 / 0.0025 | 0.012 / 0.0015 |
+| Spread kick / maximum | 0.0045 / 0.085 | 0.007 / 0.065 | 0.005 / 0.05 |
+| ADS field of view | 58° | 38° (ACOG) | 38° (ACOG) |
+| PvE falloff | `[26, 80, 0.5]` | `[28, 88, 0.55]` | `[18, 55, 0.4]` |
+| PvP body / head multiplier, falloff | 21 / 1.6, `[22, 68, 0.45]` | 26 / 1.8, `[24, 74, 0.45]` | 18 / 1.8, `[15, 45, 0.4]` |
+
+- These are initial playtest values, not measured balance.
+- An ammo pickup adds 40 % of the maximum reserve, as for the other guns: 120 rounds.
+- The reload is one `magazine` reload: the left hand changes the box. The empty reload ends with the charging handle.
+- Low draws a code-built LMG. The realistic tiers draw the Blender model (`tools/blender/weapons/lmg.py`). Its maps stop at 1K on Ultra, as the pistol's do; the Ultra weapon download budget is 10.5 MB (it was 10 MB for five guns).
+- Remote players and operators hold an LMG prop (`prop__lmg`, and the flat `lmg` prop on Low).
+
 ## Five-weapon balance
 
 These are initial playtest values, not claims of measured competitive balance. Aim transition and weapon-switch behaviour remain shared, but two per-gun stats now separate the roles: `adsSpeed` (walk-speed multiplier while aiming) and `drawTime` (seconds from draw until the gun can fire, also the raise length).

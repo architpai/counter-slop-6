@@ -154,7 +154,7 @@ export type HitPart =
   | 'legL' | 'legR' | 'shinL' | 'shinR' | 'shield' | 'blade';
 
 export type DamageSource =
-  | 'r4c' | 'rifle' | 'shotgun' | 'sniper' | 'revolver' | 'pistol' | 'melee' | 'focus'
+  | 'r4c' | 'rifle' | 'shotgun' | 'sniper' | 'revolver' | 'pistol' | 'lmg' | 'melee' | 'focus'
   | 'deflect' | 'blast' | 'fall' | 'grenade';
 
 /** One record for every damage event, from any source, to any victim. */
