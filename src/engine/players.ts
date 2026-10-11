@@ -119,6 +119,7 @@ export class RemotePlayer implements Target {
   lastSeen: number;
   deadT: number;
   onDamage: ((amount: number, from: Vector3 | null) => void) | null;
+  onKnock: ((dir: Vector3, amount: number) => void) | null;
   _a: Snap | null;
   _b: Snap | null;
   _yaw: number;
@@ -159,7 +160,7 @@ export class RemotePlayer implements Target {
       ({ part: part as HitJoint, r, obj: new Object3D() }));
     this.lastSeen = 0;
     this.deadT = 0;
-    this.onDamage = null;
+    this.onDamage = this.onKnock = null;
     this._a = this._b = null;
     this._yaw = this._pitch = this._phase = this._walk = this._flashT = 0;
     this._wi = -1;
@@ -467,7 +468,8 @@ export class RemotePlayer implements Target {
     this.onDamage?.(amount, from);
   }
 
-  knockback(): void {}
+  /** A remote body is not pushed here; co-op sends the push to its owner. */
+  knockback(dir: Vector3, amount: number): void { if (!this._disposed && this.alive) this.onKnock?.(dir, amount); }
   tryDeflect(): false { return false; }
 
   tryBlockMelee(e: Enemy): boolean {
@@ -488,7 +490,7 @@ export class RemotePlayer implements Target {
     this._rope.geometry.dispose();
     this._hookMesh.geometry.dispose();
     this._a = this._b = null;
-    this.onDamage = null;
+    this.onDamage = this.onKnock = null;
     this._placeHits();
   }
 }

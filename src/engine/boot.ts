@@ -351,7 +351,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
   };
   app.resetRun = () => {
     if (ctx.level.breakables.some(b => !b.alive)) loadLevel(loadedArena, loadedKey, true);
-    enemies.clear(); effects.clear(); app.pickups.clear();
+    enemies.clear(); enemies.mirror = false; effects.clear(); app.pickups.clear();
     // Co-op is PvE: it keeps the solo health values.
     const online = gs.mode === 'ffa' && !app.coop.active();
     player.maxHp = online ? 110 : 120; player.regenDelay = online ? 4 : 4.5; player.regenRate = online ? 14 : 11;
@@ -536,7 +536,8 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
         if (input.down('fire') || input.down('melee') || input.down('grenade')) player.shieldT = 0;
       }
       player.update(sdt);
-      enemies.update(sdt);
+      // Co-op enemies run on real time on every peer: hit-stop is one player's, not the party's.
+      enemies.update(app.coop.active() ? dt : sdt);
       effects.update(sdt);
       app.pickups.update(sdt);
       app.ffa.update(dt, nowMs / 1000);

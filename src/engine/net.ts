@@ -3,7 +3,7 @@ import type { DataConnection, PeerError, PeerOptions } from 'peerjs';
 import type { Envelope } from './types';
 import { isOnlineMode, isTeam, validTeams, validTeamMatch } from './game/team-rules';
 import type { OnlineMode } from './game/team-rules';
-import { playerCap, validCoopState } from './game/coop-rules';
+import { COOP, playerCap, validCoopState } from './game/coop-rules';
 
 export const NET = Object.freeze({
   PREFIX_LIVE: 'shooter-rebuild-v3-', PREFIX_DEV: 'shooter-rebuild-dev-v3-',
@@ -23,8 +23,9 @@ interface Welcome { hostId: string; code: string; isPublic: boolean }
 /** One lobby a knock is racing. */
 interface Attempt { conn: DataConnection; id: string; code: string; failed: boolean; welcome: Welcome | null }
 
-const HOST = new Set(['lobby', 'leave', 'start', 'end', 'backtolobby', 'score', 'pickup', 'taken', 'refused', 'teamstate', 'coop']);
-const REQUEST = new Set(['startreq', 'take', 'teamreq', 'cpts']);
+const HOST = new Set(['lobby', 'leave', 'start', 'end', 'backtolobby', 'score', 'pickup', 'taken', 'refused', 'teamstate', 'coop',
+  'espawn', 'esnap', 'ekill', 'eproj', 'edmg']);
+const REQUEST = new Set(['startreq', 'take', 'teamreq', 'cpts', 'ehit', 'eyank']);
 const ADDRESSED = new Set(['pdmg', 'headshot', 'parry', 'cut']);
 const BROADCAST = new Set(['ps', 'shots', 'pdead', 'nade', 'brk']);
 const TYPES = new Set(['welcome', ...HOST, ...REQUEST, ...ADDRESSED, ...BROADCAST]);
@@ -50,6 +51,9 @@ const fields = (o: unknown, required: string[], extra: string[] = []): o is Reco
   object(o) && required.every(k => own(o, k)) &&
   Object.keys(o).every(k => required.includes(k) || extra.includes(k));
 const empty = (o: unknown) => fields(o, []);
+/** Co-op batches: one fixed-width row of finite numbers per enemy or projectile. */
+const numberRows = (a: unknown, max: number, width: number) => array(a) && a.length > 0 && a.length <= max &&
+  a.every(row => array(row) && row.length === width && row.every(n => bounded(n, 1e7)));
 const idRecord = (o: unknown, positive = false) => fields(o, ['id']) && integer(o.id) && (!positive || o.id > 0);
 const rows = (arr: unknown, score = false) => array(arr) && arr.length <= NET.MAX_PLAYERS &&
   new Set(arr.map(row => prop(row, 'id'))).size === arr.length && arr.every(row =>
@@ -79,6 +83,19 @@ function validPayload(type: string, d: unknown): boolean {
     case 'teamstate': return validTeamMatch(d);
     case 'coop': return validCoopState(d);
     case 'cpts': return fields(d, ['n']) && integer(d.n) && d.n >= 1 && d.n <= 100000;
+    case 'espawn': return fields(d, ['id', 'type', 'pos', 'hp']) && integer(d.id) && d.id > 0 && text(d.type, 24, 1) &&
+      vector(d.pos) && finite(d.hp) && d.hp >= 1 && d.hp <= 1e7;
+    case 'esnap': return numberRows(d, COOP.SNAP_ROWS, 12);
+    case 'eproj': return numberRows(d, COOP.SHOT_ROWS, 13);
+    case 'ekill': return fields(d, ['id', 'by', 'src', 'crit', 'dir', 'point', 'boom']) && integer(d.id) && (d.by === null || peerId(d.by)) &&
+      text(d.src, 32) && typeof d.crit === 'boolean' && (d.dir === null || vector(d.dir, 1.01)) && (d.point === null || vector(d.point)) &&
+      finite(d.boom) && d.boom >= 0 && d.boom <= 5;
+    case 'edmg': return fields(d, ['amount', 'from', 'push']) && finite(d.amount) && d.amount >= 0 && d.amount <= 100000 &&
+      (d.from === null || vector(d.from)) && (d.push === null || vector(d.push, 100));
+    case 'ehit': return array(d) && d.length > 0 && d.length <= COOP.HIT_ROWS && d.every(h =>
+      fields(h, ['id', 'amount', 'part', 'src', 'crit', 'point', 'dir']) && integer(h.id) && finite(h.amount) && h.amount > 0 && h.amount <= 100000 &&
+      text(h.part, 24) && text(h.src, 32) && typeof h.crit === 'boolean' && vector(h.point) && vector(h.dir, 1.01));
+    case 'eyank': return fields(d, ['id', 'to']) && integer(d.id) && vector(d.to);
     case 'end': return fields(d, ['id', 'name']) && peerId(d.id) && text(d.name, 14);
     case 'score': return rows(d, true);
     case 'ps': return fields(d, ['round', 'state']) ? integer(d.round) && array(d.state) && validPayload('ps', d.state) : array(d) && [8, 11, 14].includes(d.length) &&

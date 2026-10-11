@@ -1,7 +1,11 @@
 import * as THREE from 'three';
+import { round1, round2 } from '../util';
+import { spawnProjectile } from '../enemies/projectiles';
 import { COOP, START_SLOTS, validCoopState } from './coop-rules';
 import type { CoopState } from './coop-rules';
+import type { EnemyRecord } from '../enemies/index';
 import type { OnlineInfo } from '../hud/screens';
+import type { HitInfo } from '../types';
 import type { App } from '../boot';
 
 /** Co-op survival: the host runs the solo waves, the clients mirror them (docs/spec/online-coop.md). */
@@ -19,19 +23,38 @@ export interface CoopApi {
   info(): OnlineInfo;
   /** Points this peer earned for the team score. */
   points(n: number): void;
+  /** An enemy died here: the host credits the attacker and tells the mirrors; each machine rewards its own player. */
+  onKill(e: EnemyRecord, info: HitInfo, overkill: boolean): void;
+  /** Host: an enemy hurt or pushed a remote player. Only that player's machine applies it. */
+  hurt(id: string, amount: number, from: THREE.Vector3 | null): void;
+  push(id: string, dir: THREE.Vector3, amount: number): void;
   /** Once a frame while the run is live, with real frame time. */
   update(dt: number): void;
   reset(): void;
 }
 
 const obj = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
+const num = (v: unknown, limit = 1e7): v is number => typeof v === 'number' && Number.isFinite(v) && Math.abs(v) <= limit;
+const int = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0;
+const triple = (v: unknown, limit = 10000): v is number[] => Array.isArray(v) && v.length === 3 && v.every(n => num(n, limit));
+const vec = (a: number[]): THREE.Vector3 => new THREE.Vector3().fromArray(a);
+const round3 = (n: number): number => Math.round(n * 1000) / 1000;
+/** `rows` in pieces a single envelope carries. */
+function* chunks<T>(rows: T[], size: number): Generator<T[]> { for (let i = 0; i < rows.length; i += size) yield rows.slice(i, i + size); }
+interface HitRow { id: number; amount: number; part: string; src: string; crit: boolean; point: number[]; dir: number[] }
 
 export function createCoop(app: App): CoopApi {
   const { ctx, gs, lobby } = app;
   const { net, hud } = ctx;
-  const min = new THREE.Vector3(), max = new THREE.Vector3();
+  const scores = app.scores;
+  const min = new THREE.Vector3(), max = new THREE.Vector3(), unit = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
   let state: CoopState | null = null;
-  let mySlot = 0, syncT = 0, sent = '';
+  let mySlot = 0, syncT = 0, snapT = 0, sent = '', scoresDirty = false;
+  /** Host: spawns and shots of this frame, sent after the director has set their final values. */
+  const spawned: EnemyRecord[] = [];
+  let shots: number[][] = [];
+  /** Client: hits of this frame, one envelope instead of one per shotgun pellet. */
+  let hits: HitRow[] = [];
   /** The last wave this client announced, so a late join in an intermission announces nothing. */
   let announced = 0;
   /** Points earned here that the host has not counted yet. */
@@ -40,6 +63,7 @@ export function createCoop(app: App): CoopApi {
   const active = (): boolean => gs.mode === 'ffa' && lobby.mode === 'coop';
   const live = (): boolean => active() && state !== null && (gs.state === 'play' || gs.state === 'dying');
   const directing = (): boolean => live() && net.isHost;
+  const mirroring = (from: string): boolean => live() && !net.isHost && from === net.hostId;
   const players = (): number => active() ? Math.max(1, Math.min(COOP.MAX_PLAYERS, lobby.players.size)) : 1;
 
   function slot(index = mySlot): THREE.Vector3 {
@@ -51,7 +75,10 @@ export function createCoop(app: App): CoopApi {
   }
 
   function begin(next: CoopState, index: number): void {
-    state = structuredClone(next); mySlot = index; syncT = 0; sent = ''; pending = 0;
+    state = structuredClone(next); mySlot = index; syncT = snapT = 0; sent = ''; pending = 0;
+    spawned.length = 0; shots = []; hits = []; scoresDirty = false;
+    const enemies = ctx.enemies;
+    if (enemies !== null) { enemies.mirror = !net.isHost; if (!net.isHost) enemies.setMutations(state.wave); }
     // A join in an intermission has missed this wave's start; the next one is announced.
     announced = state.inter > 0 ? state.wave : 0;
     gs.wave = state.wave; gs.score = state.score; gs.intermission = state.inter;
@@ -72,7 +99,130 @@ export function createCoop(app: App): CoopApi {
     if (syncT > 0 && edge === sent) return;
     syncT = COOP.SYNC; sent = edge;
     net.send('coop', s);
+    if (scoresDirty) { scoresDirty = false; app.ffa.sendScores(); }
   }
+
+  // ---- host: enemies leave as spawns, snapshots, shots and deaths
+  const manager = ctx.enemies;
+  if (manager !== null) {
+    manager.onSpawn = e => { if (directing()) spawned.push(e); };
+    manager.onFire = p => {
+      if (!directing()) return;
+      const speed = p.vel.length();
+      unit.copy(p.vel).divideScalar(speed || 1);
+      shots.push([p.id, round2(p.pos.x), round2(p.pos.y), round2(p.pos.z), round3(unit.x), round3(unit.y), round3(unit.z),
+        round2(speed), round2(p.damage), p.owner?.id ?? 0, p.tone, p.thickness, p.blast ? 1 : 0]);
+    };
+    manager.onClientHit = (e, amount, info) => {
+      if (!live() || net.isHost) return;
+      unit.copy(info.dir ?? up).normalize();
+      hits.push({ id: e.id, amount: Math.min(100000, Math.max(0.1, round1(amount))), part: String(info.part ?? 'torso').slice(0, 24),
+        src: String(info.source ?? 'rifle').slice(0, 32), crit: !!info.crit,
+        point: (info.point ?? e.center).toArray().map(round2), dir: unit.toArray().map(round3) });
+    };
+    manager.onClientYank = (e, to) => { if (live() && !net.isHost) net.send('eyank', { id: e.id, to: to.toArray().map(round2) }); };
+  }
+  function flush(dt: number): void {
+    const enemies = ctx.enemies;
+    if (enemies === null) return;
+    // A spawn goes out here, not from `onSpawn`: the director scales a boss's health after the spawn call.
+    for (const e of spawned) if (e.alive) net.send('espawn', { id: e.id, type: e.type, pos: e.body.pos.toArray().map(round2), hp: Math.max(1, e.maxHp) });
+    spawned.length = 0;
+    for (const rows of chunks(shots.filter(row => row.every(Number.isFinite)), COOP.SHOT_ROWS)) net.send('eproj', rows);
+    shots = [];
+    snapT -= dt;
+    if (snapT > 0) return;
+    snapT = COOP.SNAP;
+    for (const rows of chunks(enemies.snapshot().filter(row => row.every(Number.isFinite)), COOP.SNAP_ROWS)) net.send('esnap', rows);
+  }
+  function onKill(e: EnemyRecord, info: HitInfo, overkill: boolean): void {
+    if (!net.isHost) {
+      if (info.by === net.id) { hud.hitmarker(true, !!info.crit); app.solo.reward(e, info, overkill); }
+      return;
+    }
+    if (!directing()) return;
+    // No attacker is the host's own hit, a fall or an enemy blast: the host takes the credit.
+    const by = info.by ?? net.id;
+    net.send('ekill', { id: e.id, by, src: String(info.source ?? '').slice(0, 32), crit: !!info.crit,
+      dir: info.dir ? unit.copy(info.dir).normalize().toArray().map(round3) : null,
+      point: info.point ? info.point.toArray().map(round2) : null, boom: info.boom ?? 0 });
+    const row = by === null ? undefined : scores.get(by);
+    if (row) { row.kills++; scoresDirty = true; }
+    if (by === net.id) app.solo.reward(e, info, overkill);
+    app.solo.drop(e);
+  }
+  function hurt(id: string, amount: number, from: THREE.Vector3 | null): void {
+    if (directing() && amount > 0) net.sendTo(id, 'edmg', { amount: Math.min(100000, round1(amount)), from: from ? from.toArray().map(round1) : null, push: null });
+  }
+  function push(id: string, dir: THREE.Vector3, amount: number): void {
+    if (!directing() || !(amount > 0)) return;
+    net.sendTo(id, 'edmg', { amount: 0, from: null, push: unit.copy(dir).normalize().multiplyScalar(Math.min(amount, COOP.PUSH_CAP)).toArray().map(round2) });
+  }
+  net.on('ehit', (d, from) => {
+    const enemies = ctx.enemies;
+    // A player who is down or gone deals no damage.
+    if (!directing() || enemies === null || !lobby.players.has(from) || !ctx.remotes.get(from)?.alive || !Array.isArray(d)) return;
+    for (const h of d.slice(0, COOP.HIT_ROWS) as unknown[]) {
+      if (!obj(h) || !int(h.id) || !num(h.amount) || h.amount <= 0 || typeof h.part !== 'string' || typeof h.src !== 'string' ||
+          !triple(h.point) || !triple(h.dir, 1.01)) continue;
+      const e = enemies.byId.get(h.id);
+      if (!e?.alive) continue;
+      enemies.damage(e, Math.min(h.amount, COOP.HIT_CAP), { point: vec(h.point), dir: vec(h.dir), part: h.part, source: h.src,
+        crit: h.crit === true && h.part === 'head', by: from });
+    }
+  });
+  net.on('eyank', (d, from) => {
+    const enemies = ctx.enemies;
+    if (!directing() || enemies === null || !lobby.players.has(from) || !ctx.remotes.get(from)?.alive || !obj(d) || !int(d.id) || !triple(d.to)) return;
+    const e = enemies.byId.get(d.id);
+    if (e) enemies.yank(e, vec(d.to));
+  });
+
+  // ---- client: the mirror follows the host
+  net.on('espawn', (d, from) => {
+    const enemies = ctx.enemies;
+    if (!mirroring(from) || enemies === null || !obj(d) || !int(d.id) || d.id < 1 || typeof d.type !== 'string' || !triple(d.pos) || !num(d.hp)) return;
+    if (enemies.byId.has(d.id) || enemies.list.length >= 256) return;
+    const e = enemies.spawn(d.type, vec(d.pos), d.id);
+    if (e === null) return;
+    e.hp = e.maxHp = Math.max(1, d.hp);
+    if (e.stats.boss) enemies.onBoss?.(e);
+  });
+  net.on('esnap', (d, from) => {
+    if (mirroring(from) && Array.isArray(d)) ctx.enemies?.applySnapshot(d as number[][], performance.now() / 1000);
+  });
+  net.on('ekill', (d, from) => {
+    const enemies = ctx.enemies;
+    if (!mirroring(from) || enemies === null || !obj(d) || !int(d.id)) return;
+    const e = enemies.byId.get(d.id);
+    if (!e?.alive) return;
+    const crit = d.crit === true;
+    const info: HitInfo = { source: typeof d.src === 'string' ? d.src.slice(0, 32) : '', crit, part: crit ? 'head' : 'torso',
+      by: typeof d.by === 'string' ? d.by : null };
+    if (triple(d.dir, 1.01)) info.dir = vec(d.dir);
+    if (triple(d.point)) info.point = vec(d.point);
+    // A fuse detonation is not a kill by damage: the mirror repeats the explosion, and its own player takes it.
+    if (num(d.boom) && d.boom > 0) enemies.explode(e, Math.min(d.boom, 5)); else enemies.kill(e, info);
+  });
+  net.on('eproj', (d, from) => {
+    const enemies = ctx.enemies;
+    if (!mirroring(from) || enemies === null || !Array.isArray(d)) return;
+    for (const row of d.slice(0, COOP.SHOT_ROWS) as unknown[]) {
+      if (!Array.isArray(row) || row.length !== 13 || !row.every(n => num(n))) continue;
+      const [id = 0, x = 0, y = 0, z = 0, dx = 0, dy = 0, dz = 0, speed = 0, damage = 0, owner = 0, tone = 0, thickness = 0, blast = 0] = row as number[];
+      if (!int(id) || speed <= 0 || speed > 400 || damage < 0) continue;
+      spawnProjectile(enemies, min.set(x, y, z), max.set(dx, dy, dz), speed, damage, enemies.byId.get(owner) ?? null, tone, thickness, blast > 0, id);
+    }
+  });
+  net.on('edmg', (d, from) => {
+    const p = ctx.player;
+    if (!mirroring(from) || p === null || !p.alive || gs.state !== 'play' || !obj(d)) return;
+    if (num(d.amount) && d.amount > 0) p.takeDamage(Math.min(d.amount, COOP.DAMAGE_CAP), triple(d.from) ? vec(d.from) : null);
+    if (triple(d.push, 100)) {
+      const amount = Math.min(unit.fromArray(d.push).length(), COOP.PUSH_CAP);
+      if (amount > 0.01) p.knockback(unit.normalize(), amount);
+    }
+  });
 
   // ---- client: wave start and wave clear are read from two states
   function waveStart(s: CoopState): void {
@@ -115,7 +265,9 @@ export function createCoop(app: App): CoopApi {
   function update(dt: number): void {
     if (!live()) return;
     syncT -= dt;
-    if (net.isHost) { sync(); return; }
+    if (net.isHost) { flush(dt); sync(); return; }
+    for (const rows of chunks(hits, COOP.HIT_ROWS)) net.send('ehit', rows);
+    hits = [];
     if (syncT <= 0 && pending > 0) {
       syncT = COOP.SYNC;
       const n = Math.min(pending, 100000);
@@ -127,7 +279,12 @@ export function createCoop(app: App): CoopApi {
     return { mode: 'coop', status: state ? `WAVE ${state.wave} · team score ${Math.max(state.score, gs.score)}` : '' };
   }
 
-  function reset(): void { state = null; mySlot = 0; pending = 0; announced = 0; sent = ''; }
+  function reset(): void {
+    state = null; mySlot = 0; pending = 0; announced = 0; sent = ''; scoresDirty = false;
+    spawned.length = 0; shots = []; hits = [];
+    // Solo and training enemies think for themselves.
+    if (ctx.enemies !== null) ctx.enemies.mirror = false;
+  }
 
-  return { active, directing, players, get state() { return state; }, begin, slot, info, points, update, reset };
+  return { active, directing, players, get state() { return state; }, begin, slot, info, points, onKill, hurt, push, update, reset };
 }

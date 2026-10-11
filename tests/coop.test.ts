@@ -98,7 +98,7 @@ function makePeer(hub: ReturnType<typeof makeHub>, id: string, ids: string[], la
     forward: new Vector3(0, 0, -1), right: new Vector3(1, 0, 0), yaw: 0, pitch: 0, wi: 0, weapon: { kind: 'rifle' }, weapons: [],
     grapple: { mode: 'idle', hook: new Vector3() }, melee: { active: false, cooldown: 0, addBlood: noop },
     speed: 0, aiming: false, firing: false, blockRadius: 0, crouching: false, sliding: false, blocking: false, parryWindow: false,
-    nades: [], grenades: 1, maxGrenades: 5, lastHitBy: null as string | null, lastHit: null as unknown,
+    nades: [], grenades: 1, maxGrenades: 5, addAmmoAll: noop, lastHitBy: null as string | null, lastHit: null as unknown,
     onHeadshot: vi.fn(), tryDeflect: () => false as const, tryBlockMelee: () => false, detachGrapple: noop, throwGrenade: noop, clearNades: noop,
     knocks: [] as Vector3[], knockback(dir: Vector3, amount: number) { this.knocks.push(dir.clone().multiplyScalar(amount)); },
     reset(pos: Vector3) { body.pos.copy(pos); this.alive = true; this.hp = this.maxHp; },
@@ -176,6 +176,9 @@ function makePeer(hub: ReturnType<typeof makeHub>, id: string, ids: string[], la
 function party(count = 2) {
   const hub = makeHub(), land = yard(), ids = ['host', 'ann', 'bob', 'cat'].slice(0, count);
   const peers = ids.map(id => makePeer(hub, id, ids, land));
+  // The real join path: the host adds each avatar and tells the lobby.
+  for (const id of ids.slice(1)) (peers[0]!.net.onPeerJoin as (id: string, meta: { name: string }) => void)(id, { name: id });
+  hub.flush();
   let time = 100;
   /** One frame on every peer, the way `boot` steps a live match, then the mail. */
   const tick = (dt = 0.05): void => {
@@ -356,4 +359,193 @@ test('points from every peer go into one team score', () => {
   expect(validEnvelope({ t: 'cpts', d: { n: 0 }, relay: false })).toBe(false);
   expect(validEnvelope({ t: 'cpts', d: { n: 100001 }, relay: false })).toBe(false);
   expect(t.hub.dropped).toEqual([]);
+});
+
+// ---------------------------------------------------------------- enemies
+
+/** Two peers in wave 1 with the first enemy out, and its mirror on the client. */
+function firstEnemy() {
+  steady();
+  const t = party(2), { host, ann } = t;
+  t.start(); t.run(1.3);
+  const real = host.enemies.list[0]!, copy = ann.enemies.byId.get(real.id)!;
+  return { ...t, real, copy };
+}
+
+test('the host thinks, the client mirrors: spawns and snapshots carry each enemy across', () => {
+  const t = firstEnemy(), { host, ann, real, copy } = t;
+  expect(host.enemies.mirror).toBe(false);
+  expect(ann.enemies.mirror).toBe(true);
+  expect(host.enemies.alive).toBe(1);
+  expect(copy, 'the client has the same enemy id').toBeDefined();
+  expect(copy.type).toBe(real.type);
+  expect(ann.enemies.alive).toBe(1);
+  t.run(0.5);
+  expect(copy.snapNew!.p.distanceTo(real.body.pos)).toBeLessThan(0.6);
+  expect(copy.state).toBe(real.state);
+  expect(t.hub.dropped).toEqual([]);
+});
+
+test('a client hit moves health on the host only, and the kill is credited to that client', () => {
+  const t = firstEnemy(), { host, ann, real, copy } = t;
+  const hit = { part: 'head', crit: true, source: 'rifle', point: copy.center.clone(), dir: new Vector3(0, 0, -1) };
+  ann.enemies.damage(copy, 10, hit);
+  expect(copy.hp, 'a mirror never changes health itself').toBe(copy.maxHp);
+  expect(ann.hud.hitmarker).toHaveBeenLastCalledWith(false, true);
+  host.hud.hitmarker.mockClear();
+  t.run(0.3);
+  expect(real.hp).toBe(real.maxHp - 10);
+  expect(copy.hp, 'the snapshot brings the new health back').toBe(real.hp);
+  expect(host.hud.hitmarker, 'the host shows no hitmarker for another player').not.toHaveBeenCalled();
+  expect(host.player.onHeadshot).not.toHaveBeenCalled();
+  // The killing hit.
+  ann.enemies.damage(copy, 500, hit);
+  t.run(0.3);
+  expect(real.alive).toBe(false);
+  expect(copy.alive).toBe(false);
+  expect(ann.gs.kills, 'the reward runs on the attacker').toBe(1);
+  expect(host.gs.kills).toBe(0);
+  expect(ann.hud.hitmarker).toHaveBeenCalledWith(true, true);
+  for (const p of t.peers) {
+    expect(p.app.scores.get('ann')?.kills, `${p.id} board`).toBe(1);
+    expect(p.app.scores.get('host')?.kills).toBe(0);
+    expect(p.gs.score, 'one team score').toBe(ann.gs.score);
+  }
+  expect(ann.gs.score).toBeGreaterThan(0);
+  // The drop is the host's, and every peer sees the same pickup.
+  expect(ann.app.pickups.items.map(p => p.id).sort()).toEqual(host.app.pickups.items.map(p => p.id).sort());
+  expect(t.hub.dropped).toEqual([]);
+});
+
+test('a host kill reaches the mirror with the host as attacker', () => {
+  const t = firstEnemy(), { host, ann, real, copy } = t;
+  host.enemies.damage(real, 500, { part: 'torso', source: 'rifle', point: real.center.clone(), dir: new Vector3(0, 0, -1) });
+  t.run(0.2);
+  expect(copy.alive).toBe(false);
+  expect(host.gs.kills).toBe(1);
+  expect(ann.gs.kills).toBe(0);
+  expect(ann.app.scores.get('host')?.kills).toBe(1);
+});
+
+test('hits from a player who is down, or not in the lobby, are ignored', () => {
+  const t = firstEnemy(), { host, ann, real, copy } = t;
+  // Ann is down: her state packets say so, and her avatar on the host is not alive.
+  ann.player.alive = false; t.tick();
+  expect(host.remotes.get('ann')!.alive).toBe(false);
+  ann.enemies.damage(copy, 500, { part: 'torso', source: 'rifle' });
+  t.tick();
+  expect(real.hp).toBe(real.maxHp);
+  host.net.handlers.get('ehit')!([{ id: real.id, amount: 500, part: 'torso', src: 'rifle', crit: false, point: [0, 0, 0], dir: [0, 0, 1] }], 'stranger');
+  expect(real.alive).toBe(true);
+  // One reported hit never exceeds the cap.
+  ann.player.alive = true; t.tick(); real.hp = real.maxHp = 5000;
+  host.net.handlers.get('ehit')!([{ id: real.id, amount: 99999, part: 'torso', src: 'rifle', crit: false, point: [0, 0, 0], dir: [0, 0, 1] }], 'ann');
+  expect(real.hp).toBe(5000 - COOP.HIT_CAP);
+});
+
+test('a boss reaches the mirror with its scaled health', () => {
+  steady();
+  const t = party(2), { host, ann } = t;
+  host.settings.startWave = 5;
+  t.start(); t.run(1.3);
+  const boss = host.enemies.list.find(e => e.stats.boss)!, copy = ann.enemies.byId.get(boss.id)!;
+  expect(copy.maxHp).toBe(boss.maxHp);
+  expect(copy.maxHp).toBe(Math.round(boss.stats.hp * 1.6));
+});
+
+test('enemy damage reaches a remote player through the host only, capped, and never as PvP damage', () => {
+  const t = firstEnemy(), { host, ann } = t;
+  const sent: string[] = [], send = host.net.sendTo.bind(host.net);
+  host.net.sendTo = (to, type, data) => { sent.push(type); send(to, type, data); };
+  const avatar = host.remotes.get('ann')!;
+  avatar.takeDamage(12, new Vector3(3, 1, 0));
+  avatar.knockback(new Vector3(0, 0, 2), 7);
+  avatar.takeDamage(5000, null);
+  t.hub.flush();
+  expect(sent).toEqual(['edmg', 'edmg', 'edmg']);
+  expect(ann.damage).toEqual([12, COOP.DAMAGE_CAP]);
+  expect(ann.player.knocks).toHaveLength(1);
+  expect(ann.player.knocks[0]!.length()).toBeCloseTo(7, 1);
+  // A client never tells another client to take enemy damage.
+  ann.remotes.get('host')!.takeDamage(40, null);
+  t.hub.flush();
+  expect(host.damage).toEqual([]);
+  expect(t.hub.dropped).toEqual([]);
+});
+
+test('a detonation hurts each player on its own machine, once', () => {
+  const t = firstEnemy(), { host, ann } = t;
+  const bomber = host.enemies.spawn('bomber', new Vector3(3, 0, 15));
+  t.run(0.2);
+  expect(ann.enemies.byId.get(bomber.id), 'a spawn outside the director is mirrored too').toBeDefined();
+  host.enemies.damage(bomber, 999, { part: 'torso', source: 'rifle' });
+  t.run(0.2);
+  expect(ann.enemies.byId.get(bomber.id)?.alive ?? false).toBe(false);
+  expect(ann.damage, 'the client takes its own blast, and no second one from the host').toHaveLength(1);
+  expect(host.damage).toHaveLength(1);
+});
+
+test('enemy shots, a grapple yank and a shield plate cross the wire', async () => {
+  const { spawnProjectile } = await import('@/engine/enemies/projectiles');
+  const t = firstEnemy(), { host, ann, real, copy } = t;
+  const shot = spawnProjectile(host.enemies, new Vector3(20, 1, -20), new Vector3(0, 0, -1), 30, 9, real, 3, 0.045, false);
+  t.tick();
+  const mirrored = ann.enemies.projectiles.find(p => p.id === shot.id);
+  expect(mirrored?.damage).toBe(9);
+  expect(mirrored?.owner).toBe(copy);
+  expect(mirrored!.vel.z).toBeCloseTo(-30, 1);
+  // A yank on the mirror is a request; the host stuns the enemy.
+  real.state = 'hunt';
+  expect(ann.enemies.yank(copy, new Vector3(0, 1, 15))).toBe(true);
+  expect(copy.state).not.toBe('stunned');
+  t.tick();
+  expect(real.state).toBe('stunned');
+  // The host owns the shield plate.
+  const shield = host.enemies.spawn('shield', new Vector3(-20, 0, -20));
+  t.run(0.2);
+  const plate = ann.enemies.byId.get(shield.id)!;
+  expect(plate.shieldHp).toBe(2);
+  for (let i = 0; i < 2; i++) ann.enemies.damage(plate, 75, { part: 'shield', source: 'melee' });
+  expect(plate.shieldHp, 'not broken on the mirror').toBe(2);
+  t.run(0.3);
+  expect(shield.shieldHp).toBe(0);
+  expect(plate.shieldHp).toBe(0);
+  expect(t.hub.dropped).toEqual([]);
+});
+
+test('each enemy message is checked, and a batch over its size is refused', () => {
+  const row12 = [1, 0, 0, 0, 0, 1, 40, 0, 0, 0, 0, 2], row13 = [9, 0, 1, 0, 0, 0, -1, 30, 9, 1, 3, 0.045, 0];
+  const hit = { id: 1, amount: 28, part: 'head', src: 'rifle', crit: true, point: [1, 2, 3], dir: [0, 0, -1] };
+  const kill = { id: 1, by: 'ann', src: 'rifle', crit: false, dir: [0, 0, -1], point: null, boom: 0 };
+  const ok: [string, unknown, object][] = [
+    ['espawn', { id: 1, type: 'grunt', pos: [1, 0, 2], hp: 60 }, { from: 'host' }],
+    ['esnap', [row12], { from: 'host' }], ['eproj', [row13], { from: 'host' }], ['ekill', kill, { from: 'host' }],
+    ['ekill', { ...kill, by: null, dir: null }, { from: 'host' }],
+    ['edmg', { amount: 12, from: [1, 2, 3], push: null }, { from: 'host' }], ['edmg', { amount: 0, from: null, push: [0, 3, 7] }, { from: 'host' }],
+    ['ehit', [hit], { relay: false }], ['eyank', { id: 1, to: [0, 1, 2] }, { relay: false }],
+  ];
+  for (const [t, d, route] of ok) expect(validEnvelope({ t, d, ...route }), t).toBe(true);
+  const bad: [string, unknown][] = [
+    ['espawn', { id: 0, type: 'grunt', pos: [1, 0, 2], hp: 60 }], ['espawn', { id: 1, type: '', pos: [1, 0, 2], hp: 60 }],
+    ['espawn', { id: 1, type: 'grunt', pos: [1, 0], hp: 60 }], ['espawn', { id: 1, type: 'grunt', pos: [1, 0, 2], hp: 0 }],
+    ['esnap', []], ['esnap', [row12.slice(1)]], ['esnap', [[...row12.slice(1), Number.NaN]]], ['esnap', Array(COOP.SNAP_ROWS + 1).fill(row12)],
+    ['eproj', [row12]], ['eproj', Array(COOP.SHOT_ROWS + 1).fill(row13)],
+    ['ekill', { ...kill, by: 7 }], ['ekill', { ...kill, boom: 9 }], ['ekill', { ...kill, dir: [0, 0, -3] }],
+    ['edmg', { amount: -1, from: null, push: null }], ['edmg', { amount: 5, from: null }],
+    ['ehit', []], ['ehit', Array(COOP.HIT_ROWS + 1).fill(hit)], ['ehit', [{ ...hit, amount: 0 }]], ['ehit', [{ ...hit, dir: [0, 2, 0] }]],
+    ['eyank', { id: 1 }],
+  ];
+  for (const [t, d] of bad) expect(validEnvelope({ t, d, from: 'host' }), `${t} ${JSON.stringify(d).slice(0, 60)}`).toBe(false);
+  // The largest legal batches fit one envelope.
+  expect(validEnvelope({ t: 'esnap', d: Array(COOP.SNAP_ROWS).fill([123456, -123.45, 123.45, -123.45, -3.14, 1, 99999, 0.55, 0.55, 1, 1, 2]), from: 'host' })).toBe(true);
+  expect(validEnvelope({ t: 'eproj', d: Array(COOP.SHOT_ROWS).fill([123456, -123.45, 123.45, -123.45, -0.577, 0.577, -0.577, 123.45, 123.45, 123456, 3, 0.045, 1]), from: 'host' })).toBe(true);
+  expect(validEnvelope({ t: 'ehit', d: Array(COOP.HIT_ROWS).fill({ ...hit, id: 123456, amount: 99999.9, point: [-123.45, 123.45, -123.45], dir: [-0.577, 0.577, -0.577], part: 'x'.repeat(24), src: 'y'.repeat(32) }), relay: false })).toBe(true);
+});
+
+test('leaving a run turns the mirror off, so solo enemies think again', () => {
+  const t = firstEnemy(), { ann } = t;
+  expect(ann.enemies.mirror).toBe(true);
+  ann.app.ffa.leave();
+  expect(ann.enemies.mirror).toBe(false);
+  expect(ann.app.coop.state).toBeNull();
 });

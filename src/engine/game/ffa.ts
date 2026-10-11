@@ -57,6 +57,8 @@ export interface FfaApi {
   updateOver(dt: number): void;
   update(dt: number, t?: number): void;
   refreshScoreHud(): void;
+  /** Host: send the score rows to every peer. */
+  sendScores(): void;
   showBoard(on: boolean): void;
   boardRows(): BoardRow[];
   targets(): Target[];
@@ -155,12 +157,16 @@ export function createFFA(app: App): FfaApi {
 
   // ---- remotes
   function addRemote(rid: string, name: string): RemotePlayer {
-    let r = ctx.remotes.get(rid);
-    if (r) { r.name = name; return r; }
-    r = new RemotePlayer(ctx, rid, name, 0, TONE.HOSTILE);
-    const team = teamOf(rid);
-    r.setTeam(isTeam(team) && teamMode() ? team + 1 : 0);
+    const known = ctx.remotes.get(rid), r = known ?? new RemotePlayer(ctx, rid, name, 0, TONE.HOSTILE);
+    if (known) known.name = name;
+    else {
+      const team = teamOf(rid);
+      r.setTeam(isTeam(team) && teamMode() ? team + 1 : 0);
+    }
+    // Co-op: an enemy on the host hurt or pushed this player; the host tells its owner.
+    r.onKnock = (dir, amount) => { if (coop()) app.coop.push(rid, dir, amount); };
     r.onDamage = (amount, from) => {
+      if (coop()) { app.coop.hurt(rid, amount, from); return; }
       if (!canHurt(r) || !r.alive) return;
       hud.hitmarker(false, false);
       net.sendTo(rid, 'pdmg', { amount: Math.round(amount), from: from ? from.toArray().map(round1) : null, by: net.id, src: 'grenade', crit: false, ...roundTag() });
@@ -891,7 +897,7 @@ export function createFFA(app: App): FfaApi {
   return {
     selectMode, requestTeam, onlineInfo, dispose,
     create, join, quickPlay, hostStart, leave, lobbyScreen, broadcastLobby,
-    localDeath, updateDying, updateOver, update, refreshScoreHud, showBoard, boardRows,
+    localDeath, updateDying, updateOver, update, refreshScoreHud, sendScores, showBoard, boardRows,
     targets, canHurt, raycastPlayers, playersInArc, hitPlayer, cutRopes, onShot,
   };
 }

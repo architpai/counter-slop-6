@@ -170,6 +170,10 @@ export interface HitInfo {
   dist?: number;
   /** Melee swing side, +1 or -1. */
   slashDir?: number;
+  /** Co-op: the peer id of the attacker, when it is not this machine's player. */
+  by?: string | null;
+  /** Co-op: the explosion scale of a fuse detonation, so a mirror can repeat it. */
+  boom?: number;
 }
 
 /** `player.lastHit`, used for kill credit. */

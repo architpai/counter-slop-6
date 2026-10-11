@@ -40,6 +40,10 @@ export interface SoloApi {
   spawnPosition(type: string): THREE.Vector3;
   update(dt: number): void;
   onKill(e: EnemyRecord, info: HitInfo, overkill: boolean): void;
+  /** The killer's half of a kill: score, combo, feed line, katana streak. */
+  reward(e: EnemyRecord, info: HitInfo, overkill: boolean): void;
+  /** The world's half of a kill: the ammo or health it leaves. */
+  drop(e: EnemyRecord): void;
   onBoss(e: EnemyRecord): void;
   updateFocus(dt: number): void;
   endFocus(): void;
@@ -206,7 +210,12 @@ export function createSolo(app: App): SoloApi {
     ctx.hud.setWave(gs.wave, enemies.alive + gs.queue.length);
   }
   function onKill(e: EnemyRecord, info: HitInfo = {}, overkill = false): void {
+    // Co-op: the host credits the attacker; each machine rewards only its own player.
+    if (app.coop.active()) { app.coop.onKill(e, info, overkill); return; }
     if (gs.mode === 'ffa') return;
+    reward(e, info, overkill); drop(e);
+  }
+  function reward(e: EnemyRecord, info: HitInfo = {}, overkill = false): void {
     const player = ctx.player;
     if (player === null) return;
     gs.kills++; gs.combo++; gs.comboT = 3.5;
@@ -224,6 +233,8 @@ export function createSolo(app: App): SoloApi {
     if (info.source === 'fall') label = 'FELL OFF THE MAP';
     else if (!player.body.onGround && info.source !== 'deflect') { points += 40; label = label ? `${label} · AIRBORNE` : 'AIRBORNE'; }
     app.addScore(points, label); ctx.audio.kill(Boolean(info.crit || e.stats.boss));
+  }
+  function drop(e: EnemyRecord): void {
     const r = rand();
     if (r < 0.62) app.pickups.spawn(r < 0.5 ? 'ammo' : 'health', e.body.pos);
   }
@@ -340,5 +351,5 @@ export function createSolo(app: App): SoloApi {
       ctx.input.rumble(0.5, 0.4, 120); ctx.hud.setFocusMark(null);
     }
   }
-  return { intro, startWave, spawnPosition, update, onKill, onBoss, updateFocus, endFocus, enterFocus, candidate };
+  return { intro, startWave, spawnPosition, update, onKill, reward, drop, onBoss, updateFocus, endFocus, enterFocus, candidate };
 }
