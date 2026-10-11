@@ -7,7 +7,7 @@ import { GUN_STATS } from '../weapons/stats';
 import { MELEE_PVP_DAMAGE } from '../weapons/melee';
 import { GRENADE_PVP_MAX, MAX_THROW_SPEED } from '../player/grenades';
 import type { BoardRow, OnlineInfo } from '../hud/screens';
-import { advanceTeamMatch, assignTeams, createTeamMatch, dropFlag, interactFlag, isOnlineMode, isTeam, markDead, ONLINE_MODES, scoreTeam, TEAM_NAMES, TEAM_RULES, validTeamMatch, validTeams } from './team-rules';
+import { advanceTeamMatch, assignTeams, createTeamMatch, dropFlag, interactFlag, isOnlineMode, isTeam, isTeamMode, markDead, ONLINE_MODES, scoreTeam, TEAM_NAMES, TEAM_RULES, validTeamMatch, validTeams } from './team-rules';
 import type { OnlineMode, Point, Team, TeamMatch } from './team-rules';
 import { createTeamWorld, teamLayout } from './team-world';
 import type { HitInfo, PlayerHit, ScoreRow, Target } from '../types';
@@ -90,6 +90,7 @@ export function createFFA(app: App): FfaApi {
   const sorted = (): ScoreRow[] => rows().sort((a, b) => b.kills - a.kills || a.deaths - b.deaths);
   const boardRows = (): BoardRow[] => rows().map(r => ({ ...r, self: r.id === net.id, team: lobby.teams?.[r.id] }));
   const mode = (): OnlineMode => lobby.mode ?? 'ffa';
+  const teamMode = (): boolean => isTeamMode(mode());
   const teamOf = (rid: string | null): Team | undefined => rid === null ? undefined : lobby.teams?.[rid];
   const opponents = (a: string | null, b: string | null): boolean => mode() === 'ffa' ||
     (isTeam(teamOf(a)) && isTeam(teamOf(b)) && teamOf(a) !== teamOf(b));
@@ -122,23 +123,23 @@ export function createFFA(app: App): FfaApi {
   }
   function applyTeams(): void {
     const team = teamOf(net.id);
-    if (ctx.player) ctx.player.team = isTeam(team) && mode() !== 'ffa' ? team + 1 : 0;
+    if (ctx.player) ctx.player.team = isTeam(team) && teamMode() ? team + 1 : 0;
     for (const [rid, r] of ctx.remotes) {
       const team = teamOf(rid);
-      r.setTeam(isTeam(team) && mode() !== 'ffa' ? team + 1 : 0);
+      r.setTeam(isTeam(team) && teamMode() ? team + 1 : 0);
     }
   }
   function selectMode(value: OnlineMode): void {
     if (!isOnlineMode(value) || app.busy || (gs.state !== 'start' && gs.state !== 'lobby')) return;
     if (gs.state === 'lobby' && (!net.isHost || lobby.isPublic)) return;
     lobby.mode = value;
-    lobby.teams = value === 'ffa' ? {} : assignTeams([...lobby.players.keys()]);
+    lobby.teams = isTeamMode(value) ? assignTeams([...lobby.players.keys()]) : {};
     applyTeams();
     if (gs.state === 'lobby') broadcastLobby();
   }
   /** A player's own choice of side, in the lobby only. The host applies it; a full side refuses. */
   function setTeam(rid: string, team: unknown): void {
-    if (!net.isHost || gs.state !== 'lobby' || mode() === 'ffa' || !isTeam(team) || !lobby.players.has(rid) ||
+    if (!net.isHost || gs.state !== 'lobby' || !teamMode() || !isTeam(team) || !lobby.players.has(rid) ||
         teamOf(rid) === team || Object.values(lobby.teams).filter(t => t === team).length >= 4) return;
     lobby.teams[rid] = team;
     applyTeams(); broadcastLobby();
@@ -155,7 +156,7 @@ export function createFFA(app: App): FfaApi {
     if (r) { r.name = name; return r; }
     r = new RemotePlayer(ctx, rid, name, 0, TONE.HOSTILE);
     const team = teamOf(rid);
-    r.setTeam(isTeam(team) && mode() !== 'ffa' ? team + 1 : 0);
+    r.setTeam(isTeam(team) && teamMode() ? team + 1 : 0);
     r.onDamage = (amount, from) => {
       if (!canHurt(r) || !r.alive) return;
       hud.hitmarker(false, false);
@@ -259,7 +260,7 @@ export function createFFA(app: App): FfaApi {
     const self = net.id;
     if (self === null) { online('something went wrong'); return; }
     lobby.map = app.settings.mapKey; lobby.players.clear(); lobby.players.set(self, app.settings.name); lobby.hostId = self;
-    lobby.teams = mode() === 'ffa' ? {} : assignTeams([self]);
+    lobby.teams = teamMode() ? assignTeams([self]) : {};
     applyTeams(); enterLobby(isPublic);
   });
   const join = (code: string): Promise<void> => attempt(async () => {
@@ -279,7 +280,7 @@ export function createFFA(app: App): FfaApi {
       const self = net.id;
       if (self === null) { online('something went wrong'); return; }
       lobby.map = app.settings.mapKey; lobby.players.clear(); lobby.players.set(self, app.settings.name); lobby.hostId = self;
-      lobby.teams = mode() === 'ffa' ? {} : assignTeams([self]);
+      lobby.teams = teamMode() ? assignTeams([self]) : {};
       applyTeams(); enterLobby(true);
     }
   });
@@ -291,7 +292,7 @@ export function createFFA(app: App): FfaApi {
   function peerJoined(pid: string, meta: PeerMeta): void {
     const name = cleanName(meta?.name);
     lobby.players.set(pid, name);
-    if (mode() !== 'ffa') lobby.teams = assignTeams([...lobby.players.keys()], lobby.teams);
+    if (teamMode()) lobby.teams = assignTeams([...lobby.players.keys()], lobby.teams);
     addRemote(pid, name); applyTeams(); broadcastLobby();
     if (!inMatch()) return;
     if (!scores.has(pid)) scores.set(pid, { id: pid, name, kills: 0, deaths: 0 });
@@ -305,7 +306,7 @@ export function createFFA(app: App): FfaApi {
   function peerLeft(pid: string): void {
     const name = nameOf(pid) ?? 'someone';
     removeRemote(pid);
-    if (!inMatch() && mode() !== 'ffa') { lobby.teams = assignTeams([...lobby.players.keys()], lobby.teams); applyTeams(); }
+    if (!inMatch() && teamMode()) { lobby.teams = assignTeams([...lobby.players.keys()], lobby.teams); applyTeams(); }
     broadcastLobby();
     if (inMatch()) { hud.kill(`${name} left`); sendScores(); sendTeamState(); }
   }
@@ -327,7 +328,7 @@ export function createFFA(app: App): FfaApi {
   }
   function lobbyScreen(): void {
     dispose(); gs.teamMatch = null;
-    if (net.isHost && mode() !== 'ffa') lobby.teams = assignTeams([...lobby.players.keys()], lobby.teams);
+    if (net.isHost && teamMode()) lobby.teams = assignTeams([...lobby.players.keys()], lobby.teams);
     applyTeams();
     app.loadLevel(true, lobby.map ?? app.settings.mapKey); app.resetRun();
     gs.state = 'lobby'; gs.over = null; gs.menu = false;
@@ -356,8 +357,8 @@ export function createFFA(app: App): FfaApi {
   }
   function hostStart(): void {
     if (!net.isHost || gs.state !== 'lobby') return;
-    lobby.teams = mode() === 'ffa' ? {} : assignTeams([...lobby.players.keys()], lobby.teams);
-    if (mode() !== 'ffa' && new Set(Object.values(lobby.teams)).size < 2) {
+    lobby.teams = teamMode() ? assignTeams([...lobby.players.keys()], lobby.teams) : {};
+    if (teamMode() && new Set(Object.values(lobby.teams)).size < 2) {
       lobby.status = 'team modes need a player on each team'; app.showScreen('lobby'); return;
     }
     dispose();
@@ -371,7 +372,7 @@ export function createFFA(app: App): FfaApi {
     let i = 0;
     for (const pid of lobby.players.keys()) spawns[pid] = order.length ? order[i++ % order.length] ?? 0 : 0;
     const selected = mode();
-    const state = selected === 'ffa' ? null : createTeamMatch(selected, teamLayout(ctx.level).neutral);
+    const state = isTeamMode(selected) ? createTeamMatch(selected, teamLayout(ctx.level).neutral) : null;
     net.send('start', { spawns, map, mode: selected, teams: lobby.teams, ...(state ? { teamState: state } : {}) });
     const self = net.id;
     startMatch(false, self === null ? null : spawns[self] ?? null, state); sendScores();
@@ -682,7 +683,7 @@ export function createFFA(app: App): FfaApi {
     }
     if (new Set(ids).size !== players.length) return;
     const selected = d.mode ?? 'ffa';
-    if (!isOnlineMode(selected) || (selected !== 'ffa' && (!validTeams(d.teams) || ids.some(pid => typeof pid !== 'string' || !Object.hasOwn(d.teams as object, pid))))) return;
+    if (!isOnlineMode(selected) || (isTeamMode(selected) && (!validTeams(d.teams) || ids.some(pid => typeof pid !== 'string' || !Object.hasOwn(d.teams as object, pid))))) return;
     if (inMatch() && selected !== mode()) return;
     lobby.mode = selected; lobby.teams = validTeams(d.teams) ? d.teams : {};
     lobby.hostId = hostId; lobby.isPublic = isPublic; lobby.code = net.code;
@@ -716,7 +717,7 @@ export function createFFA(app: App): FfaApi {
     if (!fromHost(from) || !obj(d) || (gs.state !== 'lobby' && gs.state !== 'start' && !d.late)) return;
     const selected = d.mode ?? 'ffa';
     if (!isOnlineMode(selected)) return;
-    if (selected !== 'ffa') {
+    if (isTeamMode(selected)) {
       if (!validTeams(d.teams) || !validTeamMatch(d.teamState) || d.teamState.mode !== selected ||
           [...lobby.players.keys()].some(rid => !Object.hasOwn(d.teams as object, rid)) || !validStateRoster(d.teamState)) return;
     }

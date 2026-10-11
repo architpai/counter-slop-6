@@ -4,7 +4,7 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { ControlEditor } from './ControlEditor';
 import { KEYBOARD_ROWS, PAD_ROWS } from '@/engine/hud/labels';
-import { ONLINE_MODES, TEAM_NAMES, isTeam } from '@/engine/game/team-rules';
+import { ONLINE_MODES, TEAM_NAMES, isTeam, isTeamMode } from '@/engine/game/team-rules';
 import type { OnlineMode } from '@/engine/game/team-rules';
 import type {
   BoardModel, BoardRow, DeadModel, GfxModel, LobbyModel, LobbyPlayer, MainModel, MatchOnModel, MenuModel,
@@ -327,7 +327,7 @@ function Modes({ mode, disabled, onAction }: { mode?: OnlineMode; disabled: bool
 }
 
 function TeamSummary({ model }: { model: OnlineInfo }) {
-  if (modeChoice(model.mode).key === 'ffa') return null;
+  if (!isTeamMode(model.mode)) return null;
   return <div className="team-summary">
     <div className="team-scores" aria-label="Team scores">
       <span data-team="0">RED <b>{count(model.teamScores?.[0] ?? 0)}</b></span>
@@ -350,7 +350,7 @@ function LobbyRoster({ players }: { players: LobbyPlayer[] }) {
 }
 
 function ScoreRows({ rows, full = false, mode }: { rows: BoardRow[]; full?: boolean; mode?: OnlineMode }) {
-  if (modeChoice(mode).key !== 'ffa') return <div className="team-rosters">
+  if (isTeamMode(mode)) return <div className="team-rosters">
     {TEAMS.map(team => <section className="team-roster" data-team={team} key={team} aria-label={`${TEAM_NAMES[team]} team scores`}>
       <h3>{TEAM_NAMES[team]} TEAM</h3>
       <ScoreRows rows={list(rows).filter(row => row.team === team)} full={full} />
@@ -442,7 +442,7 @@ function OnlineScreen({ model, onAction }: { model: OnlineModel; onAction: Act }
 
 function LobbyScreen({ model, onAction }: { model: LobbyModel; onAction: Act }) {
   const players = list(model.players);
-  const teamMode = modeChoice(model.mode).key !== 'ffa';
+  const teamMode = isTeamMode(model.mode);
   const ready = !teamMode || TEAMS.every(team => players.some(player => player.team === team));
   const selfTeam = players.find(player => player.self)?.team;
   return (
@@ -578,7 +578,7 @@ export function BoardPanel({ model }: { model: BoardModel }) {
 }
 
 export function PvpPanel({ model }: { model: PvpModel }) {
-  if (modeChoice(model.mode).key !== 'ffa') {
+  if (isTeamMode(model.mode)) {
     const self = list(model.rows).find(row => row.id === model.selfId);
     return <div className="team-hud">
       <h2>{modeChoice(model.mode).name}</h2>

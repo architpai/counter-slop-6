@@ -34,6 +34,7 @@ export interface TeamMatch {
 }
 
 export const isOnlineMode = (value: unknown): value is OnlineMode => value === 'ffa' || value === 'tdm' || value === 'flag';
+export const isTeamMode = (value: unknown): value is 'tdm' | 'flag' => value === 'tdm' || value === 'flag';
 export const isTeam = (value: unknown): value is Team => value === 0 || value === 1;
 
 export function assignTeams(ids: string[], previous: Record<string, Team> = {}): Record<string, Team> {
