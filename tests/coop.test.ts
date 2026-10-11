@@ -817,3 +817,20 @@ test('aim and hazard messages are checked', () => {
     expect(validEnvelope({ t: 'ehaz', d, from: 'host' }), JSON.stringify(d)).toBe(false);
   }
 });
+
+test('a player who returns at a wave clear and goes down again soon after is counted again', async () => {
+  const t = quietWave(), { host, ann } = t;
+  t.hold();
+  ann.player.takeDamage(999); t.run(0.2);
+  t.clearWave();
+  expect(ann.gs.state).toBe('play');
+  // The host skips the intermission; the next wave takes Ann down well inside the PvP respawn delay.
+  host.gs.intermission = 0.01; t.run(0.4);
+  expect(host.gs.wave).toBe(2);
+  // The repeat guard on death reports reads the wall clock: 0.5 s in co-op, 3.5 s in the PvP modes.
+  await new Promise(resolve => setTimeout(resolve, 600));
+  ann.player.takeDamage(999); t.run(0.2);
+  expect(host.app.coop.state!.dead).toEqual(['ann']);
+  expect(ann.app.coop.isDown('ann')).toBe(true);
+  expect(host.app.scores.get('ann')?.deaths).toBe(2);
+});

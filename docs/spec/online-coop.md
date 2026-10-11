@@ -149,7 +149,7 @@ A mirror shows each threat that can hurt its player:
 Known limits:
 
 - The mirror's attack clock starts when the snapshot arrives, so a slam effect can be up to 0.1 s plus latency after its damage.
-- A sapper charge follows the host through the existing `brk` message; the mirror does not show the charge or its countdown.
+- A sapper charge exists only on the host. A client does not see it and cannot destroy it. The destruction of its target crate reaches clients through the existing `brk` message.
 - The Moderator yank window is host state, so a client cannot yank the Moderator.
 - A remote player's melee parry of an enemy has no parry window and gives that player no parry feedback.
 - A player who joins late does not see rings or smoke that are already in the world.

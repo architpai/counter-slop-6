@@ -858,7 +858,8 @@ export function createFFA(app: App): FfaApi {
   net.on('pdead', (d, from) => {
     if (!roster(from) || !obj(d)) return;
     const t = now();
-    if (t - (lastDeath.get(from) ?? -Infinity) < RESPAWN) return;
+    // Co-op has no timed respawn to pace deaths: a player can return at a wave clear and go down again soon after.
+    if (t - (lastDeath.get(from) ?? -Infinity) < (coop() ? 0.5 : RESPAWN)) return;
     lastDeath.set(from, t);
     if (gs.teamMatch && (!activeCombat() || d.round !== gs.teamMatch.round || Object.hasOwn(gs.teamMatch.dead, from))) return;
     const { killer, dir, over, how, crit } = d;
