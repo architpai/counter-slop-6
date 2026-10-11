@@ -12,9 +12,9 @@ A tactical survival shooter, allegedly. Runs in the browser, no install.
 
 ## What it is
 
-- Solo wave survival, or free-for-all online for up to 8 players (peer-to-peer, no server).
+- Solo wave survival, online co-op survival for up to 4 players, or online deathmatch and team modes for up to 8 (peer-to-peer, no server).
 - Two maps: **Downtown** (streets, rooftops, fire escapes) and **The House** (a suburban home, basement to rooftop).
-- Rifle, shotgun, sniper, katana. Grenades. Grapple, slide, wall jump, double jump, air dash.
+- R4-C, MP5, shotgun, sniper, pistol, LMG, combat knife. Grenades. Grapple, slide, wall jump, double jump, air dash.
 - Enemies lead their shots, take cover between bursts, fan out and dodge grenades.
 - Mouse + keyboard or controller.
 - Graphics presets (Settings → Graphics, auto-picked for your device): Low keeps the flat low-poly look for phones; Medium, High and Ultra go realistic (self-made Blender textures, baked light, haze, light shafts on Ultra), each setting adjustable under Advanced.
@@ -30,7 +30,7 @@ A tactical survival shooter, allegedly. Runs in the browser, no install.
 | Grapple | Q or E | L1 / LB |
 | Katana slash | F | R1 / RB |
 | Grenade (hold to throw further) | G | R3 or d-pad up |
-| Reload / weapons | R / 1-4 or wheel | □ / △ |
+| Reload / weapons | R / 1-6 or wheel | □ / △ |
 | Scoreboard / pause | Tab / Esc | View / Menu |
 
 ## Run it locally
