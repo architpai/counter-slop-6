@@ -33,6 +33,41 @@ function hitRing(m: EnemyManager, e: EnemyRecord, radius: number, height: number
   }
 }
 
+/** The admin's stomp as seen and heard: the host runs it with the damage, a mirror on its own clock. */
+function stompFx(m: EnemyManager, e: EnemyRecord): void {
+  m.ctx.audio.stomp(e.center); m.ctx.effects.shake += 0.9;
+  origin.copy(e.body.pos); origin.y += 0.2;
+  m.ctx.effects.explosion(origin, 7, 2);
+  for (let i = 0; i < 24; i++) {
+    const angle = TAU * i / 24, x = Math.sin(angle), z = Math.cos(angle);
+    particlePos.set(e.body.pos.x + x * 3, e.body.pos.y + 0.2, e.body.pos.z + z * 3);
+    particleVel.set(x * 14, 2, z * 14);
+    m.ctx.effects.particle({ kind: 'stroke', pos: particlePos, vel: particleVel, tone: 2, size: 0.06, life: 0.4, gravity: 4, stretch: 0.06, drag: 3 });
+  }
+}
+function wipeFx(m: EnemyManager, e: EnemyRecord): void {
+  m.ctx.audio.stomp(e.center); m.ctx.effects.shake += 0.8;
+  origin.copy(e.body.pos); origin.y += 0.2; m.ctx.effects.explosion(origin, 6, 5);
+}
+
+/** Snapshot codes for `bossAttack.kind`; zero is no attack. */
+export const ATTACK_KINDS = ['stomp', 'throw', 'wipe', 'charge', 'summon', 'spray'] as const;
+/** A mirror's stand-in for the host's attack: the pose and the telegraph, never the damage. */
+export function mirrorAttack(m: EnemyManager, e: EnemyRecord, kind: BossAttack['kind']): BossAttack {
+  if (kind === 'stomp') m.ctx.audio.bossRoar(e.center);
+  // Half a snapshot interval late on average.
+  return kind === 'charge' ? { kind, t: 0.05, dir: null, hit: true, dustT: 0 } : kind === 'spray' ? { kind, t: 0.05, shots: 0 } : { kind, t: 0.05, fired: false };
+}
+export function mirrorAttackStep(m: EnemyManager, e: EnemyRecord, dt: number): void {
+  const a = e.bossAttack;
+  if (!a) return;
+  a.t += dt;
+  if (!('fired' in a) || a.fired) return;
+  if (a.kind === 'stomp' && a.t > 0.75) { a.fired = true; stompFx(m, e); }
+  else if (a.kind === 'wipe' && a.t > 0.9) { a.fired = true; wipeFx(m, e); }
+  else if (a.kind === 'throw' && a.t > 0.6) a.fired = true;
+}
+
 function endAttack(e: EnemyRecord, factor = 1): void {
   e.bossAttack = null;
   e.attackCd = rollCooldown(e.stats) * factor;
@@ -54,15 +89,7 @@ function admin(m: EnemyManager, e: EnemyRecord, dt: number, dist: number, dy: nu
   a.t += dt; e.yawTo = yaw; stop(e, 5, dt);
   if (a.kind === 'stomp') {
     if (a.t > 0.75 && !a.fired) {
-      a.fired = true; m.ctx.audio.stomp(e.center); m.ctx.effects.shake += 0.9;
-      origin.copy(e.body.pos); origin.y += 0.2;
-      m.ctx.effects.explosion(origin, 7, 2);
-      for (let i = 0; i < 24; i++) {
-        const angle = TAU * i / 24, x = Math.sin(angle), z = Math.cos(angle);
-        particlePos.set(e.body.pos.x + x * 3, e.body.pos.y + 0.2, e.body.pos.z + z * 3);
-        particleVel.set(x * 14, 2, z * 14);
-        m.ctx.effects.particle({ kind: 'stroke', pos: particlePos, vel: particleVel, tone: 2, size: 0.06, life: 0.4, gravity: 4, stretch: 0.06, drag: 3 });
-      }
+      a.fired = true; stompFx(m, e);
       hitRing(m, e, 7.5, 2.5, 22, 9);
       m.blastEnemies(e.body.pos, 6, 60, e);
     }
@@ -94,8 +121,7 @@ function hitbox(m: EnemyManager, e: EnemyRecord, dt: number, dist: number, dy: n
   if (a.kind === 'wipe') {
     e.yawTo = yaw; stop(e, 6, dt);
     if (a.t > 0.9 && !a.fired) {
-      a.fired = true; m.ctx.audio.stomp(e.center); m.ctx.effects.shake += 0.8;
-      origin.copy(e.body.pos); origin.y += 0.2; m.ctx.effects.explosion(origin, 6, 5);
+      a.fired = true; wipeFx(m, e);
       const live = m.list.reduce((n, enemy) => n + (enemy.alive && enemy.type === 'bomber' ? 1 : 0), 0);
       for (let i = 0; i < Math.min(2, 4 - live); i++) {
         const angle = rand(0, TAU);

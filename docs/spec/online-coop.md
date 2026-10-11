@@ -116,7 +116,9 @@ The namespace advances to v3. Old builds cannot join.
 |---|---|---|
 | `coop` | host → all | `{ wave, left, inter, score, dead, label, sub, speed, damage }` |
 | `espawn` | host → all, or one late joiner | `{ id, type, pos, hp }`; `hp` is the maximum health after the boss scale |
-| `esnap` | host → all, each 0.1 s | Rows of 12 numbers: section 17.2 of [Enemies](enemies.md) plus shield health. A maximum of 64 rows for each message; more rows use more messages |
+| `esnap` | host → all, each 0.1 s | Rows of 12 numbers: section 17.2 of [Enemies](enemies.md) plus shield health. The boss attack field is a kind code: 0 none, 1 stomp, 2 throw, 3 wipe, 4 charge, 5 summon, 6 spray. A maximum of 64 rows for each message; more rows use more messages |
+| `eaim` | host → all, with each snapshot while a laser is on | A maximum of 32 rows of 6 numbers: id, aim point, warned flag, aim time. One empty batch follows the last laser |
+| `ehaz` | host → all | `{ kind, a, b, n }`: `ring` (`a` position, `n` owner id), `smoke` (`a` from, `b` to), `clear` (`a` centre, `n` radius) |
 | `ekill` | host → all | `{ id, by, src, crit, dir, point, boom }`; `by` is the attacker's peer id or null; `boom` is the explosion scale for a fuse detonation, else 0 |
 | `eproj` | host → all, one batch for each frame | Rows of 13 numbers: id, position, direction, speed, damage, owner id, tone, thickness, blast flag. A maximum of 48 rows for each message |
 | `edmg` | host → one player | `{ amount, from, push }` |
@@ -136,14 +138,21 @@ A mirror shows each threat that can hurt its player:
 
 | Threat | Replication |
 |---|---|
-| Sniper laser | The mirror builds the beam when the snapshot aim amount is 0.9 or more |
+| Sniper and Aimbot laser | `eaim` carries the aim point. The mirror draws the beam with the host's drawing code and plays the aim warning sound. An enemy with no row has no beam |
 | Shield plate | Snapshot shield health; the plate drops when it is zero |
-| Moderator ban ring | `ehaz { kind: 'ring', pos, owner }`; the mirror runs the countdown and hurts its own player |
-| Smoke grenade | `ehaz { kind: 'smoke', from, to }`; the mirror runs the arc and the cloud |
-| Smoke cleared by a blast | `ehaz { kind: 'clear', pos, radius }`, sent by the host; a client grenade clears host smoke through the `nade` replica |
-| Boss attack | The snapshot carries the attack kind code, so the mirror plays the correct telegraph |
+| Moderator ban ring | `ehaz` `ring`; the mirror runs the 3 s countdown and the 8 s burn, and hurts only its own player. The ring goes when its owner dies |
+| Smoke grenade | `ehaz` `smoke`; the mirror runs the arc and the cloud |
+| Smoke cleared by a blast | `ehaz` `clear`, sent by the host. Each machine also clears smoke where a teammate's grenade replica explodes, so a client grenade clears the host's smoke |
+| Boss attack | The snapshot carries the attack kind. The mirror runs the attack clock itself: the Admin raises and slams with the stomp sound, ring and explosion at 0.75 s; the Hitbox wipe explodes at 0.9 s. The damage is the host's (`edmg`) |
+| Enemy gunfire | The mirror plays one shot sound for each enemy in a projectile batch |
 
-Known limits: sapper charges and turret arcs follow the host through the existing `brk` and `espawn` messages; the mirror does not show the charge countdown. The Moderator yank window is host state, so a client cannot yank the Moderator.
+Known limits:
+
+- The mirror's attack clock starts when the snapshot arrives, so a slam effect can be up to 0.1 s plus latency after its damage.
+- A sapper charge follows the host through the existing `brk` message; the mirror does not show the charge or its countdown.
+- The Moderator yank window is host state, so a client cannot yank the Moderator.
+- A remote player's melee parry of an enemy has no parry window and gives that player no parry feedback.
+- A player who joins late does not see rings or smoke that are already in the world.
 
 ## 7. HUD and screens
 
@@ -176,6 +185,8 @@ Run the real WebRTC smoke check with a local app server: `node tests/online-coop
 Automated tests are not evidence of balance. Report real multi-player balance, different-network, and mobile-host coverage separately.
 
 ## 10. Build order
+
+All six parts are built.
 
 1. This specification and the team-mode check refactor (no behaviour change).
 2. Mode, discovery, player limit, lobby, start, and end. A run can start with no enemies.

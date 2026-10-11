@@ -57,7 +57,7 @@ export function createCoop(app: App): CoopApi {
   const scores = app.scores;
   const min = new THREE.Vector3(), max = new THREE.Vector3(), unit = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
   let state: CoopState | null = null;
-  let mySlot = 0, syncT = 0, snapT = 0, sent = '', scoresDirty = false;
+  let mySlot = 0, syncT = 0, snapT = 0, sent = '', scoresDirty = false, aiming = false;
   /** Host: whether the last synced frame was an intermission. Null before the first one. */
   let resting: boolean | null = null;
   /** Host: spawns and shots of this frame, sent after the director has set their final values. */
@@ -86,7 +86,7 @@ export function createCoop(app: App): CoopApi {
 
   function begin(next: CoopState, index: number): void {
     state = structuredClone(next); mySlot = index; syncT = snapT = 0; sent = ''; pending = 0;
-    spawned.length = 0; shots = []; hits = []; scoresDirty = false; resting = null;
+    spawned.length = 0; shots = []; hits = []; scoresDirty = false; resting = null; aiming = false;
     if (net.isHost) net.busyReason = 'a wave is running · try again between waves';
     const enemies = ctx.enemies;
     if (enemies !== null) { enemies.mirror = !net.isHost; if (!net.isHost) enemies.setMutations(state.wave); }
@@ -139,6 +139,9 @@ export function createCoop(app: App): CoopApi {
         src: String(info.source ?? 'rifle').slice(0, 32), crit: !!info.crit,
         point: (info.point ?? e.center).toArray().map(round2), dir: unit.toArray().map(round3) });
     };
+    manager.onHazard = (kind, a, b, n) => {
+      if (directing()) net.send('ehaz', { kind, a: a.toArray().map(round2), b: b ? b.toArray().map(round2) : null, n: round2(n) });
+    };
     manager.onClientYank = (e, to) => { if (live() && !net.isHost) net.send('eyank', { id: e.id, to: to.toArray().map(round2) }); };
   }
   function flush(dt: number): void {
@@ -153,6 +156,10 @@ export function createCoop(app: App): CoopApi {
     if (snapT > 0) return;
     snapT = COOP.SNAP;
     for (const rows of chunks(enemies.snapshot().filter(row => row.every(Number.isFinite)), COOP.SNAP_ROWS)) net.send('esnap', rows);
+    // The lasers that are on. One empty batch after the last one goes out.
+    const aims = enemies.aims().filter(row => row.every(Number.isFinite)).slice(0, COOP.AIM_ROWS);
+    if (aims.length || aiming) net.send('eaim', aims);
+    aiming = aims.length > 0;
   }
   function onKill(e: EnemyRecord, info: HitInfo, overkill: boolean): void {
     if (!net.isHost) {
@@ -239,6 +246,20 @@ export function createCoop(app: App): CoopApi {
   net.on('esnap', (d, from) => {
     if (mirroring(from) && Array.isArray(d)) ctx.enemies?.applySnapshot(d as number[][], performance.now() / 1000);
   });
+  net.on('eaim', (d, from) => {
+    if (mirroring(from) && Array.isArray(d)) ctx.enemies?.applyAims(d as number[][]);
+  });
+  net.on('ehaz', (d, from) => {
+    const enemies = ctx.enemies;
+    if (!mirroring(from) || enemies === null || !obj(d) || !triple(d.a) || !num(d.n)) return;
+    const hazards = enemies.hazards;
+    if (d.kind === 'ring') {
+      const owner = enemies.byId.get(d.n);
+      if (!owner?.alive || hazards.rings.length >= 8) return;
+      hazards.addRing(vec(d.a), owner); ctx.audio.sniperAim(owner.center);
+    } else if (d.kind === 'smoke' && triple(d.b)) hazards.throwSmoke(vec(d.a), vec(d.b));
+    else if (d.kind === 'clear') hazards.clearSmoke(vec(d.a), Math.min(Math.abs(d.n), 50));
+  });
   net.on('ekill', (d, from) => {
     const enemies = ctx.enemies;
     if (!mirroring(from) || enemies === null || !obj(d) || !int(d.id)) return;
@@ -255,11 +276,14 @@ export function createCoop(app: App): CoopApi {
   net.on('eproj', (d, from) => {
     const enemies = ctx.enemies;
     if (!mirroring(from) || enemies === null || !Array.isArray(d)) return;
+    const heard = new Set<number>();
     for (const row of d.slice(0, COOP.SHOT_ROWS) as unknown[]) {
       if (!Array.isArray(row) || row.length !== 13 || !row.every(n => num(n))) continue;
       const [id = 0, x = 0, y = 0, z = 0, dx = 0, dy = 0, dz = 0, speed = 0, damage = 0, owner = 0, tone = 0, thickness = 0, blast = 0] = row as number[];
       if (!int(id) || speed <= 0 || speed > 400 || damage < 0) continue;
       spawnProjectile(enemies, min.set(x, y, z), max.set(dx, dy, dz), speed, damage, enemies.byId.get(owner) ?? null, tone, thickness, blast > 0, id);
+      // One shot sound for each enemy in the batch: a burst or a shotgun is one report.
+      if (!heard.has(owner)) { heard.add(owner); ctx.audio.enemyShot(min); }
     }
   });
   net.on('edmg', (d, from) => {

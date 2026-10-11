@@ -3,7 +3,7 @@ import type { OnlineMode } from './team-rules';
 /** Co-op survival rules (docs/spec/online-coop.md). Scale values are playtest values, not measured balance. */
 export const COOP = {
   MAX_PLAYERS: 4, ALIVE_CAP: 24, SNAP: 0.1, SYNC: 0.25, RESPAWN: 3.5,
-  HIT_CAP: 1000, DAMAGE_CAP: 200, PUSH_CAP: 30, SNAP_ROWS: 64, SHOT_ROWS: 48, HIT_ROWS: 32,
+  HIT_CAP: 1000, DAMAGE_CAP: 200, PUSH_CAP: 30, SNAP_ROWS: 64, SHOT_ROWS: 48, HIT_ROWS: 32, AIM_ROWS: 32,
 } as const;
 
 export const playerCap = (mode: OnlineMode | undefined): number => mode === 'coop' ? COOP.MAX_PLAYERS : 8;

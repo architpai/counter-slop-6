@@ -710,3 +710,110 @@ test('a join in an intermission announces no wave that the player missed', () =>
   t.run(8.2);
   expect(ann.hud.message).toHaveBeenCalledWith('WAVE 2', expect.any(String), 2.6);
 });
+
+// ---------------------------------------------------------------- threats a client must see
+
+/** The first enemy held still, so only the threat under test can hurt anyone. */
+function heldEnemy() {
+  const t = firstEnemy();
+  t.host.gs.queue.length = 0;
+  t.real.state = 'stunned'; t.real.age = 0; t.real.stunDuration = 999;
+  return t;
+}
+
+test('a ban ring appears on the mirror, hurts each player on its own machine, and goes with its owner', () => {
+  const t = heldEnemy(), { host, ann, real, copy } = t;
+  const sent: string[] = [], send = host.net.sendTo.bind(host.net);
+  host.net.sendTo = (to, type, data) => { sent.push(type); send(to, type, data); };
+  expect(host.enemies.hazards.placeRing(real)).toBe(true);
+  t.tick();
+  const ring = host.enemies.hazards.rings[0]!, mirrored = ann.enemies.hazards.rings[0]!;
+  expect(mirrored.pos.distanceTo(ring.pos)).toBeLessThan(0.02);
+  expect(mirrored.owner).toBe(copy);
+  // Ann walks into it. The countdown passes, then the ring burns her on her own machine.
+  ann.player.body.pos.copy(ring.pos);
+  t.run(2.8);
+  expect(ann.damage).toEqual([]);
+  t.run(1);
+  expect(ann.damage.length).toBeGreaterThan(0);
+  expect(ann.damage.reduce((sum, amount) => sum + amount, 0)).toBeLessThan(40);
+  expect(sent, 'the host sends no second dose').toEqual([]);
+  expect(host.damage).toEqual([]);
+  host.enemies.kill(real, { source: 'fall' });
+  t.run(0.2);
+  expect(host.enemies.hazards.rings).toHaveLength(0);
+  expect(ann.enemies.hazards.rings).toHaveLength(0);
+  expect(t.hub.dropped).toEqual([]);
+});
+
+test('smoke is thrown and cleared on every machine', () => {
+  const t = heldEnemy(), { host, ann } = t;
+  const from = new Vector3(10, 1, -10);
+  expect(host.enemies.hazards.throwSmoke(from, new Vector3(0, 1.5, 15))).toBe(true);
+  t.tick();
+  expect(ann.enemies.hazards.smoke).toHaveLength(1);
+  t.run(0.3);
+  expect(ann.enemies.hazards.smoke[0]!.pos.distanceTo(host.enemies.hazards.smoke[0]!.pos)).toBeLessThan(1.5);
+  // A blast on the host thins it for everyone.
+  host.enemies.blastEnemies(host.enemies.hazards.smoke[0]!.pos.clone(), 3, 1);
+  t.tick();
+  expect(host.enemies.hazards.smoke).toHaveLength(0);
+  expect(ann.enemies.hazards.smoke).toHaveLength(0);
+  expect(t.hub.dropped).toEqual([]);
+});
+
+test('a sniper laser is drawn on the mirror while the host sniper aims, and goes out with it', () => {
+  const t = heldEnemy(), { host, ann } = t;
+  const sniper = host.enemies.spawn('sniper', new Vector3(20, 0, -5));
+  // Past its spawn and its first cooldown, inside the 1.7 s aim.
+  t.run(2);
+  const copy = ann.enemies.byId.get(sniper.id)!;
+  expect(sniper.laser?.visible, 'the host sniper is aiming').toBe(true);
+  expect(copy.aimPoint, 'the mirror knows where').not.toBeNull();
+  expect(copy.aimPoint!.distanceTo(sniper.aimPoint!)).toBeLessThan(1);
+  expect(copy.laser?.visible).toBe(true);
+  expect(copy.laser).not.toBe(sniper.laser);
+  // The sniper is yanked: its laser goes out on the host, and one empty batch tells the mirror.
+  sniper.state = 'stunned'; sniper.age = 0; sniper.stunDuration = 999;
+  t.run(0.3);
+  expect(sniper.laser?.visible).toBe(false);
+  expect(copy.aimPoint).toBeNull();
+  expect(copy.laser?.visible).toBe(false);
+  expect(t.hub.dropped).toEqual([]);
+});
+
+test('a boss attack reaches the mirror by kind, and the mirror plays its telegraph on its own clock', () => {
+  const t = heldEnemy(), { host, ann } = t;
+  const boss = host.enemies.spawn('boss', new Vector3(0, 0, -20));
+  t.run(0.7);
+  const copy = ann.enemies.byId.get(boss.id)!, now = performance.now() / 1000;
+  const row = (kind: 'stomp' | 'throw' | null): number[][] => {
+    boss.bossAttack = kind ? { kind, t: 0, fired: false } : null;
+    return host.enemies.snapshot().filter(r => r[0] === boss.id);
+  };
+  ann.enemies.applySnapshot(row('stomp'), now);
+  expect(copy.bossAttack).toMatchObject({ kind: 'stomp', fired: false });
+  ann.enemies.update(0.5);
+  expect(copy.bossAttack).toMatchObject({ kind: 'stomp', fired: false });
+  ann.enemies.update(0.3);
+  expect(copy.bossAttack, 'the slam lands on the mirror').toMatchObject({ kind: 'stomp', fired: true });
+  ann.enemies.applySnapshot(row('throw'), now);
+  expect(copy.bossAttack).toMatchObject({ kind: 'throw', fired: false });
+  ann.enemies.applySnapshot(row(null), now);
+  expect(copy.bossAttack).toBeNull();
+  expect(ann.damage, 'a mirror attack is a picture, not damage').toEqual([]);
+});
+
+test('aim and hazard messages are checked', () => {
+  const aim = [3, 1, 2, 3, 1, 0.9];
+  expect(validEnvelope({ t: 'eaim', d: [aim], from: 'host' })).toBe(true);
+  expect(validEnvelope({ t: 'eaim', d: [], from: 'host' })).toBe(true);
+  expect(validEnvelope({ t: 'eaim', d: [aim.slice(1)], from: 'host' })).toBe(false);
+  expect(validEnvelope({ t: 'eaim', d: Array(COOP.AIM_ROWS + 1).fill(aim), from: 'host' })).toBe(false);
+  for (const d of [{ kind: 'ring', a: [1, 0, 2], b: null, n: 7 }, { kind: 'smoke', a: [1, 0, 2], b: [3, 1, 4], n: 0 }, { kind: 'clear', a: [1, 0, 2], b: null, n: 6.4 }]) {
+    expect(validEnvelope({ t: 'ehaz', d, from: 'host' }), d.kind).toBe(true);
+  }
+  for (const d of [{ kind: 'fire', a: [1, 0, 2], b: null, n: 7 }, { kind: 'ring', a: [1, 0], b: null, n: 7 }, { kind: 'ring', a: [1, 0, 2], n: 7 }, { kind: 'ring', a: [1, 0, 2], b: null, n: Number.NaN }]) {
+    expect(validEnvelope({ t: 'ehaz', d, from: 'host' }), JSON.stringify(d)).toBe(false);
+  }
+});

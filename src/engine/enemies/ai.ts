@@ -213,6 +213,13 @@ function laser(m: EnemyManager, e: EnemyRecord, aim: Vector3): void {
   alignSegment(e.laser, muzzle, probe, 2 * (0.006 + 0.012 * clamp(e.aimT / 1.7, 0, 1) ** 2));
 }
 
+/** A mirror's sniper telegraph, from the aim point the host sent. */
+export function mirrorLaser(m: EnemyManager, e: EnemyRecord): void {
+  if (!e.aimPoint) return;
+  (e.figure.parts as CoreParts).tip.getWorldPosition(muzzle);
+  laser(m, e, e.aimPoint);
+}
+
 function fireControl(m: EnemyManager, e: EnemyRecord, dt: number, targetSpeed: number): void {
   const s = e.stats as RangedType, target = e.target;
   if (!target) return;

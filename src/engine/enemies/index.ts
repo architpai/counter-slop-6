@@ -12,14 +12,15 @@ import { ENEMY_GRAVITY, TYPES, BOSS_ORDER } from './types';
 import type { EnemyType } from './types';
 import { makeModel, syncModel, flash, spawnPose, animate, corpse, planDeath, DEATH_END, FLASH_TIME } from './model';
 import type { Death, GroundJoints, EyeAnchors, HitSphere, ModelNodes } from './model';
-import { groundThink, wander, steer, follow, onHit } from './ai';
+import { groundThink, wander, steer, follow, onHit, mirrorLaser } from './ai';
 import { flyerThink } from './flyer';
 import { updateProjectiles, clearProjectiles } from './projectiles';
 import type { ProjectileRecord } from './projectiles';
+import { ATTACK_KINDS, mirrorAttack, mirrorAttackStep } from './boss';
 import type { BossAttack } from './boss';
 import { EnemyHazards } from './hazards';
 import { specialThink } from './specials';
-import { expansionBossThink } from './expansion-boss';
+import { expansionBossThink, mirrorAimbotLaser } from './expansion-boss';
 import { MUTATIONS, mutationCount } from './progression';
 import { spawnProjectile } from './projectiles';
 
@@ -158,6 +159,8 @@ export class EnemyManager {
   onBoss: ((e: EnemyRecord) => void) | null;
   onSpawn: ((e: EnemyRecord) => void) | null;
   onClientHit: ((e: EnemyRecord, amount: number, info: HitInfo) => void) | null;
+  /** Host only: a ban ring, a smoke grenade, or smoke that a blast cleared. `n` is the ring's owner id or the cleared radius. */
+  onHazard: ((kind: 'ring' | 'smoke' | 'clear', a: Vector3, b: Vector3 | null, n: number) => void) | null;
   /** Mirror only: a grapple pull, which the host applies. */
   onClientYank: ((e: EnemyRecord, target: Vector3) => void) | null;
   onFire: ((p: ProjectileRecord) => void) | null;
@@ -177,7 +180,7 @@ export class EnemyManager {
     this.mods = { speed: 1, damage: 1 };
     this.hazards = new EnemyHazards(this);
     this.mirror = false;
-    this.onKill = this.onBoss = this.onSpawn = this.onClientHit = this.onClientYank = this.onFire = null;
+    this.onKill = this.onBoss = this.onSpawn = this.onClientHit = this.onClientYank = this.onFire = this.onHazard = null;
     this.ids = 1; this.slots = 0; this.sepT = 0; this.alive = 0;
     this._steer = (e, goal, speed, accel, dt) => steer(this, e, goal, speed, accel, dt);
     this._follow = (e, target, speed, dt) => follow(this, e, target, speed, dt);
@@ -317,7 +320,7 @@ export class EnemyManager {
       }
       animate(e, dt); syncModel(e);
     }
-    if (!this.mirror && !passive) { this._separate(dt); this.hazards.update(dt); }
+    if (!passive) { if (!this.mirror) this._separate(dt); this.hazards.update(dt); }
     updateProjectiles(this, dt);
     for (let i = this.list.length - 1; i >= 0; i--) {
       const e = this.list[i];
@@ -361,8 +364,11 @@ export class EnemyManager {
     }
     e.root.position.copy(e.body.pos); e.root.rotation.y = e.yaw;
     e.target = this.ctx.player;
+    mirrorAttackStep(this, e, dt);
     animate(e, dt); syncModel(e);
-    if (e.laser) e.laser.visible = e.aimAmt > 0.9;
+    // The telegraph a player dodges by: drawn from the aim point the host sends (`applyAims`).
+    if (!e.aimPoint) { if (e.laser) e.laser.visible = false; }
+    else if (e.type === 'aimbot') mirrorAimbotLaser(this, e); else mirrorLaser(this, e);
   }
 
   _destroy(e: EnemyRecord): void {
@@ -461,7 +467,8 @@ export class EnemyManager {
       }
     }
     if (e.type === 'flyer' && e.mutated && e.payload) {
-      effects.explosion(e.center, 3, TONE.ACCENT, true); if (!this.mirror) this.blastEnemies(e.center, 3, 60, e);
+      effects.explosion(e.center, 3, TONE.ACCENT, true);
+      if (!this.mirror) this.blastEnemies(e.center, 3, 60, e);
     }
     e.body.vel.set(0, 0, 0);
     if (e.laser) { e.laser.removeFromParent(); e.laser = null; }
@@ -607,7 +614,33 @@ export class EnemyManager {
 
   snapshot(): number[][] {
     return this.list.filter(e => e.alive).map(e => [e.id, round2(e.body.pos.x), round2(e.body.pos.y), round2(e.body.pos.z), round2(e.yaw),
-      STATE_CODE[e.state] ?? 1, Math.round(e.hp), round2(e.aimAmt), round2(e.attackT), e.fuseT >= 0 ? 1 : 0, e.bossAttack ? 1 : 0, e.shieldHp]);
+      STATE_CODE[e.state] ?? 1, Math.round(e.hp), round2(e.aimAmt), round2(e.attackT), e.fuseT >= 0 ? 1 : 0,
+      e.bossAttack ? ATTACK_KINDS.indexOf(e.bossAttack.kind) + 1 : 0, e.shieldHp]);
+  }
+
+  /** Host: one row for each aiming laser, `[id, x, y, z, warned, aim time]`. */
+  aims(): number[][] {
+    return this.list.filter(e => e.alive && e.aimPoint && e.laser?.visible).map(e => {
+      const p = e.aimPoint ?? e.center;
+      return [e.id, round2(p.x), round2(p.y), round2(p.z), e.aimWarned ? 1 : 0, round2(e.aimT)];
+    });
+  }
+
+  /** Mirror: the lasers that are on. An enemy without a row has stopped aiming. */
+  applyAims(rows: number[][]): void {
+    if (!Array.isArray(rows)) return;
+    const seen = new Set<EnemyRecord>();
+    for (const r of rows) {
+      if (!Array.isArray(r) || r.length < 6 || !r.every(Number.isFinite)) continue;
+      const [id = 0, x = 0, y = 0, z = 0, warned = 0, t = 0] = r;
+      const e = this.byId.get(id);
+      if (!e?.alive) continue;
+      seen.add(e);
+      e.aimPoint = (e.aimPoint ?? new Vector3()).set(x, y, z); e.aimT = t;
+      if (warned > 0 && !e.aimWarned) this.ctx.audio.sniperAim(e.center);
+      e.aimWarned = warned > 0;
+    }
+    for (const e of this.list) if (e.aimPoint && !seen.has(e)) { e.aimPoint = null; e.aimWarned = false; }
   }
 
   applySnapshot(rows: number[][], now: number): void {
@@ -624,7 +657,9 @@ export class EnemyManager {
       if (e.state === 'spawn' && state !== 'spawn') { e.state = state; e.root.scale.setScalar(e.stats.scale); }
       else if (e.state !== 'spawn') e.state = state;
       e.hp = hp; e.aimAmt = aim; e.attackT = attack; e.fuseT = fuse ? 0.5 : -1;
-      e.bossAttack = boss ? e.bossAttack ?? { kind: 'stomp', t: 0.3, fired: false } : null;
+      const kind = ATTACK_KINDS[boss - 1];
+      if (kind === undefined) e.bossAttack = null;
+      else if (e.bossAttack?.kind !== kind) e.bossAttack = mirrorAttack(this, e, kind);
       if (shield !== undefined && shield <= 0 && e.shieldHp > 0) this._breakShield(e);
       if (e.stats.boss) this.onBoss?.(e);
     }

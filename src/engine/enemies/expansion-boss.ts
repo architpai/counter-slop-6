@@ -49,6 +49,12 @@ function sniperLaser(m: EnemyManager, e: EnemyRecord): void {
   alignSegment(e.laser, origin, wall?.point ?? e.aimPoint, e.aimWarned ? 0.035 : 0.012);
 }
 
+/** A mirror's aimbot laser, from the aim point the host sent. */
+export function mirrorAimbotLaser(m: EnemyManager, e: EnemyRecord): void {
+  origin.copy(m.eye(e));
+  sniperLaser(m, e);
+}
+
 function aimbot(m: EnemyManager, e: EnemyRecord, dt: number): void {
   if (e.specialCd <= 0) carrier(m, e);
   const target = e.target;

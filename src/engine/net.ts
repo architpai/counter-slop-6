@@ -24,7 +24,7 @@ interface Welcome { hostId: string; code: string; isPublic: boolean }
 interface Attempt { conn: DataConnection; id: string; code: string; failed: boolean; welcome: Welcome | null }
 
 const HOST = new Set(['lobby', 'leave', 'start', 'end', 'backtolobby', 'score', 'pickup', 'taken', 'refused', 'teamstate', 'coop',
-  'espawn', 'esnap', 'ekill', 'eproj', 'edmg']);
+  'espawn', 'esnap', 'ekill', 'eproj', 'edmg', 'eaim', 'ehaz']);
 const REQUEST = new Set(['startreq', 'take', 'teamreq', 'cpts', 'ehit', 'eyank']);
 const ADDRESSED = new Set(['pdmg', 'headshot', 'parry', 'cut']);
 const BROADCAST = new Set(['ps', 'shots', 'pdead', 'nade', 'brk']);
@@ -87,6 +87,10 @@ function validPayload(type: string, d: unknown): boolean {
       vector(d.pos) && finite(d.hp) && d.hp >= 1 && d.hp <= 1e7;
     case 'esnap': return numberRows(d, COOP.SNAP_ROWS, 12);
     case 'eproj': return numberRows(d, COOP.SHOT_ROWS, 13);
+    // An empty batch says the last laser went out.
+    case 'eaim': return array(d) && (d.length === 0 || numberRows(d, COOP.AIM_ROWS, 6));
+    case 'ehaz': return fields(d, ['kind', 'a', 'b', 'n']) && typeof d.kind === 'string' && ['ring', 'smoke', 'clear'].includes(d.kind) &&
+      vector(d.a) && (d.b === null || vector(d.b)) && bounded(d.n, 1e7);
     case 'ekill': return fields(d, ['id', 'by', 'src', 'crit', 'dir', 'point', 'boom']) && integer(d.id) && (d.by === null || peerId(d.by)) &&
       text(d.src, 32) && typeof d.crit === 'boolean' && (d.dir === null || vector(d.dir, 1.01)) && (d.point === null || vector(d.point)) &&
       finite(d.boom) && d.boom >= 0 && d.boom <= 5;

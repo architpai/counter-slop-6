@@ -153,12 +153,10 @@ try {
   for (const p of [late, client, host]) { await action(p, 'leave'); await wait(p, () => window.__game.gs.state === 'start'); }
   await action(client, 'back'); await action(client, 'start');
   await wait(client, () => window.__game.gs.mode === 'solo' && window.__game.enemies.alive > 0);
-  const solo = await client.evaluate(() => new Promise(resolve => {
-    const e = window.__game.enemies.list[0], from = e.body.pos.clone();
-    setTimeout(() => resolve({ mirror: window.__game.enemies.mirror, moved: e.body.pos.distanceTo(from) }), 3000);
-  }));
-  assert.equal(solo.mirror, false);
-  assert.ok(solo.moved > 0.5, `a solo enemy moves on its own (${solo.moved})`);
+  assert.equal((await read(client)).mirror, false);
+  // Game time, not wall time: software GL runs few frames a second.
+  await client.evaluate(() => { const g = window.__game; g.soloEnemy = g.enemies.list[0]; g.soloFrom = g.soloEnemy.body.pos.clone(); });
+  await wait(client, () => window.__game.soloEnemy.body.pos.distanceTo(window.__game.soloFrom) > 0.5, null, 60000);
   assert.deepEqual(errors, []);
   console.log('PASS: real WebRTC co-op lobby, start, mirrored enemies, client hit and credit, team score, host-only enemy damage, refused and accepted late join, down and return, scaled wave, run end, and solo after co-op. Screenshots: /tmp/shooter-coop-check');
 } catch (error) {

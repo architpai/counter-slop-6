@@ -76,12 +76,18 @@ export class EnemyHazards {
       const players = ctx.game.targets().filter(t => t.alive);
       if (players.some(t => Math.hypot(t.body.pos.x - pos.x, t.body.pos.z - pos.z) < RING.playerDistance)) continue;
       if (!players.every(t => hasRingEscape(ctx.nav, t, [...this.rings.map(r => r.pos), pos], ctx.world))) continue;
-      const mesh = new Mesh(new RingGeometry(4.85, 5, 64), new MeshBasicMaterial({ color: 0xff4757, side: DoubleSide, transparent: true, opacity: 0.65, depthWrite: false }));
-      mesh.name = 'moderator ban countdown'; mesh.rotation.x = -Math.PI / 2; mesh.position.copy(pos); mesh.position.y += 0.08;
-      ctx.scene.add(mesh); this.rings.push({ pos, owner, age: 0, mesh });
+      this.addRing(pos, owner);
+      this.m.onHazard?.('ring', pos, null, owner.id);
       return true;
     }
     return false;
+  }
+
+  /** A ring at a decided place: the host's own choice, or the one a mirror was told. */
+  addRing(pos: Vector3, owner: EnemyRecord): void {
+    const mesh = new Mesh(new RingGeometry(4.85, 5, 64), new MeshBasicMaterial({ color: 0xff4757, side: DoubleSide, transparent: true, opacity: 0.65, depthWrite: false }));
+    mesh.name = 'moderator ban countdown'; mesh.rotation.x = -Math.PI / 2; mesh.position.copy(pos); mesh.position.y += 0.08;
+    this.m.ctx.scene.add(mesh); this.rings.push({ pos, owner, age: 0, mesh });
   }
 
   throwSmoke(from: Vector3, destination: Vector3): boolean {
@@ -90,6 +96,7 @@ export class EnemyHazards {
     mesh.name = 'smoke grenade'; mesh.position.copy(from); mesh.scale.setScalar(0.15);
     this.m.ctx.scene.add(mesh);
     this.smoke.push({ from: from.clone(), destination: destination.clone(), pos: from.clone(), age: 0, mesh, cloud: null });
+    if (!this.m.mirror) this.m.onHazard?.('smoke', from, destination, 0);
     return true;
   }
 
@@ -103,9 +110,11 @@ export class EnemyHazards {
   }
 
   clearSmoke(center: Vector3, radius: number): void {
+    let cleared = false;
     for (let i = this.smoke.length - 1; i >= 0; i--) if (this.smoke[i]!.pos.distanceTo(center) < radius + 3.5) {
-      this.smoke[i]!.cloud?.stop(); this.disposeMesh(this.smoke[i]!.mesh); this.smoke.splice(i, 1);
+      this.smoke[i]!.cloud?.stop(); this.disposeMesh(this.smoke[i]!.mesh); this.smoke.splice(i, 1); cleared = true;
     }
+    if (cleared && !this.m.mirror) this.m.onHazard?.('clear', center, null, radius);
   }
 
   plantCharge(target: Breakable, pos: Vector3): boolean {
@@ -134,7 +143,8 @@ export class EnemyHazards {
       ring.mesh.scale.setScalar(ring.age < 3 ? 0.85 + 0.15 * ring.age / 3 : 1);
       if (ring.age < 3) continue;
       ring.mesh.name = 'moderator active ban';
-      for (const target of ctx.game.targets()) if (target.alive && inRing(target.body.pos, ring.pos)) {
+      // Each machine runs its own copy of the ring and hurts its own player.
+      for (const target of ctx.game.targets()) if (target.alive && target.isLocal && inRing(target.body.pos, ring.pos)) {
         const dose = this.damage.get(target) ?? { amount: 0, from: ring.pos };
         dose.amount += 30 * Math.max(0, Math.min(ring.age, RING.countdown + RING.life) - Math.max(previous, RING.countdown)) * this.m.mods.damage;
         this.damage.set(target, dose);
