@@ -1,4 +1,4 @@
-export type OnlineMode = 'ffa' | 'tdm' | 'flag';
+export type OnlineMode = 'ffa' | 'tdm' | 'flag' | 'coop';
 export type Team = 0 | 1;
 export type Point = [number, number, number];
 
@@ -6,6 +6,7 @@ export const ONLINE_MODES = [
   { key: 'ffa', name: 'Solo Deathmatch', blurb: 'First to 20 kills · every player for themselves' },
   { key: 'tdm', name: 'Team Deathmatch', blurb: 'Red vs Blue · up to 4v4 · first to 40 kills' },
   { key: 'flag', name: 'Flag Hold', blurb: 'Red vs Blue · steal, place, defend for 30 seconds' },
+  { key: 'coop', name: 'Co-op Survival', blurb: 'Hold the waves together · up to 4 players' },
 ] as const;
 export const TEAM_NAMES = ['RED', 'BLUE'] as const;
 export const TEAM_RULES = { MATCH: 480, ROUND: 150, HOLD: 30, BREAK: 5, WAVE: 8, RETURN: 15, KILLS: 40 } as const;
@@ -33,7 +34,7 @@ export interface TeamMatch {
   flag: { carrier: string | null; placed: Team | null; pos: Point; holdLeft: number; returnLeft: number };
 }
 
-export const isOnlineMode = (value: unknown): value is OnlineMode => value === 'ffa' || value === 'tdm' || value === 'flag';
+export const isOnlineMode = (value: unknown): value is OnlineMode => value === 'ffa' || value === 'tdm' || value === 'flag' || value === 'coop';
 export const isTeamMode = (value: unknown): value is 'tdm' | 'flag' => value === 'tdm' || value === 'flag';
 export const isTeam = (value: unknown): value is Team => value === 0 || value === 1;
 

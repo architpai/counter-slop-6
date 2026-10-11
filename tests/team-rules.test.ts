@@ -166,6 +166,6 @@ test('wire bounds cover team snapshots, mode selection, round-tagged state and d
   expect(publicCode('ffa', 0)).toBe('PUB0');
   expect(publicCode('tdm', 7)).toBe('TDM7');
   expect(publicCode('flag', 3)).toBe('FLG3');
-  expect(NET.PREFIX_DEV).toContain('v2');
+  expect(NET.PREFIX_DEV).toContain('v3');
   expect(TEAM_RULES.ROUND).toBe(150);
 });

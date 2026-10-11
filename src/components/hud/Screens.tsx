@@ -6,6 +6,7 @@ import { ControlEditor } from './ControlEditor';
 import { KEYBOARD_ROWS, PAD_ROWS } from '@/engine/hud/labels';
 import { ONLINE_MODES, TEAM_NAMES, isTeam, isTeamMode } from '@/engine/game/team-rules';
 import type { OnlineMode } from '@/engine/game/team-rules';
+import { playerCap } from '@/engine/game/coop-rules';
 import type {
   BoardModel, BoardRow, DeadModel, GfxModel, LobbyModel, LobbyPlayer, MainModel, MatchOnModel, MenuModel,
   OnlineInfo, OnlineModel, OverModel, PauseModel, PvpModel, ScreenView, UiAction, LookModel, WeaponSettingsModel,
@@ -327,6 +328,7 @@ function Modes({ mode, disabled, onAction }: { mode?: OnlineMode; disabled: bool
 }
 
 function TeamSummary({ model }: { model: OnlineInfo }) {
+  if (model.mode === 'coop') return model.status ? <p className="match-status">{model.status}</p> : null;
   if (!isTeamMode(model.mode)) return null;
   return <div className="team-summary">
     <div className="team-scores" aria-label="Team scores">
@@ -389,7 +391,7 @@ function MainScreen({ model, pad, onAction }: { model: MainModel; pad: boolean; 
           <Maps model={model} onAction={onAction} previews />
           <div className="screen-actions launch-actions" data-ui-block="">
             <Button act="start" text="START SOLO" primary sub={count(model.startWave) > 1 ? `from wave ${count(model.startWave)}` : 'survive the waves'} onAction={onAction} />
-            <Button act="online" text="PLAY ONLINE" sub="solo deathmatch · team modes · up to 8" onAction={onAction} />
+            <Button act="online" text="PLAY ONLINE" sub="deathmatch · team modes · co-op waves" onAction={onAction} />
             <Button act="training" text="TRAINING GROUND" sub="inspect models · passive targets" onAction={onAction} />
           </div>
           <StartWave model={model} onAction={onAction} />
@@ -442,17 +444,18 @@ function OnlineScreen({ model, onAction }: { model: OnlineModel; onAction: Act }
 
 function LobbyScreen({ model, onAction }: { model: LobbyModel; onAction: Act }) {
   const players = list(model.players);
-  const teamMode = isTeamMode(model.mode);
+  const teamMode = isTeamMode(model.mode), coop = model.mode === 'coop';
   const ready = !teamMode || TEAMS.every(team => players.some(player => player.team === team));
   const selfTeam = players.find(player => player.self)?.team;
   return (
     <>
-      <Title text="LOBBY" sub={`${modeChoice(model.mode).name} · ${players.length}/8 players`} />
+      <Title text="LOBBY" sub={`${modeChoice(model.mode).name} · ${players.length}/${playerCap(model.mode)} players`} />
       <p>code <strong className="lobby-code">{model.code}</strong></p>
       <Modes mode={model.mode} disabled={!model.isHost || model.isPublic} onAction={onAction} />
       {model.isPublic ? <p className="screen-footer">Public lobby mode is fixed. Create another lobby to change it.</p> : null}
       {!model.isHost ? <p className="screen-footer">The host chooses the mode and map.</p> : null}
       <Maps model={model} onAction={onAction} disabled={!model.isHost} />
+      {coop && model.isHost ? <StartWave model={{ checkpoint: model.checkpoint ?? 0, startWave: model.startWave ?? 1 }} onAction={onAction} /> : null}
       <Weapons model={model} onAction={onAction} collapsible />
       <p className="screen-footer">{model.isPublic
         ? 'this lobby is public: anyone can quick play in, or type the code'
@@ -475,6 +478,7 @@ function LobbyScreen({ model, onAction }: { model: LobbyModel; onAction: Act }) 
       <Status text={model.status} />
       <p className="screen-footer">{teamMode
         ? ready ? 'Anyone can start · select your team · up to 4v4' : 'Need at least 2 players, with one on each team.'
+        : coop ? 'anyone can start · the run starts at the host’s wave · friends can join between waves'
         : `anyone can start · ${players.length < 2 ? 'people can still join once it is running' : `${players.length} players in`}`}</p>
     </>
   );
@@ -542,7 +546,7 @@ function DeadScreen({ model, onAction }: { model: DeadModel; onAction: Act }) {
 function OverScreen({ model }: { model: OverModel }) {
   return (
     <>
-      <Title text={model.youWin ? 'YOU WIN' : `${model.winnerName || 'someone'} WINS`} sub={modeChoice(model.mode).name} />
+      <Title text={model.mode === 'coop' ? 'RUN OVER' : model.youWin ? 'YOU WIN' : `${model.winnerName || 'someone'} WINS`} sub={modeChoice(model.mode).name} />
       <TeamSummary model={model} />
       <ScoreRows rows={model.rows} mode={model.mode} />
       <p className="screen-prompt">back to the lobby in a moment…</p>

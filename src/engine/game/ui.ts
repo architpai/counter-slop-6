@@ -62,6 +62,7 @@ export function createUI(app: App): UiApi {
     lobby: () => ({
       code: net.code ?? lobby.code ?? '', mode: lobby.mode, isPublic: lobby.isPublic, isHost: net.isHost, mapKey: lobby.map ?? settings.mapKey, maps: LEVELS, ...weapons(),
       players: [...lobby.players].map(([id, name]) => ({ id, name, team: lobby.teams[id], host: id === lobby.hostId, self: id === net.id })), status: lobby.status,
+      checkpoint: settings.checkpoint, startWave: settings.startWave,
     }),
     pause: () => ({ wave: gs.wave, score: gs.score, training: gs.mode === 'training', ...look(), ...weapons() }),
     menu: () => ({ code: net.code ?? lobby.code ?? '', rows: app.ffa.boardRows(), ...app.ffa.onlineInfo(), ...look(), ...weapons() }),

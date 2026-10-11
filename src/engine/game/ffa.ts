@@ -10,6 +10,8 @@ import type { BoardRow, OnlineInfo } from '../hud/screens';
 import { advanceTeamMatch, assignTeams, createTeamMatch, dropFlag, interactFlag, isOnlineMode, isTeam, isTeamMode, markDead, ONLINE_MODES, scoreTeam, TEAM_NAMES, TEAM_RULES, validTeamMatch, validTeams } from './team-rules';
 import type { OnlineMode, Point, Team, TeamMatch } from './team-rules';
 import { createTeamWorld, teamLayout } from './team-world';
+import { COOP, freshCoopState, playerCap, validCoopState } from './coop-rules';
+import type { CoopState } from './coop-rules';
 import type { HitInfo, PlayerHit, ScoreRow, Target } from '../types';
 import type { PeerMeta } from '../net';
 import type { App } from '../boot';
@@ -91,6 +93,7 @@ export function createFFA(app: App): FfaApi {
   const boardRows = (): BoardRow[] => rows().map(r => ({ ...r, self: r.id === net.id, team: lobby.teams?.[r.id] }));
   const mode = (): OnlineMode => lobby.mode ?? 'ffa';
   const teamMode = (): boolean => isTeamMode(mode());
+  const coop = (): boolean => mode() === 'coop';
   const teamOf = (rid: string | null): Team | undefined => rid === null ? undefined : lobby.teams?.[rid];
   const opponents = (a: string | null, b: string | null): boolean => mode() === 'ffa' ||
     (isTeam(teamOf(a)) && isTeam(teamOf(b)) && teamOf(a) !== teamOf(b));
@@ -106,7 +109,7 @@ export function createFFA(app: App): FfaApi {
   };
   function onlineInfo(): OnlineInfo {
     const state = gs.teamMatch;
-    if (!state) return { mode: mode() };
+    if (!state) return coop() ? app.coop.info() : { mode: mode() };
     const match = state.overtime ? 'OVERTIME' : `MATCH ${clockText(TEAM_RULES.MATCH - state.elapsed)}`;
     let status = `${match} · next wave ${Math.max(1, Math.ceil(TEAM_RULES.WAVE - state.elapsed % TEAM_RULES.WAVE))}s`;
     if (state.mode === 'flag') {
@@ -132,7 +135,7 @@ export function createFFA(app: App): FfaApi {
   function selectMode(value: OnlineMode): void {
     if (!isOnlineMode(value) || app.busy || (gs.state !== 'start' && gs.state !== 'lobby')) return;
     if (gs.state === 'lobby' && (!net.isHost || lobby.isPublic)) return;
-    lobby.mode = value;
+    lobby.mode = value; net.maxPlayers = playerCap(value);
     lobby.teams = isTeamMode(value) ? assignTeams([...lobby.players.keys()]) : {};
     applyTeams();
     if (gs.state === 'lobby') broadcastLobby();
@@ -177,8 +180,9 @@ export function createFFA(app: App): FfaApi {
   // ---- scores
   function refreshScoreHud(): void {
     if (!isOnline()) return;
-    hud.setPvpScore({ rows: boardRows(), selfId: net.id ?? '', ...onlineInfo() });
-    hud.setModifier('');
+    // Co-op keeps the solo wave block: no PvP panel, and the wave modifier stays.
+    if (coop()) hud.setPvpScore(null);
+    else { hud.setPvpScore({ rows: boardRows(), selfId: net.id ?? '', ...onlineInfo() }); hud.setModifier(''); }
     if (boardShown) hud.setBoard({ rows: boardRows(), code: net.code ?? lobby.code ?? '', ...onlineInfo() });
   }
   function showBoard(on: boolean): void {
@@ -211,7 +215,7 @@ export function createFFA(app: App): FfaApi {
     sendScores(); checkWin();
   }
   function checkWin(): void {
-    if (!net.isHost || !isOnline() || gs.over) return;
+    if (!net.isHost || !isOnline() || gs.over || coop()) return;
     let winner: { id: string; name: string } | null = null;
     if (gs.teamMatch) {
       const team = gs.teamMatch.winner;
@@ -296,8 +300,9 @@ export function createFFA(app: App): FfaApi {
     addRemote(pid, name); applyTeams(); broadcastLobby();
     if (!inMatch()) return;
     if (!scores.has(pid)) scores.set(pid, { id: pid, name, kills: 0, deaths: 0 });
-    net.sendTo(pid, 'start', { late: true, spawn: farthestIndex(), map: lobby.map ?? app.settings.mapKey,
-      mode: mode(), teams: lobby.teams ?? {}, ...(gs.teamMatch ? { teamState: gs.teamMatch } : {}),
+    const run = coop() ? app.coop.state : null;
+    net.sendTo(pid, 'start', { late: true, spawn: run ? lobby.players.size - 1 : farthestIndex(), map: lobby.map ?? app.settings.mapKey,
+      mode: mode(), teams: lobby.teams ?? {}, ...(gs.teamMatch ? { teamState: gs.teamMatch } : {}), ...(run ? { coop: run } : {}),
       broken: ctx.level.breakables.filter(b => !b.alive).map(b => b.id) });
     sendScores();
     if (gs.over) net.sendTo(pid, 'end', gs.over);
@@ -320,14 +325,14 @@ export function createFFA(app: App): FfaApi {
     net.leave();
     for (const rid of [...ctx.remotes.keys()]) removeRemote(rid);
     lobby.players.clear(); lobby.teams = {}; scores.clear(); showBoard(false);
-    gs.teamMatch = null;
+    gs.teamMatch = null; app.coop.reset();
     if (gs.state !== 'start') {
       gs.state = 'start'; gs.mode = 'solo'; app.loadLevel(false); app.resetRun(); hud.setGameplayVisible(false);
     }
     gs.menu = false; lobby.status = reason; app.showScreen('online');
   }
   function lobbyScreen(): void {
-    dispose(); gs.teamMatch = null;
+    dispose(); gs.teamMatch = null; app.coop.reset();
     if (net.isHost && teamMode()) lobby.teams = assignTeams([...lobby.players.keys()], lobby.teams);
     applyTeams();
     app.loadLevel(true, lobby.map ?? app.settings.mapKey); app.resetRun();
@@ -361,25 +366,31 @@ export function createFFA(app: App): FfaApi {
     if (teamMode() && new Set(Object.values(lobby.teams)).size < 2) {
       lobby.status = 'team modes need a player on each team'; app.showScreen('lobby'); return;
     }
+    if (coop() && lobby.players.size > COOP.MAX_PLAYERS) {
+      lobby.status = `co-op is for ${COOP.MAX_PLAYERS} players or fewer`; app.showScreen('lobby'); return;
+    }
     dispose();
     applyTeams(); broadcastLobby();
     scores.clear();
     for (const [pid, name] of lobby.players) scores.set(pid, { id: pid, name, kills: 0, deaths: 0 });
     const map = lobby.map ?? app.settings.mapKey;
-    app.loadLevel(true, map);
-    const order = shuffle([...spots().keys()]);
+    // Co-op plays the solo layout: its enemy spawns, nav and boss perches are tuned for it.
+    app.loadLevel(!coop(), map);
+    // Co-op start slots are the lobby order; the arena modes shuffle their spawn points.
+    const order = coop() ? [...lobby.players.keys()].map((_, slot) => slot) : shuffle([...spots().keys()]);
     const spawns: Record<string, number> = {};
     let i = 0;
     for (const pid of lobby.players.keys()) spawns[pid] = order.length ? order[i++ % order.length] ?? 0 : 0;
     const selected = mode();
     const state = isTeamMode(selected) ? createTeamMatch(selected, teamLayout(ctx.level).neutral) : null;
-    net.send('start', { spawns, map, mode: selected, teams: lobby.teams, ...(state ? { teamState: state } : {}) });
+    const run = selected === 'coop' ? freshCoopState(app.settings.startWave) : null;
+    net.send('start', { spawns, map, mode: selected, teams: lobby.teams, ...(state ? { teamState: state } : {}), ...(run ? { coop: run } : {}) });
     const self = net.id;
-    startMatch(false, self === null ? null : spawns[self] ?? null, state); sendScores();
+    startMatch(false, self === null ? null : spawns[self] ?? null, state, run); sendScores();
   }
-  function startMatch(late: boolean, index: number | null, teamState: TeamMatch | null = null): void {
+  function startMatch(late: boolean, index: number | null, teamState: TeamMatch | null = null, run: CoopState | null = null): void {
     dispose();
-    gs.mode = 'ffa'; app.loadLevel(true, lobby.map ?? app.settings.mapKey); app.resetRun();
+    gs.mode = 'ffa'; app.loadLevel(!run, lobby.map ?? app.settings.mapKey); app.resetRun();
     gs.teamMatch = teamState; gs.matchT = teamState?.elapsed ?? 0;
     lastClock = now(); syncT = 0; psT = 0; seenDead = false; deathMessage = '';
     applyTeams();
@@ -389,10 +400,11 @@ export function createFFA(app: App): FfaApi {
     const player = ctx.player;
     if (player === null) return;
     const spot = typeof index === 'number' && Number.isInteger(index) ? spots()[index] ?? null : null;
-    player.reset(teamState ? teamSpawn(net.id) : spot ? spot.clone() : arenaSpawn());
+    player.reset(teamState ? teamSpawn(net.id) : run ? app.coop.slot(index ?? 0) : spot ? spot.clone() : arenaSpawn());
     faceCenter();
     player.shieldT = late ? 2 : 0;
     app.beginCommon(); gs.state = 'play';
+    if (run) app.coop.begin(run, index ?? 0);
     refreshScoreHud();
     const choice = ONLINE_MODES.find(m => m.key === mode()) ?? ONLINE_MODES[0];
     hud.message(choice.name.toUpperCase(), late ? 'you joined a match in progress' : choice.blurb, 3);
@@ -567,7 +579,7 @@ export function createFFA(app: App): FfaApi {
     if (gs.teamMatch) {
       const elapsed = Math.max(0, t - lastClock); lastClock = t;
       updateTeam(elapsed);
-    } else if (net.isHost && inMatch() && !gs.over) {
+    } else if (net.isHost && inMatch() && !gs.over && mode() === 'ffa') {
       gs.matchT += dt;
       if (gs.matchT > TIME_LIMIT) {
         const top = sorted()[0], winner = top ? { id: top.id, name: top.name } : { id: net.id ?? 'host', name: ctx.player?.name ?? 'host' };
@@ -721,6 +733,7 @@ export function createFFA(app: App): FfaApi {
       if (!validTeams(d.teams) || !validTeamMatch(d.teamState) || d.teamState.mode !== selected ||
           [...lobby.players.keys()].some(rid => !Object.hasOwn(d.teams as object, rid)) || !validStateRoster(d.teamState)) return;
     }
+    if (selected === 'coop' && !validCoopState(d.coop)) return;
     if (str(d.map, 64)) lobby.map = validKey(d.map);
     let index: unknown = null;
     if (obj(d.spawns)) {
@@ -731,7 +744,8 @@ export function createFFA(app: App): FfaApi {
     const broken = d.broken;
     if (arr(broken) && (broken.length > 4096 || !broken.every(int))) return;
     lobby.mode = selected; lobby.teams = validTeams(d.teams) ? d.teams : {};
-    startMatch(d.late === true, int(index) ? index : null, validTeamMatch(d.teamState) ? d.teamState : null);
+    startMatch(d.late === true, int(index) ? index : null, validTeamMatch(d.teamState) ? d.teamState : null,
+      selected === 'coop' && validCoopState(d.coop) ? d.coop : null);
     // ponytail: the original `for (const bid of d.broken ?? [])` threw on a
     // non-array `broken`; net.ts already rejects those, and §9.10 says drop, never throw.
     if (arr(broken)) {
@@ -745,7 +759,7 @@ export function createFFA(app: App): FfaApi {
     if (!fromHost(from) || !obj(d)) return;
     const { id: winnerId, name } = d;
     if (!id(winnerId) || !str(name, 14) || !inMatch()) return;
-    if (gs.teamMatch ? winnerId !== 'team:0' && winnerId !== 'team:1' : !scores.has(winnerId)) return;
+    if (gs.teamMatch ? winnerId !== 'team:0' && winnerId !== 'team:1' : coop() ? winnerId !== 'coop' : !scores.has(winnerId)) return;
     endMatch({ id: winnerId, name });
   });
   net.on('backtolobby', (d, from) => { if (fromHost(from)) lobbyScreen(); });
