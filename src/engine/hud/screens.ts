@@ -59,6 +59,8 @@ export interface LobbyModel extends WeaponSettingsModel {
   maps: MapChoice[];
   players: LobbyPlayer[];
   status: string;
+  /** Co-op host only: the checkpoints the start-wave selection offers. */
+  checkpoint?: number; startWave?: number;
 }
 export interface OnlineModel { name: string; isPublic: boolean; status: string; busy: boolean;
                                code: string; mode?: OnlineMode }

@@ -109,7 +109,7 @@ Every row is built (2026-09-28): what the presets do.
 | Bloom / grade | grade only | grade + bloom + sharpen | grade + bloom + sharpen | grade + bloom + sharpen; lens dirt (R8, with the shafts) |
 | Effects detail | reduced (half the particles and pool slots): the flat effects, ribbon tracers | full: the atlas effects (R5), smoke dithered | full; soft particles | full; soft particles |
 | Characters | the GLB, optimised and merged per pivot (V12): 11 meshes and a prop a humanoid, flat props | the Blender operators (R7), LOD1 (7,600–10,900 triangles a humanoid), 512 maps; the Blender guns' LODs in hand; the GLB stays as the hit areas | LOD0 (17,900–25,900), 1K maps | LOD0, 2K maps |
-| First-person weapons and arms | code-built flat guns and hands | Blender guns, gloved hands and clips (R4), 512 maps | the same, 1K maps | the same, 2K maps (1K on the optics, pistol and knife) |
+| First-person weapons and arms | code-built flat guns and hands | Blender guns, gloved hands and clips (R4), 512 maps | the same, 1K maps | the same, 2K maps (1K on the optics, pistol, knife and LMG) |
 | Download (per map) | 0 MB | 0.55 MB sky + 1.3–1.7 MB textures (budget 8) + 0.38–0.47 MB bake | 0.55 + 4.7–6.4 (budget 20) + 0.79–0.90 bake (budget 4) | 0.55 + 17.5–24.4 (budget 45) + 2.1–2.3 bake (budget 8) |
 | Download (weapons, once a session) | 0 MB | 2.46 MB | 4.72 MB | 9.31 MB (budget 10) |
 | Download (effect atlases, once a session, R5) | 0 MB | 0.09 MB | 0.24 MB | 0.67 MB (budget 4) |

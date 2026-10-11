@@ -119,6 +119,7 @@ export class RemotePlayer implements Target {
   lastSeen: number;
   deadT: number;
   onDamage: ((amount: number, from: Vector3 | null) => void) | null;
+  onKnock: ((dir: Vector3, amount: number) => void) | null;
   _a: Snap | null;
   _b: Snap | null;
   _yaw: number;
@@ -159,7 +160,7 @@ export class RemotePlayer implements Target {
       ({ part: part as HitJoint, r, obj: new Object3D() }));
     this.lastSeen = 0;
     this.deadT = 0;
-    this.onDamage = null;
+    this.onDamage = this.onKnock = null;
     this._a = this._b = null;
     this._yaw = this._pitch = this._phase = this._walk = this._flashT = 0;
     this._wi = -1;
@@ -397,7 +398,7 @@ export class RemotePlayer implements Target {
     for (let i = 0; i < ends.length; i += 3) if (!triple(ends, i)) return;
     muzzle.copy(this.body.pos).addScaledVector(this.right, 0.3).addScaledVector(this.forward, 0.8);
     muzzle.y += 1.35 + this.forward.y * 0.8;
-    const thick = kind === 'r4c' ? 0.024 : kind === 'shotgun' ? 0.014 : kind === 'sniper' ? 0.03 : 0.02;
+    const thick = kind === 'r4c' || kind === 'lmg' ? 0.024 : kind === 'shotgun' ? 0.014 : kind === 'sniper' ? 0.03 : 0.02;
     for (let i = 0; i < ends.length; i += 3) {
       endpoint.set(num(ends[i]), num(ends[i + 1]), num(ends[i + 2]));
       this._ctx.effects.bulletTracer(muzzle, endpoint, thick, 0.06);
@@ -407,7 +408,8 @@ export class RemotePlayer implements Target {
     if (endpoint.lengthSq() > 1e-6) this._ctx.effects.muzzleFlash(muzzle, endpoint.normalize(), kind === 'shotgun' || kind === 'sniper' ? 1.4 : 1);
     this.flash();
     this._figure.rig?.motion.trigger('fire');
-    this._ctx.audio.remoteShot(kind === 'r4c' || kind === 'shotgun' || kind === 'sniper' || kind === 'pistol' ? kind : 'rifle', muzzle);
+    // The LMG shares the R4-C's heavier report.
+    this._ctx.audio.remoteShot(kind === 'lmg' ? 'r4c' : kind === 'r4c' || kind === 'shotgun' || kind === 'sniper' || kind === 'pistol' ? kind : 'rifle', muzzle);
   }
 
   flash(): void {
@@ -467,7 +469,8 @@ export class RemotePlayer implements Target {
     this.onDamage?.(amount, from);
   }
 
-  knockback(): void {}
+  /** A remote body is not pushed here; co-op sends the push to its owner. */
+  knockback(dir: Vector3, amount: number): void { if (!this._disposed && this.alive) this.onKnock?.(dir, amount); }
   tryDeflect(): false { return false; }
 
   tryBlockMelee(e: Enemy): boolean {
@@ -488,7 +491,7 @@ export class RemotePlayer implements Target {
     this._rope.geometry.dispose();
     this._hookMesh.geometry.dispose();
     this._a = this._b = null;
-    this.onDamage = null;
+    this.onDamage = this.onKnock = null;
     this._placeHits();
   }
 }

@@ -39,7 +39,7 @@ test('every enemy has a distinct clown mask without changing its hit anchors', (
   const remote = makeFigure({ kind: 'humanoid' });
   expect(remote.root.getObjectByName('head-surface')).toBeUndefined();
   remote.dispose();
-  expect([...GUN_LOADOUT]).toEqual(['r4c', 'rifle', 'shotgun', 'sniper', 'pistol']);
+  expect([...GUN_LOADOUT]).toEqual(['r4c', 'rifle', 'shotgun', 'sniper', 'pistol', 'lmg']);
   for (const kind of GUN_LOADOUT) {
     const prop = makeWeaponProp(kind);
     expect(prop.name).toBe(kind);

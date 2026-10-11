@@ -1,6 +1,6 @@
-export type GunKind = 'r4c' | 'rifle' | 'pistol' | 'shotgun' | 'sniper' | 'revolver';
+export type GunKind = 'r4c' | 'rifle' | 'pistol' | 'shotgun' | 'sniper' | 'lmg' | 'revolver';
 /** Shared slot order for the local loadout and remote weapon props. `rifle` is the MP5. */
-export const GUN_LOADOUT = ['r4c', 'rifle', 'shotgun', 'sniper', 'pistol'] as const;
+export const GUN_LOADOUT = ['r4c', 'rifle', 'shotgun', 'sniper', 'pistol', 'lmg'] as const;
 export type RifleOptic = 'acog' | 'holo';
 export type ScopeKind = RifleOptic | 'sniper';
 
@@ -112,6 +112,17 @@ export const GUN_STATS: Record<GunKind, GunStats> = {
     reloadDuration: 2.1, reloadType: 'magazine', falloff: null,
     tracerThickness: 0.03, flashScale: 1.7, fireCue: 'sniperFire', casing: [0.03, 3], cycleDuration: 0.85,
     pvp: [100, 2, null], restPos: [0.21, -0.19, -0.36], sight: [0, 0.135, 0], eyeDistance: 0.42,
+  },
+  // Belt-fed: the only gun that fires for eight seconds without a reload, and pays for it in every handling stat.
+  lmg: {
+    kind: 'lmg', name: 'LMG', hint: 'belt-fed · 100 rounds · slow to aim, draw and reload', scope: false,
+    magSize: 100, startingReserve: 200, maxReserve: 300, fireInterval: 0.085, automatic: true,
+    damage: 26, headMult: 2.2, pellets: 1, hipSpread: 0.034, adsSpread: 0.006,
+    spreadKick: 0.0045, spreadMax: 0.085, moveSpread: 0.0018, adsFov: 58, adsSpeed: 0.5, drawTime: 0.65,
+    camKick: [0.0085, 0.0045], modelKick: [0.2, 0.3, 2.2, -2.6, 0.9, 1.2], fovKick: 0.9,
+    reloadDuration: 3.6, reloadType: 'magazine', falloff: [26, 80, 0.5],
+    tracerThickness: 0.024, flashScale: 1.35, fireCue: 'shot', casing: [0.024, 3], cycleDuration: 0,
+    pvp: [21, 1.6, [22, 68, 0.45]], restPos: [0.20, -0.18, -0.36], sight: [0, 0.125, -0.95], eyeDistance: 0.52,
   },
   revolver: {
     kind: 'revolver', name: 'REVOLVER', hint: 'hand cannon · headshots delete', scope: false,

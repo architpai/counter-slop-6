@@ -17,6 +17,7 @@ import { createTraining } from './game/training';
 import { Gun } from './weapons/gun';
 import type { RifleOptic } from './weapons/stats';
 import { createFFA } from './game/ffa';
+import { createCoop } from './game/coop';
 import { createUI } from './game/ui';
 import { createPickups } from './game/pickups';
 import { createBreakables } from './game/breakables';
@@ -24,6 +25,7 @@ import type { Ctx, GameHooks, GameState, Level, LevelKey, Lobby, Pickup, RemoteP
 import type { SoloApi } from './game/solo';
 import type { TrainingApi } from './game/training';
 import type { FfaApi } from './game/ffa';
+import type { CoopApi } from './game/coop';
 import type { UiApi, ScreenName } from './game/ui';
 import type { PickupsApi } from './game/pickups';
 import type { BreakablesApi } from './game/breakables';
@@ -77,6 +79,7 @@ export interface App {
   training: TrainingApi;
   endFocus(): void;
   ffa: FfaApi;
+  coop: CoopApi;
   ui: UiApi;
   showScreen(kind: ScreenName): void;
   setMusic(on: boolean): void;
@@ -249,7 +252,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     hitstop(d, s) { gs.hitstopT = Math.max(gs.hitstopT, d); gs.hitstopScale = s; },
     addScore(points, label = null) {
       const awarded = Math.round(points * (1 + 0.25 * Math.min(gs.combo, 9)));
-      gs.score += awarded;
+      gs.score += awarded; app.coop.points(awarded);
       if (label) hud.kill(label, awarded);
       hud.setScore(gs.score, gs.combo);
     },
@@ -327,6 +330,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
   app.training = createTraining(app);
   app.endFocus = app.solo.endFocus;
   app.ffa = createFFA(app);
+  app.coop = createCoop(app);
   app.ui = createUI(app);
   app.showScreen = app.ui.showScreen;
   // One offer per session, and only an offer: the preset never changes silently.
@@ -347,8 +351,9 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
   };
   app.resetRun = () => {
     if (ctx.level.breakables.some(b => !b.alive)) loadLevel(loadedArena, loadedKey, true);
-    enemies.clear(); effects.clear(); app.pickups.clear();
-    const online = gs.mode === 'ffa';
+    enemies.clear(); enemies.mirror = false; effects.clear(); app.pickups.clear();
+    // Co-op is PvE: it keeps the solo health values.
+    const online = gs.mode === 'ffa' && !app.coop.active();
     player.maxHp = online ? 110 : 120; player.regenDelay = online ? 4 : 4.5; player.regenRate = online ? 14 : 11;
     player.reset(ctx.level.playerStart); player.name = settings.name; player.lastHitBy = player.lastHit = null;
     player.team = 0; player.shieldT = 0;
@@ -531,13 +536,16 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
         if (input.down('fire') || input.down('melee') || input.down('grenade')) player.shieldT = 0;
       }
       player.update(sdt);
-      enemies.update(sdt);
+      // Co-op enemies run on real time on every peer: hit-stop is one player's, not the party's.
+      enemies.update(app.coop.active() ? dt : sdt);
       effects.update(sdt);
       app.pickups.update(sdt);
       app.ffa.update(dt, nowMs / 1000);
       if (gs.state === 'play' && gs.mode === 'solo') app.solo.update(sdt);
+      // Co-op: the host runs the wave director, also while its own player is down.
+      else if (app.coop.directing()) app.solo.update(dt);
       if (gs.state === 'play' && gs.mode === 'training') app.training.update(sdt);
-      if (game.isOnline()) app.pickups.arenaUpdate(dt);
+      if (game.isOnline() && !app.coop.active()) app.pickups.arenaUpdate(dt);
       if (gs.comboT > 0) { gs.comboT -= sdt; if (gs.comboT <= 0) { gs.combo = 0; hud.setScore(gs.score, 0); } }
       if (gs.state === 'dying') {
         gs.deathT += dt;

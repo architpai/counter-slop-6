@@ -16,7 +16,7 @@ import { initGrenades, updateGrenades, throwGrenade, clearNades } from './grenad
 import type { GrenadeState, NadeThrow } from './grenades';
 
 /** Five gun slots. Melee never changes the selected slot. */
-const SLOT_ACTIONS = ['slot1', 'slot2', 'slot3', 'slot4', 'slot5'] as const;
+const SLOT_ACTIONS = ['slot1', 'slot2', 'slot3', 'slot4', 'slot5', 'slot6'] as const;
 const isGun = (w: Weapon): w is Gun => w.isGun;
 
 const direction = new Vector3();

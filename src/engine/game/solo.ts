@@ -2,12 +2,13 @@ import * as THREE from 'three';
 import { clamp, choose, rand, wrapAngle } from '../util';
 import { TYPES, BOSS_ORDER } from '../enemies/index';
 import { TONE } from '../render/index';
-import type { EnemyKind, HitInfo, WeaponState } from '../types';
+import type { EnemyKind, HitInfo, Target, WeaponState } from '../types';
 import type { EnemyRecord } from '../enemies/index';
 import type { Player } from '../player/index';
 import type { App } from '../boot';
 import { ROSTER, MUTATIONS, mutationCount, nextSpawn } from '../enemies/progression';
 import { validBossPerch } from '../level/boss-perch';
+import { COOP, coopScale } from './coop-rules';
 const MODS: ReadonlyArray<readonly [string, number, number]> = [
   ['', 1, 1], ['CAFFEINATED · they move fast', 1.35, 0.85],
   ['JUICED · they hit harder', 0.9, 1.4], ['SWARM · more of them, thinner', 1.15, 0.9],
@@ -33,10 +34,16 @@ interface SoloFocus {
 }
 
 export interface SoloApi {
+  /** The current wave's HUD modifier line and subtitle, for the co-op state. */
+  readonly intro: { label: string; sub: string };
   startWave(n: number): void;
   spawnPosition(type: string): THREE.Vector3;
   update(dt: number): void;
   onKill(e: EnemyRecord, info: HitInfo, overkill: boolean): void;
+  /** The killer's half of a kill: score, combo, feed line, katana streak. */
+  reward(e: EnemyRecord, info: HitInfo, overkill: boolean): void;
+  /** The world's half of a kill: the ammo or health it leaves. */
+  drop(e: EnemyRecord): void;
   onBoss(e: EnemyRecord): void;
   updateFocus(dt: number): void;
   endFocus(): void;
@@ -53,12 +60,16 @@ export function createSolo(app: App): SoloApi {
   const focus = gs.focus as unknown as SoloFocus;
   /** Bearings (player -> spawn) of the last few spawns, so the next one comes from somewhere else. */
   const recentBearings: number[] = [];
+  const intro = { label: '', sub: '' };
+  /** Read once at each wave start: a player who leaves makes the next wave smaller, not this one. */
+  let scale = coopScale(1);
   function startWave(n: number): void {
     if (!Number.isSafeInteger(n) || n < 1) return;
     const enemies = ctx.enemies, player = ctx.player;
     // Set on every live path; the guard is there for the type.
     if (enemies === null || player === null) return;
     gs.wave = n; gs.queue.length = 0; gs.spawnT = 1; gs.intermission = 0; gs.boss = null;
+    scale = coopScale(app.coop.players());
     ctx.hud.setBoss(null);
     const bossWave = n % 5 === 0;
     let bossType: EnemyKind = BOSS_ORDER[(Math.floor(n / 5) - 1) % BOSS_ORDER.length] ?? 'boss';
@@ -75,9 +86,10 @@ export function createSolo(app: App): SoloApi {
     const endless = 1 + 0.03 * Math.max(0, n - 30);
     enemies.mods.speed = Math.min(speed * endless, speed * 1.6);
     enemies.mods.damage = Math.min(damage * endless, damage * 1.6);
-    ctx.hud.setModifier(endless > 1 ? `${name ? `${name} · ` : ''}+${Math.round((Math.min(endless, 1.6) - 1) * 100)}%` : name);
-    gs.maxAlive = Math.min(4 + Math.floor(0.8 * n) + (swarm ? 3 : 0), swarm ? 20 : 16);
-    const count = bossWave ? Math.min(6 + n, 14) : Math.round(Math.min(4 + 1.7 * n, 28) * (swarm ? 1.35 : 1));
+    intro.label = endless > 1 ? `${name ? `${name} · ` : ''}+${Math.round((Math.min(endless, 1.6) - 1) * 100)}%` : name;
+    ctx.hud.setModifier(intro.label);
+    gs.maxAlive = Math.min(Math.min(4 + Math.floor(0.8 * n) + (swarm ? 3 : 0), swarm ? 20 : 16) + scale.alive, COOP.ALIVE_CAP);
+    const count = Math.round((bossWave ? Math.min(6 + n, 14) : Math.round(Math.min(4 + 1.7 * n, 28) * (swarm ? 1.35 : 1))) * scale.count);
     if (bossWave) gs.queue.push(bossType);
     const pool = ROSTER.filter(([type, from]) => n >= from
       && (type !== 'sapper' || ctx.level.breakables.some(p => ['crate', 'barrel'].includes(p.kind)))).map(([type, from, weight]): [string, number] => [type, weight * Math.min(1, 0.3 + 0.25 * (n - from))]);
@@ -100,6 +112,7 @@ export function createSolo(app: App): SoloApi {
       }
     }
     const sub = mutation?.label ?? (bossWave ? `${TYPES[bossType]?.name ?? 'BOSS'} IS COMING` : n === 1 ? 'they are pushing · hold the site' : name || choose(['rush B', 'do not stop', 'stay off the ground', 'swing for it', 'trade them']));
+    intro.sub = sub;
     ctx.hud.message(`WAVE ${n}`, sub, bossWave ? 3 : 2.6);
     ctx.audio.wave(); if (bossWave) ctx.audio.bossRoar(player.center);
     const tips = [
@@ -114,13 +127,17 @@ export function createSolo(app: App): SoloApi {
       if (tip !== undefined) ctx.hud.tip(tip, 7);
     }
     player.grenades = Math.min(player.maxGrenades, player.grenades + 1);
-    if (ctx.level.pickups.length) for (let i = 0; i < 7; i++) app.pickups.spawn(i < 5 ? 'ammo' : 'health', choose(ctx.level.pickups));
+    if (ctx.level.pickups.length) for (let i = 0; i < 7 + scale.pickups; i++) app.pickups.spawn(i % 7 < 5 ? 'ammo' : 'health', choose(ctx.level.pickups));
     ctx.hud.setWave(n, enemies.alive + gs.queue.length);
   }
   function spawnPosition(type: string): THREE.Vector3 {
     const player = ctx.player;
     if (player === null) return ctx.level.playerStart.clone();
-    const { level, world } = ctx, pp = player.body.pos;
+    const { level, world } = ctx;
+    // Co-op: each spawn is placed around one living player, and away from all of them. Solo has one.
+    const alive = ctx.game.targets().filter(t => t.alive);
+    const anchor: Target = alive.length > 1 ? choose(alive) : alive[0] ?? player, near = alive.length ? alive : [anchor];
+    const pp = anchor.body.pos;
     if (type === 'aimbot') {
       const perch = validBossPerch(ctx);
       if (perch) return perch.clone();
@@ -128,7 +145,7 @@ export function createSolo(app: App): SoloApi {
     const spots = type === 'sniper' ? level.snipers : level.spawns;
     if (TYPES[type as EnemyKind]?.flying) {
       // The rear 120 degrees of the player's facing: a drone is a trap, not a thing you watch arrive.
-      const behind = Math.atan2(-player.forward.x, -player.forward.z) + rand(-1.05, 1.05);
+      const behind = Math.atan2(-anchor.forward.x, -anchor.forward.z) + rand(-1.05, 1.05);
       const a = Math.PI / 2 - behind, r = rand(22, 32);
       return new THREE.Vector3(clamp(pp.x + Math.cos(a) * r, level.bounds.minX + 4, level.bounds.maxX - 4), pp.y + 12 + rand(0, 6), clamp(pp.z + Math.sin(a) * r, level.bounds.minZ + 4, level.bounds.maxZ - 4));
     }
@@ -145,9 +162,10 @@ export function createSolo(app: App): SoloApi {
       }
       return level.playerStart.clone();
     }
-    let candidates = spots.filter(p => { const d = p.distanceTo(pp); return d > 14 && d < 48; });
-    if (candidates.length < 2) candidates = spots.filter(p => p.distanceTo(pp) > 14);
-    const hidden = candidates.filter(p => !world.lineOfSight(player.eye, delta.copy(p).addScaledVector(THREE.Object3D.DEFAULT_UP, 1.2)));
+    const apart = (p: THREE.Vector3): boolean => near.every(t => p.distanceTo(t.body.pos) > 14);
+    let candidates = spots.filter(p => p.distanceTo(pp) < 48 && apart(p));
+    if (candidates.length < 2) candidates = spots.filter(apart);
+    const hidden = candidates.filter(p => { delta.copy(p).addScaledVector(THREE.Object3D.DEFAULT_UP, 1.2); return near.every(t => !world.lineOfSight(t.eye, delta)); });
     const from = hidden.length ? hidden : candidates.length ? candidates : spots;
     // Of the usable spots, take the one whose bearing is furthest from the last three spawns, so the
     // wave arrives from several streets instead of queuing down one. Random among near-equals.
@@ -172,13 +190,13 @@ export function createSolo(app: App): SoloApi {
     if (gs.queue.length && enemies.alive < gs.maxAlive) {
       gs.spawnT -= dt;
       if (gs.spawnT <= 0) {
-        gs.spawnT = Math.max(0.7, 2.2 - 0.13 * gs.wave);
+        gs.spawnT = Math.max(0.7, 2.2 - 0.13 * gs.wave) / scale.interval;
         let type = nextSpawn(gs.queue, type => enemies.canSpawn(type));
         if (type === undefined) return;
         if (type === 'aimbot' && !validBossPerch(ctx)) type = 'boss';
         const e = enemies.spawn(type, spawnPosition(type));
         if (e === null) return;
-        if (e.stats.boss) { e.hp = e.maxHp = Math.round(e.stats.hp * (1 + 0.35 * Math.floor((gs.wave - 5) / 15))); onBoss(e); }
+        if (e.stats.boss) { e.hp = e.maxHp = Math.round(e.stats.hp * (1 + 0.35 * Math.floor((gs.wave - 5) / 15)) * scale.bossHp); onBoss(e); }
       }
     }
     if (!gs.queue.length && enemies.alive === 0) {
@@ -192,7 +210,12 @@ export function createSolo(app: App): SoloApi {
     ctx.hud.setWave(gs.wave, enemies.alive + gs.queue.length);
   }
   function onKill(e: EnemyRecord, info: HitInfo = {}, overkill = false): void {
+    // Co-op: the host credits the attacker; each machine rewards only its own player.
+    if (app.coop.active()) { app.coop.onKill(e, info, overkill); return; }
     if (gs.mode === 'ffa') return;
+    reward(e, info, overkill); drop(e);
+  }
+  function reward(e: EnemyRecord, info: HitInfo = {}, overkill = false): void {
     const player = ctx.player;
     if (player === null) return;
     gs.kills++; gs.combo++; gs.comboT = 3.5;
@@ -210,6 +233,8 @@ export function createSolo(app: App): SoloApi {
     if (info.source === 'fall') label = 'FELL OFF THE MAP';
     else if (!player.body.onGround && info.source !== 'deflect') { points += 40; label = label ? `${label} · AIRBORNE` : 'AIRBORNE'; }
     app.addScore(points, label); ctx.audio.kill(Boolean(info.crit || e.stats.boss));
+  }
+  function drop(e: EnemyRecord): void {
     const r = rand();
     if (r < 0.62) app.pickups.spawn(r < 0.5 ? 'ammo' : 'health', e.body.pos);
   }
@@ -326,5 +351,5 @@ export function createSolo(app: App): SoloApi {
       ctx.input.rumble(0.5, 0.4, 120); ctx.hud.setFocusMark(null);
     }
   }
-  return { startWave, spawnPosition, update, onKill, onBoss, updateFocus, endFocus, enterFocus, candidate };
+  return { intro, startWave, spawnPosition, update, onKill, reward, drop, onBoss, updateFocus, endFocus, enterFocus, candidate };
 }

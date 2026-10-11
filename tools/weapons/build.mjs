@@ -37,14 +37,14 @@ const textureDir = path.join(root, 'public/weapons');
 const manifestPath = path.join(root, 'src/engine/render/weapon-assets.json');
 const blender = process.env.BLENDER ?? '/opt/homebrew/bin/blender';
 /** Build order: the guns append the hands and preview the optics. */
-const SETS = ['hands', 'optics', 'r4c', 'mp5', 'shotgun', 'sniper', 'pistol', 'knife'];
+const SETS = ['hands', 'optics', 'r4c', 'mp5', 'shotgun', 'sniper', 'lmg', 'pistol', 'knife'];
 const SIZES = [512, 1024, 2048];
 /**
  * Small models stop at 1K: at the top tier their atlases' texels would be far finer on screen than
  * the guns' (the optics, the pistol and the knife cover a fraction of the screen a rifle does), and
  * the Ultra download stays within its 10 MB (docs/VISUALS.md, R4).
  */
-const MAX_SIZE = { optics: 1024, pistol: 1024, knife: 1024 };
+const MAX_SIZE = { optics: 1024, pistol: 1024, knife: 1024, lmg: 1024 };
 const MAPS = ['albedo', 'normal', 'orm'];
 /** As the level textures (tools/textures/build.mjs): ETC1S, normals at the codec's normal-map tuning. */
 const ENCODE = {
@@ -107,9 +107,9 @@ for (const node of doc.getRoot().listNodes()) {
 }
 // ---- the enemy props' LODs (render/weapons.ts `prop`)
 /** An enemy's prop kind (render/figure.ts `WeaponPropKind`) and the model it is made from; the blade is a long knife. */
-const PROPS = { r4c: 'r4c', rifle: 'mp5', shotgun: 'shotgun', sniper: 'sniper', pistol: 'pistol', knife: 'knife', blade: 'knife' };
+const PROPS = { r4c: 'r4c', rifle: 'mp5', shotgun: 'shotgun', sniper: 'sniper', lmg: 'lmg', pistol: 'pistol', knife: 'knife', blade: 'knife' };
 /** Where each prop's muzzle (or point) is in the flat props' frame (figure.ts `setWeapon`): projectiles leave from there. */
-const TIP = { r4c: 0.78, rifle: 0.59, shotgun: 0.78, sniper: 0.78, pistol: 0.31, knife: 0.31, blade: 0.92 };
+const TIP = { r4c: 0.78, rifle: 0.59, shotgun: 0.78, sniper: 0.78, lmg: 0.78, pistol: 0.31, knife: 0.31, blade: 0.92 };
 /** The enemies' guns read as large as the flat props at range: the Blender guns, grip at the hand, a quarter up. */
 const PROP_SCALE = 1.25;
 /** How far a gun may slide along the hand for its muzzle to meet the tip; the rest is left as a gap. */

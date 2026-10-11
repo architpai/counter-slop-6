@@ -3,9 +3,10 @@ import type { DataConnection, PeerError, PeerOptions } from 'peerjs';
 import type { Envelope } from './types';
 import { isOnlineMode, isTeam, validTeams, validTeamMatch } from './game/team-rules';
 import type { OnlineMode } from './game/team-rules';
+import { COOP, playerCap, validCoopState } from './game/coop-rules';
 
 export const NET = Object.freeze({
-  PREFIX_LIVE: 'shooter-rebuild-v2-', PREFIX_DEV: 'shooter-rebuild-dev-v2-',
+  PREFIX_LIVE: 'shooter-rebuild-v3-', PREFIX_DEV: 'shooter-rebuild-dev-v3-',
   PUBLIC_SLOTS: 8, CODE_LEN: 5, CODE_ALPHABET: 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789',
   CODE_RETRIES: 3, MAX_PLAYERS: 8, SIGNAL_TIMEOUT: 12000, JOIN_TIMEOUT: 14000,
   QUICK_TIMEOUT: 11000, REFUSE_CLOSE_DELAY: 400, SILENT_TIMEOUT: 9000,
@@ -22,11 +23,14 @@ interface Welcome { hostId: string; code: string; isPublic: boolean }
 /** One lobby a knock is racing. */
 interface Attempt { conn: DataConnection; id: string; code: string; failed: boolean; welcome: Welcome | null }
 
-const HOST = new Set(['lobby', 'leave', 'start', 'end', 'backtolobby', 'score', 'pickup', 'taken', 'refused', 'teamstate']);
-const REQUEST = new Set(['startreq', 'take', 'teamreq']);
+const HOST = new Set(['lobby', 'leave', 'start', 'end', 'backtolobby', 'score', 'pickup', 'taken', 'refused', 'teamstate', 'coop',
+  'espawn', 'esnap', 'ekill', 'eproj', 'edmg', 'eaim', 'ehaz']);
+const REQUEST = new Set(['startreq', 'take', 'teamreq', 'cpts', 'ehit', 'eyank']);
 const ADDRESSED = new Set(['pdmg', 'headshot', 'parry', 'cut']);
 const BROADCAST = new Set(['ps', 'shots', 'pdead', 'nade', 'brk']);
 const TYPES = new Set(['welcome', ...HOST, ...REQUEST, ...ADDRESSED, ...BROADCAST]);
+/** Who may send what, for checks that route messages without a peer connection. */
+export const ROUTES = { HOST, REQUEST, ADDRESSED, BROADCAST } as const;
 const encoder = new TextEncoder();
 /** `Object.hasOwn` as a predicate, so an optional field reads as present. */
 const own = <T extends object, K extends string>(o: T, k: K): o is T & { [P in K]-?: P extends keyof T ? NonNullable<T[P]> : unknown } =>
@@ -47,6 +51,9 @@ const fields = (o: unknown, required: string[], extra: string[] = []): o is Reco
   object(o) && required.every(k => own(o, k)) &&
   Object.keys(o).every(k => required.includes(k) || extra.includes(k));
 const empty = (o: unknown) => fields(o, []);
+/** Co-op batches: one fixed-width row of finite numbers per enemy or projectile. */
+const numberRows = (a: unknown, max: number, width: number) => array(a) && a.length > 0 && a.length <= max &&
+  a.every(row => array(row) && row.length === width && row.every(n => bounded(n, 1e7)));
 const idRecord = (o: unknown, positive = false) => fields(o, ['id']) && integer(o.id) && (!positive || o.id > 0);
 const rows = (arr: unknown, score = false) => array(arr) && arr.length <= NET.MAX_PLAYERS &&
   new Set(arr.map(row => prop(row, 'id'))).size === arr.length && arr.every(row =>
@@ -67,13 +74,32 @@ function validPayload(type: string, d: unknown): boolean {
     case 'startreq': case 'backtolobby': return empty(d);
     case 'teamreq': return fields(d, ['team']) && isTeam(d.team);
     case 'cut': return fields(d, [], ['round']) && optional(d, 'round', integer);
-    case 'start': return fields(d, [], ['spawns', 'spawn', 'map', 'late', 'broken', 'mode', 'teams', 'teamState']) &&
-      optional(d, 'mode', isOnlineMode) && optional(d, 'teams', validTeams) && optional(d, 'teamState', validTeamMatch) &&
+    case 'start': return fields(d, [], ['spawns', 'spawn', 'map', 'late', 'broken', 'mode', 'teams', 'teamState', 'coop']) &&
+      optional(d, 'coop', validCoopState) && optional(d, 'mode', isOnlineMode) && optional(d, 'teams', validTeams) && optional(d, 'teamState', validTeamMatch) &&
       optional(d, 'map', s => text(s, 64)) && optional(d, 'late', b => typeof b === 'boolean') &&
       optional(d, 'spawn', integer) && optional(d, 'spawns', s => object(s) &&
         Object.keys(s).length <= NET.MAX_PLAYERS && Object.entries(s).every(([id, index]) => peerId(id) && integer(index))) &&
       optional(d, 'broken', a => array(a) && a.length <= 4096 && a.every(integer));
     case 'teamstate': return validTeamMatch(d);
+    case 'coop': return validCoopState(d);
+    case 'cpts': return fields(d, ['n']) && integer(d.n) && d.n >= 1 && d.n <= 100000;
+    case 'espawn': return fields(d, ['id', 'type', 'pos', 'hp']) && integer(d.id) && d.id > 0 && text(d.type, 24, 1) &&
+      vector(d.pos) && finite(d.hp) && d.hp >= 1 && d.hp <= 1e7;
+    case 'esnap': return numberRows(d, COOP.SNAP_ROWS, 12);
+    case 'eproj': return numberRows(d, COOP.SHOT_ROWS, 13);
+    // An empty batch says the last laser went out.
+    case 'eaim': return array(d) && (d.length === 0 || numberRows(d, COOP.AIM_ROWS, 6));
+    case 'ehaz': return fields(d, ['kind', 'a', 'b', 'n']) && typeof d.kind === 'string' && ['ring', 'smoke', 'clear'].includes(d.kind) &&
+      vector(d.a) && (d.b === null || vector(d.b)) && bounded(d.n, 1e7);
+    case 'ekill': return fields(d, ['id', 'by', 'src', 'crit', 'dir', 'point', 'boom']) && integer(d.id) && (d.by === null || peerId(d.by)) &&
+      text(d.src, 32) && typeof d.crit === 'boolean' && (d.dir === null || vector(d.dir, 1.01)) && (d.point === null || vector(d.point)) &&
+      finite(d.boom) && d.boom >= 0 && d.boom <= 5;
+    case 'edmg': return fields(d, ['amount', 'from', 'push']) && finite(d.amount) && d.amount >= 0 && d.amount <= 100000 &&
+      (d.from === null || vector(d.from)) && (d.push === null || vector(d.push, 100));
+    case 'ehit': return array(d) && d.length > 0 && d.length <= COOP.HIT_ROWS && d.every(h =>
+      fields(h, ['id', 'amount', 'part', 'src', 'crit', 'point', 'dir']) && integer(h.id) && finite(h.amount) && h.amount > 0 && h.amount <= 100000 &&
+      text(h.part, 24) && text(h.src, 32) && typeof h.crit === 'boolean' && vector(h.point) && vector(h.dir, 1.01));
+    case 'eyank': return fields(d, ['id', 'to']) && integer(d.id) && vector(d.to);
     case 'end': return fields(d, ['id', 'name']) && peerId(d.id) && text(d.name, 14);
     case 'score': return rows(d, true);
     case 'ps': return fields(d, ['round', 'state']) ? integer(d.round) && array(d.state) && validPayload('ps', d.state) : array(d) && [8, 11, 14].includes(d.length) &&
@@ -147,7 +173,7 @@ function randomCode() {
   return Array.from({ length: NET.CODE_LEN }, () => NET.CODE_ALPHABET[Math.floor(Math.random() * NET.CODE_ALPHABET.length)]).join('');
 }
 
-export const publicCode = (mode: OnlineMode, index: number): string => `${mode === 'tdm' ? 'TDM' : mode === 'flag' ? 'FLG' : 'PUB'}${index}`;
+export const publicCode = (mode: OnlineMode, index: number): string => `${mode === 'tdm' ? 'TDM' : mode === 'flag' ? 'FLG' : mode === 'coop' ? 'COP' : 'PUB'}${index}`;
 
 export class Net {
   #peer: Peer | null = null;
@@ -171,6 +197,10 @@ export class Net {
   isHost: boolean;
   isPublic: boolean;
   accepting: boolean;
+  /** The host refuses a join past this many players, itself included. */
+  maxPlayers: number = NET.MAX_PLAYERS;
+  /** Why a join is refused while `accepting` is false. */
+  busyReason = 'that lobby is closed';
   onPeerJoin: ((id: string, meta: PeerMeta) => void) | null;
   onPeerLeave: ((id: string) => void) | null;
   onDisconnect: (() => void) | null;
@@ -195,6 +225,7 @@ export class Net {
     const epoch = this.#epoch;
     this.isHost = true;
     this.isPublic = o?.isPublic !== false;
+    this.maxPlayers = playerCap(o?.mode);
     const explicit = typeof o?.code === 'string' ? o.code.toUpperCase() : null;
     const count = explicit !== null ? 1 : this.isPublic ? NET.PUBLIC_SLOTS : NET.CODE_RETRIES;
     for (let i = 0; i < count; i++) {
@@ -263,6 +294,7 @@ export class Net {
     if (peer) destroy(peer);
     this.#id = this.#code = this.hostId = null;
     this.#connected = this.isHost = this.accepting = false;
+    this.maxPlayers = NET.MAX_PLAYERS; this.busyReason = 'that lobby is closed';
     this.#leaving = false;
   }
 
@@ -468,8 +500,8 @@ export class Net {
     const open = () => {
       if (epoch !== this.#epoch || !this.active || !this.isHost) { this.#forget(conn); return; }
       this.#unwire(conn);
-      const reason = !this.accepting || !peerId(conn.peer) || conn.peer === this.#id || this.#conns.has(conn.peer) ?
-        'that lobby is closed' : this.#conns.size >= NET.MAX_PLAYERS - 1 ? 'that lobby is full' : null;
+      const reason = !peerId(conn.peer) || conn.peer === this.#id || this.#conns.has(conn.peer) ? 'that lobby is closed'
+        : !this.accepting ? this.busyReason : this.#conns.size >= this.maxPlayers - 1 ? 'that lobby is full' : null;
       if (reason) {
         this.#write(conn, { t: 'refused', d: { reason } });
         this.#delay(() => this.#forget(conn), NET.REFUSE_CLOSE_DELAY);

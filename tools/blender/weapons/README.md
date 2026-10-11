@@ -1,6 +1,6 @@
 # First-person weapons and arms (R4)
 
-The realistic tiers' view models: the R4-C, the MP5, the pump shotgun, the sniper rifle, the pistol,
+The realistic tiers' view models: the R4-C, the MP5, the pump shotgun, the sniper rifle, the LMG, the pistol,
 the combat knife, the ACOG and holographic sights, and the gloved hands with sleeves. Every mesh,
 pose, clip and texture is made by the Python scripts in this folder, run headless in Blender. Nothing
 is downloaded: no model, image, scan or HDRI is read from disk. Low keeps the code-built guns of
@@ -36,11 +36,29 @@ npm run weapons -- --glb           # pack the glb again only (the maps and their
    triangles; a kept triangle whose corners come from different UV islands takes one flat texel
    from inside one of them, so it samples no atlas between islands;
 3. encodes the maps to KTX2 (Basis ETC1S with mipmaps) as `public/weapons/<size>/<set>-<map>.ktx2`.
-   The optics, pistol and knife stop at 1024 (`MAX_SIZE`), so Ultra stays within 10 MB;
+   The optics, pistol, knife and LMG stop at 1024 (`MAX_SIZE`), so Ultra stays within 10.5 MB;
 4. writes `src/engine/render/weapon-assets.json`: file sizes per set and size, triangles per model
    and node, every clip's length, and the props' triangles. The game and `tests/weapon-assets.test.ts` read it.
 
 Commit the regenerated `public/models/weapons.glb`, `public/weapons/` and `weapon-assets.json`.
+
+### Blender on another machine
+
+Step 1 can run on a second machine (the bakes use an NVIDIA card through OptiX or CUDA where there is no
+Metal). The scripts read and write only under the repository root, so copy the two folders they need and
+bring the set's folder back:
+
+```sh
+ssh HOST mkdir -p work/tools/blender/weapons work/tools/weapons/.build/hands
+scp tools/blender/weapons/*.py HOST:work/tools/blender/weapons/
+scp tools/weapons/.build/hands/hands.blend HOST:work/tools/weapons/.build/hands/   # the guns pose this hand; do not rebuild it there
+ssh HOST 'cd work && blender --background --factory-startup --python tools/blender/weapons/lmg.py'
+scp -r HOST:work/tools/weapons/.build/lmg tools/weapons/.build/
+npm run weapons -- --pack
+```
+
+Keep the local `hands.blend`: a gun's posed hands wear the hands atlas that was baked with it, and a
+rebuilt hand has other UVs.
 
 Look at one set alone, without baking (a few seconds):
 
@@ -61,7 +79,8 @@ the hip). `--quick` bakes with a few samples, to check the pipeline.
   `<model>__<part>` (unique across the merged glb); the game strips the prefix. The game's
   procedural pose moves the root; clips move the `pivot` (the whole gun, for a reload's roll) and
   the parts. Static pieces are joined into `body`; moving parts (`magazine`, `slide`, `bolt`,
-  `fore-end`, `charging-handle`, `cocking-handle`, `trigger`, `shell`, `left-hand`, `right-hand`)
+  `fore-end`, `charging-handle`, `cocking-handle`, `trigger`, `shell`, `left-hand`, `right-hand`; the
+  LMG's `magazine` is its 100-round box with the belt)
   keep their own node with its origin on the pivot it turns about.
 - **Sockets** are empties: `muzzle` (tracers, flash and smoke leave from it), `eject` (shells),
   `sight` (the point the aim pose puts on the screen centre: the iron sight's post, the sniper's

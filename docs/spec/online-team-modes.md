@@ -1,5 +1,7 @@
 # Online team modes
 
+> A fourth online mode, co-op survival, is defined in [Online co-op survival](online-coop.md). It advances the namespace to v3 and adds `COP0..7` discovery. The statement "no bots" below applies to the three PvP modes.
+
 This change extends the online game described in [Game loop](game-loop.md), [Networking](networking.md), and [HUD, audio and UI](hud-audio-ui.md). It replaces their FFA-only statements. Unchanged combat, weapons, movement, solo survival, and training follow the existing specifications.
 
 All times are seconds. These are initial playtest values, not measured balance results. Runtime rules are in `src/engine/game/team-rules.ts`.

@@ -43,7 +43,7 @@ test('the model file is optimised and within its budget (V12)', async () => {
   expect(masks).toBeGreaterThan(300);
   expect(masks).toBeLessThan(650);
   // The enemies' Blender guns (render/weapons.ts `prop`): one cheap mesh per prop kind.
-  expect(Object.keys(weaponManifest.props).sort()).toEqual(['blade', 'knife', 'pistol', 'r4c', 'rifle', 'shotgun', 'sniper']);
+  expect(Object.keys(weaponManifest.props).sort()).toEqual(['blade', 'knife', 'lmg', 'pistol', 'r4c', 'rifle', 'shotgun', 'sniper']);
   for (const triangles of Object.values(weaponManifest.props)) expect(triangles).toBeLessThanOrEqual(1200);
 });
 

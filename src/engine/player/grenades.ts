@@ -205,7 +205,7 @@ function explode(p: Player, n: Nade): void {
   if (n.mine) {
     ctx.enemies?.blastEnemies(center, BLAST, 120);
     ctx.game.blastBreakables(center, BLAST * 0.9);
-  }
+  } else ctx.enemies?.hazards.clearSmoke(center, BLAST); // Co-op: a teammate's grenade thins smoke on every machine.
   const distance = p.center.distanceTo(center);
   if (n.mine && p.alive && distance < HURT_RADIUS) {
     p.takeDamage(10 + 34 * (1 - distance / HURT_RADIUS), center);

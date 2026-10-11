@@ -282,7 +282,7 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .score-rows .self, .lobby-players .self { background: rgba(76, 125, 255, .12); }
 
 /* Online modes extend the same flat panels; team names never rely on colour. */
-.mode-picker { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 14px 0 8px; }
+.mode-picker { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 14px 0 8px; }
 .mode-picker .screen-button { min-height: 44px; padding: 10px 12px; font-size: 17px; }
 .mode-picker [aria-pressed="true"] { border-color: #91b1ff; background: #22394b; box-shadow: inset 0 -2px #91b1ff; }
 .mode-rules { font-size: 14px; }

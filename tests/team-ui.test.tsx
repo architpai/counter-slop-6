@@ -38,8 +38,8 @@ test('online mode choices are accessible, disabled while busy, and emit the sele
   const model: OnlineModel = { name: 'Player', code: '', mode: 'flag', isPublic: true, busy: false, status: '' };
   const show = () => render(<Screen view={{ kind: 'online', model }} pad={false} onAction={onAction} />);
   show();
-  expect(modeButtons().map(button => button.textContent)).toEqual(['Solo Deathmatch', 'Team Deathmatch', 'Flag Hold']);
-  expect(modeButtons().map(button => button.getAttribute('aria-pressed'))).toEqual(['false', 'false', 'true']);
+  expect(modeButtons().map(button => button.textContent)).toEqual(['Solo Deathmatch', 'Team Deathmatch', 'Flag Hold', 'Co-op Survival']);
+  expect(modeButtons().map(button => button.getAttribute('aria-pressed'))).toEqual(['false', 'false', 'true', 'false']);
   expect(host.textContent).toContain('Finds a public Flag Hold lobby');
   expect(host.textContent).toContain('Joining by code uses the host’s mode');
   modeButtons()[1]!.click();

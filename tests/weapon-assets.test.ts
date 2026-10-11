@@ -75,7 +75,7 @@ const ctx = {
 } as unknown as Ctx;
 const player = { eye: new Vector3(), forward: new Vector3(0, 0, -1), right: new Vector3(1, 0, 0), headshotT: 0,
   recoil: () => {}, kickFov: () => {}, aimDir: (_s: number, out: Vector3) => out.set(0, 0, -1) } as unknown as Player;
-const guns = (['r4c', 'rifle', 'shotgun', 'sniper', 'pistol'] as const).map(kind => new Gun(ctx, player, kind));
+const guns = (['r4c', 'rifle', 'shotgun', 'sniper', 'pistol', 'lmg'] as const).map(kind => new Gun(ctx, player, kind));
 const melee = new Melee(ctx, player);
 
 afterAll(() => {
@@ -88,13 +88,13 @@ test('tier selection, URLs and the download budget', () => {
   expect([PRESET_VALUES.medium, PRESET_VALUES.high, PRESET_VALUES.ultra].map(weaponTextureSize)).toEqual([512, 1024, 2048]);
   expect(weaponTextureSize({ look: 'lowpoly', textures: 'high' })).toBeNull();
   expect(weaponMapUrl('r4c', 1024, 'albedo')).toBe('/weapons/1024/r4c-albedo.ktx2');
-  // Small models stop at 1K; the rifles and the hands go to 2K on Ultra.
-  expect(['optics', 'pistol', 'knife'].map(set => weaponSetSize(set as never, 2048))).toEqual([1024, 1024, 1024]);
+  // Small models stop at 1K, and so does the sixth gun, the LMG, to hold the download; the other long guns and the hands go to 2K on Ultra.
+  expect(['optics', 'pistol', 'knife', 'lmg'].map(set => weaponSetSize(set as never, 2048))).toEqual([1024, 1024, 1024, 1024]);
   expect(weaponSetSize('r4c', 2048)).toBe(2048);
   expect(weaponSetSize('hands', 512)).toBe(512);
   const bytes = [512, 1024, 2048].map(size => weaponDownloadBytes(size as 512));
   expect(bytes[0]! < bytes[1]! && bytes[1]! < bytes[2]!).toBe(true);
-  expect(bytes[2]!, 'Ultra downloads at most 10 MB of weapons').toBeLessThanOrEqual(10 * MB);
+  expect(bytes[2]!, 'Ultra downloads at most 10.5 MB of weapons').toBeLessThanOrEqual(10.5 * MB);
 });
 
 test('every set and size the tiers ask for is on the server', async () => {

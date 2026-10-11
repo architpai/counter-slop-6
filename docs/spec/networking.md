@@ -2,6 +2,8 @@
 
 > Online extension: [Online team modes](online-team-modes.md) defines the v2 namespace, mode-specific discovery, team roster and host-owned objective snapshots.
 
+> Online extension: [Online co-op survival](online-coop.md) defines the v3 namespace, the `coop` mode, host-owned enemies, and the messages that carry them. It replaces section 9.10.
+
 > Current combat changes: [Combat rehaul](combat-rehaul.md). It replaces slot 3, extends flags to 1023 and adds addressed headshot confirmation.
 
 This document describes the multiplayer networking of the game: peer-to-peer transport, lobby discovery, the message protocol, state replication, hit validation, score authority, and the representation of remote players. It is written so that an implementer can build identical gameplay from it alone.
@@ -574,12 +576,12 @@ Score table: peer id → `{ name, kills, deaths }`. The host owns it; clients ho
 
 ### 9.10 Bots (enemies) in online play
 
-Online matches spawn no enemies; wave logic runs only in solo. The enemy manager nevertheless contains a dormant "mirror" facility. **No message type carries it and nothing enables it**; it is not part of the live protocol. For completeness, it consists of:
+The PvP modes (`ffa`, `tdm`, `flag`) spawn no enemies. Co-op survival does: the host runs the solo wave director and the clients run the enemy manager as a mirror. [Online co-op survival](online-coop.md) sections 4 and 5 define the authority and the messages (`espawn`, `esnap`, `ekill`, `eproj`, `edmg`, `ehit`, `eyank`). The mirror consists of:
 
 - A host-side snapshot: one row per living enemy: `[id, x, y, z (2 decimals), yaw (2 decimals), state code, round(hp), aim amount (2 decimals), attack timer (2 decimals), fuse-lit flag 0/1, boss-attack flag 0/1]`. State codes: 0 spawn, 1 hunt, 2 stunned, 3 dead.
 - A client-side apply: two-snapshot buffering like players (synthetic first A at now − 0.08), rendered 100 ms behind with `k` clamped to [0, 1.2] (slight extrapolation), velocity derived from the position delta per step clamped to 30 m/s, on-ground = |vy| < 0.5, yaw by shortest arc; a spawn state that becomes non-spawn snaps the scale to full; a "kill mirror" that runs the death effects without scoring; and a "client hit" callback fired instead of applying damage.
 
-If enemies were ever present online: enemy projectiles are consumed by remote bodies without damage (capsule test with catch radius 0.5, or 0.9 for blast projectiles, against the remote's centre, eye, and a point 0.55 below the centre); each peer's own client handles its own damage; and enemy melee/blast sweeps that reach a remote route through the remote's damage hook as a `pdmg` labelled `grenade`.
+In co-op: enemy projectiles are consumed by remote bodies without damage (capsule test with catch radius 0.42, or 0.9 for blast projectiles, against the remote's centre, eye, and a point 0.55 below the centre); each peer applies projectile, blast, and detonation damage to its own player; and host-only attacks that reach a remote (melee swings, drone dives, boss attacks) go through the remote's damage and knockback hooks as a host-only `edmg`. `pdmg` stays PvP-only.
 
 ## 10. Lobby synchronisation and match flow
 

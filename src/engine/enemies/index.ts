@@ -12,14 +12,15 @@ import { ENEMY_GRAVITY, TYPES, BOSS_ORDER } from './types';
 import type { EnemyType } from './types';
 import { makeModel, syncModel, flash, spawnPose, animate, corpse, planDeath, DEATH_END, FLASH_TIME } from './model';
 import type { Death, GroundJoints, EyeAnchors, HitSphere, ModelNodes } from './model';
-import { groundThink, wander, steer, follow, onHit } from './ai';
+import { groundThink, wander, steer, follow, onHit, mirrorLaser } from './ai';
 import { flyerThink } from './flyer';
 import { updateProjectiles, clearProjectiles } from './projectiles';
 import type { ProjectileRecord } from './projectiles';
+import { ATTACK_KINDS, mirrorAttack, mirrorAttackStep } from './boss';
 import type { BossAttack } from './boss';
 import { EnemyHazards } from './hazards';
 import { specialThink } from './specials';
-import { expansionBossThink } from './expansion-boss';
+import { expansionBossThink, mirrorAimbotLaser } from './expansion-boss';
 import { MUTATIONS, mutationCount } from './progression';
 import { spawnProjectile } from './projectiles';
 
@@ -152,12 +153,16 @@ export class EnemyManager {
   mods: { speed: number; damage: number };
   hazards: EnemyHazards;
   mutations = new Set<EnemyKind>();
-  /** True on a client mirror: it interpolates instead of thinking (dormant). */
+  /** True on a co-op client: it interpolates host snapshots instead of thinking. */
   mirror: boolean;
   onKill: ((e: EnemyRecord, info: HitInfo, overkill: boolean) => void) | null;
   onBoss: ((e: EnemyRecord) => void) | null;
   onSpawn: ((e: EnemyRecord) => void) | null;
   onClientHit: ((e: EnemyRecord, amount: number, info: HitInfo) => void) | null;
+  /** Host only: a ban ring, a smoke grenade, or smoke that a blast cleared. `n` is the ring's owner id or the cleared radius. */
+  onHazard: ((kind: 'ring' | 'smoke' | 'clear', a: Vector3, b: Vector3 | null, n: number) => void) | null;
+  /** Mirror only: a grapple pull, which the host applies. */
+  onClientYank: ((e: EnemyRecord, target: Vector3) => void) | null;
   onFire: ((p: ProjectileRecord) => void) | null;
   /** Shared with projectiles: enemy and projectile ids come from one counter. */
   ids: number;
@@ -175,7 +180,7 @@ export class EnemyManager {
     this.mods = { speed: 1, damage: 1 };
     this.hazards = new EnemyHazards(this);
     this.mirror = false;
-    this.onKill = this.onBoss = this.onSpawn = this.onClientHit = this.onFire = null;
+    this.onKill = this.onBoss = this.onSpawn = this.onClientHit = this.onClientYank = this.onFire = this.onHazard = null;
     this.ids = 1; this.slots = 0; this.sepT = 0; this.alive = 0;
     this._steer = (e, goal, speed, accel, dt) => steer(this, e, goal, speed, accel, dt);
     this._follow = (e, target, speed, dt) => follow(this, e, target, speed, dt);
@@ -315,7 +320,7 @@ export class EnemyManager {
       }
       animate(e, dt); syncModel(e);
     }
-    if (!this.mirror && !passive) { this._separate(dt); this.hazards.update(dt); }
+    if (!passive) { if (!this.mirror) this._separate(dt); this.hazards.update(dt); }
     updateProjectiles(this, dt);
     for (let i = this.list.length - 1; i >= 0; i--) {
       const e = this.list[i];
@@ -359,8 +364,11 @@ export class EnemyManager {
     }
     e.root.position.copy(e.body.pos); e.root.rotation.y = e.yaw;
     e.target = this.ctx.player;
+    mirrorAttackStep(this, e, dt);
     animate(e, dt); syncModel(e);
-    if (e.laser) e.laser.visible = e.aimAmt > 0.9;
+    // The telegraph a player dodges by: drawn from the aim point the host sends (`applyAims`).
+    if (!e.aimPoint) { if (e.laser) e.laser.visible = false; }
+    else if (e.type === 'aimbot') mirrorAimbotLaser(this, e); else mirrorLaser(this, e);
   }
 
   _destroy(e: EnemyRecord): void {
@@ -383,7 +391,8 @@ export class EnemyManager {
     if (i >= 0) e.hits.splice(i, 1);
     if (plate) this.ctx.effects.debris(plate, plate.position, vel.set(rand(-3, 3), 4, rand(-3, 3)), spin.set(rand(-6, 6), rand(-6, 6), rand(-6, 6)), { radius: 0.4, blood: false, life: 8, gone: e.figure.lend(plate) });
     this.ctx.audio.shieldHit(e.center);
-    this.ctx.game.addScore(40, 'SHIELD BROKEN');
+    // One award for the team: the mirrors drop the plate without it.
+    if (!this.mirror) this.ctx.game.addScore(40, 'SHIELD BROKEN');
   }
 
   _bloodTone(e: EnemyRecord): ToneId { return e.stats.tone === TONE.DARK ? TONE.DARK : TONE.HOSTILE; }
@@ -392,10 +401,12 @@ export class EnemyManager {
     if (!e?.alive || !Number.isFinite(amount) || amount <= 0) return;
     const { effects, audio, hud, input, game } = this.ctx;
     const point = info.point ?? e.center, dir = info.dir ?? up;
+    // Co-op host: another player's hit. It moves health here, and its feedback plays on that player's machine.
+    const remote = info.by != null;
     if (e.type === 'parry' && e.guardT > 0 && e.state === 'hunt' && info.dir
-      && ['r4c', 'rifle', 'shotgun', 'sniper', 'revolver', 'pistol'].includes(info.source ?? '')
+      && ['r4c', 'rifle', 'shotgun', 'sniper', 'revolver', 'pistol', 'lmg'].includes(info.source ?? '')
       && info.dir.dot(scratch.set(Math.sin(e.yaw), 0, Math.cos(e.yaw))) < -0.5) {
-      effects.sparks(point, scratch.copy(dir).negate(), TONE.ACCENT, 6, 6); hud.hitmarker(false, false, true);
+      effects.sparks(point, scratch.copy(dir).negate(), TONE.ACCENT, 6, 6); if (!remote) hud.hitmarker(false, false, true);
       // One reflected projectile per 0.2 s, not one per shotgun pellet.
       if (e.burstT <= 0 && !this.mirror) {
         spawnProjectile(this, point, scratch.copy(dir).negate(), 30, 7, e, 3, 0.045, false); e.burstT = 0.2;
@@ -404,27 +415,37 @@ export class EnemyManager {
     }
     if (info.part === 'shield') {
       effects.sparks(point, scratch.copy(dir).negate(), TONE.ACCENT, 8, 8);
-      audio.shieldHit(point); hud.hitmarker(false, false, true);
-      if ((info.source === 'melee' || info.source === 'blast') && e.shieldHp > 0 && --e.shieldHp <= 0) this._breakShield(e);
+      audio.shieldHit(point); if (!remote) hud.hitmarker(false, false, true);
+      // The host owns the plate: a mirror reports the hit and reads shield health from the snapshot.
+      if (this.mirror) this.onClientHit?.(e, amount, info);
+      else if ((info.source === 'melee' || info.source === 'blast') && e.shieldHp > 0 && --e.shieldHp <= 0) this._breakShield(e);
       return;
     }
     e.flinch = 1; e.flashT = FLASH_TIME; flash(e, 0);
     effects.blood(point, dir, clamp(0.5 + amount / 70, 0.5, 2.2) * (e.stats.boss ? 1.6 : 1), { tone: this._bloodTone(e) });
-    if (this.mirror) { hud.hitmarker(false, !!info.crit); this.onClientHit?.(e, amount, info); return; }
+    if (this.mirror) {
+      this.ctx.player?.onHeadshot(info);
+      if (info.crit) audio.headshot(); else audio.hitEnemy();
+      hud.hitmarker(false, !!info.crit);
+      if (info.source !== 'deflect') input.rumble(0.1, 0.3, 30);
+      this.onClientHit?.(e, amount, info); return;
+    }
     amount *= this.mods.damage;
     if (e.type === 'aimbot' && e.weakT > 0 && info.crit) amount *= 1.5;
     if (e.type === 'moderator' && e.state === 'stunned' && info.crit) amount *= 1.5;
     e.hp -= amount;
     e.rageT = 0;
     if (e.type === 'medic') e.wantCover = true;
-    if (amount > 0) this.ctx.player?.onHeadshot(info);
-    if (info.crit) audio.headshot(); else audio.hitEnemy();
-    hud.hitmarker(e.hp <= 0, !!info.crit);
-    if (info.source !== 'deflect') input.rumble(0.1, 0.3, 30);
+    if (!remote) {
+      if (amount > 0) this.ctx.player?.onHeadshot(info);
+      if (info.crit) audio.headshot(); else audio.hitEnemy();
+      hud.hitmarker(e.hp <= 0, !!info.crit);
+      if (info.source !== 'deflect') input.rumble(0.1, 0.3, 30);
+    }
     if (e.state === 'spawn') { e.state = 'hunt'; e.root.scale.setScalar(e.stats.scale); }
     else if (game.mode !== 'training') onHit(this, e);
     if (e.stats.boss) this.onBoss?.(e);
-    if (e.hp <= 0) { game.hitstop(info.crit ? 0.05 : 0.025, 0.25); this.kill(e, info); }
+    if (e.hp <= 0) { if (!remote) game.hitstop(info.crit ? 0.05 : 0.025, 0.25); this.kill(e, info); }
   }
 
   _detach(e: EnemyRecord, name: FigurePartName | undefined, dir: Vector3, extra: Vector3, radius: number): void {
@@ -446,7 +467,8 @@ export class EnemyManager {
       }
     }
     if (e.type === 'flyer' && e.mutated && e.payload) {
-      effects.explosion(e.center, 3, TONE.ACCENT, true); this.blastEnemies(e.center, 3, 60, e);
+      effects.explosion(e.center, 3, TONE.ACCENT, true);
+      if (!this.mirror) this.blastEnemies(e.center, 3, 60, e);
     }
     e.body.vel.set(0, 0, 0);
     if (e.laser) { e.laser.removeFromParent(); e.laser = null; }
@@ -501,8 +523,9 @@ export class EnemyManager {
   _detonate(e: EnemyRecord, scale: number): void {
     const R = 4.2 * scale, c = e.center, { effects, audio, game } = this.ctx;
     effects.explosion(c, R, TONE.DARK); audio.explosion(c);
+    // Each machine hurts its own player: a mirror repeats the detonation when the death arrives.
     for (const t of game.targets()) {
-      if (!t.alive) continue;
+      if (!t.alive || !t.isLocal) continue;
       const d = t.center.distanceTo(c);
       if (d >= R) continue;
       t.takeDamage(24 * this.mods.damage * Math.sqrt(1 - d / R), c);
@@ -517,7 +540,7 @@ export class EnemyManager {
     const wasAlive = e.alive;
     if (wasAlive) { e.alive = false; e.state = 'dead'; this.alive--; if (e.laser) { e.laser.removeFromParent(); e.laser = null; } }
     this._detonate(e, scale);
-    if (wasAlive && !this.mirror) this.onKill?.(e, { source: 'blast', dir: up.clone() }, true);
+    if (wasAlive && !this.mirror) this.onKill?.(e, { source: 'blast', dir: up.clone(), boom: scale }, true);
   }
 
   blastEnemies(center: Vector3, radius: number, base: number, except: EnemyRecord | null = null): void {
@@ -533,6 +556,7 @@ export class EnemyManager {
   yank(e: EnemyRecord, target: Vector3): boolean {
     if (!e?.alive) return false;
     if (e.stats.boss && (e.type !== 'moderator' || e.yankableT <= 0)) { e.flinch = 1; return false; }
+    if (this.mirror) { this.onClientYank?.(e, target); return true; }
     e.yankableT = 0; e.guardT = 0; e.specialT = 0;
     if (e.type === 'moderator') e.weakT = 1.3;
     e.state = 'stunned'; e.age = 0; e.stunDuration = 1.3; e.path = null;
@@ -590,7 +614,33 @@ export class EnemyManager {
 
   snapshot(): number[][] {
     return this.list.filter(e => e.alive).map(e => [e.id, round2(e.body.pos.x), round2(e.body.pos.y), round2(e.body.pos.z), round2(e.yaw),
-      STATE_CODE[e.state] ?? 1, Math.round(e.hp), round2(e.aimAmt), round2(e.attackT), e.fuseT >= 0 ? 1 : 0, e.bossAttack ? 1 : 0]);
+      STATE_CODE[e.state] ?? 1, Math.round(e.hp), round2(e.aimAmt), round2(e.attackT), e.fuseT >= 0 ? 1 : 0,
+      e.bossAttack ? ATTACK_KINDS.indexOf(e.bossAttack.kind) + 1 : 0, e.shieldHp]);
+  }
+
+  /** Host: one row for each aiming laser, `[id, x, y, z, warned, aim time]`. */
+  aims(): number[][] {
+    return this.list.filter(e => e.alive && e.aimPoint && e.laser?.visible).map(e => {
+      const p = e.aimPoint ?? e.center;
+      return [e.id, round2(p.x), round2(p.y), round2(p.z), e.aimWarned ? 1 : 0, round2(e.aimT)];
+    });
+  }
+
+  /** Mirror: the lasers that are on. An enemy without a row has stopped aiming. */
+  applyAims(rows: number[][]): void {
+    if (!Array.isArray(rows)) return;
+    const seen = new Set<EnemyRecord>();
+    for (const r of rows) {
+      if (!Array.isArray(r) || r.length < 6 || !r.every(Number.isFinite)) continue;
+      const [id = 0, x = 0, y = 0, z = 0, warned = 0, t = 0] = r;
+      const e = this.byId.get(id);
+      if (!e?.alive) continue;
+      seen.add(e);
+      e.aimPoint = (e.aimPoint ?? new Vector3()).set(x, y, z); e.aimT = t;
+      if (warned > 0 && !e.aimWarned) this.ctx.audio.sniperAim(e.center);
+      e.aimWarned = warned > 0;
+    }
+    for (const e of this.list) if (e.aimPoint && !seen.has(e)) { e.aimPoint = null; e.aimWarned = false; }
   }
 
   applySnapshot(rows: number[][], now: number): void {
@@ -598,7 +648,7 @@ export class EnemyManager {
     for (const r of rows) {
       if (!Array.isArray(r) || r.length < 11 || !r.every(Number.isFinite)) continue;
       // Every slot above is present and finite; the defaults are for the type.
-      const [id = 0, x = 0, y = 0, z = 0, yaw = 0, code = 1, hp = 0, aim = 0, attack = 0, fuse = 0, boss = 0] = r;
+      const [id = 0, x = 0, y = 0, z = 0, yaw = 0, code = 1, hp = 0, aim = 0, attack = 0, fuse = 0, boss = 0, shield] = r;
       const e = this.byId.get(id);
       if (!e?.alive) continue;
       e.snapOld = e.snapNew ?? { p: e.body.pos.clone(), yaw: e.yaw, t: now - 0.08 };
@@ -607,7 +657,10 @@ export class EnemyManager {
       if (e.state === 'spawn' && state !== 'spawn') { e.state = state; e.root.scale.setScalar(e.stats.scale); }
       else if (e.state !== 'spawn') e.state = state;
       e.hp = hp; e.aimAmt = aim; e.attackT = attack; e.fuseT = fuse ? 0.5 : -1;
-      e.bossAttack = boss ? e.bossAttack ?? { kind: 'stomp', t: 0.3, fired: false } : null;
+      const kind = ATTACK_KINDS[boss - 1];
+      if (kind === undefined) e.bossAttack = null;
+      else if (e.bossAttack?.kind !== kind) e.bossAttack = mirrorAttack(this, e, kind);
+      if (shield !== undefined && shield <= 0 && e.shieldHp > 0) this._breakShield(e);
       if (e.stats.boss) this.onBoss?.(e);
     }
   }

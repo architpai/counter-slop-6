@@ -108,6 +108,7 @@ function setup(isHost = false, mode: OnlineMode = 'ffa') {
       gs.matchT = gs.respawnT = gs.deathT = gs.overT = 0; gs.over = null;
     },
     beginCommon: noop, showScreen: (kind: string) => screens.push(kind), endFocus: noop, addScore: noop,
+    coop: { reset: noop },
   };
   const ffa = createFFA(app as unknown as App);
   return { app, ctx, gs, lobby, scores, ffa, remote, sent, screens, damage, resets,
