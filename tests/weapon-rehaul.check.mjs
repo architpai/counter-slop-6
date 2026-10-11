@@ -92,6 +92,8 @@ try {
       await page.mouse.up({ button: 'right' }); await page.evaluate(() => window.rehaulFrame(60));
     }
   }
+  // Back to the pistol: one shot for each press.
+  await page.keyboard.down('5'); await page.evaluate(() => window.rehaulFrame(60)); await page.keyboard.up('5');
   await page.mouse.down(); await page.evaluate(() => window.rehaulFrame(1));
   const first = await page.evaluate(() => window.__game.player.weapon.mag);
   await page.evaluate(() => window.rehaulFrame(30));
@@ -99,10 +101,10 @@ try {
   assert.equal(first, 14);
   await page.mouse.up(); await page.evaluate(() => window.rehaulFrame(1));
 
-  await page.keyboard.down('6'); await page.evaluate(() => window.rehaulFrame(1));
+  await page.keyboard.down('v'); await page.evaluate(() => window.rehaulFrame(1));
   assert.deepEqual(await page.evaluate(() => ({ slot: window.__game.player.wi, melee: window.__game.player.melee.active })), { slot: 4, melee: true });
-  await page.keyboard.up('6'); await page.evaluate(() => window.rehaulFrame(60));
-  for (const [deltaY, slot] of [[1, 0], [-1, 4]]) {
+  await page.keyboard.up('v'); await page.evaluate(() => window.rehaulFrame(60));
+  for (const [deltaY, slot] of [[1, 5], [1, 0], [-1, 5]]) {
     await page.evaluate(deltaY => { window.dispatchEvent(new WheelEvent('wheel', { deltaY })); window.rehaulFrame(1); }, deltaY);
     assert.equal(await page.evaluate(() => window.__game.player.wi), slot);
     await page.evaluate(() => window.rehaulFrame(1));

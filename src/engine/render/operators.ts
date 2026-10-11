@@ -773,7 +773,7 @@ export const PROP_HOLDS: Readonly<Record<string, { grip: Vec3; support: Vec3 }>>
   rifle: { grip: [0, -0.08, 0.07], support: [0, -0.01, 0.4] },
   shotgun: { grip: [0, -0.08, -0.04], support: [0, -0.03, 0.32] },
   sniper: { grip: [0, -0.07, -0.11], support: [0, -0.03, 0.34] },
-  lmg: { grip: [0, -0.07, -0.02], support: [0, -0.02, 0.34] },
+  lmg: { grip: [0, -0.08, -0.04], support: [0, -0.035, 0.34] },
   pistol: { grip: [0, -0.07, 0.08], support: [-0.04, -0.09, 0.07] },
   knife: { grip: [0, 0.01, 0.04], support: [0, 0.01, 0.04] },
   blade: { grip: [0, 0.01, 0], support: [0, 0.01, 0] },
