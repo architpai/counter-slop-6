@@ -751,7 +751,6 @@ export function createFFA(app: App): FfaApi {
     if (gs.state === 'lobby') app.showScreen('lobby');
   });
   net.on('teamreq', (d, from) => { if (obj(d)) setTeam(from, d.team); });
-  net.on('startreq', (d, from) => { if (net.isHost && lobby.players.has(from) && gs.state === 'lobby') hostStart(); });
   net.on('start', (d, from) => {
     if (!fromHost(from) || !obj(d) || (gs.state !== 'lobby' && gs.state !== 'start' && !d.late)) return;
     const selected = d.mode ?? 'ffa';

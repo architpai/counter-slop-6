@@ -447,6 +447,7 @@ function LobbyScreen({ model, onAction }: { model: LobbyModel; onAction: Act }) 
   const teamMode = isTeamMode(model.mode), coop = model.mode === 'coop';
   const ready = !teamMode || TEAMS.every(team => players.some(player => player.team === team));
   const selfTeam = players.find(player => player.self)?.team;
+  const starts = model.isHost ? 'you start the match' : 'waiting for the host to start';
   return (
     <>
       <Title text="LOBBY" sub={`${modeChoice(model.mode).name} · ${players.length}/${playerCap(model.mode)} players`} />
@@ -472,14 +473,14 @@ function LobbyScreen({ model, onAction }: { model: LobbyModel; onAction: Act }) 
         })}
       </div> : <LobbyRoster players={players} />}
       <div className="screen-actions" data-ui-block="">
-        <Button act="startMatch" text="START MATCH" primary disabled={!ready} onAction={onAction} />
+        <Button act="startMatch" text="START MATCH" primary disabled={!ready || !model.isHost} onAction={onAction} />
         <Button act="leave" text="LEAVE" onAction={onAction} />
       </div>
       <Status text={model.status} />
       <p className="screen-footer">{teamMode
-        ? ready ? 'Anyone can start · select your team · up to 4v4' : 'Need at least 2 players, with one on each team.'
-        : coop ? 'anyone can start · the run starts at the host’s wave · friends can join between waves'
-        : `anyone can start · ${players.length < 2 ? 'people can still join once it is running' : `${players.length} players in`}`}</p>
+        ? ready ? `${starts} · select your team · up to 4v4` : 'Need at least 2 players, with one on each team.'
+        : coop ? `${starts} · the run starts at the host’s wave · friends can join between waves`
+        : `${starts} · ${players.length < 2 ? 'people can still join once it is running' : `${players.length} players in`}`}</p>
     </>
   );
 }

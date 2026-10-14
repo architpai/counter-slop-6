@@ -9,6 +9,7 @@ import type { App } from '../boot';
 import { ROSTER, MUTATIONS, mutationCount, nextSpawn } from '../enemies/progression';
 import { validBossPerch } from '../level/boss-perch';
 import { COOP, coopScale } from './coop-rules';
+import { showStragglers, stragglerMark, type StragglerMark } from './stragglers';
 const MODS: ReadonlyArray<readonly [string, number, number]> = [
   ['', 1, 1], ['CAFFEINATED · they move fast', 1.35, 0.85],
   ['JUICED · they hit harder', 0.9, 1.4], ['SWARM · more of them, thinner', 1.15, 0.9],
@@ -45,6 +46,8 @@ export interface SoloApi {
   /** The world's half of a kill: the ammo or health it leaves. */
   drop(e: EnemyRecord): void;
   onBoss(e: EnemyRecord): void;
+  /** Every frame: marks the last few enemies of a boss wave once the boss is down. */
+  markStragglers(): void;
   updateFocus(dt: number): void;
   endFocus(): void;
   enterFocus(): void;
@@ -241,6 +244,25 @@ export function createSolo(app: App): SoloApi {
   function onBoss(e: EnemyRecord): void {
     gs.boss = e.alive ? e : null; ctx.hud.setBoss(e.alive ? e.stats.name : null, e.hp / e.maxHp);
   }
+  function markStragglers(): void {
+    const enemies = ctx.enemies, list = enemies?.list ?? [];
+    // A co-op client has no queue of its own; the host's count comes with the run state.
+    const left = app.coop.active() && !ctx.net.isHost ? app.coop.state?.left ?? 0 : (enemies?.alive ?? 0) + gs.queue.length;
+    const boss = list.some(e => e.alive && e.stats.boss) || gs.queue.some(type => TYPES[type as EnemyKind]?.boss);
+    const marks: StragglerMark[] = [];
+    if ((gs.mode === 'solo' || app.coop.active()) && ctx.game.playing() && gs.intermission <= 0 && showStragglers(gs.wave, left, boss)) {
+      const camera = ctx.camera, canvas = ctx.renderer.three.domElement;
+      camera.updateMatrixWorld();
+      for (const e of list) {
+        if (!e.alive) continue;
+        projected.copy(e.center).applyMatrix4(camera.matrixWorldInverse);
+        const behind = projected.z > 0;
+        projected.applyMatrix4(camera.projectionMatrix);
+        marks.push(stragglerMark(projected.x, projected.y, behind, canvas.clientWidth, canvas.clientHeight));
+      }
+    }
+    ctx.hud.setStragglers(marks);
+  }
   function candidate(): EnemyRecord | null {
     const player = ctx.player;
     if (player === null) return null;
@@ -351,5 +373,5 @@ export function createSolo(app: App): SoloApi {
       ctx.input.rumble(0.5, 0.4, 120); ctx.hud.setFocusMark(null);
     }
   }
-  return { intro, startWave, spawnPosition, update, onKill, reward, drop, onBoss, updateFocus, endFocus, enterFocus, candidate };
+  return { intro, startWave, spawnPosition, update, onKill, reward, drop, onBoss, markStragglers, updateFocus, endFocus, enterFocus, candidate };
 }

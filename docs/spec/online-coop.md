@@ -12,7 +12,7 @@ All times are seconds. All scale values are initial playtest values, not measure
 
 - The online screen and a private lobby list the mode with the other three. Public discovery uses `COP0..7`.
 - A co-op lobby accepts a maximum of four players. The host refuses a fifth with "that lobby is full". A host cannot start co-op with more than four players in the lobby.
-- One player can start a run. Anyone in the lobby can start it.
+- Only the host can start a run.
 - There are no teams, no friendly fire, no rope cuts, and no match clock. Bullets and blades ignore other players.
 - The run uses the solo layout of the selected map, not the arena layout. Enemy spawn points, navigation, and boss perches are tuned for the solo layout.
 - Players start around the solo player start: slot 0 at the start, slots 1 to 3 at 1.6 m offsets. A slot that overlaps the world uses the start itself.
@@ -156,7 +156,7 @@ Known limits:
 
 ## 7. HUD and screens
 
-- In a run the HUD shows the solo wave block (wave, modifier, enemies left, intermission timer), the team score, the boss bar, and the kill feed. The PvP score panel is hidden.
+- In a run the HUD shows the solo wave block (wave, modifier, enemies left, intermission timer), the team score, the boss bar, the straggler arrows (every peer, from its own view), and the kill feed. The PvP score panel is hidden.
 - The scoreboard and the online menu show the wave, the team score, and one row for each player with kills and downs.
 - The lobby shows `n/4 players`, the player list, and for the host the start-wave selection.
 - The result screen title is `RUN OVER`.

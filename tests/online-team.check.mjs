@@ -57,7 +57,7 @@ try {
   const code = await host.evaluate(() => window.__game.net.code);
   await join(client, code);
   assert.equal((await read(client)).mode, 'flag');
-  await client.locator('[data-act="startMatch"]').click();
+  await host.locator('[data-act="startMatch"]').click();
   await Promise.all([host, client].map(p => wait(p, () => window.__game.gs.state === 'play' && !!window.__game.gs.teamMatch)));
   const hostId = (await read(host)).id, clientId = (await read(client)).id;
   assert.equal((await read(host)).teams[hostId], 0);

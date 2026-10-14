@@ -206,7 +206,7 @@ Transitions:
 Notes:
 
 - The `end` message handler runs in whatever state the client is in; in practice the host only sends it while in match.
-- The `start` message is ignored by the host itself. A `startreq` is honoured by the host only while its own state is `lobby`.
+- The `start` message is ignored by the host itself. Only the host can start a match.
 - Leaving online from a state other than `start` always passes through the reset-run routine (section 11) so a half-finished match leaves no enemies, pickups, or effects behind.
 
 ## 6. Main loop and timestep
@@ -327,13 +327,13 @@ When QUICK PLAY, CREATE, or JOIN is clicked, every button except BACK is disable
 
 Title "LOBBY", subtitle "free for all · first to 20 · N/8 players". Rows:
 
-- "code" and the lobby code.
+- "code" and the lobby code, in the system monospace font so that `0` and `O` look different.
 - Map selector; only the host can pick. Host pick sets the lobby map and broadcasts the lobby.
 - Hint: public → "this lobby is public: anyone can quick play in, or type the code"; private → "private lobby: friends type this code under PLAY ONLINE → JOIN".
 - Player list: one row per lobby player, host row marked, own row marked with "you".
-- START MATCH button: host → host start; client → send `startreq`, status "asking the host to start…".
+- START MATCH button: host → host start; disabled for a client.
 - LEAVE button → leave online with an empty reason.
-- Status line, then hint "anyone can start · " + (fewer than 2 players ? "people can still join once it is running" : "N players in").
+- Status line, then hint "you start the match · " (host) or "waiting for the host to start · " (client) + (fewer than 2 players ? "people can still join once it is running" : "N players in").
 
 The lobby panel is redrawn whenever the lobby record changes while the state is `lobby`.
 
@@ -437,6 +437,7 @@ The modifier index is a uniform random integer in [0, allowed) where allowed = 1
 2. If the queue has entries and enemies alive < maxAlive: spawn timer −= dt. When ≤ 0: spawn timer = max(0.7, 2.2 − 0.13 × wave); pop the front type; spawn it at the position from section 13. If the spawned enemy is a boss: HP multiplier = 1 + 0.35 × floor((wave − 5) / 15); its hp and max hp = round(type hp × multiplier).
 3. If the queue is empty and no enemy is alive: intermission = 8; message main "WAVE w CLEARED", sub "catch your breath · +" + 200 × w, 2.5 s; add score 200 × w with no label (combo multiplier applies); wave-clear sound; `player.heal(40)`.
 4. HUD wave = wave, enemies left = alive + queue length.
+5. On a boss wave, once the boss is dead and fewer than 10 enemies are left, the HUD marks the rest (hud-audio-ui.md 3.10, straggler arrows).
 
 ## 13. Solo mode: enemy spawn placement
 
@@ -551,7 +552,7 @@ Network facts used here (owned by the network subsystem, listed as contract): ma
 
 ## 18. Free-for-all: match lifecycle
 
-**Host start** (host clicks START MATCH, or receives `startreq` while in state `lobby`):
+**Host start** (host clicks START MATCH):
 
 1. Scores = one row {name, kills 0, deaths 0} per lobby player.
 2. Arena on. Build the list of spawn indices 0..S−1 (S = arena spawn count) and shuffle it (Fisher–Yates, uniform).
@@ -693,7 +694,6 @@ Delivery: the host sends to everyone; a client sends to the host, and with the r
 | `lobby` | host → all | {players [{id,name}], hostId, isPublic, map} | Section 17. |
 | `leave` | host → all | {id} | Section 17. |
 | `start` | host → all / one | {spawns {id→index}, map} or {late true, spawn index, map, broken [ids]} | Section 18. |
-| `startreq` | client → host | {} | Host starts if in state `lobby`. |
 | `teamreq` | client → host | { team } | Host moves the sender to that team if in state `lobby`, in a team mode, and the team has fewer than four players. |
 | `end` | host → all | {id, name} | End match. |
 | `backtolobby` | host → all | {} | Client goes to the lobby screen. |

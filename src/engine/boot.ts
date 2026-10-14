@@ -582,6 +582,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
       if (gs.boss.alive) hud.setBoss(gs.boss.stats.name, gs.boss.hp / gs.boss.maxHp);
       else { hud.setBoss(null); gs.boss = null; }
     }
+    app.solo.markStragglers();
     audio.setIntensity(clamp((enemies.alive + gs.queue.length + 2 * ctx.remotes.size) / 12, 0, 1) * (gs.intermission > 0 ? 0.25 : 1));
 
     fx.hurt = player.hurtFx; fx.flash = player.flashFx; fx.slow = scale < 1 ? 1 : 0;
