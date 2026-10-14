@@ -72,6 +72,9 @@ test('team lobbies show named rosters and need both sides; solo start stays avai
   model.players.push({ ...roster.players[1]!, team: 0 }); show();
   expect(action('startMatch').disabled).toBe(true);
   model.mode = 'ffa'; show();
+  expect(action('startMatch').disabled).toBe(true);
+  expect(host.textContent).toContain('waiting for the host to start');
+  model.isHost = true; show();
   expect(action('startMatch').disabled).toBe(false);
   expect(host.querySelector('.team-rosters')).toBeNull();
 });

@@ -61,6 +61,7 @@ export function Hud({ store, children }: HudProps) {
           <Scope store={store} />
           <FocusMeter store={store} />
           <FocusMark store={store} />
+          <Stragglers store={store} />
           <Crosshair store={store} />
           <GrappleReticle store={store} />
           <Breath store={store} />
@@ -210,6 +211,14 @@ export const FocusMeter = memo(function FocusMeter({ store }: { store: HudStore 
       <div className="focus-ready">SLASH READY</div>
     </div>
   );
+});
+
+export const Stragglers = memo(function Stragglers({ store }: { store: HudStore }) {
+  rendered();
+  const count = useHud(store, 'stragglers');
+  return <div className="stragglers" data-hud="stragglers" aria-hidden="true">
+    {Array.from({ length: count }, (_, i) => <i key={i} style={{ transform: `var(--straggler-${i})` }} />)}
+  </div>;
 });
 
 export const FocusMark = memo(function FocusMark({ store }: { store: HudStore }) {

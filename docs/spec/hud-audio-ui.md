@@ -98,7 +98,7 @@ The HUD root carries three boolean states that change what is visible:
 
 | State | Set when | Effect |
 |---|---|---|
-| "no gameplay" | Any menu is showing that replaces gameplay (main menu, online, lobby, game over, match over). Cleared when play begins or resumes. | Hides: top-left, top-right, bottom-left, bottom-right blocks, crosshair, grapple reticle, kill feed, tip line, boss bar, scope, focus mark, focus meter. Not hidden: hit marker, damage indicator, centre message, scoreboard overlay, grapple breath bar (these are simply not fed while no game is running; the breath bar is hidden anyway because a reset refills breath to 1). |
+| "no gameplay" | Any menu is showing that replaces gameplay (main menu, online, lobby, game over, match over). Cleared when play begins or resumes. | Hides: top-left, top-right, bottom-left, bottom-right blocks, crosshair, grapple reticle, kill feed, tip line, boss bar, straggler arrows, scope, focus mark, focus meter. Not hidden: hit marker, damage indicator, centre message, scoreboard overlay, grapple breath bar (these are simply not fed while no game is running; the breath bar is hidden anyway because a reset refills breath to 1). |
 | "low health" | Health fraction (hp / max hp) < 0.3 | Health bar outline and fill turn to the alert colour (red). |
 | "gamepad" | The last input device used was a gamepad (see section 5). | Control labels switch to controller names; anything marked "keyboard only" hides and anything marked "pad only" shows. |
 
@@ -197,6 +197,8 @@ Breath rules (player module, listed so the bar can be reproduced): breath starts
 - Set every frame while a boss is alive; hidden when the boss dies or on reset. Hidden in "no gameplay".
 - Boss names: "THE ADMIN", "THE HITBOX", "THE LAG SPIKE".
 
+**Straggler arrows.** On a boss wave (solo and co-op), once no boss is alive or queued and fewer than 10 enemies are left (alive + queued; a co-op client uses the host's count), every live enemy gets a red 16 × 18 px arrow. An enemy on screen gets the arrow above its torso, pointing down at it. An enemy off screen gets it on the screen edge (28 px in), pointing toward the enemy. An enemy behind the camera gets it on the left or right edge, whichever side is nearer. Set every frame, and an empty set hides them; so they go on wave clear, death, pause and every menu. Hidden in "no gameplay".
+
 ### 3.11 Health
 
 - In the bottom-left block (left 9 %, bottom 5 %). One row: the label "HP" (26 px), a 210 × 16 px bar (2.5 px tone border, rotated −1°), and the numeric HP.
@@ -291,6 +293,7 @@ Once per frame after simulation, in this order, with `dt` = real frame time (cap
 7. HUD update(dt): tick the message and tip countdowns.
 8. Set focus meter (rules in 3.17).
 9. If a boss is tracked: set boss bar (name, hp fraction) or hide it if the boss is dead.
+10. Set the straggler arrows (3.10).
 
 Also per frame: the audio listener is set to the player's eye position and right vector; music intensity is set (section 12).
 
@@ -410,8 +413,8 @@ This block appears on the main menu, the solo pause screen and the online menu s
   3. Hint: public → "this lobby is public: anyone can quick play in, or type the code"; private → "private lobby: friends type this code under PLAY ONLINE → JOIN".
   4. Player list (one row per player, name on the left; the host's name is followed by " · host" dimmed; the right column reads "you" on your own row; your row has a faint tint).
   5. Buttons: big "START MATCH" and outline "LEAVE".
-  6. Status line, then hint: "anyone can start · people can still join once it is running" when fewer than 2 players, else "anyone can start · <n> players in".
-- START MATCH: host starts the match for everyone; a non-host sends a start request and shows status "asking the host to start…" (the host starts on receipt if still in the lobby). LEAVE: leaves the network and returns to the Play Online screen with an empty status.
+  6. Status line, then hint: "you start the match" (host) or "waiting for the host to start" (client), then " · people can still join once it is running" when fewer than 2 players, else " · <n> players in".
+- START MATCH: host starts the match for everyone; disabled for a non-host. LEAVE: leaves the network and returns to the Play Online screen with an empty status.
 - The lobby screen is fully re-rendered every time the lobby roster/map/visibility changes (this resets any focus inside it).
 - Clicking the overlay background does nothing in the lobby.
 

@@ -55,6 +55,8 @@ export interface HudView {
   setFocusMeter(show: boolean, frac: number, ready: boolean, label: string): void;
   setFocusMark(x: number | null, y?: number): void;
   setBoss(name: string | null, frac?: number): void;
+  /** Arrows at the last enemies of a boss wave; an empty list hides them. */
+  setStragglers(marks: readonly { x: number; y: number; a: number }[]): void;
   /** Frames per second for the optional counter; null hides it. */
   setFps(fps: number | null): void;
   /** The one-time "Lower quality?" offer, naming the preset it would switch to; null hides it. */

@@ -125,10 +125,7 @@ export function createUI(app: App): UiApi {
     onlineMode: value => { if (isOnlineMode(value)) { app.ffa.selectMode(value); redraw(); } },
     team: value => { if (value === '0' || value === '1') app.ffa.requestTeam(value === '0' ? 0 : 1); },
     mainMenu: () => app.mainMenu(),
-    startMatch: () => {
-      if (net.isHost) app.ffa.hostStart();
-      else { net.send('startreq', {}); lobby.status = 'asking the host to start…'; redraw(); }
-    },
+    startMatch: () => { if (net.isHost) app.ffa.hostStart(); },
     leave: () => app.ffa.leave(''),
     leaveMatch: () => app.ffa.leave(''),
     sens: value => sensitivity('sens', value, 100),

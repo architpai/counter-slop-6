@@ -59,8 +59,9 @@ try {
   await client.getByText(/2\/4 players/).waitFor();
   await host.screenshot({ path: '/tmp/shooter-coop-check/lobby.png' });
 
-  // Anyone can start. Every peer plays the solo layout with solo health, no teams.
-  await client.locator('[data-act="startMatch"]').click();
+  // Only the host can start. Every peer plays the solo layout with solo health, no teams.
+  assert.equal(await client.locator('[data-act="startMatch"]').isDisabled(), true);
+  await host.locator('[data-act="startMatch"]').click();
   await Promise.all([host, client].map(p => wait(p, () => window.__game.gs.state === 'play' && window.__game.gs.wave === 1)));
   for (const p of [host, client]) {
     const s = await read(p);
