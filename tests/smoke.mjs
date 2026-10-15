@@ -73,8 +73,8 @@ await page.click('.screen-button[data-act="start"]');
 const clicked = await page.evaluate(() => window.__game.gs.state);
 assert.equal(await page.evaluate(() => window.__game.gs.wave), 1);
 
-// Back to the main screen, then prove the backdrop still advances the screen:
-// a click that misses every [data-ui-block] must reach onScreenClick.
+// Back to the main screen, then prove a stray click does not start a run: the
+// main menu fills the screen, so only START SOLO (or the confirm key) may.
 await page.evaluate(() => window.__game.hud.onUiAction?.('mainMenu', null, new Event('click')));
 await page.waitForFunction(() => window.__game.gs.state === 'start');
 await page.mouse.click(20, 20);
@@ -316,7 +316,7 @@ check(report.advancing, 'frame loop is advancing gs.time');
 check(report.hasHud, 'HUD elements mounted');
 check(report.screen !== null, `main screen rendered (${report.screen})`);
 check(clicked === 'play', `clicking the real START button starts the game (state ${clicked})`);
-check(backdrop === 'play', `a backdrop click still advances the screen (state ${backdrop})`);
+check(backdrop === 'start', `a background click on the main menu does not start a run (state ${backdrop})`);
 check(report.ctxComplete.length === 0,
   `ctx fully populated at boot${report.ctxComplete.length ? `; null: ${report.ctxComplete.join(', ')}` : ''}`);
 check(report.ctxAgreesWithHandle, 'ctx.level/nav and the debug handle are the same objects');

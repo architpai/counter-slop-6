@@ -459,6 +459,9 @@ export const ScreenOverlay = memo(function ScreenOverlay({ store }: { store: Hud
       event.stopPropagation();
       return;
     }
+    // The main menu fills the screen, so a stray click on it must not start a
+    // run: only START SOLO does (and the confirm key, for controller players).
+    if (view?.kind === 'main') return;
     store.onScreenClick?.();
   };
 
