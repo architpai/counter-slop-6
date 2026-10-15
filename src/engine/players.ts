@@ -181,6 +181,7 @@ export class RemotePlayer implements Target {
   get name() { return this._name; }
   set name(value: string) { this._name = cleanName(value); }
   get visible() { return !!this._figure?.root.visible; }
+  get root(): Object3D | null { return this._figure?.root ?? null; }
   get center() { return this._center; }
   get eye() { return this._eye; }
   get forward() { return this._forward; }
@@ -298,7 +299,8 @@ export class RemotePlayer implements Target {
     if (this._figure) {
       this._pose(dt);
       if (this._tagName !== this.name) this._makeTag();
-      const viewer = this._ctx.player?.eye || this._ctx.camera.position;
+      // The camera, not the local body: a spectator's camera is with someone else.
+      const viewer = this._ctx.camera.position;
       // A figure always carries a tag; the guard is only for the type.
       if (this._tag) {
         this._tag.rotation.y = -this._figure.root.rotation.y +

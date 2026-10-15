@@ -22,7 +22,7 @@ The host assigns balanced teams, with a maximum of four players per team. Team m
 
 - Red and Blue use distinct colours AND written team labels in the lobby, world, scoreboard, and result screen.
 - Friendly fire is off for guns, melee, grenade damage, deflections, and rope cuts. Own grenade damage remains possible. Remote grenade replicas are visual only; the throwing peer sends validated enemy damage through the existing PvP path.
-- Dead players spectate a living teammate. If none is alive, show the team's base while waiting.
+- Dead players spectate a living teammate: fire / aim switch teammate, jump switches first and third person. If none is alive, show the team's base while waiting.
 - A continuous host-clock wave occurs every **8 s**. All dead teammates return on the next wave. The wait is zero to eight seconds; it is not eight seconds after each death.
 - A full wipe does not restart the wave clock, cause an instant respawn, award bonus points, or end the round.
 - Team Deathmatch credits each enemy kill normally. Flag Hold awards no objective points for kills, and an active hold continues during a wipe.

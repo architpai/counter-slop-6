@@ -56,7 +56,7 @@ function setup(isHost = false, mode: OnlineMode = 'ffa') {
   const remote = {
     id: other, name: other, alive: true, visible: true, lastSeen: 0, team: 0,
     setTeam(team: number) { this.team = team; },
-    body: { pos: new Vector3(20, 0, 0) }, center: new Vector3(20, 1, 0),
+    body: { pos: new Vector3(20, 0, 0) }, center: new Vector3(20, 1, 0), eye: new Vector3(20, 1.6, 0), root: new Group(),
     forward: new Vector3(0, 0, -1), right: new Vector3(1, 0, 0), hits: [], blocking: false, parryWindow: false,
     raycast: (_o: Vector3, _d: Vector3, _max: number): { part: 'torso'; dist: number; point: Vector3 } | null => null,
     updates: 0, pushes: 0, disposed: false, _b: null as { p: Vector3 } | null,
@@ -80,7 +80,8 @@ function setup(isHost = false, mode: OnlineMode = 'ffa') {
     },
     audio: { kill: noop, spawn: noop, enemyDie: noop, shieldHit: noop, hitEnemy: noop },
     effects: { strokeBurst: noop, blood: noop, tracer: noop, clear: noop },
-    input: { locked: true, usingGamepad: true, exitLock: noop, requestLock: noop, rumble: noop },
+    input: { locked: true, usingGamepad: true, usingTouch: false, exitLock: noop, requestLock: noop, rumble: noop,
+      held: new Set<string>(), pressed(action: string) { return this.held.has(action); } },
     world: { lineOfSight: () => true, groundBelow: () => 0, raycast: () => null }, game: { hitstop: noop },
   };
   const lobby = {
@@ -386,6 +387,30 @@ test('host wipe waits for the shared wave instead of individual delay', () => {
     expect(t.gs.state).toBe('play');
     expect(t.ctx.player.alive).toBe(true);
     expect(t.ctx.player.shieldT).toBe(2);
+  } finally { t.ffa.leave(); }
+});
+
+test('a waiting player cycles teammates and swaps first and third person', () => {
+  const t = setup(true, 'flag'), { ctx } = t;
+  try {
+    t.ffa.hostStart();
+    const mate = { ...t.remote, id: 'mate', name: 'mate', center: new Vector3(-20, 1, 0), eye: new Vector3(-20, 1.6, 0), root: new Group() };
+    ctx.remotes.set('mate', mate);
+    t.lobby.teams = { host: 0, client: 0, mate: 0 };
+    ctx.player.alive = false; t.ffa.localDeath();
+    const step = (...keys: string[]) => { ctx.input.held = new Set(keys); t.gs.deathT += 0.05; t.ffa.updateDying(0.05); };
+    step();
+    expect(ctx.camera.position.x).toBeGreaterThan(15); // over the client's shoulder
+    expect(t.ffa.watchedFigure()).toBeNull();
+    step('fire');
+    expect(ctx.camera.position.x).toBeLessThan(-15); // the next teammate
+    step('jump');
+    expect(ctx.camera.position.toArray()).toEqual([-20, 1.6, 0]); // their eyes
+    expect(t.ffa.watchedFigure()).toBe(mate.root);
+    step('aim');
+    expect(ctx.camera.position.toArray()).toEqual([20, 1.6, 0]); // back to the client
+    t.gs.menu = true; step('fire');
+    expect(ctx.camera.position.x).toBe(20); // the pause menu takes the click
   } finally { t.ffa.leave(); }
 });
 
