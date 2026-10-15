@@ -199,6 +199,8 @@ Breath rules (player module, listed so the bar can be reproduced): breath starts
 
 **Straggler arrows.** On a boss wave (solo and co-op), once no boss is alive or queued and fewer than 10 enemies are left (alive + queued; a co-op client uses the host's count), every live enemy gets a red 16 × 18 px arrow. On any other wave this starts at 5 or fewer left, and the centre message says "N LEFT · go get them · marked on screen" once that wave. An enemy on screen gets the arrow above its torso, pointing down at it. An enemy off screen gets it on the screen edge (28 px in), pointing toward the enemy. An enemy behind the camera gets it on the left or right edge, whichever side is nearer. Set every frame, and an empty set hides them; so they go on wave clear, death, pause and every menu. Hidden in "no gameplay".
 
+**Squad marks.** Each mark is a 12 px yellow diamond with a "NAME · 42m" label under it. It sits on the marked point, or on the screen edge toward it (the same placement as the straggler arrows). A short rising tone plays when a mark is placed. Set every frame; cleared on leaving the match. Hidden in "no gameplay".
+
 ### 3.11 Health
 
 - In the bottom-left block (left 9 %, bottom 5 %). One row: the label "HP" (26 px), a 210 × 16 px bar (2.5 px tone border, rotated −1°), and the numeric HP.

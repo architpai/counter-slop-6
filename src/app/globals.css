@@ -31,7 +31,7 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .game-hud [hidden] { display: none !important; }
 .game-hud b, .game-hud strong { font-weight: 700; }
 .hud-block { position: absolute; text-shadow: 0 1px 2px rgba(10, 18, 24, .9); }
-.no-gameplay :is(.hud-block, .crosshair, .grapple-reticle, .hit-marker, .kill-marker, .kill-feed, .tip-line, .boss-bar, .scope, .focus-mark, .stragglers, .focus-meter) { display: none; }
+.no-gameplay :is(.hud-block, .crosshair, .grapple-reticle, .hit-marker, .kill-marker, .kill-feed, .tip-line, .boss-bar, .scope, .focus-mark, .stragglers, .squad-marks, .focus-meter) { display: none; }
 .game-hud .pad-only { display: none; }
 .game-hud.gamepad .pad-only { display: initial; }
 .game-hud.gamepad .keyboard-only { display: none; }
@@ -168,6 +168,9 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .focus-mark > i:nth-child(3) { left: 0; bottom: 0; border-width: 0 0 3px 3px; }
 .focus-mark > i:nth-child(4) { right: 0; bottom: 0; border-width: 0 3px 3px 0; }
 .stragglers > i { position: absolute; left: 0; top: 0; }
+.squad-marks > i { position: absolute; left: 0; top: 0; }
+.squad-marks > i::before { content: ''; position: absolute; left: -8px; top: -8px; width: 12px; height: 12px; border: 2px solid #000; background: var(--signal); transform: rotate(45deg); }
+.squad-marks span { position: absolute; left: 0; top: 12px; transform: translateX(-50%); padding: 1px 5px; background: rgba(10, 10, 10, .75); color: var(--signal); font: 700 11px/1.3 var(--font-display), system-ui, sans-serif; font-style: normal; white-space: nowrap; }
 .stragglers > i::before { content: ''; position: absolute; top: -9px; left: -22px; border-block: 9px solid transparent; border-left: 16px solid var(--hot); filter: drop-shadow(0 0 2px #000); }
 
 .screen-overlay { position: absolute; z-index: 50; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(10, 10, 10, .62); pointer-events: auto; cursor: pointer; }

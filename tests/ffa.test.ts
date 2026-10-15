@@ -68,7 +68,7 @@ function setup(isHost = false, mode: OnlineMode = 'ffa') {
     ragdoll() { this.alive = false; }, flash: noop,
   };
   const ctx = {
-    net, player, scene: new Scene(), camera: new PerspectiveCamera(), renderer: { rig: new Group() }, remotes: new Map([[other, remote]]),
+    net, player, scene: new Scene(), camera: new PerspectiveCamera(), renderer: { rig: new Group(), three: { domElement: { clientWidth: 800, clientHeight: 600 } } }, remotes: new Map([[other, remote]]),
     level: {
       key: 'downtown', playerStart: new Vector3(0, 0, 42), bounds: { minX: -68, maxX: 68, minZ: -68, maxZ: 68 },
       arenaSpawns: [new Vector3(-10, 0, 3), new Vector3(10, 2, 8)],
@@ -77,12 +77,13 @@ function setup(isHost = false, mode: OnlineMode = 'ffa') {
     hud: {
       setPvpScore: noop, setModifier: noop, setBoard: noop, setGameplayVisible: noop, hideScreen: vi.fn(),
       message: vi.fn(), tip: noop, kill: vi.fn(), hitmarker: vi.fn(), key: (action: string) => action,
+      setMarks: vi.fn((_marks: { x: number; y: number; label: string }[]) => {}),
     },
-    audio: { kill: noop, spawn: noop, enemyDie: noop, shieldHit: noop, hitEnemy: noop },
+    audio: { kill: noop, spawn: noop, enemyDie: noop, shieldHit: noop, hitEnemy: noop, mark: vi.fn(), empty: vi.fn() },
     effects: { strokeBurst: noop, blood: noop, tracer: noop, clear: noop },
     input: { locked: true, usingGamepad: true, usingTouch: false, exitLock: noop, requestLock: noop, rumble: noop,
       held: new Set<string>(), pressed(action: string) { return this.held.has(action); } },
-    world: { lineOfSight: () => true, groundBelow: () => 0, raycast: () => null }, game: { hitstop: noop },
+    world: { lineOfSight: () => true, groundBelow: () => 0, raycast: (..._args: unknown[]): { dist: number; point: Vector3 } | null => null }, game: { hitstop: noop },
   };
   const lobby = {
     mode, teams: mode === 'ffa' ? {} : assignTeams(['host', 'client']),
@@ -411,6 +412,29 @@ test('a waiting player cycles teammates and swaps first and third person', () =>
     expect(ctx.camera.position.toArray()).toEqual([20, 1.6, 0]); // back to the client
     t.gs.menu = true; step('fire');
     expect(ctx.camera.position.x).toBe(20); // the pause menu takes the click
+  } finally { t.ffa.leave(); }
+});
+
+test('a squad mark: one per player, teammates only, gone after 15 s', () => {
+  const t = setup(true, 'tdm'), { ctx } = t;
+  try {
+    t.ffa.hostStart();
+    must(t.gs.teamMatch, 'team state').breakLeft = 0;
+    t.lobby.teams = { host: 0, client: 0, foe: 1 }; t.lobby.players.set('foe', 'Foe');
+    const labels = () => ctx.hud.setMarks.mock.lastCall?.[0].map(m => m.label);
+    const clock = performance.now() / 1000;
+    ctx.world.raycast = () => ({ dist: 10, point: new Vector3(0, 0, -10) });
+    ctx.input.held = new Set(['mark']); t.ffa.update(0.05, clock);
+    expect(t.sent.at(-1)).toEqual({ type: 'mark', data: { pos: [0, 0, -10] } });
+    t.ffa.update(0.05, clock); // held, but not a new press, and too soon
+    expect(t.sent.filter(m => m.type === 'mark')).toHaveLength(1);
+    t.receive('mark', { pos: [5, 0, 0] });
+    t.receive('mark', { pos: [6, 0, 0] }); // takes the place of the client's first mark
+    t.receive('mark', { pos: [1, 1, 1] }, 'foe'); // the other team's: not shown
+    ctx.input.held = new Set(); t.ffa.update(0.05, clock + 1);
+    expect(labels()).toEqual(['host · 10m', 'Client · 6m']);
+    t.ffa.update(0.05, clock + 16);
+    expect(labels()).toEqual([]);
   } finally { t.ffa.leave(); }
 });
 

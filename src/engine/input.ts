@@ -10,7 +10,7 @@ export type Action =
   | 'forward' | 'back' | 'left' | 'right' | 'jump' | 'sprint' | 'crouch' | 'reload'
   | 'grapple' | 'melee' | 'slot1' | 'slot2' | 'slot3' | 'slot4' | 'slot5' | 'slot6' | 'pause'
   | 'confirm' | 'grenade' | 'dash' | 'music' | 'talk' | 'score' | 'fire' | 'aim'
-  | 'nextWeapon' | 'prevWeapon';
+  | 'nextWeapon' | 'prevWeapon' | 'mark';
 
 const KEYS: Record<string, Action> = {
   KeyW: 'forward', ArrowUp: 'forward', KeyS: 'back', ArrowDown: 'back',
@@ -20,12 +20,12 @@ const KEYS: Record<string, Action> = {
   KeyQ: 'grapple', KeyE: 'grapple', KeyF: 'melee', KeyV: 'melee',
   Digit1: 'slot1', Digit2: 'slot2', Digit3: 'slot3', Digit4: 'slot4', Digit5: 'slot5', Digit6: 'slot6',
   Escape: 'pause', KeyP: 'pause', Enter: 'confirm', KeyG: 'grenade',
-  KeyX: 'dash', AltLeft: 'dash', KeyM: 'music', KeyT: 'talk', Tab: 'score',
+  KeyX: 'dash', AltLeft: 'dash', KeyM: 'music', KeyT: 'talk', Tab: 'score', KeyZ: 'mark',
 };
 const MOUSE: readonly Action[] = ['fire', 'grapple', 'aim', 'grapple', 'melee'];
 const PAD: readonly (Action | null)[] = [
   'jump', 'crouch', 'reload', 'nextWeapon', 'grapple', 'melee', 'aim', 'fire',
-  'score', 'pause', 'sprint', 'grenade', 'grenade', 'melee', 'prevWeapon',
+  'score', 'pause', 'sprint', 'grenade', 'grenade', 'mark', 'prevWeapon',
   'nextWeapon', null, 'confirm',
 ];
 const PREVENT: ReadonlySet<string> = new Set(['Space', 'Tab', 'ArrowUp', 'ArrowDown']);

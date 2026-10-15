@@ -10,6 +10,9 @@ import type { BoardRow, OnlineInfo } from '../hud/screens';
 import { advanceTeamMatch, assignTeams, createTeamMatch, dropFlag, interactFlag, isOnlineMode, isTeam, isTeamMode, markDead, ONLINE_MODES, scoreTeam, TEAM_NAMES, TEAM_RULES, validTeamMatch, validTeams } from './team-rules';
 import type { OnlineMode, Point, Team, TeamMatch } from './team-rules';
 import { createTeamWorld, teamLayout } from './team-world';
+import { MARK_GAP, MARK_RANGE, placeMark, pruneMarks, type Mark } from './marks';
+import { stragglerMark } from './stragglers';
+import { seeThrough } from '../physics';
 import { COOP, freshCoopState, playerCap, validCoopState } from './coop-rules';
 import type { CoopState } from './coop-rules';
 import type { HitInfo, PlayerHit, ScoreRow, Target } from '../types';
@@ -83,6 +86,9 @@ export function createFFA(app: App): FfaApi {
   /** Who a waiting player watches, through their eyes or not, and the yaw the shoulder view has swung to. */
   let watching: string | null = null, firstPerson = false, watchYaw = 0;
   let shotQueue: number[] = [];
+  /** Squad marks by player id, and the time until the local player may mark again. */
+  const marks = new Map<string, Mark>();
+  let markGap = 0;
   let boardShown = false;
   let timer: number | undefined = undefined;
   let hitId = 0;
@@ -106,6 +112,8 @@ export function createFFA(app: App): FfaApi {
   const teamOf = (rid: string | null): Team | undefined => rid === null ? undefined : lobby.teams?.[rid];
   const opponents = (a: string | null, b: string | null): boolean => mode() === 'ffa' ||
     (isTeam(teamOf(a)) && isTeam(teamOf(b)) && teamOf(a) !== teamOf(b));
+  /** Co-op: everyone. Team modes: the same team. Deathmatch has no squad. */
+  const squadmate = (rid: string | null): boolean => coop() || (teamMode() && isTeam(teamOf(rid)) && teamOf(rid) === teamOf(net.id));
   const activeCombat = (): boolean => playing() && !gs.over && !(gs.teamMatch && gs.teamMatch.breakLeft > 0);
   const roundTag = () => gs.teamMatch ? { round: gs.teamMatch.round } : {};
   const currentRound = (d: Record<string, unknown>): boolean => !gs.teamMatch || d.round === gs.teamMatch.round;
@@ -334,6 +342,7 @@ export function createFFA(app: App): FfaApi {
     window.clearTimeout(timer);
     pendingHeadshots.clear(); ready.clear(); shotQueue = []; lastDeath.clear();
     teamWorld?.dispose(); teamWorld = null;
+    marks.clear(); hud.setMarks([]);
   }
   function leave(reason = ''): void {
     dispose();
@@ -640,6 +649,7 @@ export function createFFA(app: App): FfaApi {
       const player = ctx.player;
       if (player !== null) { net.broadcast('shots', { k: player.weapon.kind, e: shotQueue }); shotQueue = []; }
     }
+    updateMarks(dt, t);
     if (coop()) app.coop.update(dt);
     if (gs.teamMatch) {
       const elapsed = Math.max(0, t - lastClock); lastClock = t;
@@ -651,6 +661,39 @@ export function createFFA(app: App): FfaApi {
         net.send('end', winner); endMatch(winner);
       }
     }
+  }
+
+  /** Places the local player's mark on the aim key, then draws every live mark. */
+  function updateMarks(dt: number, t: number): void {
+    markGap -= dt;
+    const p = ctx.player, camera = ctx.camera;
+    if (p && net.id && squadmate(net.id) && activeCombat() && gs.state === 'play' && !gs.menu && markGap <= 0 && ctx.input.pressed('mark')) {
+      markGap = MARK_GAP;
+      const dir = camera.getWorldDirection(d1), eye = camera.position;
+      // The nearest of wall, enemy and player, as a shot finds it.
+      const hits = [ctx.world.raycast(eye, dir, MARK_RANGE, seeThrough), ctx.enemies?.raycast(eye, dir, MARK_RANGE), raycastPlayers(eye, dir, MARK_RANGE)];
+      let point: THREE.Vector3 | null = null, best = Infinity;
+      for (const h of hits) if (h && h.dist < best) { best = h.dist; point = h.point; }
+      if (point) {
+        placeMark(marks, net.id, p.name, point, t);
+        // ponytail: the host relays to every peer and the other team drops it; send to the team only if this leak matters.
+        net.broadcast('mark', { pos: point.toArray().map(round2) });
+        ctx.audio.mark();
+      } else ctx.audio.empty();
+    }
+    if (!activeCombat()) marks.clear();
+    pruneMarks(marks, t);
+    if (!marks.size) { hud.setMarks([]); return; }
+    const canvas = ctx.renderer.three.domElement, view: { x: number; y: number; label: string }[] = [];
+    camera.updateMatrixWorld();
+    for (const m of marks.values()) {
+      d2.copy(m.pos).applyMatrix4(camera.matrixWorldInverse);
+      const behind = d2.z > 0;
+      d2.applyMatrix4(camera.projectionMatrix);
+      const { x, y } = stragglerMark(d2.x, d2.y, behind, canvas.clientWidth, canvas.clientHeight);
+      view.push({ x, y, label: `${m.name} · ${Math.round(m.pos.distanceTo(camera.position))}m` });
+    }
+    hud.setMarks(view);
   }
 
   // ---- PvP hooks
@@ -922,6 +965,11 @@ export function createFFA(app: App): FfaApi {
     const p = ctx.player;
     if (p === null) return;
     p.throwGrenade({ pos, vel });
+  });
+  net.on('mark', (d, from) => {
+    if (!roster(from) || !squadmate(from) || !activeCombat() || !obj(d) || !triple(d.pos)) return;
+    placeMark(marks, from, nameOf(from) ?? 'player', vec(d.pos), now());
+    ctx.audio.mark();
   });
   net.on('brk', (d, from) => {
     if (!roster(from) || !obj(d) || !int(d.id)) return;

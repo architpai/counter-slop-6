@@ -1307,7 +1307,7 @@ about the game.
 export type Action =
   'forward'|'back'|'left'|'right'|'jump'|'sprint'|'crouch'|'reload'|'grapple'|'melee'|
   'slot1'|'slot2'|'slot3'|'slot4'|'slot5'|'pause'|'confirm'|'grenade'|'dash'|'music'|
-  'talk'|'score'|'fire'|'aim'|'nextWeapon'|'prevWeapon';
+  'talk'|'score'|'fire'|'aim'|'nextWeapon'|'prevWeapon'|'mark';
 
 export class Input {
   constructor(canvas: HTMLCanvasElement);

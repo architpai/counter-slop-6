@@ -38,7 +38,7 @@ export type HudKey =
   | 'ammo' | 'slots' | 'grenades' | 'health' | 'score' | 'wave' | 'modifier'
   | 'timer' | 'weapon' | 'boss' | 'focus' | 'crosshair' | 'scope' | 'grapple'
   | 'message' | 'tip' | 'killFeed' | 'damage' | 'hitmarker' | 'pvp' | 'board'
-  | 'screen' | 'device' | 'mobile' | 'gameplay' | 'breath' | 'focusMark' | 'stragglers' | 'fps' | 'qualityPrompt';
+  | 'screen' | 'device' | 'mobile' | 'gameplay' | 'breath' | 'focusMark' | 'stragglers' | 'marks' | 'fps' | 'qualityPrompt';
 
 export interface AmmoState {
   magazine: string;
@@ -95,6 +95,8 @@ export interface HudState {
   focusMark: boolean;
   /** How many straggler arrows; each one's place is the `--straggler-<i>` variable. */
   stragglers: number;
+  /** One label for each squad mark; each one's place is the `--mark-<i>` variable. */
+  marks: readonly string[];
   fps: number | null;
   qualityPrompt: string | null;
 }
@@ -127,6 +129,7 @@ export class HudStore implements HudView {
   breath: BreathState = { shown: false, low: false, percent: 100 };
   focusMark = false;
   stragglers = 0;
+  marks: readonly string[] = [];
   score: ScoreState = { score: 0, combo: 0 };
   wave: WaveState = { wave: 1, left: 0 };
   modifier = '';
@@ -383,6 +386,12 @@ export class HudStore implements HudView {
     if (marks.length === this.stragglers) return;
     this.stragglers = marks.length;
     this.#emit('stragglers');
+  }
+  setMarks(marks: readonly { x: number; y: number; label: string }[]): void {
+    marks.forEach((m, i) => this.#setVar(`--mark-${i}`, `translate(${Math.round(m.x)}px, ${Math.round(m.y)}px)`));
+    if (marks.length === this.marks.length && marks.every((m, i) => m.label === this.marks[i])) return;
+    this.marks = marks.map(m => m.label);
+    this.#emit('marks');
   }
 
   setBoss(name: string | null, frac?: number): void {
