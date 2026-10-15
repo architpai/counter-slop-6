@@ -12,6 +12,10 @@
   --line: #344550;
   --shadow: 0 18px 60px rgba(0, 0, 0, .3);
   --r: 4px;
+  /* The menus' poster palette: hazard yellow, ink and an alarm red. */
+  --signal: #FFD21F;
+  --ink: #111;
+  --alarm: #FF3B30;
 }
 
 html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: var(--panel); }
@@ -166,44 +170,44 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .stragglers > i { position: absolute; left: 0; top: 0; }
 .stragglers > i::before { content: ''; position: absolute; top: -9px; left: -22px; border-block: 9px solid transparent; border-left: 16px solid var(--hot); filter: drop-shadow(0 0 2px #000); }
 
-.screen-overlay { position: absolute; z-index: 50; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(12, 23, 32, .6); pointer-events: auto; cursor: pointer; }
-.screen-panel { width: max-content; max-width: 980px; padding: 26px 36px; border: 1px solid var(--line); border-top: 3px solid var(--cool); border-radius: var(--r); background: rgba(17, 28, 37, .97); box-shadow: var(--shadow); text-align: center; }
-.screen-panel[data-screen-kind="main"] { width: min(940px, calc(100vw - 40px)); text-align: left; }
+.screen-overlay { position: absolute; z-index: 50; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(10, 10, 10, .62); pointer-events: auto; cursor: pointer; }
+/* Menus are ink sheets on the poster palette; the panel re-points the HUD's accents at it. */
+.screen-panel { --cool: var(--signal); --hot: var(--alarm); --fg: #F5F3EA; --fg-dim: #A9A696; --panel-2: #1D1D1B; --line: #3B3B37;
+  position: relative; width: max-content; max-width: 980px; padding: 34px 36px 26px; border: 3px solid #000; border-radius: 0; background: rgba(17, 17, 17, .97); box-shadow: 10px 10px 0 var(--signal); color: var(--fg); text-align: center; }
+.screen-panel::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 10px; background: repeating-linear-gradient(-45deg, var(--signal) 0 12px, var(--ink) 12px 24px); }
 .screen-panel:is([data-screen-kind="online"], [data-screen-kind="lobby"]) { width: min(740px, calc(100vw - 24px)); }
 .screen-panel:focus { outline: none; }
-.screen-title { margin: 0 0 8px; font-size: 54px; font-weight: 700; letter-spacing: -2px; line-height: 1; overflow-wrap: anywhere; }
-.screen-subtitle { margin: 0 0 18px; color: #b4c2cc; font-size: 18px; font-weight: 500; line-height: 1.4; overflow-wrap: anywhere; }
+.screen-title { margin: 0 0 8px; color: var(--signal); font: 400 64px/1 var(--font-poster), var(--font-display), sans-serif; letter-spacing: .01em; text-transform: uppercase; overflow-wrap: anywhere; }
+.screen-panel[data-screen-kind="dead"] .screen-title { color: var(--alarm); }
+.screen-subtitle { margin: 0 0 18px; color: var(--fg-dim); font-size: 18px; font-weight: 500; line-height: 1.4; overflow-wrap: anywhere; }
 .screen-actions { display: flex; flex-direction: column; align-items: center; gap: 10px; margin: 12px 0; }
-.screen-button { max-width: 100%; border: 1px solid var(--line); border-radius: var(--r); padding: 10px 20px; font: 700 20px/1.15 var(--font-display), system-ui, sans-serif; color: var(--fg); background: var(--panel-2); cursor: pointer; transition: background .12s, border-color .12s; }
-.screen-button:hover { border-color: var(--cool); background: #233149; }
-.screen-button.primary { background: var(--cool); border-color: var(--cool); }
-.screen-button.primary:hover { background: #628EFF; }
+.screen-button { max-width: 100%; border: 2px solid var(--line); border-radius: 0; padding: 10px 20px; font: 700 20px/1.15 var(--font-display), system-ui, sans-serif; color: var(--fg); background: var(--panel-2); cursor: pointer; transition: background .12s, border-color .12s, color .12s; }
+.screen-button:hover { border-color: var(--signal); background: #27251A; }
+.screen-button.primary { background: var(--signal); border-color: var(--signal); color: var(--ink); box-shadow: 5px 5px 0 var(--alarm); }
+.screen-button.primary:hover { background: #FFE15C; border-color: #FFE15C; }
 .screen-button small { display: block; margin-top: 5px; font: 400 15px/1.4 var(--font-body), system-ui, sans-serif; letter-spacing: 0; opacity: .8; }
 .screen-button:disabled { opacity: .4; cursor: default; }
 .screen-button:disabled:hover { background: var(--panel-2); border-color: var(--line); }
-.screen-button.primary:disabled:hover { background: var(--cool); border-color: var(--cool); }
+.screen-button.primary:disabled:hover { background: var(--signal); border-color: var(--signal); }
 .screen-button[data-act="start"] { font-size: 26px; }
 .screen-button[data-act="online"] { font-size: 20px; }
-.screen-button[data-act="startMatch"], .screen-button[data-act="quickPlay"] { font-size: 28px; }
+.screen-button:is([data-act="startMatch"], [data-act="quickPlay"]), .screen-panel[data-screen-kind="dead"] .screen-button[data-act="start"] { font: 400 32px/1.05 var(--font-poster), var(--font-display), sans-serif; letter-spacing: .03em; }
 .screen-panel :is(button,input,select,textarea,summary):focus-visible { outline: 2px solid var(--warn); outline-offset: 3px; }
 .screen-button:active, .menu-nav button:active, .control-switch button:active { transform: translateY(1px); }
 .screen-controls { margin: 16px 0; text-align: left; font: 400 16px/1.45 var(--font-body), system-ui, sans-serif; }
 .control-column { min-width: 0; max-width: 800px; }
 .control-column ol { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 28px; list-style: none; padding: 0; margin: 0; }
 .control-row { padding-left: 10px; border-left: 2px solid var(--line); }
-.control-row b { color: #91b1ff; }
-.menu-eyebrow { margin: 0 0 12px; color: #91b1ff; font-size: 11px; font-weight: 700; letter-spacing: 2px; }
+.control-row b { color: var(--signal); }
 .menu-nav, .control-switch { display: flex; gap: 24px; border-bottom: 1px solid var(--line); }
-.menu-nav button, .control-switch button { padding: 10px 0; border: 0; border-bottom: 2px solid transparent; background: none; color: #b4c2cc; cursor: pointer; font: 500 15px/1.2 var(--font-display), sans-serif; text-transform: capitalize; }
+.menu-nav button, .control-switch button { padding: 10px 0; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--fg-dim); cursor: pointer; font: 700 14px/1.2 var(--font-display), sans-serif; letter-spacing: .1em; text-transform: uppercase; }
+.control-switch button { letter-spacing: .04em; text-transform: none; }
 .menu-nav button:hover, .control-switch button:hover { color: var(--fg); }
 .menu-nav button[aria-pressed="true"], .control-switch button[aria-pressed="true"] { color: var(--fg); border-bottom-color: var(--cool); }
 .menu-page { padding-top: 20px; }
 .menu-page > .screen-footer { margin-bottom: 0; font-size: 12px; }
 .menu-page .settings { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; border-top: 0; margin: 0; padding: 14px 0; gap: 18px 36px; }
 .settings-general { display: flex; flex-direction: column; align-items: flex-start; gap: 18px; min-width: 0; }
-.launch-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 20px; }
-.launch-actions .screen-button { min-height: 76px; text-align: left; padding: 14px 20px; }
-.launch-actions .screen-button small { font-size: 13px; }
 .settings { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 8px 28px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); font: 400 17px/1.5 var(--font-body), system-ui, sans-serif; }
 .settings-row { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 10px; margin: 4px 0; }
 .sensitivity-settings { flex-basis: 100%; max-width: 100%; }
@@ -216,13 +220,13 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .weapon-customization-note { margin: 8px 0 18px; color: var(--fg-dim); font: 400 13px/1.5 var(--font-body), sans-serif; }
 .weapon-customization-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 20px; padding: 20px 0; border-top: 1px solid var(--line); }
 .weapon-identity { display: flex; align-items: center; gap: 16px; }
-.weapon-identity .slot-badge { padding: 8px; color: #91b1ff; border-color: #5476aa; }
-.weapon-identity h4 { margin: 0; font-size: 24px; }
+.weapon-identity .slot-badge { padding: 8px; color: var(--signal); border-color: var(--signal); border-radius: 0; }
+.weapon-identity h4 { margin: 0; font: 400 30px/1 var(--font-poster), var(--font-display), sans-serif; letter-spacing: .03em; }
 .weapon-identity p { margin: 5px 0 0; color: var(--fg-dim); font: 400 13px/1.4 var(--font-body), sans-serif; }
 .optic-picker { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; margin: 0; padding: 0; border: 0; }
 .optic-picker legend { padding: 0 0 8px; color: var(--fg-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
 .optic-picker .screen-button { min-height: 44px; padding: 10px 14px; font-size: 14px; }
-.optic-picker .screen-button[aria-pressed="true"] { border-color: #91b1ff; background: #22394b; box-shadow: inset 0 -2px #91b1ff; }
+.optic-picker .screen-button[aria-pressed="true"] { border-color: var(--signal); background: var(--signal); color: var(--ink); }
 .settings-row label { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 10px; }
 .settings input[type="range"] { width: 160px; max-width: 100%; min-width: 100px; accent-color: var(--cool); cursor: pointer; }
 .settings output { min-width: 55px; font-weight: 700; color: var(--hot); }
@@ -231,7 +235,7 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .graphics-settings h3 { margin: 0 0 10px; color: var(--fg-dim); font: 500 12px/1.2 var(--font-display), sans-serif; text-transform: uppercase; letter-spacing: 1px; }
 .preset-picker { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .preset-picker .screen-button { min-height: 40px; padding: 8px 6px; font-size: 14px; }
-.preset-picker [aria-pressed="true"] { border-color: #91b1ff; background: #22394b; box-shadow: inset 0 -2px #91b1ff; }
+.preset-picker [aria-pressed="true"] { border-color: var(--signal); background: var(--signal); color: var(--ink); }
 .graphics-advanced summary { margin-top: 10px; padding: 8px 0; cursor: pointer; font-size: 15px; }
 .graphics-advanced summary span { margin-left: 8px; color: var(--fg-dim); font-size: 12px; }
 .graphics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 14px; font-size: 13px; }
@@ -239,7 +243,7 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .graphics-grid .graphics-scale { grid-column: 1 / -1; display: grid; grid-template-columns: auto minmax(0, 1fr) 48px; align-items: center; gap: 10px; }
 .graphics-grid .graphics-scale input[type="range"] { width: 100%; min-width: 0; }
 .graphics-grid .graphics-check { flex-direction: row; align-items: center; align-self: end; min-height: 31px; gap: 8px; color: var(--fg); }
-.game-hud select { max-width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel-2); color: var(--fg); font: 400 14px/1.2 var(--font-body), system-ui, sans-serif; cursor: pointer; }
+.game-hud select { max-width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 0; background: var(--panel-2); color: var(--fg); font: 400 14px/1.2 var(--font-body), system-ui, sans-serif; cursor: pointer; }
 .graphics-grid .graphics-reset { align-self: end; justify-self: start; padding: 7px 14px; font-size: 14px; }
 .fps-counter { position: absolute; z-index: 60; left: 50%; bottom: 4px; transform: translateX(-50%); padding: 2px 8px; border-radius: 2px; background: rgba(14, 24, 32, .7); color: var(--good); font: 600 12px/1.4 var(--font-body), system-ui, sans-serif; }
 .quality-prompt { position: absolute; z-index: 60; left: 50%; top: 12px; transform: translateX(-50%); display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px; max-width: calc(100% - 24px); padding: 10px 14px; border: 1px solid var(--line); border-top: 2px solid var(--warn); border-radius: var(--r); background: rgba(17, 28, 37, .95); box-shadow: var(--shadow); font: 400 15px/1.4 var(--font-body), system-ui, sans-serif; pointer-events: auto; }
@@ -249,8 +253,9 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .quality-prompt small { color: var(--fg-dim); font-size: 12px; }
 /* Inside a menu panel it is part of the page, above the screen's content. */
 .screen-panel .quality-prompt { position: static; transform: none; max-width: none; margin: 0 0 14px; box-shadow: none; }
+.screen-panel .quality-prompt button:first-of-type { color: var(--ink); }
 .game-hud input[type="checkbox"], .game-hud input[type="radio"] { width: 18px; height: 18px; accent-color: var(--cool); cursor: pointer; flex-shrink: 0; }
-.game-hud input[type="text"] { width: 16ch; max-width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); color: var(--fg); font: inherit; user-select: text; }
+.game-hud input[type="text"] { width: 16ch; max-width: 100%; padding: 10px 12px; border: 2px solid var(--line); border-radius: 0; background: var(--panel-2); color: var(--fg); font: inherit; user-select: text; }
 .game-hud input[data-act="joinCode"] { width: 8ch; font-family: ui-monospace, Menlo, Consolas, monospace; letter-spacing: 3px; text-transform: uppercase; }
 .game-hud input::placeholder { color: var(--fg-dim); }
 .screen-prompt { margin: 16px 0 0; font-size: 26px; animation: blink 1.2s ease-in-out infinite; }
@@ -264,29 +269,23 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .start-wave { display: block; margin-top: 12px; font-size: 17px; color: var(--fg-dim); }
 .start-wave select { margin-left: 8px; font-size: 16px; }
 .map-choice { display: inline-flex; flex-direction: column; margin: 4px; max-width: 100%; font-size: 19px; }
-.map-choice.selected { color: var(--fg); background: #22394b; border-color: #91b1ff; }
-.map-previews { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0; border: 0; }
-.map-previews h3 { grid-column: 1 / -1; margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
-.map-previews .map-choice { display: flex; margin: 0; padding: 0 0 12px; overflow: hidden; text-align: left; font-size: 16px; }
-.map-previews img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; border-bottom: 1px solid var(--line); }
-.map-previews .map-name { margin: 12px 12px 0; }
-.map-previews small { margin: 6px 12px 0; font-size: 12px; line-height: 1.4; color: #c2ced6; opacity: 1; }
-.map-previews .selected .map-name::after { content: ' / SELECTED'; font-size: 9px; color: #a9c2ff; }
+.map-choice.selected { color: var(--ink); background: var(--signal); border-color: var(--signal); }
 .online-box { min-width: min(500px, 100%); font: 400 17px/1.5 var(--font-body), system-ui, sans-serif; }
 .online-or { margin: 16px 0; color: var(--fg-dim); }
 .visibility-options { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 20px; margin: 18px 0; }
 .visibility-options label { display: flex; gap: 7px; align-items: center; }
-.lobby-code { display: inline-block; padding: 8px 18px; margin: 6px 10px; border: 2px dashed var(--hot); border-radius: var(--r); font: 700 40px ui-monospace, Menlo, Consolas, monospace; letter-spacing: 5px; color: var(--hot); }
+.lobby-code { display: inline-block; padding: 8px 18px; margin: 6px 10px; border: 3px solid var(--ink); background: var(--signal); box-shadow: 5px 5px 0 var(--alarm); font: 700 40px ui-monospace, Menlo, Consolas, monospace; letter-spacing: 5px; color: var(--ink); }
 .lobby-players, .score-rows { min-width: min(360px, 100%); margin: 14px 0; font: 400 19px/1.4 var(--font-body), system-ui, sans-serif; text-align: left; }
 .lobby-players > div, .score-rows > div { display: flex; justify-content: space-between; gap: 20px; padding: 7px 10px; border-radius: 5px; }
 .score-rows > div > span:first-child, .lobby-players > div > span:first-child { min-width: 0; overflow-wrap: anywhere; }
 .score-rows > div > span:last-child { white-space: nowrap; }
 .score-rows .self, .lobby-players .self { background: rgba(76, 125, 255, .12); }
+.screen-panel :is(.score-rows, .lobby-players) .self { background: rgba(255, 210, 31, .12); box-shadow: inset 3px 0 var(--signal); }
 
 /* Online modes extend the same flat panels; team names never rely on colour. */
 .mode-picker { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 14px 0 8px; }
 .mode-picker .screen-button { min-height: 44px; padding: 10px 12px; font-size: 17px; }
-.mode-picker [aria-pressed="true"] { border-color: #91b1ff; background: #22394b; box-shadow: inset 0 -2px #91b1ff; }
+.mode-picker [aria-pressed="true"] { border-color: var(--signal); background: var(--signal); color: var(--ink); }
 .mode-rules { font-size: 14px; }
 .game-hud [data-team="0"] { --team-color: var(--team-red); }
 .game-hud [data-team="1"] { --team-color: var(--team-blue); }
@@ -323,22 +322,13 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
   .screen-panel { padding: 20px 24px; }
   .screen-title { font-size: 42px; }
   .screen-subtitle { font-size: 16px; margin-bottom: 12px; }
-  .menu-eyebrow { margin-bottom: 8px; }
   .menu-page { padding-top: 14px; }
-  .map-previews img { max-height: 130px; }
   .message-main { font-size: 44px; }
   .message-sub { font-size: 18px; }
   .screen-controls { font-size: 14px; }
 }
 @media (max-width: 600px) {
-  .screen-panel[data-screen-kind="main"] { width: calc(100vw - 24px); }
   .screen-title { font-size: 32px; letter-spacing: -1px; }
-  .map-previews { gap: 6px; }
-  .map-previews .map-name { margin: 8px 6px 0; font-size: 12px; }
-  .map-previews small, .map-previews .selected .map-name::after { display: none; }
-  .launch-actions { grid-template-columns: 1fr 1fr; }
-  .launch-actions [data-act="training"] { grid-column: 1 / -1; }
-  .launch-actions .screen-button { padding: 10px; font-size: 18px; }
   .sensitivity-settings .settings-row { grid-template-columns: 1fr 55px; }
   .sensitivity-settings input { grid-row: 2; width: 100%; }
   .menu-page .settings { grid-template-columns: minmax(0, 1fr); }
@@ -360,6 +350,207 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 @media (prefers-reduced-motion: reduce) {
   .screen-prompt, .focus-ready, .focus-flames > i, .focus-mark.is-visible { animation: none; }
   .screen-button, .tip-line { transition: none; }
+}
+
+/* ------------------------------------------------------------ poster controls
+   Every form control in a menu wears the poster: square, hard-edged, yellow
+   when on. Selects stay native <select>s (keyboard, gamepad and tests rely on
+   them); where the browser allows it (appearance: base-select) the open list
+   is drawn here too, elsewhere only the closed box is. */
+.screen-panel :is(h3, .graphics-settings h3, .sensitivity-settings h3) { letter-spacing: .03em; }
+.screen-panel :is(.graphics-settings, .sensitivity-settings) h3 { margin: 0 0 12px; color: var(--signal); font: 400 26px/1 var(--font-poster), var(--font-display), sans-serif; text-transform: uppercase; }
+.screen-panel .settings { font: 600 15px/1.4 var(--font-display), sans-serif; }
+.screen-panel .settings output { color: var(--signal); font: 400 22px/1 var(--font-poster), sans-serif; letter-spacing: .03em; text-align: right; }
+.screen-panel .sensitivity-settings p, .screen-panel .graphics-advanced summary span { font-family: var(--font-display), sans-serif; font-weight: 500; }
+
+/* Buttons that pick something: outlined until chosen, then a yellow slab with a red shadow. */
+.screen-panel .screen-button:not(.primary, .map-previews > *) { border-color: rgba(245, 243, 234, .3); background: transparent; letter-spacing: .04em; text-transform: uppercase; }
+.screen-panel .screen-button:not(.primary, .map-previews > *):hover { border-color: var(--signal); background: rgba(255, 210, 31, .08); color: var(--signal); }
+.screen-panel .screen-button[aria-pressed="true"]:not(.map-previews > *) { border-color: var(--signal); background: var(--signal); color: var(--ink); box-shadow: 4px 4px 0 var(--alarm); }
+.screen-panel .screen-button[aria-pressed="true"]:not(.map-previews > *):hover { background: #FFE15C; color: var(--ink); }
+.screen-panel .screen-button small { text-transform: none; letter-spacing: 0; }
+.screen-panel .screen-button:not(.map-previews > *):active { transform: translate(2px, 2px); }
+.screen-panel .screen-button:disabled:hover { border-color: rgba(245, 243, 234, .3); background: transparent; color: var(--fg); }
+
+/* Page tabs and the device switch: chips, like the main menu's tabs. */
+.screen-panel :is(.menu-nav, .control-switch) { flex-wrap: wrap; gap: 6px; border: 0; }
+.screen-panel :is(.menu-nav, .control-switch) button { padding: 7px 12px; border: 2px solid rgba(245, 243, 234, .3); color: var(--fg); }
+.screen-panel :is(.menu-nav, .control-switch) button:hover { border-color: var(--signal); color: var(--signal); }
+.screen-panel :is(.menu-nav, .control-switch) button[aria-pressed="true"] { border-color: var(--signal); background: var(--signal); color: var(--ink); }
+.screen-panel[data-screen-kind]:not([data-screen-kind="main"]) .menu-nav { justify-content: center; }
+
+/* Checkboxes: a square that fills yellow with an ink tick. Radios: a ring with a yellow dot. */
+.screen-panel :is(input[type="checkbox"], input[type="radio"]) { appearance: none; -webkit-appearance: none; display: inline-grid; place-content: center; width: 22px; height: 22px; margin: 0; border: 2.5px solid var(--fg); border-radius: 0; background: transparent; cursor: pointer; transition: background .1s, border-color .1s; }
+.screen-panel input[type="radio"] { border-radius: 50%; }
+.screen-panel :is(input[type="checkbox"], input[type="radio"])::before { content: ''; width: 12px; height: 12px; transform: scale(0); transition: transform .1s; }
+.screen-panel input[type="checkbox"]::before { background: var(--ink); clip-path: polygon(12% 46%, 0 62%, 42% 100%, 100% 18%, 86% 4%, 40% 70%); }
+.screen-panel input[type="radio"]::before { width: 10px; height: 10px; border-radius: 50%; background: var(--signal); }
+.screen-panel :is(input[type="checkbox"], input[type="radio"]):hover { border-color: var(--signal); }
+.screen-panel input[type="checkbox"]:checked { border-color: var(--signal); background: var(--signal); }
+.screen-panel input[type="radio"]:checked { border-color: var(--signal); }
+.screen-panel :is(input[type="checkbox"], input[type="radio"]):checked::before { transform: scale(1); }
+.screen-panel :is(input[type="checkbox"], input[type="radio"]):disabled { opacity: .35; cursor: default; }
+
+/* Sliders: an ink track filled yellow up to the value (--fill, set by the menu), and a yellow block thumb. */
+.screen-panel input[type="range"] { --fill: 50%; appearance: none; -webkit-appearance: none; height: 28px; margin: 0; background: transparent; accent-color: var(--signal); cursor: pointer; }
+.screen-panel input[type="range"]::-webkit-slider-runnable-track { height: 10px; border: 2px solid #000; background: linear-gradient(90deg, var(--signal) var(--fill), #3A3A35 var(--fill)); }
+.screen-panel input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 26px; margin-top: -10px; border: 2.5px solid var(--ink); background: var(--signal); box-shadow: 3px 3px 0 var(--alarm); }
+.screen-panel input[type="range"]::-moz-range-track { height: 6px; border: 2px solid #000; background: #3A3A35; }
+.screen-panel input[type="range"]::-moz-range-progress { height: 6px; background: var(--signal); }
+.screen-panel input[type="range"]::-moz-range-thumb { width: 9px; height: 21px; border: 2.5px solid var(--ink); border-radius: 0; background: var(--signal); box-shadow: 3px 3px 0 var(--alarm); }
+.screen-panel input[type="range"]:hover::-webkit-slider-thumb { background: #FFE15C; }
+.screen-panel input[type="range"]:focus-visible { outline-offset: 2px; }
+
+/* Text boxes: square, and yellow-edged while typing. */
+.screen-panel input[type="text"] { border-color: rgba(245, 243, 234, .3); background: #0B0B0A; font-weight: 600; }
+.screen-panel input[type="text"]:focus { border-color: var(--signal); outline: none; }
+
+/* Selects: an ink box with a yellow chevron. */
+.screen-panel select { appearance: none; -webkit-appearance: none; min-height: 36px; padding: 7px 34px 7px 10px; border: 2px solid rgba(245, 243, 234, .3); border-radius: 0; color: var(--fg); font: 700 13px/1.2 var(--font-display), sans-serif; letter-spacing: .04em; text-transform: uppercase; cursor: pointer;
+  background: #0B0B0A linear-gradient(135deg, var(--signal) 50%, transparent 50%) no-repeat calc(100% - 12px) 50% / 8px 8px; }
+.screen-panel select:hover { border-color: var(--signal); }
+.screen-panel select:disabled { opacity: .4; cursor: default; }
+.screen-panel select:disabled:hover { border-color: rgba(245, 243, 234, .3); }
+@supports (appearance: base-select) {
+  .screen-panel select { appearance: base-select; display: inline-flex; align-items: center; gap: 14px; background-image: none; padding-right: 12px; }
+  .screen-panel select::picker-icon { content: ''; flex: none; width: 8px; height: 8px; margin-left: auto; background: var(--signal); clip-path: polygon(0 0, 100% 0, 50% 100%); transition: rotate .15s; }
+  .screen-panel select:open::picker-icon { rotate: 180deg; }
+  .screen-panel select::picker(select) { appearance: base-select; max-height: min(320px, 60vh); margin-top: 4px; padding: 4px; border: 3px solid #000; background: var(--ink); color: #F5F3EA; box-shadow: 6px 6px 0 var(--signal); }
+  .screen-panel select option { padding: 8px 12px; font: 700 13px/1.2 var(--font-display), sans-serif; letter-spacing: .04em; text-transform: uppercase; cursor: pointer; }
+  .screen-panel select option::checkmark { content: '■'; order: 1; margin-left: auto; color: var(--signal); font-size: 10px; }
+  .screen-panel select option:is(:hover, :focus-visible) { outline: none; background: var(--signal); color: var(--ink); }
+  .screen-panel select option:is(:hover, :focus-visible)::checkmark { color: var(--ink); }
+  .screen-panel select option:checked { color: var(--signal); }
+  .screen-panel select option:checked:is(:hover, :focus-visible) { color: var(--ink); }
+  .screen-panel select option:disabled { opacity: .4; }
+}
+
+/* Advanced: a yellow plus/minus box instead of the browser's triangle. */
+.screen-panel details > summary { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; list-style: none; font: 700 14px/1.2 var(--font-display), sans-serif; letter-spacing: .06em; text-transform: uppercase; }
+.screen-panel details > summary::-webkit-details-marker { display: none; }
+.screen-panel details > summary::before { content: '+'; display: grid; place-items: center; width: 22px; height: 22px; border: 2px solid var(--signal); color: var(--signal); font: 700 17px/1 var(--font-display), sans-serif; }
+.screen-panel details[open] > summary::before { content: '−'; background: var(--signal); color: var(--ink); }
+.screen-panel details > summary:hover { color: var(--signal); }
+.screen-panel details > summary span { margin-left: 0; text-transform: none; letter-spacing: 0; }
+.screen-panel .graphics-grid label { font: 600 12px/1.3 var(--font-display), sans-serif; letter-spacing: .06em; text-transform: uppercase; }
+.screen-panel .graphics-grid .graphics-check { gap: 10px; font-size: 13px; letter-spacing: .02em; text-transform: none; }
+
+/* ---------------------------------------------------------------- main menu
+   The poster: hazard yellow fills the screen, ink type, hard shadows. The
+   brand and launch buttons sit on the left on every page; the right holds the
+   slanted map panels (Play) or an ink sheet (Weapons, Controls, Settings). */
+.screen-overlay[data-screen-kind="main"] { background: var(--signal); }
+.screen-overlay[data-screen-kind="main"]::before { content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(rgba(0, 0, 0, .09) 1.1px, transparent 1.6px) 0 0 / 7px 7px;
+  -webkit-mask-image: linear-gradient(115deg, #000, transparent 55%); mask-image: linear-gradient(115deg, #000, transparent 55%); }
+.screen-overlay[data-screen-kind="main"]::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 8px; pointer-events: none;
+  background: repeating-linear-gradient(-45deg, var(--ink) 0 12px, var(--signal) 12px 24px); }
+.screen-panel[data-screen-kind="main"] { z-index: 1; width: min(1480px, calc(100vw - 48px)); max-width: none; padding: 0; border: 0; background: none; box-shadow: none; text-align: left; }
+.screen-panel[data-screen-kind="main"]::before { display: none; }
+.screen-panel[data-screen-kind="main"] :is(button, input, select, textarea, summary):focus-visible { outline-color: var(--ink); }
+.screen-panel[data-screen-kind="main"] .menu-sheet :is(button, input, select, textarea, summary):focus-visible { outline-color: var(--signal); }
+/* --map-row is the height of the map panels; every page keeps it, so switching pages never moves the tabs. */
+.main-menu { --map-row: clamp(220px, calc(100vh - 140px), 760px); display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: clamp(24px, 3.5vw, 64px); align-items: stretch; min-height: var(--map-row); }
+.main-side { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; color: var(--ink); }
+/* Anton's tall glyphs overflow the title's line box: keep the tabs above it. */
+.main-menu .menu-nav { position: relative; z-index: 2; flex-wrap: wrap; gap: 4px; border: 0; }
+.main-menu .menu-nav button { padding: 7px 12px; border: 2.5px solid var(--ink); color: var(--ink); white-space: nowrap; }
+.main-menu .menu-nav button:hover { background: rgba(17, 17, 17, .08); color: var(--ink); }
+.main-menu .menu-nav button[aria-pressed="true"] { background: var(--ink); color: var(--signal); border-color: var(--ink); }
+.main-menu .main-title { margin: clamp(14px, 3vh, 36px) 0 0; color: var(--ink); font-size: clamp(56px, min(10vw, 15.5vh), 160px); line-height: .84; letter-spacing: 0; overflow-wrap: normal; pointer-events: none; }
+.main-title > span { display: block; }
+.main-title .six { display: inline-block; margin-left: .04em; color: var(--alarm); font-size: 1.2em; line-height: .7; -webkit-text-stroke: .018em var(--ink); text-shadow: .04em .04em 0 var(--ink); }
+.main-side .screen-subtitle { margin: 14px 0 0; color: rgba(17, 17, 17, .72); font-size: 15px; }
+.main-launch { position: relative; width: min(100%, 540px); margin-top: auto; padding-top: clamp(20px, 4vh, 48px); }
+.main-menu .launch-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; gap: 14px; margin: 0; }
+.main-menu .launch-actions .screen-button { min-height: 0; padding: 10px 14px 11px; border: 3px solid var(--ink); background: rgba(255, 255, 255, .2); color: var(--ink); text-align: left; font: 400 26px/1 var(--font-poster), var(--font-display), sans-serif; letter-spacing: .03em; box-shadow: none; }
+.main-menu .launch-actions .screen-button:hover { background: rgba(255, 255, 255, .5); border-color: var(--ink); }
+.main-menu .launch-actions .screen-button small { margin-top: 5px; font: 500 12px/1.3 var(--font-display), sans-serif; opacity: .85; }
+.main-menu .launch-actions .screen-button.primary { position: relative; grid-column: 1 / -1; padding: 14px 84px 14px 22px; background: var(--ink); color: var(--signal); font-size: clamp(36px, 5.4vh, 52px); box-shadow: 7px 7px 0 var(--alarm); }
+.main-menu .launch-actions .screen-button.primary:hover { background: #000; }
+.main-menu .launch-actions .screen-button.primary small { color: #fff; font-size: 13px; }
+.main-menu .launch-actions .screen-button.primary::after { content: '→'; position: absolute; right: 24px; top: 50%; transform: translateY(-50%); font-size: 1.15em; transition: transform .15s; }
+.main-menu .launch-actions .screen-button.primary:hover::after { transform: translate(6px, -50%); }
+.main-menu .launch-actions .screen-button:active { transform: translate(2px, 2px); }
+.main-launch .start-wave { margin: 18px 0 0; color: var(--ink); font: 700 14px/1.2 var(--font-display), sans-serif; }
+.main-launch .start-wave select { margin-left: 10px; border-color: var(--ink); background-color: var(--ink); color: var(--signal); box-shadow: 4px 4px 0 var(--alarm); }
+.main-launch .start-wave select:hover { border-color: var(--ink); }
+.main-launch .screen-footer { margin: 16px 0 0; color: var(--ink); font-size: 13px; opacity: .75; }
+/* The personal best is a price tag slapped on the corner of the map panels. */
+.main-launch .best-tag { position: absolute; z-index: 3; left: calc(100% - 8px); bottom: 0; display: flex; flex-direction: column; margin: 0; padding: 10px 12px 9px 28px; border: 3px solid var(--ink); background: #fff; box-shadow: 5px 5px 0 var(--ink); opacity: 1; transform: rotate(-7deg); pointer-events: none;
+  clip-path: polygon(16px 0, 100% 0, 100% 100%, 16px 100%, 0 50%); }
+.main-launch .best-tag::before { content: ''; position: absolute; left: 13px; top: 50%; width: 8px; height: 8px; margin-top: -4px; border: 2px solid var(--ink); border-radius: 50%; background: var(--signal); }
+.best-tag small { font: 700 10px/1.2 var(--font-display), sans-serif; letter-spacing: .14em; }
+.best-tag b { color: var(--alarm); font: 400 44px/1 var(--font-poster), sans-serif; }
+.screen-panel[data-screen-kind="main"] .install-prompt { color: var(--ink); border-top-color: var(--ink); }
+
+/* Play: the maps are tall slanted panels; the selected one, or the one under
+   the pointer, opens wide. */
+.main-menu .menu-page { min-width: 0; padding: 0; }
+/* An 8° skew leans each panel past its box by about 7% of its height: pad the row for it. */
+.main-menu .map-previews { display: flex; gap: 12px; height: var(--map-row); margin: 0; padding: 0 clamp(24px, 7.5vh, 60px); border: 0; }
+.map-previews h3 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.map-previews .map-choice { position: relative; flex: 1 1 0; min-width: 0; margin: 0; padding: 0; overflow: hidden; border: 4px solid var(--ink); background: var(--ink); color: #fff; text-align: left;
+  transform: skewX(-8deg); box-shadow: 6px 6px 0 var(--ink); transition: flex-grow .45s cubic-bezier(.2, .8, .2, 1); }
+.map-previews .map-choice:hover, .map-previews .map-choice.selected { border-color: var(--ink); background: var(--ink); color: #fff; }
+.map-previews .map-choice:active { transform: skewX(-8deg) translateY(1px); }
+.map-previews img { position: absolute; top: 0; left: -64px; width: calc(100% + 128px); height: 100%; object-fit: cover; transform: skewX(8deg); filter: saturate(.85) brightness(.8); transition: filter .3s; }
+.map-number { position: absolute; top: 10px; left: 18px; color: var(--signal); font: 400 30px/1 var(--font-poster), sans-serif; -webkit-text-stroke: 1.5px var(--ink); transform: skewX(8deg); }
+.map-previews .map-name { position: absolute; left: 50%; bottom: 18px; writing-mode: vertical-rl; transform: skewX(8deg) translateX(-50%) rotate(180deg); color: #fff; font: 400 clamp(26px, 4.4vh, 40px)/1 var(--font-poster), sans-serif; letter-spacing: .04em; text-shadow: 3px 3px 0 var(--ink); white-space: nowrap; }
+.map-previews small { display: none; }
+/* Open: the selected panel, unless the pointer or focus is on another one. */
+.map-previews .map-choice:is(.selected, :hover, :focus-visible) { flex-grow: 3.2; }
+.map-previews .map-choice:is(.selected, :hover, :focus-visible) img { filter: none; }
+.map-previews .map-choice:is(.selected, :hover, :focus-visible) .map-name { left: 28px; bottom: 58px; writing-mode: horizontal-tb; transform: skewX(8deg); padding: 6px 12px 4px; border: 3px solid var(--ink); background: var(--signal); color: var(--ink); font-size: clamp(20px, min(5vh, 3vw), 46px); text-shadow: none; animation: panel-label .3s .12s both; }
+.map-previews .map-choice:is(.selected, :hover, :focus-visible) small { display: block; position: absolute; left: 28px; bottom: 22px; max-width: calc(100% - 56px); padding: 6px 12px; background: var(--ink); color: #fff; font: 500 13px/1.3 var(--font-display), sans-serif; transform: skewX(8deg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; animation: panel-label .3s .16s both; }
+.map-previews .map-choice.selected::after { content: 'SELECTED'; position: absolute; top: 14px; right: 22px; padding: 5px 10px; border: 2.5px solid var(--ink); background: var(--alarm); color: #fff; font: 700 12px/1 var(--font-display), sans-serif; letter-spacing: .14em; transform: skewX(8deg) rotate(4deg); }
+.map-previews:has(.map-choice:is(:hover, :focus-visible)) .map-choice.selected:not(:hover, :focus-visible) { flex-grow: 1; }
+.map-previews:has(.map-choice:is(:hover, :focus-visible)) .map-choice.selected:not(:hover, :focus-visible) img { filter: saturate(.85) brightness(.8); }
+.map-previews:has(.map-choice:is(:hover, :focus-visible)) .map-choice.selected:not(:hover, :focus-visible) .map-name { left: 50%; bottom: 18px; writing-mode: vertical-rl; transform: skewX(8deg) translateX(-50%) rotate(180deg); padding: 0; border: 0; background: none; color: var(--signal); font-size: clamp(26px, 4.4vh, 40px); text-shadow: 3px 3px 0 var(--ink); animation: none; }
+.map-previews:has(.map-choice:is(:hover, :focus-visible)) .map-choice.selected:not(:hover, :focus-visible) small,
+.map-previews:has(.map-choice:is(:hover, :focus-visible)) .map-choice.selected:not(:hover, :focus-visible)::after { display: none; }
+.screen-panel .map-previews .map-choice:focus-visible { outline: 3px solid var(--alarm); outline-offset: 3px; }
+@keyframes panel-label { from { opacity: 0; translate: 0 10px; } }
+
+/* Weapons, Controls and Settings: an ink sheet with a red sticker shadow. */
+.main-menu .menu-sheet { align-self: start; padding: 30px 30px 26px; position: relative; border: 3px solid var(--ink); background: rgba(17, 17, 17, .97); box-shadow: 10px 10px 0 var(--alarm); color: var(--fg); }
+.main-menu .menu-sheet::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 8px; background: repeating-linear-gradient(-45deg, var(--signal) 0 12px, var(--ink) 12px 24px); }
+.main-menu .menu-sheet > .screen-footer { margin-bottom: 0; font-size: 12px; }
+.main-menu .menu-sheet { container-type: inline-size; }
+/* A narrow sheet stacks Settings' two columns and puts each slider under its label. */
+@container (max-width: 680px) {
+  .menu-sheet .settings { grid-template-columns: minmax(0, 1fr); }
+  .menu-sheet .sensitivity-settings .settings-row { grid-template-columns: minmax(0, 1fr) 55px; }
+  .menu-sheet .sensitivity-settings input { grid-row: 2; width: 100%; }
+}
+
+@media (max-width: 1100px) {
+  .main-menu { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .main-menu .menu-nav button { padding: 6px 9px; font-size: 12.5px; letter-spacing: .06em; }
+}
+@media (max-height: 520px) {
+  .main-side .screen-subtitle { display: none; }
+  .main-menu .main-title { margin-top: 10px; }
+  .main-launch { padding-top: 14px; }
+  .main-menu .launch-actions .screen-button.primary { padding-block: 8px; font-size: 32px; }
+}
+/* Narrow screens: one column, and the maps become a swipe row. */
+@media (max-width: 760px) {
+  .screen-panel[data-screen-kind="main"] { width: calc(100vw - 24px); }
+  .main-menu { grid-template-columns: minmax(0, 1fr); }
+  .main-menu .main-title { font-size: clamp(56px, 19vw, 120px); }
+  .main-launch { width: 100%; margin-top: 0; }
+  .main-launch .best-tag { position: static; width: max-content; margin-top: 20px; transform: rotate(-3deg); }
+  .main-menu { min-height: 0; }
+  .main-menu .map-previews { height: 230px; overflow-x: auto; scroll-snap-type: x mandatory; padding: 4px 20px 14px; }
+  .map-previews .map-choice, .map-previews .map-choice:is(.selected, :hover, :focus-visible) { flex: 0 0 78%; scroll-snap-align: center; }
+  .map-previews:has(.map-choice:is(:hover, :focus-visible)) .map-choice.selected:not(:hover, :focus-visible) { flex-grow: 0; }
+  .map-previews .map-choice .map-name, .map-previews:has(.map-choice:is(:hover, :focus-visible)) .map-choice.selected:not(:hover, :focus-visible) .map-name { left: 22px; bottom: 16px; writing-mode: horizontal-tb; transform: skewX(8deg); padding: 4px 10px 3px; border: 3px solid var(--ink); background: var(--signal); color: var(--ink); font-size: 30px; text-shadow: none; animation: none; }
+  .map-previews .map-choice small, .map-previews .map-choice:is(.selected, :hover, :focus-visible) small { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .map-previews .map-choice, .map-previews img, .main-menu .launch-actions .screen-button.primary::after { transition: none; }
+  .map-previews .map-choice .map-name, .map-previews .map-choice small { animation: none !important; }
 }
 
 /* Boot failure panel (WebGL off, engine chunk failed to load). */

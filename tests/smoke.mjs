@@ -73,8 +73,8 @@ await page.click('.screen-button[data-act="start"]');
 const clicked = await page.evaluate(() => window.__game.gs.state);
 assert.equal(await page.evaluate(() => window.__game.gs.wave), 1);
 
-// Back to the main screen, then prove the backdrop still advances the screen:
-// a click that misses every [data-ui-block] must reach onScreenClick.
+// Back to the main screen, then prove a stray click does not start a run: the
+// main menu fills the screen, so only START SOLO (or the confirm key) may.
 await page.evaluate(() => window.__game.hud.onUiAction?.('mainMenu', null, new Event('click')));
 await page.waitForFunction(() => window.__game.gs.state === 'start');
 await page.mouse.click(20, 20);
@@ -192,7 +192,10 @@ await startWave.selectOption('1');
 assert.match(await page.locator('.screen-prompt').innerText(), /RESTART AT WAVE 1$/);
 assert.match(await page.locator('.screen-stats').innerText(), /NEW BEST/); // Survives the redraws above.
 assert.equal(await page.evaluate(() => Number(localStorage.getItem('cs6_best'))), cleared);
+// A background click no longer restarts; the RESTART button does.
 await page.mouse.click(20, 20);
+assert.equal(await page.evaluate(() => window.__game.gs.state), 'dead', 'a background click on the death screen does not restart');
+await page.locator('[data-act="start"]').click();
 await page.waitForFunction(() => window.__game.gs.state === 'play');
 assert.equal(await page.evaluate(() => window.__game.gs.wave), 1);
 assert.equal(await page.evaluate(() => window.__game.gs.score), 0);
@@ -207,7 +210,8 @@ assert.deepEqual(await page.evaluate(() => { const g = window.__game.gs; return 
 await page.evaluate(() => { const g = window.__game; g.player.takeDamage(100000); g.gs.deathT = 2; });
 await page.waitForFunction(() => window.__game.gs.state === 'dead');
 assert.match(await page.locator('.screen-prompt').innerText(), /RESTART AT WAVE 11$/);
-await page.mouse.click(20, 20);
+assert.match(await page.locator('[data-act="start"]').innerText(), /at wave 11/);
+await page.locator('[data-act="start"]').click();
 await page.waitForFunction(() => window.__game.gs.state === 'play');
 assert.equal(await page.evaluate(() => window.__game.gs.wave), 11);
 // Unpin on the death screen, so the remaining checks run from wave 1.
@@ -316,7 +320,7 @@ check(report.advancing, 'frame loop is advancing gs.time');
 check(report.hasHud, 'HUD elements mounted');
 check(report.screen !== null, `main screen rendered (${report.screen})`);
 check(clicked === 'play', `clicking the real START button starts the game (state ${clicked})`);
-check(backdrop === 'play', `a backdrop click still advances the screen (state ${backdrop})`);
+check(backdrop === 'start', `a background click on the main menu does not start a run (state ${backdrop})`);
 check(report.ctxComplete.length === 0,
   `ctx fully populated at boot${report.ctxComplete.length ? `; null: ${report.ctxComplete.join(', ')}` : ''}`);
 check(report.ctxAgreesWithHandle, 'ctx.level/nav and the debug handle are the same objects');

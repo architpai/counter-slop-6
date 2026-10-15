@@ -1,9 +1,11 @@
 import type { Metadata, Viewport } from 'next';
-import { Space_Grotesk, Inter } from 'next/font/google';
+import { Anton, Space_Grotesk, Inter } from 'next/font/google';
 import './globals.css';
 
 const grotesk = Space_Grotesk({ subsets: ['latin'], weight: ['500', '700'], variable: '--font-display' });
 const inter = Inter({ subsets: ['latin'], weight: ['400', '600', '700'], variable: '--font-body' });
+/** The menus' poster type: tall condensed capitals for titles and big buttons. */
+const anton = Anton({ subsets: ['latin'], weight: '400', variable: '--font-poster' });
 
 export const metadata: Metadata = {
   title: 'Counter Slop 6',
@@ -21,7 +23,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${grotesk.variable} ${inter.variable}`}>
+    <html lang="en" className={`${grotesk.variable} ${inter.variable} ${anton.variable}`}>
       <body>{children}</body>
     </html>
   );
