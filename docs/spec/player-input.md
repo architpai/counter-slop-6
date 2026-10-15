@@ -86,7 +86,7 @@ The input layer merges keyboard, mouse and a standard-mapping gamepad into one s
 
 ### 2.1 Actions
 
-`forward, back, left, right, jump, sprint, crouch, reload, grapple, melee, slot1, slot2, slot3, slot4, slot5, pause, confirm, grenade, dash, music, talk, score, fire, aim, nextWeapon, prevWeapon`.
+`forward, back, left, right, jump, sprint, crouch, reload, grapple, melee, slot1, slot2, slot3, slot4, slot5, pause, confirm, grenade, dash, music, talk, score, fire, aim, nextWeapon, prevWeapon, mark`.
 
 ### 2.2 Keyboard bindings
 
@@ -111,6 +111,7 @@ Bindings are by physical key code (layout independent).
 | X, Left Alt | dash |
 | M | music |
 | T | talk |
+| Z | mark |
 | Tab | score |
 
 Key-down handling:
@@ -157,7 +158,7 @@ Standard gamepad mapping (DualSense names given for reference):
 | 10 | L3 | sprint |
 | 11 | R3 | grenade |
 | 12 | D-pad up | grenade |
-| 13 | D-pad down | slot5 |
+| 13 | D-pad down | mark |
 | 14 | D-pad left | prevWeapon |
 | 15 | D-pad right | nextWeapon |
 | 17 | Touchpad click | confirm |

@@ -9,7 +9,7 @@ import type { App } from '../boot';
 import { ROSTER, MUTATIONS, mutationCount, nextSpawn } from '../enemies/progression';
 import { validBossPerch } from '../level/boss-perch';
 import { COOP, coopScale } from './coop-rules';
-import { showStragglers, stragglerMark, type StragglerMark } from './stragglers';
+import { LAST_FEW, showStragglers, stragglerMark, type StragglerMark } from './stragglers';
 const MODS: ReadonlyArray<readonly [string, number, number]> = [
   ['', 1, 1], ['CAFFEINATED · they move fast', 1.35, 0.85],
   ['JUICED · they hit harder', 0.9, 1.4], ['SWARM · more of them, thinner', 1.15, 0.9],
@@ -46,7 +46,7 @@ export interface SoloApi {
   /** The world's half of a kill: the ammo or health it leaves. */
   drop(e: EnemyRecord): void;
   onBoss(e: EnemyRecord): void;
-  /** Every frame: marks the last few enemies of a boss wave once the boss is down. */
+  /** Every frame: marks the last few enemies of a wave (of a boss wave, once the boss is down). */
   markStragglers(): void;
   updateFocus(dt: number): void;
   endFocus(): void;
@@ -66,6 +66,8 @@ export function createSolo(app: App): SoloApi {
   const intro = { label: '', sub: '' };
   /** Read once at each wave start: a player who leaves makes the next wave smaller, not this one. */
   let scale = coopScale(1);
+  /** The last few of this wave were called out. More left, or a break between waves, clears it. */
+  let calledOut = false;
   function startWave(n: number): void {
     if (!Number.isSafeInteger(n) || n < 1) return;
     const enemies = ctx.enemies, player = ctx.player;
@@ -250,7 +252,10 @@ export function createSolo(app: App): SoloApi {
     const left = app.coop.active() && !ctx.net.isHost ? app.coop.state?.left ?? 0 : (enemies?.alive ?? 0) + gs.queue.length;
     const boss = list.some(e => e.alive && e.stats.boss) || gs.queue.some(type => TYPES[type as EnemyKind]?.boss);
     const marks: StragglerMark[] = [];
+    if (left > LAST_FEW || gs.intermission > 0) calledOut = false;
     if ((gs.mode === 'solo' || app.coop.active()) && ctx.game.playing() && gs.intermission <= 0 && showStragglers(gs.wave, left, boss)) {
+      // Once a wave, as the arrows first show; a boss wave's go up without a word.
+      if (!calledOut && gs.wave % 5 !== 0) { calledOut = true; ctx.hud.message(`${left} LEFT`, 'go get them · marked on screen', 2.2); }
       const camera = ctx.camera, canvas = ctx.renderer.three.domElement;
       camera.updateMatrixWorld();
       for (const e of list) {

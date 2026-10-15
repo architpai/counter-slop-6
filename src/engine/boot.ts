@@ -589,7 +589,11 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     fx.lowHp = player.alive && player.hp < 30 ? 1 - player.hp / 30 : 0;
     // An online match plays on under its menu (`app.pause`): still live for the renderer.
     renderer.setLive(game.playing() && (!gs.menu || gs.mode === 'ffa'));
+    // Hidden for this render only: hit tests skip a hidden figure.
+    const watched = app.ffa.watchedFigure();
+    if (watched) watched.visible = false;
     renderer.render(gs.time, fx);
+    if (watched) watched.visible = true;
   }
 
   let lastFrame = 0, fpsFrames = 0, fpsMs = 0;

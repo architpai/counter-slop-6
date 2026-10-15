@@ -1,9 +1,11 @@
 /** Fewer enemies than this, with the boss down, and the rest of a boss wave is marked on screen. */
 export const STRAGGLERS = 10;
+/** This many enemies or fewer, and the rest of any other wave is marked and called out. */
+export const LAST_FEW = 5;
 
-/** Boss waves only (every fifth): once no boss is alive or queued and few enemies are left. */
+/** Boss waves (every fifth): once no boss is alive or queued and fewer than ten are left. Other waves: five or fewer left. */
 export const showStragglers = (wave: number, left: number, boss: boolean): boolean =>
-  wave > 0 && wave % 5 === 0 && !boss && left > 0 && left < STRAGGLERS;
+  wave > 0 && !boss && left > 0 && (wave % 5 === 0 ? left < STRAGGLERS : left <= LAST_FEW);
 
 /** A marker in CSS pixels; `a` turns the arrow, which points along +x. */
 export interface StragglerMark { x: number; y: number; a: number }

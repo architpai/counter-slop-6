@@ -247,7 +247,7 @@ Sending rules:
 
 Receiving/routing (per message on a wired connection; `origin` is the peer id of the connection it arrived on):
 
-First validate the envelope and payload bounds in section 5. The envelope must have a known string `t` and its required `d`; optional `to`/`from` are bounded peer-id strings and `relay` is boolean. Net owns these transport checks; main checks current roster ids, map indices and state before applying a payload. Host-only commands are `lobby`, `leave`, `start`, `end`, `backtolobby`, `score`, `pickup`, `taken`, and `refused`. Never accept or forward these from a client. `welcome` is only accepted by an outstanding knock on its requested host connection. `take` goes only from a stored client to the host and cannot be relayed or addressed elsewhere. `pdmg`, `parry` and `cut` are addressed events. `ps`, `shots`, `pdead`, `nade` and `brk` are broadcast events; a client's version must request relay and must have no `to`.
+First validate the envelope and payload bounds in section 5. The envelope must have a known string `t` and its required `d`; optional `to`/`from` are bounded peer-id strings and `relay` is boolean. Net owns these transport checks; main checks current roster ids, map indices and state before applying a payload. Host-only commands are `lobby`, `leave`, `start`, `end`, `backtolobby`, `score`, `pickup`, `taken`, and `refused`. Never accept or forward these from a client. `welcome` is only accepted by an outstanding knock on its requested host connection. `take` goes only from a stored client to the host and cannot be relayed or addressed elsewhere. `pdmg`, `parry` and `cut` are addressed events. `ps`, `shots`, `pdead`, `nade`, `brk` and `mark` are broadcast events; a client's version must request relay and must have no `to`.
 
 1. On the host, the sender is always `origin`; ignore a client's supplied `from`. For an addressed event whose `to` is another stored, open client, forward `{t, d, from: origin}` and stop. Unknown destinations and self-addresses are dropped. An addressed event for the host proceeds to dispatch with sender `origin`.
 2. On the host, a valid broadcast event is sent as `{t, d, from: origin}` to every other open connection, not back to origin; then processed locally.
@@ -281,6 +281,7 @@ Direction key: H = host, C = client, A = all other peers. "C→A" means the clie
 | `cut` | slasher → grappler (addressed) | slasher's blade crossed the grappler's rope | `{}` |
 | `nade` | thrower → A (relay) | grenade thrown | `{ pos: [x,y,z], vel: [x,y,z] }` |
 | `brk` | breaker → A (relay) | a breakable prop was destroyed locally | `{ id }` |
+| `mark` | marker → A (relay) | a squad mark was placed (co-op, team modes) | `{ pos: [x,y,z] }` |
 | `pickup` | H → A | host spawned a pickup | `{ id, kind, pos: [x,y,z] }` |
 | `take` | C → H | client collected a pickup | `{ id }` |
 | `taken` | H → A | host collected, expired, or confirmed a pickup removal | `{ id }` |

@@ -27,7 +27,7 @@ const HOST = new Set(['lobby', 'leave', 'start', 'end', 'backtolobby', 'score', 
   'espawn', 'esnap', 'ekill', 'eproj', 'edmg', 'eaim', 'ehaz']);
 const REQUEST = new Set(['take', 'teamreq', 'cpts', 'ehit', 'eyank']);
 const ADDRESSED = new Set(['pdmg', 'headshot', 'parry', 'cut']);
-const BROADCAST = new Set(['ps', 'shots', 'pdead', 'nade', 'brk']);
+const BROADCAST = new Set(['ps', 'shots', 'pdead', 'nade', 'brk', 'mark']);
 const TYPES = new Set(['welcome', ...HOST, ...REQUEST, ...ADDRESSED, ...BROADCAST]);
 /** Who may send what, for checks that route messages without a peer connection. */
 export const ROUTES = { HOST, REQUEST, ADDRESSED, BROADCAST } as const;
@@ -119,6 +119,7 @@ function validPayload(type: string, d: unknown): boolean {
     case 'parry': return fields(d, ['ret', 'by'], ['round']) && typeof d.ret === 'boolean' && peerId(d.by) && optional(d, 'round', integer);
     case 'nade': return fields(d, ['pos', 'vel']) && vector(d.pos) && vector(d.vel);
     case 'brk': return idRecord(d);
+    case 'mark': return fields(d, ['pos']) && vector(d.pos);
     case 'pickup': return fields(d, ['id', 'kind', 'pos']) && integer(d.id) && d.id > 0 &&
       typeof d.kind === 'string' && ['ammo', 'health'].includes(d.kind) && vector(d.pos);
     case 'take': case 'taken': return idRecord(d, true);

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { choose, shuffle, round1, round2, clamp } from '../util';
+import { angleLerp, choose, shuffle, round1, round2, clamp } from '../util';
 import { RemotePlayer, encodeState } from '../players';
 import { validKey } from '../level/index';
 import { TONE } from '../render/index';
@@ -10,6 +10,9 @@ import type { BoardRow, OnlineInfo } from '../hud/screens';
 import { advanceTeamMatch, assignTeams, createTeamMatch, dropFlag, interactFlag, isOnlineMode, isTeam, isTeamMode, markDead, ONLINE_MODES, scoreTeam, TEAM_NAMES, TEAM_RULES, validTeamMatch, validTeams } from './team-rules';
 import type { OnlineMode, Point, Team, TeamMatch } from './team-rules';
 import { createTeamWorld, teamLayout } from './team-world';
+import { MARK_GAP, MARK_RANGE, placeMark, pruneMarks, type Mark } from './marks';
+import { stragglerMark } from './stragglers';
+import { seeThrough } from '../physics';
 import { COOP, freshCoopState, playerCap, validCoopState } from './coop-rules';
 import type { CoopState } from './coop-rules';
 import type { HitInfo, PlayerHit, ScoreRow, Target } from '../types';
@@ -67,6 +70,8 @@ export interface FfaApi {
   targets(): Target[];
   canHurt(t: Target): boolean;
   raycastPlayers(o: THREE.Vector3, d: THREE.Vector3, max: number): PlayerHit | null;
+  /** The figure to leave out of this frame: a first-person spectator looks out of it. */
+  watchedFigure(): THREE.Object3D | null;
   playersInArc(pos: THREE.Vector3, dir: THREE.Vector3, range: number, cosHalf: number): RemotePlayer[];
   hitPlayer(t: RemotePlayer, damage: number, info?: HitInfo): void;
   cutRopes(eye: THREE.Vector3, dir: THREE.Vector3, range: number): boolean;
@@ -78,7 +83,12 @@ export function createFFA(app: App): FfaApi {
   const { net, hud } = ctx;
   const d1 = new THREE.Vector3(), d2 = new THREE.Vector3(), d3 = new THREE.Vector3();
   let psT = 0;
+  /** Who a waiting player watches, through their eyes or not, and the yaw the shoulder view has swung to. */
+  let watching: string | null = null, firstPerson = false, watchYaw = 0;
   let shotQueue: number[] = [];
+  /** Squad marks by player id, and the time until the local player may mark again. */
+  const marks = new Map<string, Mark>();
+  let markGap = 0;
   let boardShown = false;
   let timer: number | undefined = undefined;
   let hitId = 0;
@@ -102,6 +112,8 @@ export function createFFA(app: App): FfaApi {
   const teamOf = (rid: string | null): Team | undefined => rid === null ? undefined : lobby.teams?.[rid];
   const opponents = (a: string | null, b: string | null): boolean => mode() === 'ffa' ||
     (isTeam(teamOf(a)) && isTeam(teamOf(b)) && teamOf(a) !== teamOf(b));
+  /** Co-op: everyone. Team modes: the same team. Deathmatch has no squad. */
+  const squadmate = (rid: string | null): boolean => coop() || (teamMode() && isTeam(teamOf(rid)) && teamOf(rid) === teamOf(net.id));
   const activeCombat = (): boolean => playing() && !gs.over && !(gs.teamMatch && gs.teamMatch.breakLeft > 0);
   const roundTag = () => gs.teamMatch ? { round: gs.teamMatch.round } : {};
   const currentRound = (d: Record<string, unknown>): boolean => !gs.teamMatch || d.round === gs.teamMatch.round;
@@ -330,6 +342,7 @@ export function createFFA(app: App): FfaApi {
     window.clearTimeout(timer);
     pendingHeadshots.clear(); ready.clear(); shotQueue = []; lastDeath.clear();
     teamWorld?.dispose(); teamWorld = null;
+    marks.clear(); hud.setMarks([]);
   }
   function leave(reason = ''): void {
     dispose();
@@ -527,22 +540,56 @@ export function createFFA(app: App): FfaApi {
     const row = killer ? scores.get(killer) : null;
     hud.kill(row ? `eliminated by ${row.name}${how ? ` · ${how}${h?.crit ? ' headshot' : ''}` : ''}` : 'eliminated');
   }
-  /** The camera of a player who waits: behind and above `target`, pulled in front of a wall. */
-  function watch(target: THREE.Vector3): void {
-    if (!ctx.camera || !ctx.renderer) return;
-    d1.set(0, 2.5, 4).normalize();
-    const wall = ctx.world.raycast(target, d1, 4.72);
-    ctx.camera.position.copy(target).addScaledVector(d1, wall ? Math.max(0.1, wall.dist - 0.2) : 4.72);
-    ctx.camera.lookAt(target); ctx.camera.fov = 82; ctx.camera.updateProjectionMatrix(); ctx.camera.updateMatrixWorld();
+  /**
+   * The camera of a player who waits. Fire / aim watch the next / previous of `mates`, jump swaps
+   * their eyes for a view over their shoulder. No one to watch: a view of `rest`. Returns who it watches.
+   */
+  function spectate(mates: RemotePlayer[], rest: THREE.Vector3, dt: number): RemotePlayer | undefined {
+    const { input } = ctx;
+    let i = Math.max(0, mates.findIndex(r => r.id === watching));
+    if (!gs.menu && mates.length) {
+      if (input.pressed('fire')) i = (i + 1) % mates.length;
+      if (input.pressed('aim')) i = (i + mates.length - 1) % mates.length;
+      if (input.pressed('jump')) firstPerson = !firstPerson;
+    }
+    const mate = mates[i];
+    // `right` is (cos yaw, 0, -sin yaw): the yaw it faces, which the shoulder view swings after.
+    const yaw = mate ? Math.atan2(-mate.right.z, mate.right.x) : 0;
+    if (mate?.id !== watching) watchYaw = yaw;
+    watching = mate?.id ?? null;
+    if (!ctx.camera || !ctx.renderer) return mate;
+    if (gs.deathT <= dt && mates.length && !input.usingTouch) {
+      hud.tip(`${hud.key('fire')} / ${hud.key('aim')} switch player · ${hud.key('jump')} first / third person`, 4);
+    }
+    const cam = ctx.camera;
+    if (mate && firstPerson) {
+      cam.position.copy(mate.eye);
+      cam.lookAt(d1.copy(mate.eye).add(mate.forward));
+    } else {
+      const target = mate?.center ?? rest;
+      watchYaw = angleLerp(watchYaw, yaw, 1 - Math.exp(-6 * dt));
+      if (mate) d1.set(Math.sin(watchYaw) * 4, 2.5, Math.cos(watchYaw) * 4).normalize();
+      else d1.set(0, 2.5, 4).normalize();
+      const wall = ctx.world.raycast(target, d1, 4.72);
+      cam.position.copy(target).addScaledVector(d1, wall ? Math.max(0.1, wall.dist - 0.2) : 4.72);
+      cam.lookAt(target);
+    }
+    cam.fov = 82; cam.updateProjectionMatrix(); cam.updateMatrixWorld();
     ctx.renderer.rig.visible = false;
+    return mate;
+  }
+  /** The figure a first-person spectator looks out of: the renderer leaves it out, as it fills the view. */
+  function watchedFigure(): THREE.Object3D | null {
+    const r = gs.state === 'dying' && firstPerson && watching ? ctx.remotes.get(watching) : undefined;
+    return r?.alive && r.visible ? r.root : null;
   }
   function updateDying(dt: number): void {
     if (coop()) {
       // Down in a wave: back at the wave clear (the co-op state says when). Down between waves: a short timer.
       const waiting = net.id !== null && app.coop.isDown(net.id);
       if (!waiting && (gs.respawnT -= dt) <= 0) { respawn(false); return; }
-      const mate = [...ctx.remotes.values()].find(r => r.alive);
-      watch(mate?.center ?? d2.copy(ctx.level.playerStart).setY(ctx.level.playerStart.y + 1.5));
+      const mate = spectate([...ctx.remotes.values()].filter(r => r.alive),
+        d2.copy(ctx.level.playerStart).setY(ctx.level.playerStart.y + 1.5), dt);
       const main = waiting ? 'DOWN' : String(Math.max(1, Math.ceil(gs.respawnT)));
       const sub = `${mate ? `spectating ${mate.name}` : 'no one is up'} · ${waiting ? 'back at the wave clear' : 'back in a moment'}`;
       if (deathMessage !== main + sub) { hud.message(main, sub, 1.1); deathMessage = main + sub; }
@@ -553,8 +600,8 @@ export function createFFA(app: App): FfaApi {
       const until = net.id ? state.dead[net.id] : undefined;
       gs.respawnT = until === undefined ? Math.max(0, gs.respawnT - dt) : Math.max(0, until - state.elapsed);
       const team = teamOf(net.id);
-      const mate = [...ctx.remotes.values()].find(r => r.alive && teamOf(r.id) === team);
-      if (isTeam(team)) watch(mate?.center ?? vec(teamLayout(ctx.level).bases[team]).add(new THREE.Vector3(0, 1.5, 0)));
+      const mate = isTeam(team) ? spectate([...ctx.remotes.values()].filter(r => r.alive && teamOf(r.id) === team),
+        vec(teamLayout(ctx.level).bases[team]).add(new THREE.Vector3(0, 1.5, 0)), dt) : undefined;
       const main = gs.respawnT > 0 ? String(Math.ceil(gs.respawnT)) : 'WAIT';
       const sub = `${mate ? `spectating ${mate.name}` : 'team wiped'} · next respawn wave`;
       if (deathMessage !== main + sub) { hud.message(main, sub, 1.1); deathMessage = main + sub; }
@@ -602,6 +649,7 @@ export function createFFA(app: App): FfaApi {
       const player = ctx.player;
       if (player !== null) { net.broadcast('shots', { k: player.weapon.kind, e: shotQueue }); shotQueue = []; }
     }
+    updateMarks(dt, t);
     if (coop()) app.coop.update(dt);
     if (gs.teamMatch) {
       const elapsed = Math.max(0, t - lastClock); lastClock = t;
@@ -613,6 +661,39 @@ export function createFFA(app: App): FfaApi {
         net.send('end', winner); endMatch(winner);
       }
     }
+  }
+
+  /** Places the local player's mark on the aim key, then draws every live mark. */
+  function updateMarks(dt: number, t: number): void {
+    markGap -= dt;
+    const p = ctx.player, camera = ctx.camera;
+    if (p && net.id && squadmate(net.id) && activeCombat() && gs.state === 'play' && !gs.menu && markGap <= 0 && ctx.input.pressed('mark')) {
+      markGap = MARK_GAP;
+      const dir = camera.getWorldDirection(d1), eye = camera.position;
+      // The nearest of wall, enemy and player, as a shot finds it.
+      const hits = [ctx.world.raycast(eye, dir, MARK_RANGE, seeThrough), ctx.enemies?.raycast(eye, dir, MARK_RANGE), raycastPlayers(eye, dir, MARK_RANGE)];
+      let point: THREE.Vector3 | null = null, best = Infinity;
+      for (const h of hits) if (h && h.dist < best) { best = h.dist; point = h.point; }
+      if (point) {
+        placeMark(marks, net.id, p.name, point, t);
+        // ponytail: the host relays to every peer and the other team drops it; send to the team only if this leak matters.
+        net.broadcast('mark', { pos: point.toArray().map(round2) });
+        ctx.audio.mark();
+      } else ctx.audio.empty();
+    }
+    if (!activeCombat()) marks.clear();
+    pruneMarks(marks, t);
+    if (!marks.size) { hud.setMarks([]); return; }
+    const canvas = ctx.renderer.three.domElement, view: { x: number; y: number; label: string }[] = [];
+    camera.updateMatrixWorld();
+    for (const m of marks.values()) {
+      d2.copy(m.pos).applyMatrix4(camera.matrixWorldInverse);
+      const behind = d2.z > 0;
+      d2.applyMatrix4(camera.projectionMatrix);
+      const { x, y } = stragglerMark(d2.x, d2.y, behind, canvas.clientWidth, canvas.clientHeight);
+      view.push({ x, y, label: `${m.name} · ${Math.round(m.pos.distanceTo(camera.position))}m` });
+    }
+    hud.setMarks(view);
   }
 
   // ---- PvP hooks
@@ -885,6 +966,11 @@ export function createFFA(app: App): FfaApi {
     if (p === null) return;
     p.throwGrenade({ pos, vel });
   });
+  net.on('mark', (d, from) => {
+    if (!roster(from) || !squadmate(from) || !activeCombat() || !obj(d) || !triple(d.pos)) return;
+    placeMark(marks, from, nameOf(from) ?? 'player', vec(d.pos), now());
+    ctx.audio.mark();
+  });
   net.on('brk', (d, from) => {
     if (!roster(from) || !obj(d) || !int(d.id)) return;
     app.breakables.breakProp(ctx.level.breakables[d.id], null, false, false);
@@ -917,7 +1003,7 @@ export function createFFA(app: App): FfaApi {
   return {
     selectMode, requestTeam, onlineInfo, dispose,
     create, join, quickPlay, hostStart, leave, lobbyScreen, broadcastLobby,
-    localDeath, updateDying, updateOver, update, refreshScoreHud, sendScores, endMatch, respawn, showBoard, boardRows,
+    localDeath, updateDying, updateOver, watchedFigure, update, refreshScoreHud, sendScores, endMatch, respawn, showBoard, boardRows,
     targets, canHurt, raycastPlayers, playersInArc, hitPlayer, cutRopes, onShot,
   };
 }

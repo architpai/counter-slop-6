@@ -349,6 +349,10 @@ export class Audio {
     this.#tone({ type: 'square', freq: 900, end: 500, duration: 0.06, gain: 0.15, delay: 1.25 });
   }
   empty(): void { this.#noise({ type: 'highpass', freq: 3000, duration: 0.03, gain: 0.3 }); }
+  /** A squadmate marked a point. */
+  mark(): void {
+    this.#tone({ type: 'sine', freq: 1320, end: 1760, duration: 0.09, gain: 0.12 });
+  }
   winded(): void { this.#tone({ type: 'triangle', freq: 220, end: 140, duration: 0.14, gain: 0.1 }); }
   switchWeapon(): void { this.#noise({ type: 'bandpass', freq: 1800, Q: 1.5, duration: 0.05, gain: 0.25 }); }
   katanaSwing(): void { this.#noise({ type: 'bandpass', freq: 500, end: 3000, Q: 1.5, duration: 0.2, gain: 0.35 }); }

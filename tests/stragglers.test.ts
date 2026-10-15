@@ -2,12 +2,14 @@ import { expect, test } from 'vitest';
 import { PerspectiveCamera, Vector3 } from 'three';
 import { showStragglers, stragglerMark } from '@/engine/game/stragglers';
 
-test('stragglers show on boss waves only, with the boss down and fewer than ten left', () => {
+test('stragglers show on boss waves with the boss down and fewer than ten left, on other waves at five left', () => {
   expect(showStragglers(5, 9, false)).toBe(true);
   expect(showStragglers(5, 10, false)).toBe(false);
   expect(showStragglers(5, 9, true)).toBe(false);
   expect(showStragglers(5, 0, false)).toBe(false);
-  expect(showStragglers(4, 3, false)).toBe(false);
+  expect(showStragglers(4, 5, false)).toBe(true);
+  expect(showStragglers(4, 6, false)).toBe(false);
+  expect(showStragglers(4, 0, false)).toBe(false);
 });
 
 test('a marker sits on a visible enemy and on the near screen edge for one off screen or behind', () => {
