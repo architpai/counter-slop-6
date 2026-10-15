@@ -437,7 +437,7 @@ The modifier index is a uniform random integer in [0, allowed) where allowed = 1
 2. If the queue has entries and enemies alive < maxAlive: spawn timer −= dt. When ≤ 0: spawn timer = max(0.7, 2.2 − 0.13 × wave); pop the front type; spawn it at the position from section 13. If the spawned enemy is a boss: HP multiplier = 1 + 0.35 × floor((wave − 5) / 15); its hp and max hp = round(type hp × multiplier).
 3. If the queue is empty and no enemy is alive: intermission = 8; message main "WAVE w CLEARED", sub "catch your breath · +" + 200 × w, 2.5 s; add score 200 × w with no label (combo multiplier applies); wave-clear sound; `player.heal(40)`.
 4. HUD wave = wave, enemies left = alive + queue length.
-5. On a boss wave, once the boss is dead and fewer than 10 enemies are left, the HUD marks the rest (hud-audio-ui.md 3.10, straggler arrows).
+5. On a boss wave, once the boss is dead and fewer than 10 enemies are left, the HUD marks the rest (hud-audio-ui.md 3.10, straggler arrows). On any other wave it marks them at 5 or fewer left, and the centre message calls it out once ("5 LEFT · go get them").
 
 ## 13. Solo mode: enemy spawn placement
 
