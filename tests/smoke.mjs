@@ -192,7 +192,10 @@ await startWave.selectOption('1');
 assert.match(await page.locator('.screen-prompt').innerText(), /RESTART AT WAVE 1$/);
 assert.match(await page.locator('.screen-stats').innerText(), /NEW BEST/); // Survives the redraws above.
 assert.equal(await page.evaluate(() => Number(localStorage.getItem('cs6_best'))), cleared);
+// A background click no longer restarts; the RESTART button does.
 await page.mouse.click(20, 20);
+assert.equal(await page.evaluate(() => window.__game.gs.state), 'dead', 'a background click on the death screen does not restart');
+await page.locator('[data-act="start"]').click();
 await page.waitForFunction(() => window.__game.gs.state === 'play');
 assert.equal(await page.evaluate(() => window.__game.gs.wave), 1);
 assert.equal(await page.evaluate(() => window.__game.gs.score), 0);
@@ -207,7 +210,8 @@ assert.deepEqual(await page.evaluate(() => { const g = window.__game.gs; return 
 await page.evaluate(() => { const g = window.__game; g.player.takeDamage(100000); g.gs.deathT = 2; });
 await page.waitForFunction(() => window.__game.gs.state === 'dead');
 assert.match(await page.locator('.screen-prompt').innerText(), /RESTART AT WAVE 11$/);
-await page.mouse.click(20, 20);
+assert.match(await page.locator('[data-act="start"]').innerText(), /at wave 11/);
+await page.locator('[data-act="start"]').click();
 await page.waitForFunction(() => window.__game.gs.state === 'play');
 assert.equal(await page.evaluate(() => window.__game.gs.wave), 11);
 // Unpin on the death screen, so the remaining checks run from wave 1.

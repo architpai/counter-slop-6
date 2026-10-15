@@ -191,7 +191,7 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .screen-button.primary:disabled:hover { background: var(--signal); border-color: var(--signal); }
 .screen-button[data-act="start"] { font-size: 26px; }
 .screen-button[data-act="online"] { font-size: 20px; }
-.screen-button:is([data-act="startMatch"], [data-act="quickPlay"]) { font: 400 32px/1.05 var(--font-poster), var(--font-display), sans-serif; letter-spacing: .03em; }
+.screen-button:is([data-act="startMatch"], [data-act="quickPlay"]), .screen-panel[data-screen-kind="dead"] .screen-button[data-act="start"] { font: 400 32px/1.05 var(--font-poster), var(--font-display), sans-serif; letter-spacing: .03em; }
 .screen-panel :is(button,input,select,textarea,summary):focus-visible { outline: 2px solid var(--warn); outline-offset: 3px; }
 .screen-button:active, .menu-nav button:active, .control-switch button:active { transform: translateY(1px); }
 .screen-controls { margin: 16px 0; text-align: left; font: 400 16px/1.45 var(--font-body), system-ui, sans-serif; }

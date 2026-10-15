@@ -362,7 +362,7 @@ This block appears on the main menu, the solo pause screen and the online menu s
 - The screen overlay covers the whole viewport, is translucent (backdrop colour at 55 % alpha so the game/idle camera shows through), receives pointer events, shows a pointer cursor, and centres a panel.
 - The panel: centred text, max width 980 px, padding 26 px top/bottom and 48 px sides, near-opaque backdrop background, tone border, slightly rotated (−0.6° in the design only). Use border-box sizing; the panel's outer width and height must not exceed the viewport. Reduce side padding on narrow viewports as needed. Allow vertical scrolling inside the panel when its content is taller than the available height, so all controls remain reachable. The canvas and gameplay HUD stay fixed.
 - Text styles inside a panel: title (h1) 92 px letter-spaced; subtitle (h2) 36 px normal weight; "go" prompt line 34 px that blinks (1.2 s cycle, 35 % opacity at mid-cycle); stats line 30 px with red bold numbers; footnote tip 21 px at 80 %.
-- Clicking anywhere on the overlay fires the "screen click" action (7.11), except on the main menu (7.3). Interactive blocks inside the panel (buttons, inputs, settings box, online box, checkpoints box, map picker) stop the click from reaching the overlay, and the settings/online boxes also stop key presses from reaching the game's key handler so typing in a text box does not move the player.
+- Clicking anywhere on the overlay fires the "screen click" action (7.11), except on the main menu (7.3) and the death screen (7.9). Interactive blocks inside the panel (buttons, inputs, settings box, online box, checkpoints box, map picker) stop the click from reaching the overlay, and the settings/online boxes also stop key presses from reaching the game's key handler so typing in a text box does not move the player.
 - "show screen(html)" replaces the panel content and shows the overlay; "hide screen" hides it. Only one screen exists at a time.
 - The Space / ✕ key (jump), the confirm input, and — on the pause screen only — the pause key are equivalent to clicking the overlay while in the start, pause or dead states. While playing with a menu open, jump/confirm resume.
 
@@ -454,9 +454,9 @@ Solo death: the player dies, the state becomes "dying" for 1.7 s (the game keeps
 
 - Title: ELIMINATED
 - Stats line: you survived **<waves>** wave(s) · **<kills>** kills · score **<score>** followed by either " · **NEW BEST**" or " · best <best>". ("wave" is singular when waves = 1.)
-- Checkpoints block, MAIN MENU button.
-- Prompt: CLICK (or press <confirm label>) TO DRAW AGAIN
-- Click/jump/confirm: full reset and a new solo game at wave 1.
+- Checkpoints block, a primary RESTART button (sub-label "at wave <start wave>") and a MAIN MENU button.
+- Prompt: or press <confirm label> TO RESTART AT WAVE <start wave> (no prompt on touch).
+- RESTART and jump/confirm: full reset and a new solo game at the start wave. A pointer click on the background does nothing, so a player still firing as they die cannot skip this screen.
 
 ### 7.10 Match over (online)
 

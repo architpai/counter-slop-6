@@ -459,9 +459,10 @@ export const ScreenOverlay = memo(function ScreenOverlay({ store }: { store: Hud
       event.stopPropagation();
       return;
     }
-    // The main menu fills the screen, so a stray click on it must not start a
-    // run: only START SOLO does (and the confirm key, for controller players).
-    if (view?.kind === 'main') return;
+    // Starting or restarting a run takes its button (or the confirm key, for
+    // controller players): the main menu fills the screen, and a player still
+    // firing as they die would skip the death screen.
+    if (view?.kind === 'main' || view?.kind === 'dead') return;
     store.onScreenClick?.();
   };
 

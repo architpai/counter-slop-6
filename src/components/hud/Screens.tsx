@@ -552,8 +552,13 @@ function DeadScreen({ model, onAction }: { model: DeadModel; onAction: Act }) {
       <Title text="ELIMINATED" />
       <p className="screen-stats">you survived <b>{waves}</b> {waves === 1 ? 'wave' : 'waves'} · <b>{count(model.kills)}</b> kills · score <b>{count(model.score)}</b> · {model.newBest ? <b>NEW BEST</b> : `best ${count(model.best)}`}</p>
       <StartWave model={model} onAction={onAction} />
-      <MainMenu onAction={onAction} />
-      <Prompt confirmKey={model.confirmKey} end={`TO RESTART AT WAVE ${count(model.startWave)}`} start="CLICK" />
+      {/* A click on the background no longer restarts: a player still firing as they die would skip this screen. */}
+      <div className="screen-actions" data-ui-block="">
+        <Button act="start" text="RESTART" primary sub={`at wave ${count(model.startWave)}`} onAction={onAction} />
+        <Button act="mainMenu" text="MAIN MENU" onAction={onAction} />
+      </div>
+      {model.confirmKey === 'Tap' ? null
+        : <p className="screen-prompt">or press <span data-control="confirm">{model.confirmKey}</span> TO RESTART AT WAVE {count(model.startWave)}</p>}
     </>
   );
 }
