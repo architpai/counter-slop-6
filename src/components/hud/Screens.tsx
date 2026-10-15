@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { ControlEditor } from './ControlEditor';
 import { KEYBOARD_ROWS, PAD_ROWS } from '@/engine/hud/labels';
 import { ONLINE_MODES, TEAM_NAMES, isTeam, isTeamMode } from '@/engine/game/team-rules';
@@ -38,6 +38,10 @@ type SettingsModel = LookModel;
 type MapsModel = Pick<MainModel, 'maps' | 'mapKey'>;
 
 const BOLD = /<(b|strong)>([\s\S]*?)<\/\1>/gi;
+
+/** A slider's filled share as `--fill`, which the poster track paints in yellow. */
+const fill = (value: number, min: number, max: number): CSSProperties =>
+  ({ '--fill': `${Math.min(100, Math.max(0, (value - min) / (max - min) * 100))}%` }) as CSSProperties;
 
 /**
  * The one bold-markup renderer: control rows and engine tips are plain text
@@ -166,7 +170,7 @@ function Sensitivity({ act, label, value, onAction }: {
 }) {
   const [readout, setReadout] = useState(value);
   return <label className="settings-row">{label}<input type="range" data-act={act} min={25} max={250} step={5}
-    defaultValue={value} onChange={event => { setReadout(Number(event.target.value)); onAction(act, event.target.value, event.nativeEvent); }} />
+    defaultValue={value} style={fill(readout, 25, 250)} onChange={event => { setReadout(Number(event.target.value)); onAction(act, event.target.value, event.nativeEvent); }} />
     <output>{readout}%</output></label>;
 }
 
@@ -213,6 +217,7 @@ function Graphics({ model, onAction }: { model: GfxModel; onAction: Act }) {
         <div className="graphics-grid">
           <label className="graphics-scale">Render scale
             <input type="range" data-act="gfx" min={50} max={100} step={5} value={Math.round(values.renderScale * 100)}
+              style={fill(values.renderScale * 100, 50, 100)}
               onChange={event => set('renderScale', event.target.value, event.nativeEvent)} />
             <output>{Math.round(values.renderScale * 100)}%</output>
           </label>
@@ -259,6 +264,7 @@ function Settings({ model, onAction }: { model: SettingsModel; onAction: Act }) 
     <div className="settings" data-ui-block="" data-ui-input-block="">
       <div className="settings-general">
         <div className="sensitivity-settings">
+          <h3>Sensitivity</h3>
           {model.touch ? <Sensitivity act="touchSens" label="Touch look / Holo sensitivity" value={model.touchSens ?? 100} key={`touch-${model.touchSens}`} onAction={onAction} />
             : <Sensitivity act="sens" label="Look / Holo sensitivity" value={model.sens} key={`sens-${model.sens}`} onAction={onAction} />}
           <Sensitivity act="acogSens" label="ACOG sensitivity" value={model.acogSens} key={`acog-${model.acogSens}`} onAction={onAction} />
@@ -300,13 +306,14 @@ function Maps({ model, onAction, disabled = false, previews = false }: { model: 
   return (
     <div className={`map-picker${previews ? ' map-previews' : ''}`} data-ui-block="">
       <h3>Choose your map</h3>
-      {choices.map(map => {
+      {choices.map((map, index) => {
         const selected = map.key === model.mapKey;
         return (
           <button type="button" className={`screen-button map-choice${selected ? ' selected' : ''}`} data-act="pickMap"
             aria-pressed={selected} disabled={disabled} key={map.key}
             onClick={event => onAction('pickMap', map.key, event.nativeEvent)}>
-            {previews ? <img src={`/maps/${map.key}.webp`} alt="" width={480} height={270} /> : null}
+            {previews ? <><img src={`/maps/${map.key}.webp`} alt="" width={1280} height={720} />
+              <span className="map-number" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span></> : null}
             <span className="map-name">{map.name}</span><small>{map.blurb}</small>
           </button>
         );
@@ -377,30 +384,37 @@ function MainScreen({ model, pad, onAction }: { model: MainModel; pad: boolean; 
   // Controller-only players can read their controls before the confirm button
   // starts play; explicit mouse/keyboard navigation keeps the chosen page.
   const currentPage = page ?? (pad ? 'controls' : 'play');
+  const best = count(model.best);
+  // The poster: brand and launch buttons on the left on every page; the page
+  // itself (the map panels, or a sheet of controls/settings) on the right.
   return (
-    <div className="main-menu">
-      <p className="menu-eyebrow">SURVIVE. RELOAD. REPEAT.</p>
-      <Title text="COUNTER SLOP 6" sub="a tactical survival shooter, allegedly" />
-      <nav className="menu-nav" aria-label="Main menu pages" data-ui-block="">
-        {(['play', 'weapons', 'controls', 'settings'] as const).map(item => (
-          <button type="button" key={item} aria-pressed={currentPage === item} aria-controls="main-menu-content" onClick={() => setPage(item)}>{item}</button>
-        ))}
-      </nav>
-      <div id="main-menu-content" className="menu-page">
-        {currentPage === 'play' ? <>
-          <Maps model={model} onAction={onAction} previews />
+    <div className="main-menu" data-page={currentPage}>
+      <div className="main-side">
+        <nav className="menu-nav" aria-label="Main menu pages" data-ui-block="">
+          {(['play', 'weapons', 'controls', 'settings'] as const).map(item => (
+            <button type="button" key={item} aria-pressed={currentPage === item} aria-controls="main-menu-content" onClick={() => setPage(item)}>{item}</button>
+          ))}
+        </nav>
+        <h1 className="screen-title main-title" id={SCREEN_TITLE_ID}><span>COUNTER</span> <span>SLOP <span className="six">6</span></span></h1>
+        <h2 className="screen-subtitle">a tactical survival shooter, allegedly</h2>
+        <div className="main-launch">
           <div className="screen-actions launch-actions" data-ui-block="">
             <Button act="start" text="START SOLO" primary sub={count(model.startWave) > 1 ? `from wave ${count(model.startWave)}` : 'survive the waves'} onAction={onAction} />
             <Button act="online" text="PLAY ONLINE" sub="deathmatch · team modes · co-op waves" onAction={onAction} />
             <Button act="training" text="TRAINING GROUND" sub="inspect models · passive targets" onAction={onAction} />
           </div>
           <StartWave model={model} onAction={onAction} />
-          <p className="screen-footer">{count(model.best) > 0 ? `Personal best · ${count(model.best)}` : 'One more wave. One more try.'}</p>
-        </> : currentPage === 'controls' ? <>
-          <Controls pad={pad} touch={model.touch} />
-          {pad ? <p className="screen-footer">Press {model.confirmKey} to start solo</p> : null}
-        </> : currentPage === 'weapons' ? <Weapons model={model} onAction={onAction} />
-          : <Settings model={model} onAction={onAction} />}
+          {best > 0 ? <p className="screen-footer best-tag"><small>PERSONAL BEST</small> <b>{best}</b></p>
+            : <p className="screen-footer">One more wave. One more try.</p>}
+        </div>
+      </div>
+      <div id="main-menu-content" className={`menu-page${currentPage === 'play' ? '' : ' menu-sheet'}`}>
+        {currentPage === 'play' ? <Maps model={model} onAction={onAction} previews />
+          : currentPage === 'controls' ? <>
+            <Controls pad={pad} touch={model.touch} />
+            {pad ? <p className="screen-footer">Press {model.confirmKey} to start solo</p> : null}
+          </> : currentPage === 'weapons' ? <Weapons model={model} onAction={onAction} />
+            : <Settings model={model} onAction={onAction} />}
       </div>
     </div>
   );

@@ -508,7 +508,7 @@ export const ScreenOverlay = memo(function ScreenOverlay({ store }: { store: Hud
   }, [view, device, mobile.active]);
 
   return (
-    <div className="screen-overlay" data-hud="screen" hidden={view === null} onClick={click} onKeyDown={key} onKeyUp={key}>
+    <div className="screen-overlay" data-hud="screen" data-screen-kind={kind ?? undefined} hidden={view === null} onClick={click} onKeyDown={key} onKeyUp={key}>
       <section ref={panelRef} className="screen-panel" data-hud="panel" data-screen-kind={kind ?? undefined} role="dialog" aria-modal="true" aria-label="Game menu" aria-labelledby={SCREEN_TITLE_ID} tabIndex={-1}>
         <div className="screen-content"><QualityPrompt store={store} inPanel={true} />{view === null ? null : <Screen view={view} pad={device} onAction={(act, value, ev) => store.onUiAction?.(act, value, ev)} />}<InstallPrompt visible={view?.kind === 'main' && mobile.active} /></div>
       </section>

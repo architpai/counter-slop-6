@@ -84,6 +84,8 @@
 
 .touch-mode .screen-overlay { padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); touch-action: auto; }
 .touch-mode .screen-panel { width: min(940px, 100%); max-width: 100%; max-height: 100%; overflow: auto; overscroll-behavior: contain; padding: 20px; cursor: auto; }
+/* The main menu is the full-screen poster; the panel only scrolls it. */
+.touch-mode .screen-panel[data-screen-kind="main"] { width: 100%; padding: 4px 4px 14px; }
 .touch-mode .screen-panel :is(button, input:not([type="checkbox"]):not([type="radio"]), select, summary), .touch-mode .settings-row, .touch-mode .visibility-options label { min-height: 44px; }
 .touch-mode .screen-panel :is(button, select) { min-width: 44px; }
 /* In play the top band between the HP card and the wave count is free; the control columns are not. */
