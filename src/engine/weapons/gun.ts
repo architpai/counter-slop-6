@@ -88,6 +88,14 @@ export abstract class ViewModel<M extends WeaponModel = WeaponModel> {
   _swayPos: Vector3;
   _swayRot: Vector3;
   aimAmt: number;
+  /**
+   * Where the scoped overlay's near edge sits off the eye line, in the overlay's units (1000 across), and its
+   * scale: the hood lags a turn, steps with the bob, kicks with each shot and rises into place at the end of the
+   * aim-in. The reticle is at infinity and does not move (HUD `setScopeDrift`).
+   */
+  sightX = 0;
+  sightY = 0;
+  sightScale = 1;
   _sprintAmt: number;
   /** Raise progress 0..1; reaches 1 after `_drawTime` seconds. */
   _equipT: number;
@@ -285,11 +293,20 @@ export abstract class ViewModel<M extends WeaponModel = WeaponModel> {
       this.root.scale.setScalar(depth);
     }
     this.root.visible = this._equipped && !(this.scope && this.aimAmt >= 0.8);
+    // Turn rate, not the frame's turn, so the drift is the same at any frame rate.
+    const perSecond = 1 / Math.max(dt, 1 / 240), rise = 1 - clamp((this.aimAmt - 0.8) / 0.2, 0, 1);
+    const dx = clamp(st.lookDelta.x * perSecond, -6, 6) * 9 - st.strafe * 6 + Math.sin(st.bobPhase) * st.bobAmt * 12 + p.x * 900;
+    const dy = clamp(st.lookDelta.y * perSecond, -6, 6) * 9 + Math.abs(Math.cos(st.bobPhase)) * st.bobAmt * 9 - p.y * 1500
+      + st.landDip * 50 + rise * 90;
+    this.sightX = clamp(damp(this.sightX, dx, 12, dt), -70, 70);
+    this.sightY = clamp(damp(this.sightY, dy, 12, dt), -70, 110);
+    this.sightScale = 1 + rise * 0.1 + clamp(p.z, 0, 0.2) * 0.3;
   }
 
   _resetPose() {
     // `_equipT` belongs to `equip()`: a reset re-equips through the player and raises from there.
-    this.aimAmt = this._sprintAmt = 0;
+    this.aimAmt = this._sprintAmt = this.sightX = this.sightY = 0;
+    this.sightScale = 1;
     this._swayPos.set(0, 0, 0);
     this._swayRot.set(0, 0, 0);
     for (const spring of [this._posSpring, this._rotSpring]) {

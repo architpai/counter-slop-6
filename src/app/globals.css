@@ -62,7 +62,12 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .scope-dot { position: absolute; left: 50%; top: 50%; width: 5px; height: 5px; transform: translate(-50%, -50%); border-radius: 50%; background: var(--hot); }
 .scope.acog, .scope.holo { background: none; }
 .acog-optic, .holo-optic { position: absolute; left: 50%; top: 50%; width: 94vmin; height: 94vmin; transform: translate(-50%, -50%); overflow: visible; }
-.holo-optic { width: 86vmin; height: 86vmin; }
+.holo-optic { width: 86vmin; height: 86vmin; transform: translate(-50%, -50%) scale(var(--scope-scale, 1)); }
+/* Parallax through the hood: its near edge moves the full drift, the far window 0.62 of it, the reticle (at infinity) none. */
+.holo-near { transform: translate(calc(var(--scope-x, 0) * 1px), calc(var(--scope-y, 0) * 1px)); }
+.holo-far { transform: translate(calc(var(--scope-x, 0) * -0.38px), calc(var(--scope-y, 0) * -0.38px)); }
+.holo-still { transform: translate(calc(var(--scope-x, 0) * -0.62px), calc(var(--scope-y, 0) * -0.62px)); }
+.holo-bloom { opacity: .22; }
 .acog-reticle { fill: none; stroke: #101313; stroke-width: 2.5; }
 .acog-reticle .acog-chevron { fill: currentColor; stroke: none; }
 .acog-reticle .acog-illuminated { stroke: currentColor; stroke-width: 3; }

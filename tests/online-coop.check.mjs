@@ -69,7 +69,7 @@ try {
   }
   assert.equal((await read(host)).mirror, false);
   assert.equal((await read(client)).mirror, true);
-  assert.equal((await read(host)).accepting, false);
+  assert.equal((await read(host)).accepting, true, 'a co-op lobby stays open in a wave');
   for (const p of [host, client]) await armour(p);
   const hostId = (await read(host)).id, clientId = (await read(client)).id;
 
@@ -161,7 +161,7 @@ try {
   await client.evaluate(() => { const g = window.__game; g.soloEnemy = g.enemies.list[0]; g.soloFrom = g.soloEnemy.body.pos.clone(); });
   await wait(client, () => window.__game.soloEnemy.body.pos.distanceTo(window.__game.soloFrom) > 0.5, null, 60000);
   assert.deepEqual(errors, []);
-  console.log('PASS: real WebRTC co-op lobby, start, mirrored enemies, client hit and credit, team score, host-only enemy damage, refused and accepted late join, down and return, scaled wave, run end, and solo after co-op. Screenshots: /tmp/shooter-coop-check');
+  console.log('PASS: real WebRTC co-op lobby, start, mirrored enemies, client hit and credit, team score, host-only enemy damage, a join in a wave that waits for the wave clear, down and return, scaled wave, run end, and solo after co-op. Screenshots: /tmp/shooter-coop-check');
 } catch (error) {
   console.error('Browser errors:', errors);
   console.error('Peer states:', await Promise.all(pages.map(page => read(page).catch(() => null))));

@@ -21,6 +21,10 @@ export interface Weapon {
   /** Walk-speed multiplier while aiming; the knife never aims. */
   readonly adsSpeed: number;
   aimAmt: number;
+  /** The scoped overlay's drift and scale (gun.ts `ViewModel`). */
+  readonly sightX: number;
+  readonly sightY: number;
+  readonly sightScale: number;
   mag: number;
   reserve: number;
   magSize: number;

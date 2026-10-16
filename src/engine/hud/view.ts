@@ -51,6 +51,8 @@ export interface HudView {
   setCrosshairMode(mode: '' | 'melee'): void;
   setAds(on: boolean): void;
   setScope(on: boolean, kind?: ScopeKind): void;
+  /** The scoped overlay's drift off the eye line (its units, 1000 across) and scale; the reticle stays put. */
+  setScopeDrift(x: number, y: number, scale: number): void;
   setGrappleTarget(state: 0 | 1 | 2): void;
   setFocusMeter(show: boolean, frac: number, ready: boolean, label: string): void;
   setFocusMark(x: number | null, y?: number): void;

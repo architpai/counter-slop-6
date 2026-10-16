@@ -257,8 +257,9 @@ export class Player implements Target {
     this.firing = this.alive && !melee && !this.weapon.reloading && input.down('fire');
     hud.setCrosshairMode(melee ? 'melee' : '');
     hud.setAds(!melee && this.weapon.aimAmt > 0.55);
-    hud.setScope(!melee && this.weapon.scope && this.weapon.aimAmt >= 0.8,
-      isGun(this.weapon) ? this.weapon.scopeKind : undefined);
+    const scoped = !melee && this.weapon.scope && this.weapon.aimAmt >= 0.8;
+    hud.setScope(scoped, isGun(this.weapon) ? this.weapon.scopeKind : undefined);
+    if (scoped) hud.setScopeDrift(this.weapon.sightX, this.weapon.sightY, this.weapon.sightScale);
   }
 
   /**
@@ -271,7 +272,9 @@ export class Player implements Target {
     const st = this.weaponState();
     this.weapon.animate(view ? { ...st, aim: view.aim, lookDelta: STILL_LOOK } : st, dt);
     hud.setAds(view !== null && this.weapon.aimAmt > 0.55);
-    hud.setScope(view !== null && this.weapon.scope && this.weapon.aimAmt >= 0.8, isGun(this.weapon) ? this.weapon.scopeKind : undefined);
+    const scoped = view !== null && this.weapon.scope && this.weapon.aimAmt >= 0.8;
+    hud.setScope(scoped, isGun(this.weapon) ? this.weapon.scopeKind : undefined);
+    if (scoped) hud.setScopeDrift(this.weapon.sightX, this.weapon.sightY, this.weapon.sightScale);
   }
 
   weaponState(): WeaponState {

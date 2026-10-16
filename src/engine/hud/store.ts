@@ -359,6 +359,12 @@ export class HudStore implements HudView {
     this.#emit('scope');
   }
 
+  setScopeDrift(x: number, y: number, scale: number): void {
+    this.#setVar('--scope-x', number(x).toFixed(1));
+    this.#setVar('--scope-y', number(y).toFixed(1));
+    this.#setVar('--scope-scale', number(scale, 1).toFixed(3));
+  }
+
   setGrappleTarget(state: 0 | 1 | 2): void {
     const next = state === 1 || state === 2 ? state : 0;
     if (next === this.grapple) return;
