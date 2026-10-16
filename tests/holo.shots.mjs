@@ -34,7 +34,7 @@ try {
     }, [x, y]);
     await page.waitForTimeout(300);
     const centre = await page.evaluate(() => {
-      const ring = document.querySelector('.holo-reticle circle[stroke-width="2.2"]').getBoundingClientRect();
+      const ring = document.querySelector('.holo-ring').getBoundingClientRect();
       return [ring.x + ring.width / 2, ring.y + ring.height / 2];
     });
     assert.ok(Math.abs(centre[0] - 720) < 1.5 && Math.abs(centre[1] - 450) < 1.5, `${name}: the reticle stays on the aim point (${centre})`);
