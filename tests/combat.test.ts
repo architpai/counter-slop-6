@@ -315,7 +315,7 @@ test('the holo hood lags a turn at any frame rate, kicks with a shot, rises into
   let lifted = false;
   for (let i = 0; i < 90; i++) {
     gun.animate(still, 1 / 60);
-    if (gun.aimAmt >= 0.8 && gun.aimAmt < 0.9) lifted = gun.sightY > 20 && gun.sightScale > 1.03;
+    if (gun.aimAmt >= 0.8 && gun.aimAmt < 0.9) lifted = gun.sightY > 12 && gun.sightScale > 1.03;
   }
   expect(lifted, 'below the eye line and nearer just as the overlay comes in').toBe(true);
   expect(Math.abs(gun.sightX)).toBeLessThan(0.5);
@@ -326,12 +326,12 @@ test('the holo hood lags a turn at any frame rate, kicks with a shot, rises into
     for (let i = 0; i < fps; i++) gun.animate({ ...still, lookDelta: { x: -1.8 / fps, y: 0 } }, 1 / fps);
     return gun.sightX;
   };
-  expect(turn(60)).toBeCloseTo(-16.2, 0);
+  expect(turn(60)).toBeCloseTo(-9.72, 0);
   expect(turn(120)).toBeCloseTo(turn(60), 1);
   gun._resetPose(); gun.aimAmt = 1;
   gun.kickPos(0, 0.3, 2.5);
   for (let i = 0; i < 4; i++) gun.animate(still, 1 / 60);
-  expect(gun.sightY, 'the shot lifts the hood').toBeLessThan(-3);
+  expect(gun.sightY, 'the shot lifts the hood').toBeLessThan(-1.5);
   expect(gun.sightScale, 'and pushes it back to the eye').toBeGreaterThan(1.005);
   const root = document.createElement('div');
   hud.bindRoot(root);

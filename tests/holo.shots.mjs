@@ -26,7 +26,7 @@ try {
   await page.waitForTimeout(600);
   await page.screenshot({ path: `${out}/aimed.png` });
   // The hood off the eye line: the near edge and the far window part, the reticle stays on the screen centre.
-  for (const [name, x, y] of [['drift-right', 60, 35], ['drift-left', -60, -40]]) {
+  for (const [name, x, y] of [['drift-right', 42, 30], ['drift-left', -42, -30]]) {
     await page.evaluate(([x, y]) => {
       const hud = window.__game.hud;
       hud.__drift ??= hud.setScopeDrift.bind(hud);

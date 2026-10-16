@@ -295,11 +295,12 @@ export abstract class ViewModel<M extends WeaponModel = WeaponModel> {
     this.root.visible = this._equipped && !(this.scope && this.aimAmt >= 0.8);
     // Turn rate, not the frame's turn, so the drift is the same at any frame rate.
     const perSecond = 1 / Math.max(dt, 1 / 240), rise = 1 - clamp((this.aimAmt - 0.8) / 0.2, 0, 1);
-    const dx = clamp(st.lookDelta.x * perSecond, -6, 6) * 9 - st.strafe * 6 + Math.sin(st.bobPhase) * st.bobAmt * 12 + p.x * 900;
-    const dy = clamp(st.lookDelta.y * perSecond, -6, 6) * 9 + Math.abs(Math.cos(st.bobPhase)) * st.bobAmt * 9 - p.y * 1500
-      + st.landDip * 50 + rise * 90;
-    this.sightX = clamp(damp(this.sightX, dx, 12, dt), -70, 70);
-    this.sightY = clamp(damp(this.sightY, dy, 12, dt), -70, 110);
+    // Sized to the holo's window (290 × 183): the reticle stays clear of its edges at the largest drift.
+    const dx = clamp(st.lookDelta.x * perSecond, -6, 6) * 5.4 - st.strafe * 4 + Math.sin(st.bobPhase) * st.bobAmt * 7 + p.x * 540;
+    const dy = clamp(st.lookDelta.y * perSecond, -6, 6) * 5.4 + Math.abs(Math.cos(st.bobPhase)) * st.bobAmt * 5 - p.y * 900
+      + st.landDip * 30 + rise * 60;
+    this.sightX = clamp(damp(this.sightX, dx, 12, dt), -42, 42);
+    this.sightY = clamp(damp(this.sightY, dy, 12, dt), -30, 70);
     this.sightScale = 1 + rise * 0.1 + clamp(p.z, 0, 0.2) * 0.3;
   }
 
