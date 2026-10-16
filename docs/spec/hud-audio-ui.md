@@ -128,6 +128,8 @@ The replacement look removes decorative panel and text tilt. Keep rotations that
   - A ring 60.5 vh in diameter centred on screen, 3.5 px border in the tone, with an inner 7 px band at 12 % tone alpha.
   - A horizontal dashed line 60 vh long and 2.5 px thick through centre; dashes 14 px on, 3 px off. A vertical dashed line likewise.
   - A 5 px red dot at the exact centre.
+- **Holographic sight overlay** (R4-C and MP5 with the holo, shown at aim amount ≥ 0.8): the holo of Rainbow Six Siege as the eye sees it in game, in the ACOG overlay's style (metal gradients, dark outlines), 86 vmin square, its units 1000 across. A tall hood (745 wide at the bottom, its top corners rounded) with a tan face (holo body colour), a shadowed band under the top edge, light worn edges along its outline, a lit warm right flank, and a dark lip down the lower left. A wide window high in it: a thick dark rim (near opening 499 × 377, rounded) round the glass. Under the window, a black rear panel (holo base colour) runs off the screen's bottom, with two cross-head screws at its top. Inside the rim, its inner walls (dark at the top, lit at the bottom) go down to the far window 412 × 293, its top a little arched, with clear glass, a faint blue-green edge and a faint glare. The reticle is a small ring (radius 19) with four ticks across it and a centre dot, in the reticle colour with a soft bloom under the crisp lines, on the screen centre, in the window's middle.
+  - **Eye box and parallax.** The player module sends the gun's sight drift each frame while the holo shows (`setScopeDrift`; CSS variables `--scope-x`, `--scope-y`, `--scope-scale`). The near opening moves by the full drift, the far window by 0.62 of it, and the reticle not at all: it is at infinity, so it stays on the aim point while the hood's depth shows on the side the eye is away from. The drift (gun.ts `sightX`, `sightY`, in overlay units, x ±42, y −30 to 70) is the turn rate × 5.4 (rad/s, ±6), the strafe × −4, the step bob (7 across, 5 up at full bob), the recoil spring (x × 540, y × −900), the landing dip × 30, and a rise of 60 at 80 % aim that goes to 0 at full aim, damped at rate 12. It is sized so the reticle stays inside the far window at the largest drift. The scale is 1 + 0.1 × that rise + 0.3 × the spring's push back (up to 0.2).
 
 ### 3.3 Grapple reticle and grapple breath bar
 
@@ -200,6 +202,8 @@ Breath rules (player module, listed so the bar can be reproduced): breath starts
 **Straggler arrows.** On a boss wave (solo and co-op), once no boss is alive or queued and fewer than 10 enemies are left (alive + queued; a co-op client uses the host's count), every live enemy gets a red 16 × 18 px arrow. On any other wave this starts at 5 or fewer left, and the centre message says "N LEFT · go get them · marked on screen" once that wave. An enemy on screen gets the arrow above its torso, pointing down at it. An enemy off screen gets it on the screen edge (28 px in), pointing toward the enemy. An enemy behind the camera gets it on the left or right edge, whichever side is nearer. Set every frame, and an empty set hides them; so they go on wave clear, death, pause and every menu. Hidden in "no gameplay".
 
 **Squad marks.** Each mark is a 12 px yellow diamond with a "NAME · 42m" label under it. It sits on the marked point, or on the screen edge toward it (the same placement as the straggler arrows). A short rising tone plays when a mark is placed. Set every frame; cleared on leaving the match. Hidden in "no gameplay".
+
+**Spectate bar.** While a down or dead online player watches a teammate, a dark bar at 17 % from the bottom, centred, with a 4 px red edge on the left, shows "SPECTATING" (small caps), the teammate's name, and under it the return line ("back at the wave clear", "you join at the wave clear", "back in a moment", or "next respawn wave"). It changes in place when the player switches teammate; the centre banner does not come back. Hidden when no teammate is watched, on respawn, at match end, and in "no gameplay".
 
 ### 3.11 Health
 
@@ -516,6 +520,8 @@ Raw messages the network layer can produce (for the mapping above): "networking 
 | Solo wave cleared | WAVE n CLEARED | catch your breath · +<200 × n> | 2.5 |
 | Online match starts | FREE FOR ALL | "first to 20 · everyone is fair game", or "you joined a match in progress" for a late joiner | 3 |
 | Online respawn countdown (3.5 s): at the moment of death and every time the remaining time crosses a whole second | "4" (at death, since ceil(3.5) = 4), then "3", "2", "1" after 0.5 s, 1.5 s, 2.5 s, and "GO" at 3.5 s when the player respawns | "respawning in" (empty for GO) | 1.1 |
+| Co-op down in a wave (one time, when the player goes down) | DOWN | "back at the wave clear" ("no one is up · back at the wave clear" if no teammate is alive) | 2.2 |
+| Co-op join during a wave (one time) | WAVE IN PROGRESS | "you join at the wave clear" | 2.2 |
 | Player fell out of the level (solo or online): teleported to start, −20 HP | OUT OF BOUNDS | respawned at spawn | 1.8 |
 
 Wave modifier names (top-right line and wave sub-line): "" (none), "CAFFEINATED · they move fast", "JUICED · they hit harder", "SWARM · more of them, thinner". Waves 1–3 and boss waves: none; waves 4–5 pick from the first three; from wave 6 from all four.

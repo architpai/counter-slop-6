@@ -1,10 +1,11 @@
 import * as THREE from 'three';
-import { angleLerp, choose, shuffle, round1, round2, clamp } from '../util';
+import { angleLerp, choose, shuffle, round1, round2, clamp, lerp } from '../util';
 import { RemotePlayer, encodeState } from '../players';
 import { validKey } from '../level/index';
-import { TONE } from '../render/index';
+import { TONE, VIEW_MODEL_FOV } from '../render/index';
 import { GUN_STATS } from '../weapons/stats';
 import { MELEE_PVP_DAMAGE } from '../weapons/melee';
+import type { Gun } from '../weapons/index';
 import { GRENADE_PVP_MAX, MAX_THROW_SPEED } from '../player/grenades';
 import type { BoardRow, OnlineInfo } from '../hud/screens';
 import { advanceTeamMatch, assignTeams, createTeamMatch, dropFlag, interactFlag, isOnlineMode, isTeam, isTeamMode, markDead, ONLINE_MODES, scoreTeam, TEAM_NAMES, TEAM_RULES, validTeamMatch, validTeams } from './team-rules';
@@ -95,6 +96,8 @@ export function createFFA(app: App): FfaApi {
   let teamWorld: ReturnType<typeof createTeamWorld> | null = null;
   let lastClock = 0, syncT = 0;
   let seenDead = false, deathMessage = '';
+  /** A co-op join in a wave: down from the start, in at the wave clear. */
+  let joinWait = false;
   const ready = new Set<string>();
   const pendingHeadshots = new Map<number, { target: string; source: string; until: number }>();
 
@@ -247,7 +250,8 @@ export function createFFA(app: App): FfaApi {
     net.send('end', winner); endMatch(winner);
   }
   function endMatch(winner: { id: string; name: string }): void {
-    gs.over = winner; gs.overT = 0; gs.state = 'over';
+    gs.over = winner; gs.overT = 0; gs.state = 'over'; hud.setSpectate('');
+    if (ctx.player) ctx.player.watched = null;
     teamWorld?.dispose(); teamWorld = null;
     app.endFocus(); ctx.input.exitLock(); showBoard(false);
     hud.setGameplayVisible(false); app.showScreen('over');
@@ -323,6 +327,7 @@ export function createFFA(app: App): FfaApi {
     if (!inMatch()) return;
     if (!scores.has(pid)) scores.set(pid, { id: pid, name, kills: 0, deaths: 0 });
     const run = coop() ? app.coop.state : null;
+    if (run) app.coop.admit(pid);
     net.sendTo(pid, 'start', { late: true, spawn: run ? lobby.players.size - 1 : farthestIndex(), map: lobby.map ?? app.settings.mapKey,
       mode: mode(), teams: lobby.teams ?? {}, ...(gs.teamMatch ? { teamState: gs.teamMatch } : {}), ...(run ? { coop: run } : {}),
       broken: ctx.level.breakables.filter(b => !b.alive).map(b => b.id) });
@@ -343,6 +348,8 @@ export function createFFA(app: App): FfaApi {
     pendingHeadshots.clear(); ready.clear(); shotQueue = []; lastDeath.clear();
     teamWorld?.dispose(); teamWorld = null;
     marks.clear(); hud.setMarks([]);
+    watching = null; hud.setSpectate('');
+    if (ctx.player) ctx.player.watched = null;
   }
   function leave(reason = ''): void {
     dispose();
@@ -416,7 +423,7 @@ export function createFFA(app: App): FfaApi {
     dispose();
     gs.mode = 'ffa'; app.loadLevel(!run, lobby.map ?? app.settings.mapKey); app.resetRun();
     gs.teamMatch = teamState; gs.matchT = teamState?.elapsed ?? 0;
-    lastClock = now(); syncT = 0; psT = 0; seenDead = false; deathMessage = '';
+    lastClock = now(); syncT = 0; psT = 0; seenDead = false; deathMessage = ''; joinWait = false;
     applyTeams();
     if (net.id) ready.add(net.id);
     if (teamState) teamWorld = createTeamWorld(ctx);
@@ -434,6 +441,11 @@ export function createFFA(app: App): FfaApi {
     if (teamState) sendPlayerState();
     // After the mode message: the first wave's own message replaces it on the host.
     if (run) app.coop.begin(run, index ?? 0);
+    if (run && net.id !== null && app.coop.isDown(net.id)) {
+      // The host put this join on the down list: it watches the wave and comes in at the clear, as a player who is down does.
+      player.alive = false; player.aiming = player.firing = false;
+      gs.state = 'dying'; gs.deathT = 0; gs.respawnT = COOP.RESPAWN; joinWait = true;
+    }
     hud.tip(ctx.input.usingTouch ? 'Open Menu for the scoreboard. The match keeps running.' : `hold ${hud.key('score')} for the scoreboard`, 5);
     window.clearTimeout(timer);
     timer = window.setTimeout(() => {
@@ -561,8 +573,11 @@ export function createFFA(app: App): FfaApi {
     if (gs.deathT <= dt && mates.length && !input.usingTouch) {
       hud.tip(`${hud.key('fire')} / ${hud.key('aim')} switch player · ${hud.key('jump')} first / third person`, 4);
     }
-    const cam = ctx.camera;
-    if (mate && firstPerson) {
+    const cam = ctx.camera, p = ctx.player;
+    // Through their eyes, this player's own gun stands in for theirs: the slot they hold, and their aim.
+    const eyes = !!mate && firstPerson;
+    if (p) p.watched = eyes && mate && !mate.melee ? { slot: mate.slot, aim: mate.aiming } : null;
+    if (mate && eyes) {
       cam.position.copy(mate.eye);
       cam.lookAt(d1.copy(mate.eye).add(mate.forward));
     } else {
@@ -574,8 +589,10 @@ export function createFFA(app: App): FfaApi {
       cam.position.copy(target).addScaledVector(d1, wall ? Math.max(0.1, wall.dist - 0.2) : 4.72);
       cam.lookAt(target);
     }
-    cam.fov = 82; cam.updateProjectionMatrix(); cam.updateMatrixWorld();
-    ctx.renderer.rig.visible = false;
+    const aim = p?.watched ? clamp(p.weapon.aimAmt, 0, 1) : 0;
+    cam.fov = p?.watched ? lerp(82, p.weapon.adsFov, aim) : 82; cam.updateProjectionMatrix(); cam.updateMatrixWorld();
+    ctx.renderer.rig.visible = !!p?.watched;
+    ctx.renderer.setViewFov?.(lerp(VIEW_MODEL_FOV, cam.fov, aim));
     return mate;
   }
   /** The figure a first-person spectator looks out of: the renderer leaves it out, as it fills the view. */
@@ -590,9 +607,11 @@ export function createFFA(app: App): FfaApi {
       if (!waiting && (gs.respawnT -= dt) <= 0) { respawn(false); return; }
       const mate = spectate([...ctx.remotes.values()].filter(r => r.alive),
         d2.copy(ctx.level.playerStart).setY(ctx.level.playerStart.y + 1.5), dt);
-      const main = waiting ? 'DOWN' : String(Math.max(1, Math.ceil(gs.respawnT)));
-      const sub = `${mate ? `spectating ${mate.name}` : 'no one is up'} · ${waiting ? 'back at the wave clear' : 'back in a moment'}`;
-      if (deathMessage !== main + sub) { hud.message(main, sub, 1.1); deathMessage = main + sub; }
+      const status = !waiting ? 'back in a moment' : joinWait ? 'you join at the wave clear' : 'back at the wave clear';
+      const main = !waiting ? String(Math.max(1, Math.ceil(gs.respawnT))) : joinWait ? 'WAVE IN PROGRESS' : 'DOWN';
+      // The banner once (and each count); who is watched stays in the spectate bar, so a switch brings no banner back.
+      if (deathMessage !== main) { hud.message(main, mate ? status : `no one is up · ${status}`, waiting ? 2.2 : 1.1); deathMessage = main; }
+      hud.setSpectate(mate?.name ?? '', status);
       return;
     }
     if (gs.teamMatch) {
@@ -603,8 +622,9 @@ export function createFFA(app: App): FfaApi {
       const mate = isTeam(team) ? spectate([...ctx.remotes.values()].filter(r => r.alive && teamOf(r.id) === team),
         vec(teamLayout(ctx.level).bases[team]).add(new THREE.Vector3(0, 1.5, 0)), dt) : undefined;
       const main = gs.respawnT > 0 ? String(Math.ceil(gs.respawnT)) : 'WAIT';
-      const sub = `${mate ? `spectating ${mate.name}` : 'team wiped'} · next respawn wave`;
+      const sub = mate ? 'next respawn wave' : 'team wiped · next respawn wave';
       if (deathMessage !== main + sub) { hud.message(main, sub, 1.1); deathMessage = main + sub; }
+      hud.setSpectate(mate?.name ?? '', 'next respawn wave');
       return;
     }
     const before = Math.ceil(gs.respawnT);
@@ -618,7 +638,7 @@ export function createFFA(app: App): FfaApi {
     if (p === null) return;
     p.reset(gs.teamMatch ? teamSpawn(net.id) : coop() ? app.coop.slot() : arenaSpawn()); p.name = app.settings.name; p.lastHitBy = p.lastHit = null;
     faceCenter();
-    gs.state = 'play'; p.shieldT = protect ? 2 : 0; deathMessage = '';
+    gs.state = 'play'; p.shieldT = protect ? 2 : 0; deathMessage = ''; joinWait = false; p.watched = null; hud.setSpectate('');
     if (gs.teamMatch) sendPlayerState();
     if (protect) hud.tip('spawn protection · 2s', 1.6);
     ctx.effects.strokeBurst(p.center, TONE.PRIMARY, 24, 6, { life: 0.5, size: 0.03 });
@@ -988,6 +1008,9 @@ export function createFFA(app: App): FfaApi {
   net.on('shots', (d, from) => {
     if (!roster(from) || !obj(d)) return;
     ctx.remotes.get(from)?.shots(d.k, d.e);
+    // Watched through their eyes: their shot kicks the gun that stands in for theirs.
+    const w = ctx.player?.watched && watching === from ? ctx.player.weapon : null;
+    if (w?.isGun) (w as Gun).echoShot();
   });
   net.on('cut', (d, from) => {
     const p = ctx.player;

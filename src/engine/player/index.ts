@@ -18,6 +18,10 @@ import type { GrenadeState, NadeThrow } from './grenades';
 /** Five gun slots. Melee never changes the selected slot. */
 const SLOT_ACTIONS = ['slot1', 'slot2', 'slot3', 'slot4', 'slot5', 'slot6'] as const;
 const isGun = (w: Weapon): w is Gun => w.isGun;
+const STILL_LOOK = Object.freeze({ x: 0, y: 0 });
+
+/** What a first-person spectator copies of the player it watches: the slot it holds, and whether it aims. */
+export interface WatchedGun { slot: number; aim: boolean }
 
 const direction = new Vector3();
 const point = new Vector3();
@@ -74,6 +78,8 @@ export class Player implements Target {
   wi: number;
   /** Available with every gun, including during a reload or with no ammo. */
   melee: Melee;
+  /** Set while down and watching a teammate through their eyes: this player's own gun stands in for theirs. */
+  watched: WatchedGun | null = null;
 
   constructor(ctx: Ctx) {
     this.ctx = ctx;
@@ -198,9 +204,10 @@ export class Player implements Target {
       this.ctx.world.moveBody(this.body, dt);
       updateGrenades(this, dt, false);
       updateCamera(this, dt);
-      this.weapon.animate(this.weaponState(), dt);
+      this._animateWatched(dt);
       return;
     }
+    this.watched = null;
     this.ctx.renderer.rig.visible = true;
     const { input } = this.ctx;
     const optic = isGun(this.weapon) && this.weapon.scope ? this.weapon.scopeKind : null;
@@ -250,8 +257,24 @@ export class Player implements Target {
     this.firing = this.alive && !melee && !this.weapon.reloading && input.down('fire');
     hud.setCrosshairMode(melee ? 'melee' : '');
     hud.setAds(!melee && this.weapon.aimAmt > 0.55);
-    hud.setScope(!melee && this.weapon.scope && this.weapon.aimAmt >= 0.8,
-      isGun(this.weapon) ? this.weapon.scopeKind : undefined);
+    const scoped = !melee && this.weapon.scope && this.weapon.aimAmt >= 0.8;
+    hud.setScope(scoped, isGun(this.weapon) ? this.weapon.scopeKind : undefined);
+    if (scoped) hud.setScopeDrift(this.weapon.sightX, this.weapon.sightY, this.weapon.sightScale);
+  }
+
+  /**
+   * Down: the gun rests, or, while a spectator looks through a teammate's eyes, it holds and aims
+   * as that teammate does. It never fires; `echoShot` shows their shots on it.
+   */
+  _animateWatched(dt: number): void {
+    const view = this.watched, hud = this.ctx.hud;
+    if (view && view.slot !== this.wi && Number.isInteger(view.slot) && view.slot >= 0 && view.slot < this.weapons.length) this.switchTo(view.slot, true);
+    const st = this.weaponState();
+    this.weapon.animate(view ? { ...st, aim: view.aim, lookDelta: STILL_LOOK } : st, dt);
+    hud.setAds(view !== null && this.weapon.aimAmt > 0.55);
+    const scoped = view !== null && this.weapon.scope && this.weapon.aimAmt >= 0.8;
+    hud.setScope(scoped, isGun(this.weapon) ? this.weapon.scopeKind : undefined);
+    if (scoped) hud.setScopeDrift(this.weapon.sightX, this.weapon.sightY, this.weapon.sightScale);
   }
 
   weaponState(): WeaponState {

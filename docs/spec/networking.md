@@ -188,7 +188,7 @@ When an incoming data connection opens on the host:
 
 - If the host is not accepting, or already has (max players − 1) = 7 connections: send `refused` with reason "that lobby is closed" (not accepting) or "that lobby is full" (capacity), then close the connection after 400 ms. The connection is never stored, never wired, and never announced.
 - Otherwise: store the connection under the remote peer id, wire it for data/close/error, send `welcome` (payload: host id, lobby code, public flag; envelope `from` = host id), then raise the "peer joined" event with the remote's id and its connection metadata (or an empty object if none).
-- The design never sets "accepting" to false; the capability exists for a closed lobby.
+- The design never sets "accepting" to false; the capability exists for a closed lobby. Co-op also keeps it true: a join during a wave waits on the down list ([Online co-op](online-coop.md) §3.4).
 - Joining is possible in any host state (lobby, match, over); see 10.3.
 
 ### 3.5 Disconnects, keep-alive, and leaving
@@ -622,7 +622,7 @@ Start match (every peer, with `late` flag and spawn index):
 
 ### 10.3 Late joiners
 
-A client that connects while the host is in a match (`play`, `dying`, or `over`) receives, in order: `welcome`, `lobby`, `start { late: true, spawn, map, broken }`, `score`. It enters the match immediately (even if the host is on the "over" screen; it then receives `backtolobby` like everyone else); existing pickups are not replicated; existing remote positions arrive with their next `ps`; remotes that are dead show as standing figures until their `ps` says alive = false (then they slump) — a ragdoll already in progress elsewhere is not replayed.
+A client that connects while the host is in a match (`play`, `dying`, or `over`) receives, in order: `welcome`, `lobby`, `start { late: true, spawn, map, broken }`, `score`. It enters the match immediately (even if the host is on the "over" screen; it then receives `backtolobby` like everyone else). A co-op join during a wave waits for the wave clear instead ([Online co-op](online-coop.md) §3.4); existing pickups are not replicated; existing remote positions arrive with their next `ps`; remotes that are dead show as standing figures until their `ps` says alive = false (then they slump) — a ragdoll already in progress elsewhere is not replayed.
 
 ### 10.4 Match end and return to lobby
 

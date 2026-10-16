@@ -81,6 +81,7 @@ export function Hud({ store, children }: HudProps) {
             <Weapon store={store} />
           </div>
           <TipLine store={store} />
+          <Spectate store={store} />
           <CentreMessage store={store} />
           <KillFeed store={store} />
           <FpsCounter store={store} />
@@ -285,16 +286,81 @@ export const Scope = memo(function Scope({ store }: { store: HudStore }) {
         </svg>
       ) : state.kind === 'holo' ? (
         <svg className="holo-optic" viewBox="0 0 1000 1000" aria-hidden="true">
-          <path d="M340 775 H660 L705 930 V1500 H295 V930 Z" fill={OPTIC_COLOR.holoBase} stroke="#090e10" strokeWidth="14" />
-          <path d="M230 200 H770 Q820 200 820 250 V745 Q820 800 765 800 H235 Q180 800 180 745 V250 Q180 200 230 200 Z M285 275 Q255 275 255 305 V685 Q255 720 290 720 H710 Q745 720 745 685 V305 Q745 275 715 275 Z"
-            fill={OPTIC_COLOR.holoBody} stroke="#0c1316" strokeWidth="12" fillRule="evenodd" />
-          <rect x="258" y="278" width="484" height="439" rx="28" fill="#90bdba" fillOpacity=".045" stroke="#687773" strokeWidth="5" />
-          <path d="M250 818 H750 V892 H250 Z" fill="#222c31" stroke="#0c1316" strokeWidth="9" />
-          <g fill="#111a20" stroke="#75807f" strokeWidth="4"><circle cx="215" cy="760" r="13" /><circle cx="785" cy="760" r="13" /></g>
-          <g className="holo-reticle" color={OPTIC_COLOR.reticle} stroke="currentColor" strokeWidth="2" fill="none">
-            <circle cx="500" cy="500" r="22" />
-            <path d="M500 472 V482 M500 518 V528 M472 500 H482 M518 500 H528" />
-            <circle cx="500" cy="500" r="2" fill="currentColor" stroke="none" />
+          {/* The holo of Rainbow Six Siege as the eye sees it, in the ACOG overlay's style: a tall tan hood with worn edges
+              and a lit right flank, a thick dark rim round a wide window, and a black rear panel with two cross-head screws. */}
+          <defs>
+            {/* The front face, top to bottom: the worn top edge, the shadow under it, the tan face, the face's dark foot. */}
+            <linearGradient id="holo-metal" gradientUnits="userSpaceOnUse" x1="0" y1="220" x2="0" y2="735">
+              <stop stopColor="#8f8873" /><stop offset=".05" stopColor="#63544a" /><stop offset=".12" stopColor="#635344" />
+              <stop offset=".17" stopColor="#777061" /><stop offset=".35" stopColor={OPTIC_COLOR.holoBody} />
+              <stop offset=".88" stopColor="#7b7563" /><stop offset="1" stopColor="#5b5446" />
+            </linearGradient>
+            <linearGradient id="holo-base-metal" gradientUnits="userSpaceOnUse" x1="0" y1="735" x2="0" y2="1200">
+              <stop stopColor="#3f3934" /><stop offset=".1" stopColor="#332e2d" /><stop offset=".4" stopColor={OPTIC_COLOR.holoBase} />
+              <stop offset="1" stopColor="#262222" />
+            </linearGradient>
+            {/* The left of the face is a little in shadow; the right flank catches a warm light. */}
+            <linearGradient id="holo-side" gradientUnits="userSpaceOnUse" x1="140" y1="0" x2="885" y2="0">
+              <stop stopColor="#000" stopOpacity=".2" /><stop offset=".35" stopColor="#000" stopOpacity="0" />
+              <stop offset="1" stopColor="#fff" stopOpacity=".04" />
+            </linearGradient>
+            <linearGradient id="holo-flank" x1="0" y1="0" x2="0" y2="1">
+              <stop stopColor="#94795c" /><stop offset=".3" stopColor="#856444" /><stop offset="1" stopColor="#755a3f" />
+            </linearGradient>
+            <linearGradient id="holo-lip" gradientUnits="userSpaceOnUse" x1="140" y1="0" x2="184" y2="0">
+              <stop stopColor="#4a4540" /><stop offset=".2" stopColor="#38332f" /><stop offset=".62" stopColor="#38332f" />
+              <stop offset=".72" stopColor="#4a4642" /><stop offset=".85" stopColor="#36322f" />
+            </linearGradient>
+            {/* The rim is the hood's tunnel: dark at the top, lit a little at the bottom. */}
+            <linearGradient id="holo-wall" gradientUnits="userSpaceOnUse" x1="0" y1="313" x2="0" y2="690">
+              <stop stopColor="#2a2726" /><stop offset=".5" stopColor="#3a3634" /><stop offset="1" stopColor="#514b42" />
+            </linearGradient>
+            <radialGradient id="holo-screw" cx=".4" cy=".35" r=".7">
+              <stop stopColor="#c4c1b7" /><stop offset=".55" stopColor="#8f8d84" /><stop offset="1" stopColor="#5d5b54" />
+            </radialGradient>
+            <radialGradient id="holo-coat" cx=".5" cy=".5" r=".7">
+              <stop offset=".4" stopColor="#b4dcdc" stopOpacity="0" /><stop offset="1" stopColor="#6fa6b0" stopOpacity=".1" />
+            </radialGradient>
+            {/* The near opening, in the rim's outer edge, and the far one, in the window's: the hood is a tunnel. */}
+            <clipPath id="holo-near"><path d="M309 313 H692 Q750 313 750 371 V632 Q750 690 692 690 H309 Q251 690 251 632 V371 Q251 313 309 313 Z" /></clipPath>
+            <clipPath id="holo-far"><path d="M331 363 Q500 349 669 363 Q706 365 706 401 V618 Q706 656 669 656 H331 Q294 656 294 618 V401 Q294 365 331 363 Z" /></clipPath>
+          </defs>
+          <g className="holo-near">
+            <g clipPath="url(#holo-near)">
+              <g className="holo-far">
+                <path d="M-500 -500 H1500 V1500 H-500 Z M331 363 Q294 365 294 401 V618 Q294 656 331 656 H669 Q706 656 706 618 V401 Q706 365 669 363 Q500 349 331 363 Z" fill="url(#holo-wall)" />
+                <path d="M331 363 Q500 349 669 363 Q706 365 706 401 V618 Q706 656 669 656 H331 Q294 656 294 618 V401 Q294 365 331 363 Z" fill="url(#holo-coat)" />
+                <g clipPath="url(#holo-far)">
+                  <g className="holo-still">
+                    <g className="holo-reticle" color={OPTIC_COLOR.reticle} stroke="currentColor" fill="none" strokeLinecap="round">
+                      <g className="holo-bloom" strokeWidth="7">
+                        <circle cx="500" cy="500" r="19" />
+                        <path d="M500 474 V485 M500 515 V526 M474 500 H485 M515 500 H526" />
+                      </g>
+                      <circle className="holo-ring" cx="500" cy="500" r="19" strokeWidth="2.6" />
+                      <path d="M500 474 V485 M500 515 V526 M474 500 H485 M515 500 H526" strokeWidth="2.6" />
+                      <circle cx="500" cy="500" r="2.4" fill="currentColor" stroke="none" />
+                    </g>
+                  </g>
+                </g>
+                <path d="M331 365 H441 L296 466 V401 Q296 368 331 365 Z" fill="#fff" fillOpacity=".05" />
+                <path d="M331 363 Q500 349 669 363 Q706 365 706 401 V618 Q706 656 669 656 H331 Q294 656 294 618 V401 Q294 365 331 363 Z" fill="none" stroke="#5c574a" strokeWidth="3" />
+              </g>
+            </g>
+            {/* The hood's face, with the window cut out; the rear panel and the flanks lie over it. */}
+            <path d="M140 1500 V680 C140 640 178 628 178 588 V292 Q178 220 250 220 H753 Q825 220 825 292 L885 1500 Z M309 313 Q251 313 251 371 V632 Q251 690 309 690 H692 Q750 690 750 632 V371 Q750 313 692 313 Z" fill="url(#holo-metal)" />
+            <path d="M140 1500 V680 C140 640 178 628 178 588 V292 Q178 220 250 220 H753 Q825 220 825 292 L885 1500 Z M309 313 Q251 313 251 371 V632 Q251 690 309 690 H692 Q750 690 750 632 V371 Q750 313 692 313 Z" fill="url(#holo-side)" />
+            <path d="M783 228 Q821 232 821 294 L879 1500 H842 L789 316 Q788 262 757 254 Z" fill="url(#holo-flank)" />
+            <path d="M143 1500 V682 C145 658 165 640 182 630 V1500 Z" fill="url(#holo-lip)" />
+            <path d="M182 1500 V771 Q182 735 218 735 H742 Q778 735 778 771 V1500 Z" fill="url(#holo-base-metal)" stroke="#2a2524" strokeWidth="3" />
+            <path d="M309 313 H692 Q750 313 750 371 V632 Q750 690 692 690 H309 Q251 690 251 632 V371 Q251 313 309 313 Z" fill="none" stroke="#262321" strokeWidth="5" />
+            <path d="M256 652 Q265 693 309 694 H692 Q736 693 745 652" fill="none" stroke="#a49c86" strokeOpacity=".35" strokeWidth="3" />
+            {/* Worn edges: the bare metal shows light along the hood's outline. */}
+            <path d="M140 1500 V680 C140 640 178 628 178 588 V292 Q178 220 250 220 H753 Q825 220 825 292 L885 1500" fill="none" stroke="#a39c86" strokeWidth="8" strokeLinejoin="round" />
+            <path d="M140 1500 V680 C140 640 178 628 178 588 V292 Q178 220 250 220 H753 Q825 220 825 292 L885 1500" fill="none" stroke="#4d483f" strokeWidth="2" transform="translate(4 5)" strokeOpacity=".6" />
+            <g fill="url(#holo-screw)" stroke="#23201f" strokeWidth="3"><circle cx="300" cy="782" r="46" /><circle cx="708" cy="780" r="46" /></g>
+            <path d="M274 777 L326 787 M295 756 L305 808 M682 775 L734 785 M703 754 L713 806" stroke="#4a4844" strokeWidth="10" strokeLinecap="round" />
+            <path d="M274 777 L326 787 M295 756 L305 808 M682 775 L734 785 M703 754 L713 806" stroke="#2c2a27" strokeWidth="5" strokeLinecap="round" />
           </g>
         </svg>
       ) : <><div className="scope-ring" /><div className="scope-cross horizontal" /><div className="scope-cross vertical" /><div className="scope-dot" /></>}
@@ -374,6 +440,14 @@ export const KillFeed = memo(function KillFeed({ store }: { store: HudStore }) {
   rendered();
   const lines = useHud(store, 'killFeed');
   return <div className="kill-feed" data-hud="killFeed" role="log" aria-live="polite">{lines.map(line => <KillLine line={line} key={line.id} />)}</div>;
+});
+
+export const Spectate = memo(function Spectate({ store }: { store: HudStore }) {
+  rendered();
+  const state = useHud(store, 'spectate');
+  return <div className={`spectate-bar${state.name ? ' is-visible' : ''}`} data-hud="spectate" aria-live="polite">
+    {state.name && <><span className="spectate-label">spectating</span> <b>{state.name}</b>{state.status && <span className="spectate-status">{state.status}</span>}</>}
+  </div>;
 });
 
 export const CentreMessage = memo(function CentreMessage({ store }: { store: HudStore }) {

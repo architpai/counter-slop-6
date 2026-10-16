@@ -34,6 +34,8 @@ export interface CoopApi {
   isDown(id: string): boolean;
   /** Host: a player left the run. */
   left(id: string): void;
+  /** Host: a player joins a live run. In a wave it waits on the down list for the wave clear. Before its `start`. */
+  admit(id: string): void;
   /** Host: a player joined a live run; it needs the enemies that are already out. */
   joined(id: string): void;
   /** Once a frame while the run is live, with real frame time. */
@@ -87,11 +89,10 @@ export function createCoop(app: App): CoopApi {
   function begin(next: CoopState, index: number): void {
     state = structuredClone(next); mySlot = index; syncT = snapT = 0; sent = ''; pending = 0;
     spawned.length = 0; shots = []; hits = []; scoresDirty = false; resting = null; aiming = false;
-    if (net.isHost) net.busyReason = 'a wave is running · try again between waves';
     const enemies = ctx.enemies;
     if (enemies !== null) { enemies.mirror = !net.isHost; if (!net.isHost) enemies.setMutations(state.wave); }
-    // A join in an intermission has missed this wave's start; the next one is announced.
-    announced = state.inter > 0 ? state.wave : 0;
+    // A join in an intermission has missed this wave's start, and a join in a wave waits it out: the next one is announced.
+    announced = state.inter > 0 || (net.id !== null && state.dead.includes(net.id)) ? state.wave : 0;
     gs.wave = state.wave; gs.score = state.score; gs.intermission = state.inter;
     hud.setWave(state.wave, state.left); hud.setScore(state.score, 0);
     if (net.isHost) { if (state.inter <= 0) app.solo.startWave(state.wave); sync(); }
@@ -107,8 +108,6 @@ export function createCoop(app: App): CoopApi {
     s.speed = enemies.mods.speed; s.damage = enemies.mods.damage;
     const rest = s.inter > 0;
     if (rest !== resting) {
-      // The lobby is open between waves only: a join then needs no enemy catch-up worth the name.
-      net.accepting = rest;
       // A wave clear brings back every player who is down, the host's own included.
       if (rest && resting !== null) { s.dead = []; if (gs.state === 'dying') app.ffa.respawn(false); }
       resting = rest;
@@ -181,6 +180,12 @@ export function createCoop(app: App): CoopApi {
   function joined(id: string): void {
     if (!directing() || ctx.enemies === null) return;
     for (const e of ctx.enemies.list) if (e.alive && !spawned.includes(e)) net.sendTo(id, 'espawn', espawn(e));
+  }
+  function admit(id: string): void {
+    const s = state;
+    if (s === null || !directing() || gs.intermission > 0 || s.dead.includes(id)) return;
+    // Not a down: no score row changes. The wave clear brings the player in with everyone who is down.
+    s.dead.push(id); sent = '';
   }
   function isDown(id: string): boolean { return state !== null && state.dead.includes(id); }
   function finish(): void {
@@ -361,5 +366,5 @@ export function createCoop(app: App): CoopApi {
     if (ctx.enemies !== null) ctx.enemies.mirror = false;
   }
 
-  return { active, directing, players, get state() { return state; }, begin, slot, info, points, onKill, hurt, push, down, isDown, left, joined, update, reset };
+  return { active, directing, players, get state() { return state; }, begin, slot, info, points, onKill, hurt, push, down, isDown, left, admit, joined, update, reset };
 }

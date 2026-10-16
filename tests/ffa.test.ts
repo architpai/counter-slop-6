@@ -45,7 +45,8 @@ function setup(isHost = false, mode: OnlineMode = 'ffa') {
     body: { pos: new Vector3(), vel: new Vector3(), onGround: true },
     center: new Vector3(0, 1, 0), eye: new Vector3(0, 1.6, 0),
     forward: new Vector3(0, 0, -1), right: new Vector3(1, 0, 0),
-    yaw: 0, pitch: 0, wi: 0, weapon: { kind: 'rifle' }, weapons: [],
+    yaw: 0, pitch: 0, wi: 0, weapon: { kind: 'rifle', aimAmt: 0, adsFov: 38 }, weapons: [],
+    watched: null as { slot: number; aim: boolean } | null,
     grapple: { mode: 'idle', hook: new Vector3() }, melee: { active: false, cooldown: 0 },
     headshots: 0, onHeadshot() { this.headshots++; },
     lastHitBy: null as string | null, lastHit: null as { from: Vector3 | null; amount: number; crit: boolean; src: string } | null,
@@ -77,7 +78,7 @@ function setup(isHost = false, mode: OnlineMode = 'ffa') {
     hud: {
       setPvpScore: noop, setModifier: noop, setBoard: noop, setGameplayVisible: noop, hideScreen: vi.fn(),
       message: vi.fn(), tip: noop, kill: vi.fn(), hitmarker: vi.fn(), key: (action: string) => action,
-      setMarks: vi.fn((_marks: { x: number; y: number; label: string }[]) => {}),
+      setMarks: vi.fn((_marks: { x: number; y: number; label: string }[]) => {}), setSpectate: vi.fn(),
     },
     audio: { kill: noop, spawn: noop, enemyDie: noop, shieldHit: noop, hitEnemy: noop, mark: vi.fn(), empty: vi.fn() },
     effects: { strokeBurst: noop, blood: noop, tracer: noop, clear: noop },
@@ -395,7 +396,8 @@ test('a waiting player cycles teammates and swaps first and third person', () =>
   const t = setup(true, 'flag'), { ctx } = t;
   try {
     t.ffa.hostStart();
-    const mate = { ...t.remote, id: 'mate', name: 'mate', center: new Vector3(-20, 1, 0), eye: new Vector3(-20, 1.6, 0), root: new Group() };
+    const mate = { ...t.remote, id: 'mate', name: 'mate', center: new Vector3(-20, 1, 0), eye: new Vector3(-20, 1.6, 0), root: new Group(),
+      slot: 3, aiming: true, melee: false };
     ctx.remotes.set('mate', mate);
     t.lobby.teams = { host: 0, client: 0, mate: 0 };
     ctx.player.alive = false; t.ffa.localDeath();
@@ -403,11 +405,18 @@ test('a waiting player cycles teammates and swaps first and third person', () =>
     step();
     expect(ctx.camera.position.x).toBeGreaterThan(15); // over the client's shoulder
     expect(t.ffa.watchedFigure()).toBeNull();
+    expect(ctx.player.watched, 'no gun of ours over their shoulder').toBeNull();
+    expect(ctx.renderer.rig.visible).toBe(false);
+    expect(ctx.hud.setSpectate).toHaveBeenLastCalledWith('client', 'next respawn wave');
     step('fire');
     expect(ctx.camera.position.x).toBeLessThan(-15); // the next teammate
+    expect(ctx.hud.setSpectate).toHaveBeenLastCalledWith('mate', 'next respawn wave');
     step('jump');
     expect(ctx.camera.position.toArray()).toEqual([-20, 1.6, 0]); // their eyes
     expect(t.ffa.watchedFigure()).toBe(mate.root);
+    // Their figure is left out, so our own gun stands in for theirs: their slot, their aim.
+    expect(ctx.player.watched).toEqual({ slot: 3, aim: true });
+    expect(ctx.renderer.rig.visible).toBe(true);
     step('aim');
     expect(ctx.camera.position.toArray()).toEqual([20, 1.6, 0]); // back to the client
     t.gs.menu = true; step('fire');

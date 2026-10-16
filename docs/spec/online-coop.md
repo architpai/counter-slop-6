@@ -52,7 +52,8 @@ All times are seconds. All scale values are initial playtest values, not measure
 ### 3.2 Down and return
 
 - A player with zero health is down. A down player does not respawn on a timer.
-- A down player watches a living teammate. If no teammate is alive, the camera shows the player start.
+- A down player watches a living teammate: fire / aim switch teammate, jump switches first and third person. If no teammate is alive, the camera shows the player start. Through a teammate's eyes the down player sees that teammate's gun: its own gun of the same slot, aimed when the teammate aims and kicked by each of the teammate's shots. It cannot fire.
+- The banner "DOWN" (sub "back at the wave clear") shows one time when the player goes down. The spectate bar shows "spectating <name>" and the return line for as long as the player waits; a switch of teammate changes only the bar.
 - All down players return at the next wave clear, at their start slot, with full health and the standard loadout.
 - A player who goes down during the intermission returns after 3.5 s.
 - The run ends when all players in the lobby are down in the same wave. The host sends `end { id: 'coop', name: 'WAVE n' }`. The result screen shows the wave reached, the team score, and the kills and downs of each player. After 8 s all players return to the lobby.
@@ -68,8 +69,9 @@ All times are seconds. All scale values are initial playtest values, not measure
 
 ### 3.4 Join and leave
 
-- The lobby is open in the lobby state and during each intermission. The host closes it at wave start and refuses a join with "a wave is running · try again between waves". Quick play then tries the next public lobby.
-- A late join receives the map, the co-op state, the broken props, the scores, and all living enemies. The player starts at a start slot.
+- The lobby is open at all times while it has a free place (four players). A full lobby refuses a join with "that lobby is full", and quick play then tries the next public lobby.
+- A late join receives the map, the co-op state, the broken props, the scores, and all living enemies. In an intermission the player starts at a start slot at once.
+- A join during a wave goes on the down list before the host sends `start`, so the player waits as a down player does: it watches a teammate (banner "WAVE IN PROGRESS", sub "you join at the wave clear") and enters at its start slot at the wave clear. The join is not a down: the scoreboard does not count it, and the running wave is not announced to it. A waiting join counts for the run end, as a down player does.
 - A player who leaves is removed from the down list and from the next wave's scale. If all players that stay are down, the run ends.
 - If the host leaves, the run ends for all players, as in the other online modes. There is no host migration.
 

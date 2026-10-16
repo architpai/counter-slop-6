@@ -88,6 +88,14 @@ export abstract class ViewModel<M extends WeaponModel = WeaponModel> {
   _swayPos: Vector3;
   _swayRot: Vector3;
   aimAmt: number;
+  /**
+   * Where the scoped overlay's near edge sits off the eye line, in the overlay's units (1000 across), and its
+   * scale: the hood lags a turn, steps with the bob, kicks with each shot and rises into place at the end of the
+   * aim-in. The reticle is at infinity and does not move (HUD `setScopeDrift`).
+   */
+  sightX = 0;
+  sightY = 0;
+  sightScale = 1;
   _sprintAmt: number;
   /** Raise progress 0..1; reaches 1 after `_drawTime` seconds. */
   _equipT: number;
@@ -285,11 +293,21 @@ export abstract class ViewModel<M extends WeaponModel = WeaponModel> {
       this.root.scale.setScalar(depth);
     }
     this.root.visible = this._equipped && !(this.scope && this.aimAmt >= 0.8);
+    // Turn rate, not the frame's turn, so the drift is the same at any frame rate.
+    const perSecond = 1 / Math.max(dt, 1 / 240), rise = 1 - clamp((this.aimAmt - 0.8) / 0.2, 0, 1);
+    // Sized to the holo's window (412 × 293): the reticle stays clear of its edges at the largest drift.
+    const dx = clamp(st.lookDelta.x * perSecond, -6, 6) * 5.4 - st.strafe * 4 + Math.sin(st.bobPhase) * st.bobAmt * 7 + p.x * 540;
+    const dy = clamp(st.lookDelta.y * perSecond, -6, 6) * 5.4 + Math.abs(Math.cos(st.bobPhase)) * st.bobAmt * 5 - p.y * 900
+      + st.landDip * 30 + rise * 60;
+    this.sightX = clamp(damp(this.sightX, dx, 12, dt), -42, 42);
+    this.sightY = clamp(damp(this.sightY, dy, 12, dt), -30, 70);
+    this.sightScale = 1 + rise * 0.1 + clamp(p.z, 0, 0.2) * 0.3;
   }
 
   _resetPose() {
     // `_equipT` belongs to `equip()`: a reset re-equips through the player and raises from there.
-    this.aimAmt = this._sprintAmt = 0;
+    this.aimAmt = this._sprintAmt = this.sightX = this.sightY = 0;
+    this.sightScale = 1;
     this._swayPos.set(0, 0, 0);
     this._swayRot.set(0, 0, 0);
     for (const spring of [this._posSpring, this._rotSpring]) {
@@ -592,6 +610,18 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
         if (!this._disposed && this.mag === 0 && !this.reloading) this.startReload();
       }, 250);
     }
+  }
+
+  /** A watched teammate fired (a spectator sees through their eyes on this gun): the kick and flash only. */
+  echoShot(): void {
+    if (this._disposed || !this._equipped) return;
+    const s = this._stats, k = s.modelKick, flash = this._model.flash;
+    flash.visible = true;
+    this._flashT = 0.045;
+    flash.rotation.z = rand(0, TAU);
+    flash.scale.setScalar(((flash.userData.scale as number | null) ?? s.flashScale) * (HIP_FLASH + (1 - HIP_FLASH) * this.aimAmt) * rand(0.85, 1.15));
+    this.kickPos(rand(-k[0], k[0]), rand(0.4 * k[1], k[1]), k[2]);
+    this.kickRot(k[3], rand(-k[4], k[4]), rand(-k[5], k[5]));
   }
 
   _ray(dir: Vector3) {

@@ -32,8 +32,8 @@ try {
         ['acog-ocular', '#acog-metal stop[offset=".3"]', 'stop-color'],
         ['acog-ocular-rim', '#acog-bevel stop[offset="1"]', 'stop-color'],
       ] : [
-        ['holo-frame-top', '.holo-optic > path:nth-child(2)', 'fill'],
-        ['holo-base', '.holo-optic > path:first-child', 'fill'],
+        ['holo-frame-top', '#holo-metal stop[offset=".35"]', 'stop-color'],
+        ['holo-base', '#holo-base-metal stop[offset=".4"]', 'stop-color'],
         ['holo-dot', '.holo-reticle', 'color'],
       ];
       return pairs.map(([part, selector, attribute]) => ({

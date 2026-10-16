@@ -307,6 +307,61 @@ test('ADS look sensitivity tracks the aimed FOV, holo stays hip speed', () => {
   expect(yawDelta(true) / hip).toBeCloseTo(acog, 6);
 });
 
+test('the holo hood lags a turn at any frame rate, kicks with a shot, rises into place, and the HUD gets the drift', () => {
+  const { p, hud } = setup();
+  const gun = p.weapon as Gun;
+  gun.setOptic('holo');
+  const still = { ...p.weaponState(), aim: true, blockFire: true, lookDelta: { x: 0, y: 0 } };
+  let lifted = false;
+  for (let i = 0; i < 90; i++) {
+    gun.animate(still, 1 / 60);
+    if (gun.aimAmt >= 0.8 && gun.aimAmt < 0.9) lifted = gun.sightY > 12 && gun.sightScale > 1.03;
+  }
+  expect(lifted, 'below the eye line and nearer just as the overlay comes in').toBe(true);
+  expect(Math.abs(gun.sightX)).toBeLessThan(0.5);
+  expect(Math.abs(gun.sightY)).toBeLessThan(0.5);
+  // A turn to the right at 1.8 rad/s: the hood trails left, the same at 60 and 120 frames a second.
+  const turn = (fps: number): number => {
+    gun._resetPose(); gun.aimAmt = 1;
+    for (let i = 0; i < fps; i++) gun.animate({ ...still, lookDelta: { x: -1.8 / fps, y: 0 } }, 1 / fps);
+    return gun.sightX;
+  };
+  expect(turn(60)).toBeCloseTo(-9.72, 0);
+  expect(turn(120)).toBeCloseTo(turn(60), 1);
+  gun._resetPose(); gun.aimAmt = 1;
+  gun.kickPos(0, 0.3, 2.5);
+  for (let i = 0; i < 4; i++) gun.animate(still, 1 / 60);
+  expect(gun.sightY, 'the shot lifts the hood').toBeLessThan(-1.5);
+  expect(gun.sightScale, 'and pushes it back to the eye').toBeGreaterThan(1.005);
+  const root = document.createElement('div');
+  hud.bindRoot(root);
+  hud.setScopeDrift(12.34, -5, 1.0234);
+  expect([root.style.getPropertyValue('--scope-x'), root.style.getPropertyValue('--scope-y'), root.style.getPropertyValue('--scope-scale')])
+    .toEqual(['12.3', '-5.0', '1.023']);
+});
+
+test('a spectator through a teammate\'s eyes holds their gun, aims with them, and never fires', () => {
+  const { p, ctx, hud } = setup();
+  p.takeDamage(9999);
+  expect(p.alive).toBe(false);
+  p.watched = { slot: 3, aim: true };
+  for (let i = 0; i < 60; i++) { ctx.input.update(1 / 60); p.update(1 / 60); }
+  const sniper = p.weapon as Gun;
+  expect(p.wi).toBe(3);
+  expect(sniper.kind).toBe('sniper');
+  expect(sniper.aimAmt).toBeGreaterThan(0.95);
+  expect(hud.scope).toEqual({ shown: true, kind: 'sniper' });
+  const mag = sniper.mag;
+  sniper.echoShot();
+  for (let i = 0; i < 5; i++) { ctx.input.update(1 / 60); p.update(1 / 60); }
+  expect(sniper.mag, 'a watched shot costs nothing').toBe(mag);
+  // Back to the shoulder view: the gun rests and the scope goes.
+  p.watched = null;
+  for (let i = 0; i < 60; i++) { ctx.input.update(1 / 60); p.update(1 / 60); }
+  expect(sniper.aimAmt).toBeLessThan(0.05);
+  expect(hud.scope.shown).toBe(false);
+});
+
 test('ground friction is independent of frame rate', () => {
   const { p, ctx } = setup();
   ctx.world.addBox(new Vector3(-100, -1, -100), new Vector3(100, 0, 100)); ctx.world.finalize();

@@ -69,7 +69,7 @@ try {
   }
   assert.equal((await read(host)).mirror, false);
   assert.equal((await read(client)).mirror, true);
-  assert.equal((await read(host)).accepting, false);
+  assert.equal((await read(host)).accepting, true, 'a co-op lobby stays open in a wave');
   for (const p of [host, client]) await armour(p);
   const hostId = (await read(host)).id, clientId = (await read(client)).id;
 
@@ -104,11 +104,15 @@ try {
     g.net.send('end', { id: 'coop', name: 'WAVE 9' });
   }, hostId);
 
-  // A join in a wave is refused with the reason.
+  // A join in a wave is let in, down: it watches the wave and enters at the wave clear.
   const late = await open('Late tester');
   await join(late, code);
-  await wait(late, () => /wave is running/.test(window.__game.lobby.status));
-  assert.equal((await read(host)).players, 2);
+  await wait(late, () => window.__game.gs.state === 'dying' && window.__game.lobby.mode === 'coop' && window.__game.enemies.mirror &&
+    !window.__game.player.alive);
+  const lateId = (await read(late)).id;
+  assert.equal((await read(host)).players, 3);
+  await wait(host, id => window.__game.remotes.get(id)?.alive === false, lateId);
+  await late.screenshot({ path: '/tmp/shooter-coop-check/late-waits.png' });
   assert.ok(!(await hits(host)).includes(50), 'a client cannot send enemy or PvP damage to a teammate');
   assert.equal((await read(host)).over, null);
 
@@ -122,13 +126,11 @@ try {
   await client.screenshot({ path: '/tmp/shooter-coop-check/client-down.png' });
   await clearWave(host);
   await host.evaluate(() => { window.__game.gs.intermission = 60; });
-  await wait(client, () => window.__game.gs.state === 'play' && window.__game.player.alive && window.__game.gs.intermission > 0);
+  for (const p of [client, late]) await wait(p, () => window.__game.gs.state === 'play' && window.__game.player.alive && window.__game.gs.intermission > 0);
   assert.equal((await read(client)).alive, 0);
   assert.equal((await read(host)).accepting, true);
 
-  // A join in the intermission enters the run; the next wave is scaled for three players.
-  await join(late, code); await joined(late);
-  await wait(late, () => window.__game.gs.state === 'play' && window.__game.lobby.mode === 'coop' && window.__game.enemies.mirror);
+  // The join is in the run; the next wave is scaled for three players.
   assert.equal((await read(late)).wave, 1);
   await armour(late);
   await host.evaluate(() => { window.__game.gs.intermission = 0.2; });
@@ -159,7 +161,7 @@ try {
   await client.evaluate(() => { const g = window.__game; g.soloEnemy = g.enemies.list[0]; g.soloFrom = g.soloEnemy.body.pos.clone(); });
   await wait(client, () => window.__game.soloEnemy.body.pos.distanceTo(window.__game.soloFrom) > 0.5, null, 60000);
   assert.deepEqual(errors, []);
-  console.log('PASS: real WebRTC co-op lobby, start, mirrored enemies, client hit and credit, team score, host-only enemy damage, refused and accepted late join, down and return, scaled wave, run end, and solo after co-op. Screenshots: /tmp/shooter-coop-check');
+  console.log('PASS: real WebRTC co-op lobby, start, mirrored enemies, client hit and credit, team score, host-only enemy damage, a join in a wave that waits for the wave clear, down and return, scaled wave, run end, and solo after co-op. Screenshots: /tmp/shooter-coop-check');
 } catch (error) {
   console.error('Browser errors:', errors);
   console.error('Peer states:', await Promise.all(pages.map(page => read(page).catch(() => null))));

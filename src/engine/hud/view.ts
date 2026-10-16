@@ -51,6 +51,8 @@ export interface HudView {
   setCrosshairMode(mode: '' | 'melee'): void;
   setAds(on: boolean): void;
   setScope(on: boolean, kind?: ScopeKind): void;
+  /** The scoped overlay's drift off the eye line (its units, 1000 across) and scale; the reticle stays put. */
+  setScopeDrift(x: number, y: number, scale: number): void;
   setGrappleTarget(state: 0 | 1 | 2): void;
   setFocusMeter(show: boolean, frac: number, ready: boolean, label: string): void;
   setFocusMark(x: number | null, y?: number): void;
@@ -59,6 +61,8 @@ export interface HudView {
   setStragglers(marks: readonly { x: number; y: number; a: number }[]): void;
   /** Squad marks in CSS pixels, each with its "NAME · 42m" label; an empty list hides them. */
   setMarks(marks: readonly { x: number; y: number; label: string }[]): void;
+  /** The bar a waiting player reads: who it watches, and when it is back. An empty name hides it. */
+  setSpectate(name: string, status?: string): void;
   /** Frames per second for the optional counter; null hides it. */
   setFps(fps: number | null): void;
   /** The one-time "Lower quality?" offer, naming the preset it would switch to; null hides it. */
