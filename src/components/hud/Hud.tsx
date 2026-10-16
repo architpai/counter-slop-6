@@ -286,79 +286,81 @@ export const Scope = memo(function Scope({ store }: { store: HudStore }) {
         </svg>
       ) : state.kind === 'holo' ? (
         <svg className="holo-optic" viewBox="0 0 1000 1000" aria-hidden="true">
-          {/* The holo of Rainbow Six Siege as the eye sees it, in the ACOG overlay's style: a small, wide window high in a
-              thick hood, the body flaring at the shoulders into a rear panel with three button pockets and four screws. */}
+          {/* The holo of Rainbow Six Siege as the eye sees it, in the ACOG overlay's style: a tall tan hood with worn edges
+              and a lit right flank, a thick dark rim round a wide window, and a black rear panel with two cross-head screws. */}
           <defs>
-            <linearGradient id="holo-metal" gradientUnits="userSpaceOnUse" x1="0" y1="331" x2="0" y2="700">
-              <stop stopColor="#706b60" /><stop offset=".35" stopColor={OPTIC_COLOR.holoBody} />
-              <stop offset=".8" stopColor="#1b1d1d" /><stop offset="1" stopColor="#3a3833" />
+            {/* The front face, top to bottom: the worn top edge, the shadow under it, the tan face, the face's dark foot. */}
+            <linearGradient id="holo-metal" gradientUnits="userSpaceOnUse" x1="0" y1="256" x2="0" y2="720">
+              <stop stopColor="#8f8873" /><stop offset=".05" stopColor="#63544a" /><stop offset=".12" stopColor="#635344" />
+              <stop offset=".17" stopColor="#777061" /><stop offset=".35" stopColor={OPTIC_COLOR.holoBody} />
+              <stop offset=".88" stopColor="#7b7563" /><stop offset="1" stopColor="#5b5446" />
             </linearGradient>
-            <linearGradient id="holo-base-metal" gradientUnits="userSpaceOnUse" x1="0" y1="665" x2="0" y2="1080">
-              <stop stopColor="#4c4942" /><stop offset=".4" stopColor={OPTIC_COLOR.holoBase} /><stop offset="1" stopColor="#111313" />
+            <linearGradient id="holo-base-metal" gradientUnits="userSpaceOnUse" x1="0" y1="717" x2="0" y2="1200">
+              <stop stopColor="#3f3934" /><stop offset=".1" stopColor="#332e2d" /><stop offset=".4" stopColor={OPTIC_COLOR.holoBase} />
+              <stop offset="1" stopColor="#262222" />
             </linearGradient>
-            {/* Surfaces that face up catch the light: the hood's roof, the floor under the window, the shoulders. */}
-            <linearGradient id="holo-top" x1="0" y1="0" x2="0" y2="1">
-              <stop stopColor="#7a7468" /><stop offset="1" stopColor="#47443d" />
+            {/* The left of the face is a little in shadow; the right flank catches a warm light. */}
+            <linearGradient id="holo-side" gradientUnits="userSpaceOnUse" x1="155" y1="0" x2="870" y2="0">
+              <stop stopColor="#000" stopOpacity=".2" /><stop offset=".35" stopColor="#000" stopOpacity="0" />
+              <stop offset="1" stopColor="#fff" stopOpacity=".04" />
             </linearGradient>
-            <linearGradient id="holo-side" x1="0" y1="0" x2="1" y2="0">
-              <stop stopColor="#000" stopOpacity=".5" /><stop offset=".14" stopColor="#000" stopOpacity="0" />
-              <stop offset=".86" stopColor="#000" stopOpacity="0" /><stop offset="1" stopColor="#000" stopOpacity=".55" />
+            <linearGradient id="holo-flank" x1="0" y1="0" x2="0" y2="1">
+              <stop stopColor="#94795c" /><stop offset=".3" stopColor="#856444" /><stop offset="1" stopColor="#755a3f" />
             </linearGradient>
-            <linearGradient id="holo-wall" gradientUnits="userSpaceOnUse" x1="0" y1="386" x2="0" y2="569">
-              <stop stopColor="#050606" /><stop offset=".55" stopColor="#161716" /><stop offset="1" stopColor="#3b3934" />
+            <linearGradient id="holo-lip" gradientUnits="userSpaceOnUse" x1="155" y1="0" x2="215" y2="0">
+              <stop stopColor="#4a4540" /><stop offset=".2" stopColor="#38332f" /><stop offset=".62" stopColor="#38332f" />
+              <stop offset=".72" stopColor="#4a4642" /><stop offset=".85" stopColor="#36322f" />
             </linearGradient>
-            <radialGradient id="holo-pocket" cx=".5" cy=".35" r=".7">
-              <stop stopColor="#080909" /><stop offset=".75" stopColor="#151615" /><stop offset="1" stopColor="#2f2d29" />
-            </radialGradient>
-            <radialGradient id="holo-knob" cx=".42" cy=".3" r=".75">
-              <stop stopColor="#5b574f" /><stop offset=".6" stopColor="#2b2a27" /><stop offset="1" stopColor="#121313" />
+            {/* The rim is the hood's tunnel: dark at the top, lit a little at the bottom. */}
+            <linearGradient id="holo-wall" gradientUnits="userSpaceOnUse" x1="0" y1="342" x2="0" y2="661">
+              <stop stopColor="#2a2726" /><stop offset=".5" stopColor="#3a3634" /><stop offset="1" stopColor="#514b42" />
+            </linearGradient>
+            <radialGradient id="holo-screw" cx=".4" cy=".35" r=".7">
+              <stop stopColor="#c4c1b7" /><stop offset=".55" stopColor="#8f8d84" /><stop offset="1" stopColor="#5d5b54" />
             </radialGradient>
             <radialGradient id="holo-coat" cx=".5" cy=".5" r=".7">
               <stop offset=".4" stopColor="#b4dcdc" stopOpacity="0" /><stop offset="1" stopColor="#6fa6b0" stopOpacity=".1" />
             </radialGradient>
-            {/* The near opening, in the hood's place, and the far one, in the window's: the hood is a tunnel. */}
-            <clipPath id="holo-near"><path d="M381 386 H619 L645 412 V555 Q645 569 631 569 H369 Q355 569 355 555 V412 Z" /></clipPath>
-            <clipPath id="holo-far"><path d="M393 402 H607 L629 424 V545 Q629 553 621 553 H379 Q371 553 371 545 V424 Z" /></clipPath>
+            {/* The near opening, in the rim's outer edge, and the far one, in the window's: the hood is a tunnel. */}
+            <clipPath id="holo-near"><path d="M339 342 H662 Q712 342 712 392 V611 Q712 661 662 661 H339 Q289 661 289 611 V392 Q289 342 339 342 Z" /></clipPath>
+            <clipPath id="holo-far"><path d="M357 384 Q500 372 643 384 Q675 386 675 416 V600 Q675 632 643 632 H357 Q325 632 325 600 V416 Q325 386 357 384 Z" /></clipPath>
           </defs>
           <g className="holo-near">
             <g clipPath="url(#holo-near)">
               <g className="holo-far">
-                <path d="M-500 -500 H1500 V1500 H-500 Z M393 402 L371 424 V545 Q371 553 379 553 H621 Q629 553 629 545 V424 L607 402 Z" fill="url(#holo-wall)" />
-                <path d="M393 402 H607 L629 424 V545 Q629 553 621 553 H379 Q371 553 371 545 V424 Z" fill="url(#holo-coat)" />
+                <path d="M-500 -500 H1500 V1500 H-500 Z M357 384 Q325 386 325 416 V600 Q325 632 357 632 H643 Q675 632 675 600 V416 Q675 386 643 384 Q500 372 357 384 Z" fill="url(#holo-wall)" />
+                <path d="M357 384 Q500 372 643 384 Q675 386 675 416 V600 Q675 632 643 632 H357 Q325 632 325 600 V416 Q325 386 357 384 Z" fill="url(#holo-coat)" />
                 <g clipPath="url(#holo-far)">
                   <g className="holo-still">
                     <g className="holo-reticle" color={OPTIC_COLOR.reticle} stroke="currentColor" fill="none" strokeLinecap="round">
-                      <g className="holo-bloom" strokeWidth="8">
-                        <circle cx="500" cy="500" r="30" />
-                        <path d="M500 470 V479 M500 521 V530 M470 500 H479 M521 500 H530" />
-                        <circle cx="500" cy="500" r="3" fill="currentColor" />
+                      <g className="holo-bloom" strokeWidth="7">
+                        <circle cx="500" cy="500" r="19" />
+                        <path d="M500 474 V485 M500 515 V526 M474 500 H485 M515 500 H526" />
                       </g>
-                      <circle className="holo-ring" cx="500" cy="500" r="30" strokeWidth="2.6" />
-                      <path d="M500 470 V479 M500 521 V530 M470 500 H479 M521 500 H530" strokeWidth="2.6" />
-                      <circle cx="500" cy="500" r="3" fill="currentColor" stroke="none" />
+                      <circle className="holo-ring" cx="500" cy="500" r="19" strokeWidth="2.6" />
+                      <path d="M500 474 V485 M500 515 V526 M474 500 H485 M515 500 H526" strokeWidth="2.6" />
+                      <circle cx="500" cy="500" r="2.4" fill="currentColor" stroke="none" />
                     </g>
                   </g>
                 </g>
-                <path d="M393 403 H470 L372 470 V424 Z" fill="#fff" fillOpacity=".05" />
-                <path d="M393 402 H607 L629 424 V545 Q629 553 621 553 H379 Q371 553 371 545 V424 Z" fill="none" stroke="#4a463f" strokeWidth="4" />
+                <path d="M357 386 H450 L327 470 V416 Q327 388 357 386 Z" fill="#fff" fillOpacity=".05" />
+                <path d="M357 384 Q500 372 643 384 Q675 386 675 416 V600 Q675 632 643 632 H357 Q325 632 325 600 V416 Q325 386 357 384 Z" fill="none" stroke="#5c574a" strokeWidth="3" />
               </g>
             </g>
-            <path d="M245 1500 V665 L285 615 V381 L335 331 H665 L715 381 V615 L755 665 V1500 Z M381 386 L355 412 V555 Q355 569 369 569 H631 Q645 569 645 555 V412 L619 386 Z" fill="url(#holo-metal)" stroke="#191d1d" strokeWidth="5" />
-            <path d="M245 1500 V665 H755 V1500 Z" fill="url(#holo-base-metal)" stroke="#191d1d" strokeWidth="5" />
-            <path d="M245 1500 V665 L285 615 V381 L335 331 H665 L715 381 V615 L755 665 V1500 Z M381 386 L355 412 V555 Q355 569 369 569 H631 Q645 569 645 555 V412 L619 386 Z" fill="url(#holo-side)" />
-            <path d="M287 381 L336 334 H664 L713 381 L698 393 H302 Z" fill="url(#holo-top)" />
-            <path d="M285 615 L245 665 H755 L715 615 Z" fill="url(#holo-top)" stroke="#191d1d" strokeWidth="4" />
-            <path d="M355 571 H645 L668 609 H332 Z" fill="url(#holo-top)" fillOpacity=".75" />
-            <path d="M381 386 H619 L645 412 V555 Q645 569 631 569 H369 Q355 569 355 555 V412 Z" fill="none" stroke="#0c0e0e" strokeWidth="9" />
-            <path d="M357 563 Q357 571 369 571 H631 Q643 571 643 563" fill="none" stroke="#8a8478" strokeOpacity=".55" strokeWidth="3" />
-            <g fill="url(#holo-pocket)" stroke="#0c0e0e" strokeWidth="4">
-              <path d="M290 800 L317 752 H373 L400 800 L373 848 H317 Z" /><path d="M600 800 L627 752 H683 L710 800 L683 848 H627 Z" /><rect x="458" y="758" width="84" height="84" rx="8" />
-            </g>
-            <g fill="url(#holo-knob)" stroke="#0c0e0e" strokeWidth="3">
-              <circle cx="345" cy="800" r="27" /><circle cx="655" cy="800" r="27" /><circle cx="500" cy="800" r="25" />
-            </g>
-            <path d="M333 800 H357 M655 788 V812 M643 800 H667 M488 788 L512 812" stroke="#0a0b0b" strokeWidth="5" strokeLinecap="round" />
-            <g fill="#0b0c0c" stroke="#191d1d" strokeWidth="3"><circle cx="292" cy="712" r="17" /><path d="M279 718 Q292 731 305 718" className="holo-rim" /><circle cx="708" cy="712" r="17" /><path d="M695 718 Q708 731 721 718" className="holo-rim" /><circle cx="292" cy="905" r="17" /><path d="M279 911 Q292 924 305 911" className="holo-rim" /><circle cx="708" cy="905" r="17" /><path d="M695 911 Q708 924 721 911" className="holo-rim" /></g>
+            {/* The hood's face, with the window cut out; the rear panel and the flanks lie over it. */}
+            <path d="M155 1500 V640 C155 602 209 592 209 548 V328 Q209 256 281 256 H722 Q794 256 794 328 L869 1500 Z M339 342 Q289 342 289 392 V611 Q289 661 339 661 H662 Q712 661 712 611 V392 Q712 342 662 342 Z" fill="url(#holo-metal)" />
+            <path d="M155 1500 V640 C155 602 209 592 209 548 V328 Q209 256 281 256 H722 Q794 256 794 328 L869 1500 Z M339 342 Q289 342 289 392 V611 Q289 661 339 661 H662 Q712 661 712 611 V392 Q712 342 662 342 Z" fill="url(#holo-side)" />
+            <path d="M752 264 Q790 268 790 330 L863 1500 H826 L758 352 Q757 298 726 290 Z" fill="url(#holo-flank)" />
+            <path d="M158 1500 V642 C160 618 196 606 213 590 V1500 Z" fill="url(#holo-lip)" />
+            <path d="M213 1500 V753 Q213 717 249 717 H711 Q747 717 747 753 V1500 Z" fill="url(#holo-base-metal)" stroke="#2a2524" strokeWidth="3" />
+            <path d="M339 342 H662 Q712 342 712 392 V611 Q712 661 662 661 H339 Q289 661 289 611 V392 Q289 342 339 342 Z" fill="none" stroke="#262321" strokeWidth="5" />
+            <path d="M294 628 Q302 663 339 664 H662 Q699 663 707 628" fill="none" stroke="#a49c86" strokeOpacity=".35" strokeWidth="3" />
+            {/* Worn edges: the bare metal shows light along the hood's outline. */}
+            <path d="M155 1500 V640 C155 602 209 592 209 548 V328 Q209 256 281 256 H722 Q794 256 794 328 L869 1500" fill="none" stroke="#a39c86" strokeWidth="8" strokeLinejoin="round" />
+            <path d="M155 1500 V640 C155 602 209 592 209 548 V328 Q209 256 281 256 H722 Q794 256 794 328 L869 1500" fill="none" stroke="#4d483f" strokeWidth="2" transform="translate(4 5)" strokeOpacity=".6" />
+            <g fill="url(#holo-screw)" stroke="#23201f" strokeWidth="3"><circle cx="321" cy="762" r="44" /><circle cx="687" cy="760" r="44" /></g>
+            <path d="M296 757 L346 767 M316 737 L326 787 M662 755 L712 765 M682 735 L692 785" stroke="#4a4844" strokeWidth="10" strokeLinecap="round" />
+            <path d="M296 757 L346 767 M316 737 L326 787 M662 755 L712 765 M682 735 L692 785" stroke="#2c2a27" strokeWidth="5" strokeLinecap="round" />
           </g>
         </svg>
       ) : <><div className="scope-ring" /><div className="scope-cross horizontal" /><div className="scope-cross vertical" /><div className="scope-dot" /></>}

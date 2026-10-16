@@ -41,7 +41,7 @@ export const MATERIAL_COLOR = Object.freeze({
 /** Shared finishes for the weapon-mounted sights and their aiming overlays. */
 export const OPTIC_COLOR = Object.freeze({
   acogBody: '#353633', acogRim: '#615e54',
-  holoBody: '#35342f', holoBase: '#22211e', reticle: '#ed2428',
+  holoBody: '#77705f', holoBase: '#2f2a29', reticle: '#ed2428',
 });
 
 export const WHITE_HEX = 0xffffff;
