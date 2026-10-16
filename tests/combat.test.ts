@@ -307,6 +307,28 @@ test('ADS look sensitivity tracks the aimed FOV, holo stays hip speed', () => {
   expect(yawDelta(true) / hip).toBeCloseTo(acog, 6);
 });
 
+test('a spectator through a teammate\'s eyes holds their gun, aims with them, and never fires', () => {
+  const { p, ctx, hud } = setup();
+  p.takeDamage(9999);
+  expect(p.alive).toBe(false);
+  p.watched = { slot: 3, aim: true };
+  for (let i = 0; i < 60; i++) { ctx.input.update(1 / 60); p.update(1 / 60); }
+  const sniper = p.weapon as Gun;
+  expect(p.wi).toBe(3);
+  expect(sniper.kind).toBe('sniper');
+  expect(sniper.aimAmt).toBeGreaterThan(0.95);
+  expect(hud.scope).toEqual({ shown: true, kind: 'sniper' });
+  const mag = sniper.mag;
+  sniper.echoShot();
+  for (let i = 0; i < 5; i++) { ctx.input.update(1 / 60); p.update(1 / 60); }
+  expect(sniper.mag, 'a watched shot costs nothing').toBe(mag);
+  // Back to the shoulder view: the gun rests and the scope goes.
+  p.watched = null;
+  for (let i = 0; i < 60; i++) { ctx.input.update(1 / 60); p.update(1 / 60); }
+  expect(sniper.aimAmt).toBeLessThan(0.05);
+  expect(hud.scope.shown).toBe(false);
+});
+
 test('ground friction is independent of frame rate', () => {
   const { p, ctx } = setup();
   ctx.world.addBox(new Vector3(-100, -1, -100), new Vector3(100, 0, 100)); ctx.world.finalize();

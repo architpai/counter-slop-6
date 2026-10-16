@@ -594,6 +594,18 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
     }
   }
 
+  /** A watched teammate fired (a spectator sees through their eyes on this gun): the kick and flash only. */
+  echoShot(): void {
+    if (this._disposed || !this._equipped) return;
+    const s = this._stats, k = s.modelKick, flash = this._model.flash;
+    flash.visible = true;
+    this._flashT = 0.045;
+    flash.rotation.z = rand(0, TAU);
+    flash.scale.setScalar(((flash.userData.scale as number | null) ?? s.flashScale) * (HIP_FLASH + (1 - HIP_FLASH) * this.aimAmt) * rand(0.85, 1.15));
+    this.kickPos(rand(-k[0], k[0]), rand(0.4 * k[1], k[1]), k[2]);
+    this.kickRot(k[3], rand(-k[4], k[4]), rand(-k[5], k[5]));
+  }
+
   _ray(dir: Vector3) {
     const { world, game, effects, audio } = this._ctx, s = this._stats;
     const enemies = this._ctx.enemies;

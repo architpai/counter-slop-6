@@ -81,6 +81,7 @@ export function Hud({ store, children }: HudProps) {
             <Weapon store={store} />
           </div>
           <TipLine store={store} />
+          <Spectate store={store} />
           <CentreMessage store={store} />
           <KillFeed store={store} />
           <FpsCounter store={store} />
@@ -374,6 +375,14 @@ export const KillFeed = memo(function KillFeed({ store }: { store: HudStore }) {
   rendered();
   const lines = useHud(store, 'killFeed');
   return <div className="kill-feed" data-hud="killFeed" role="log" aria-live="polite">{lines.map(line => <KillLine line={line} key={line.id} />)}</div>;
+});
+
+export const Spectate = memo(function Spectate({ store }: { store: HudStore }) {
+  rendered();
+  const state = useHud(store, 'spectate');
+  return <div className={`spectate-bar${state.name ? ' is-visible' : ''}`} data-hud="spectate" aria-live="polite">
+    {state.name && <><span className="spectate-label">spectating</span> <b>{state.name}</b>{state.status && <span className="spectate-status">{state.status}</span>}</>}
+  </div>;
 });
 
 export const CentreMessage = memo(function CentreMessage({ store }: { store: HudStore }) {

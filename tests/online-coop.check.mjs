@@ -104,11 +104,15 @@ try {
     g.net.send('end', { id: 'coop', name: 'WAVE 9' });
   }, hostId);
 
-  // A join in a wave is refused with the reason.
+  // A join in a wave is let in, down: it watches the wave and enters at the wave clear.
   const late = await open('Late tester');
   await join(late, code);
-  await wait(late, () => /wave is running/.test(window.__game.lobby.status));
-  assert.equal((await read(host)).players, 2);
+  await wait(late, () => window.__game.gs.state === 'dying' && window.__game.lobby.mode === 'coop' && window.__game.enemies.mirror &&
+    !window.__game.player.alive);
+  const lateId = (await read(late)).id;
+  assert.equal((await read(host)).players, 3);
+  await wait(host, id => window.__game.remotes.get(id)?.alive === false, lateId);
+  await late.screenshot({ path: '/tmp/shooter-coop-check/late-waits.png' });
   assert.ok(!(await hits(host)).includes(50), 'a client cannot send enemy or PvP damage to a teammate');
   assert.equal((await read(host)).over, null);
 
@@ -122,13 +126,11 @@ try {
   await client.screenshot({ path: '/tmp/shooter-coop-check/client-down.png' });
   await clearWave(host);
   await host.evaluate(() => { window.__game.gs.intermission = 60; });
-  await wait(client, () => window.__game.gs.state === 'play' && window.__game.player.alive && window.__game.gs.intermission > 0);
+  for (const p of [client, late]) await wait(p, () => window.__game.gs.state === 'play' && window.__game.player.alive && window.__game.gs.intermission > 0);
   assert.equal((await read(client)).alive, 0);
   assert.equal((await read(host)).accepting, true);
 
-  // A join in the intermission enters the run; the next wave is scaled for three players.
-  await join(late, code); await joined(late);
-  await wait(late, () => window.__game.gs.state === 'play' && window.__game.lobby.mode === 'coop' && window.__game.enemies.mirror);
+  // The join is in the run; the next wave is scaled for three players.
   assert.equal((await read(late)).wave, 1);
   await armour(late);
   await host.evaluate(() => { window.__game.gs.intermission = 0.2; });

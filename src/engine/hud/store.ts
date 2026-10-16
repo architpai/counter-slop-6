@@ -38,7 +38,7 @@ export type HudKey =
   | 'ammo' | 'slots' | 'grenades' | 'health' | 'score' | 'wave' | 'modifier'
   | 'timer' | 'weapon' | 'boss' | 'focus' | 'crosshair' | 'scope' | 'grapple'
   | 'message' | 'tip' | 'killFeed' | 'damage' | 'hitmarker' | 'pvp' | 'board'
-  | 'screen' | 'device' | 'mobile' | 'gameplay' | 'breath' | 'focusMark' | 'stragglers' | 'marks' | 'fps' | 'qualityPrompt';
+  | 'screen' | 'device' | 'mobile' | 'gameplay' | 'breath' | 'focusMark' | 'stragglers' | 'marks' | 'spectate' | 'fps' | 'qualityPrompt';
 
 export interface AmmoState {
   magazine: string;
@@ -58,6 +58,8 @@ export interface BossState { name: string | null }
 export interface FocusState { show: boolean; ready: boolean; label: string }
 export interface CrosshairState { melee: boolean; ads: boolean }
 export interface ScopeState { shown: boolean; kind: ScopeKind }
+/** Who a waiting player watches, and when it is back. An empty name hides the bar. */
+export interface SpectateState { name: string; status: string }
 export interface MessageState { main: string; sub: string; nonce: number }
 export interface TipState { html: string; nonce: number }
 export interface KillLine { id: number; text: string; points: number }
@@ -97,6 +99,7 @@ export interface HudState {
   stragglers: number;
   /** One label for each squad mark; each one's place is the `--mark-<i>` variable. */
   marks: readonly string[];
+  spectate: SpectateState;
   fps: number | null;
   qualityPrompt: string | null;
 }
@@ -130,6 +133,7 @@ export class HudStore implements HudView {
   focusMark = false;
   stragglers = 0;
   marks: readonly string[] = [];
+  spectate: SpectateState = { name: '', status: '' };
   score: ScoreState = { score: 0, combo: 0 };
   wave: WaveState = { wave: 1, left: 0 };
   modifier = '';
@@ -456,6 +460,13 @@ export class HudStore implements HudView {
     if (next === this.modifier) return;
     this.modifier = next;
     this.#emit('modifier');
+  }
+
+  setSpectate(name: string, status = ''): void {
+    const next: SpectateState = { name: String(name ?? ''), status: name ? String(status ?? '') : '' };
+    if (next.name === this.spectate.name && next.status === this.spectate.status) return;
+    this.spectate = next;
+    this.#emit('spectate');
   }
 
   setTimer(text: string): void {

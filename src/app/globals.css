@@ -31,7 +31,7 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .game-hud [hidden] { display: none !important; }
 .game-hud b, .game-hud strong { font-weight: 700; }
 .hud-block { position: absolute; text-shadow: 0 1px 2px rgba(10, 18, 24, .9); }
-.no-gameplay :is(.hud-block, .crosshair, .grapple-reticle, .hit-marker, .kill-marker, .kill-feed, .tip-line, .boss-bar, .scope, .focus-mark, .stragglers, .squad-marks, .focus-meter) { display: none; }
+.no-gameplay :is(.hud-block, .crosshair, .grapple-reticle, .hit-marker, .kill-marker, .kill-feed, .tip-line, .spectate-bar, .boss-bar, .scope, .focus-mark, .stragglers, .squad-marks, .focus-meter) { display: none; }
 .game-hud .pad-only { display: none; }
 .game-hud.gamepad .pad-only { display: initial; }
 .game-hud.gamepad .keyboard-only { display: none; }
@@ -138,6 +138,11 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .tip-line.is-visible { opacity: .9; }
 .tip-line:empty { display: none; }
 .tip-line b { color: var(--hot); }
+.spectate-bar { position: absolute; left: 50%; bottom: 17%; transform: translateX(-50%); width: max-content; max-width: 80%; padding: 6px 16px 7px; border-left: 4px solid var(--hot); background: rgba(14, 24, 32, .82); text-align: center; font-size: 20px; color: var(--fg); opacity: 0; transition: opacity .2s; }
+.spectate-bar.is-visible { opacity: 1; }
+.spectate-bar b { letter-spacing: .5px; text-transform: uppercase; }
+.spectate-label { margin-right: 4px; font-size: 13px; letter-spacing: 2px; text-transform: uppercase; opacity: .7; }
+.spectate-status { display: block; font-size: 14px; opacity: .75; }
 .center-message { position: absolute; left: 50%; top: 20%; transform: translateX(-50%); width: max-content; max-width: 85%; text-align: center; text-shadow: 0 2px 5px rgba(19, 26, 38, .7); }
 .message-main { font-size: 64px; letter-spacing: 1px; font-weight: 700; opacity: 0; }
 .message-sub { font-size: 22px; opacity: 0; }

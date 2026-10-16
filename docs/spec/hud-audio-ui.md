@@ -201,6 +201,8 @@ Breath rules (player module, listed so the bar can be reproduced): breath starts
 
 **Squad marks.** Each mark is a 12 px yellow diamond with a "NAME · 42m" label under it. It sits on the marked point, or on the screen edge toward it (the same placement as the straggler arrows). A short rising tone plays when a mark is placed. Set every frame; cleared on leaving the match. Hidden in "no gameplay".
 
+**Spectate bar.** While a down or dead online player watches a teammate, a dark bar at 17 % from the bottom, centred, with a 4 px red edge on the left, shows "SPECTATING" (small caps), the teammate's name, and under it the return line ("back at the wave clear", "you join at the wave clear", "back in a moment", or "next respawn wave"). It changes in place when the player switches teammate; the centre banner does not come back. Hidden when no teammate is watched, on respawn, at match end, and in "no gameplay".
+
 ### 3.11 Health
 
 - In the bottom-left block (left 9 %, bottom 5 %). One row: the label "HP" (26 px), a 210 × 16 px bar (2.5 px tone border, rotated −1°), and the numeric HP.
@@ -516,6 +518,8 @@ Raw messages the network layer can produce (for the mapping above): "networking 
 | Solo wave cleared | WAVE n CLEARED | catch your breath · +<200 × n> | 2.5 |
 | Online match starts | FREE FOR ALL | "first to 20 · everyone is fair game", or "you joined a match in progress" for a late joiner | 3 |
 | Online respawn countdown (3.5 s): at the moment of death and every time the remaining time crosses a whole second | "4" (at death, since ceil(3.5) = 4), then "3", "2", "1" after 0.5 s, 1.5 s, 2.5 s, and "GO" at 3.5 s when the player respawns | "respawning in" (empty for GO) | 1.1 |
+| Co-op down in a wave (one time, when the player goes down) | DOWN | "back at the wave clear" ("no one is up · back at the wave clear" if no teammate is alive) | 2.2 |
+| Co-op join during a wave (one time) | WAVE IN PROGRESS | "you join at the wave clear" | 2.2 |
 | Player fell out of the level (solo or online): teleported to start, −20 HP | OUT OF BOUNDS | respawned at spawn | 1.8 |
 
 Wave modifier names (top-right line and wave sub-line): "" (none), "CAFFEINATED · they move fast", "JUICED · they hit harder", "SWARM · more of them, thinner". Waves 1–3 and boss waves: none; waves 4–5 pick from the first three; from wave 6 from all four.

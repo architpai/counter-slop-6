@@ -59,6 +59,8 @@ export interface HudView {
   setStragglers(marks: readonly { x: number; y: number; a: number }[]): void;
   /** Squad marks in CSS pixels, each with its "NAME · 42m" label; an empty list hides them. */
   setMarks(marks: readonly { x: number; y: number; label: string }[]): void;
+  /** The bar a waiting player reads: who it watches, and when it is back. An empty name hides it. */
+  setSpectate(name: string, status?: string): void;
   /** Frames per second for the optional counter; null hides it. */
   setFps(fps: number | null): void;
   /** The one-time "Lower quality?" offer, naming the preset it would switch to; null hides it. */

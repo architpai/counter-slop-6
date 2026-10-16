@@ -184,6 +184,8 @@ export class RemotePlayer implements Target {
   get root(): Object3D | null { return this._figure?.root ?? null; }
   get center() { return this._center; }
   get eye() { return this._eye; }
+  /** The loadout slot it holds; -1 before its figure has one. */
+  get slot() { return this._wi; }
   get forward() { return this._forward; }
   get right() { return this._right; }
   get isLocal(): false { return false; }
