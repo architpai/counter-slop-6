@@ -295,7 +295,7 @@ export abstract class ViewModel<M extends WeaponModel = WeaponModel> {
     this.root.visible = this._equipped && !(this.scope && this.aimAmt >= 0.8);
     // Turn rate, not the frame's turn, so the drift is the same at any frame rate.
     const perSecond = 1 / Math.max(dt, 1 / 240), rise = 1 - clamp((this.aimAmt - 0.8) / 0.2, 0, 1);
-    // Sized to the holo's window (350 × 250): the reticle stays clear of its edges at the largest drift.
+    // Sized to the holo's window (412 × 293): the reticle stays clear of its edges at the largest drift.
     const dx = clamp(st.lookDelta.x * perSecond, -6, 6) * 5.4 - st.strafe * 4 + Math.sin(st.bobPhase) * st.bobAmt * 7 + p.x * 540;
     const dy = clamp(st.lookDelta.y * perSecond, -6, 6) * 5.4 + Math.abs(Math.cos(st.bobPhase)) * st.bobAmt * 5 - p.y * 900
       + st.landDip * 30 + rise * 60;
