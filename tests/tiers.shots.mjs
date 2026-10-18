@@ -20,8 +20,8 @@
 //            (from the start where there is none); a preset with shafts on is also rendered with them off and the
 //            frame's change judged (`SHAFT_DIFF`)
 //   weapon   first person at spawn with the R4-C at the hip
-//   weapon-<kind>, weapon-<kind>-ads  every gun slot at the hip and at full aim, and the knife's
-//            guard, weapon-knife; on the realistic presets these are the Blender weapons (R4). A scoped
+//   weapon-<kind>, weapon-<kind>-ads  every weapon at the hip and at full aim (the sword's -ads is
+//            its guard); on the realistic presets these are the Blender weapons (R4). A scoped
 //            gun (R4-C, MP5, sniper) hides its model at full aim and the HUD draws the optic instead:
 //            its -ads shot shows the model anyway, so the optic's axis can be seen on the screen
 //            centre, and weapon-<kind>-scope is what the player sees there, the HUD's optic overlay
@@ -282,21 +282,22 @@ try {
       }));
       await timing();
       Object.assign(row, await timing());
-      // Every gun slot at the hip and aimed, then the knife's guard. Aim and melee are held through a
-      // wrapped `input.down`; the player steps by hand, as the run is paused.
-      for (const kind of await page.evaluate(() => window.__game.player.weapons.map(w => w.kind))) {
-        const slot = await page.evaluate(kind => window.__game.player.weapons.findIndex(w => w.kind === kind), kind);
+      // Every weapon at the hip and aimed (the sword: its guard), each carried in slot 1 in turn. Aim is
+      // held through a wrapped `input.down`; the player steps by hand, as the run is paused.
+      const loadout = await page.evaluate(() => window.__game.player.loadout);
+      for (const kind of ['r4c', 'rifle', 'shotgun', 'sniper', 'pistol', 'lmg', 'sword']) {
+        await page.evaluate(kind => window.__game.player.setLoadout([kind, ...['r4c', 'pistol', 'sword'].filter(k => k !== kind).slice(0, 2)]), kind);
         for (const aim of [false, true]) {
-          const scoped = await page.evaluate(({ slot, aim }) => {
+          const scoped = await page.evaluate(({ aim }) => {
             const g = window.__game, down = g.input.down;
-            g.player.switchTo(slot, true);
+            g.player.switchTo(0, true);
             g.input.down = action => (aim && action === 'aim') || down.call(g.input, action);
             try { for (let i = 0; i < 70; i++) g.player.update(1 / 60); } finally { g.input.down = down; }
             g.effects.clear();
             const w = g.player.weapon, scoped = aim && w.scope && !w.root.visible;
             w.root.visible = true;
             return scoped;
-          }, { slot, aim });
+          }, { aim });
           const name = `${preset}-${map}-weapon-${kind === 'rifle' ? 'mp5' : kind}`;
           row.shots.push(await shot(`${name}${aim ? '-ads' : ''}`));
           if (scoped) {
@@ -308,23 +309,15 @@ try {
           }
         }
       }
-      // The paused player animates the gun only, so the knife's guard (melee held) is stepped here.
-      await page.evaluate(() => {
-        const g = window.__game, p = g.player;
-        const guard = { ...p.weaponState(), fire: false, firePressed: false, aim: true, meleePressed: false };
-        for (let i = 0; i < 40; i++) p.melee.animate(guard, 1 / 60);
-        p.weapon.root.visible = false;
-      });
-      row.shots.push(await shot(`${preset}-${map}-weapon-knife`));
-      await page.evaluate(() => {
-        const g = window.__game, p = g.player, rest = { ...p.weaponState(), aim: false };
-        for (let i = 0; i < 40; i++) p.melee.animate(rest, 1 / 60);
+      await page.evaluate(loadout => {
+        const g = window.__game;
+        g.player.setLoadout(loadout);
         for (let i = 0; i < 40; i++) g.player.update(1 / 60);
         g.player.switchTo(0, true);
         for (let i = 0; i < 60; i++) g.player.update(1 / 60);
         g.effects.clear();
         g.ctx.renderer.rig.visible = false;
-      });
+      }, loadout);
       row.shots.push(await shot(`${preset}-${map}-spawn`));
 
       // Enemy readability: find a clear 64 m corridor at ground level, then place grunts.

@@ -1,6 +1,7 @@
 import { afterAll, expect, test } from 'vitest';
 import { Group, Mesh, MeshToonMaterial, Vector3 } from 'three';
-import { Gun, Melee, GUN_STATS, makeLoadout } from '@/engine/weapons/index';
+import { Gun, Sword, GUN_STATS, makeWeapon } from '@/engine/weapons/index';
+import { SLASH_TIME, SWORD_DAMAGE, SWORD_PVP_DAMAGE } from '@/engine/weapons/sword';
 import type { GunKind } from '@/engine/weapons/index';
 import type { Breakable, Ctx, Player, WeaponState } from '@/engine/types';
 import type { Box } from '@/engine/physics';
@@ -37,10 +38,11 @@ interface PlayerHitLike { player: Foe; part: string; dist: number; point: Vector
 // The slice of `Ctx` a weapon touches. A real one needs WebGL, a level and a net peer.
 const ctx = {
   renderer: { rig: new Group() },
+  scene: new Group(),
   camera: { position: new Vector3(2, 3, 4) },
   input: { rumble: record('rumble') },
   audio: Object.fromEntries(['shot', 'mp5Fire', 'pistolFire', 'shotgunFire', 'sniperFire', 'revolver', 'reload', 'shellCue', 'cylinder',
-    'empty', 'pump', 'ricochet', 'katanaSwing', 'katanaHit'].map(name => [name, record(name)])),
+    'empty', 'pump', 'ricochet', 'katanaSwing', 'katanaHit', 'dash'].map(name => [name, record(name)])),
   effects: { shake: 0, realistic: false, ...Object.fromEntries(['strokeBurst', 'muzzleSmoke', 'muzzleLight', 'shell', 'bulletImpact'].map(name => [name, record(name)])),
     tracer: (a: Vector3, b: Vector3, ...args: unknown[]) => calls.push({ name: 'tracer', args: [a.clone(), b.clone(), ...args] }),
     bulletTracer: (a: Vector3, b: Vector3, ...args: unknown[]) => calls.push({ name: 'tracer', args: [a.clone(), b.clone(), ...args] }) },
@@ -67,20 +69,20 @@ const ctx = {
   },
 };
 
-const player = { eye: new Vector3(2, 3, 4), forward: new Vector3(0, 0, -1), right: new Vector3(1, 0, 0),
+const player = { eye: new Vector3(2, 3, 4), forward: new Vector3(0, 0, -1), right: new Vector3(1, 0, 0), waves: [] as unknown[],
   recoil: record('recoil'), kickFov: record('kickFov'), lunge: record('lunge'), step: record('step'),
   aimDir: (spread: number, out: Vector3) => { calls.push({ name: 'spread', args: [spread] }); return out.copy(player.forward); } };
 
 const engineCtx = ctx as unknown as Ctx;
 const enginePlayer = player as unknown as Player;
-const loadout = makeLoadout(engineCtx, enginePlayer), revolver = new Gun(engineCtx, enginePlayer, 'revolver');
+const loadout = (['r4c', 'rifle', 'shotgun', 'sniper', 'pistol', 'lmg'] as const).map(kind => makeWeapon(engineCtx, enginePlayer, kind)), revolver = new Gun(engineCtx, enginePlayer, 'revolver');
 const gunAt = (i: number): Gun => {
   const weapon = loadout[i];
   if (!(weapon instanceof Gun)) throw new Error(`slot ${i} is not a gun`);
   return weapon;
 };
 const r4c = gunAt(0), rifle = gunAt(1), shotgun = gunAt(2), sniper = gunAt(3), pistol = gunAt(4), lmg = gunAt(5);
-const melee = new Melee(engineCtx, enginePlayer);
+const melee = new Sword(engineCtx, enginePlayer);
 const all = [...loadout, revolver, melee];
 const step = (weapon: { animate(st: WeaponState, dt: number): void }, duration: number, state: WeaponState = neutral) => {
   for (let left = duration; left > 1e-9;) { const dt = Math.min(0.01, left); weapon.animate(state, dt); left -= dt; }
@@ -91,8 +93,8 @@ const draw = (weapon: { equip(): void; animate(st: WeaponState, dt: number): voi
 afterAll(() => { for (const weapon of all) weapon.dispose(); });
 
 test('loadout, view models and aim poses', () => {
-  assert(loadout.map(w => w.kind).join(',') === 'r4c,rifle,shotgun,sniper,pistol,lmg', 'Loadout keeps six guns and independent melee');
-  assert(melee instanceof Melee && melee.spreadPx === 4 && !melee.isGun, 'Melee exposes its independent state');
+  assert(loadout.map(w => w.kind).join(',') === 'r4c,rifle,shotgun,sniper,pistol,lmg', 'makeWeapon builds each gun');
+  assert(melee instanceof Sword && melee.spreadPx === 4 && !melee.isGun && melee.kind === 'sword', 'The sword is a weapon with no ammo');
   const muzzleZ: Record<GunKind, number> = { r4c: -1.16, rifle: -0.96, pistol: -0.42, shotgun: -1.09, sniper: -1.60, lmg: -1.32, revolver: -0.40 };
   const expected: Record<GunKind, number[]> = { r4c: [30, 150, 300, 28, 38, 0.08], rifle: [30, 150, 300, 22, 38, 0.075], pistol: [15, 90, 180, 40, 62, 0.18], shotgun: [6, 36, 72, 19, 68, 0.78],
     sniper: [5, 25, 50, 150, 20, 0.20], lmg: [100, 200, 300, 26, 58, 0.085], revolver: [6, 36, 72, 62, 52, 0.30] };
@@ -140,7 +142,7 @@ test('loadout, view models and aim poses', () => {
   assert(rifle.root.getObjectByName('magazine-lower'), 'MP5 magazine has a curved lower section');
   const blade = must(melee.root.getObjectByName('blade'), 'blade');
   if (!(blade instanceof Mesh)) throw new Error('blade is not a mesh');
-  assert((blade.material as MeshToonMaterial).color.getHex() === 0xcbdbe3, 'Knife blade uses pale cool steel');
+  assert((blade.material as MeshToonMaterial).color.getHex() === 0xcbdbe3, 'The sword blade uses pale cool steel');
 });
 
 test('R4-C and MP5 optics change independently without changing combat stats', () => {
@@ -464,33 +466,45 @@ test('real rays use separate PvE and PvP damage, headshots and distance falloff'
   }
 });
 
-test('melee guard, single strikes, obstruction and blade blood', () => {
+test('sword guard, strikes, held-fire chains, obstruction, air slash and blade blood', () => {
   const foe: Foe = { center: new Vector3(0, 1, -2), stats: { boss: false } }, remote: Foe = { center: new Vector3(0, 1, -2), stats: { boss: false } }, prop: Prop = { pos: new Vector3(0, 1, -1) };
-  melee.equip();
+  draw(melee);
   calls.length = 0;
   melee.animate({ ...neutral, aim: true }, 0.05);
-  assert(melee.blocking && near(melee.blockT, 0.05), 'Held melee raises the guard');
+  assert(melee.blocking && near(melee.blockT, 0.05), 'Held aim raises the guard');
   melee.animate({ ...neutral, blockFire: true }, 0.05);
-  assert(!melee.blocking && !melee.root.visible, 'Dead state clears melee');
+  assert(!melee.blocking && !melee.active, 'Dead state drops the guard');
   ctx.enemies.inArc = () => [{ enemy: foe, dist: 2 }];
   ctx.game.playersInArc = () => [remote];
   ctx.game.breakablesInArc = () => [prop];
-  melee.startSlash(neutral);
-  step(melee, 0.08);
-  assert(!last('enemyDamage'), 'Melee damage waits for contact');
-  step(melee, 0.01);
-  assert(num(must(last('enemyDamage'), 'enemyDamage')[1]) === 75 && num(must(last('playerDamage'), 'playerDamage')[1]) === 55 && num(must(last('breakHit'), 'breakHit')[1]) === 75, 'Melee routes enemy, player and prop damage');
-  step(melee, 0.3, { ...neutral, fire: true });
-  assert(named('enemyDamage').length === 1 && melee.combo === 1, 'One strike hits once; holding gun fire does not chain it');
+  assert(melee.startSlash(neutral), 'A free blade slashes');
+  step(melee, 0.4 * SLASH_TIME - 0.01);
+  assert(!last('enemyDamage'), 'Damage waits for contact');
+  assert(melee.cutting() && melee.cutting(true), 'The middle of the slash cuts bullets');
+  step(melee, 0.02);
+  assert(num(must(last('enemyDamage'), 'enemyDamage')[1]) === SWORD_DAMAGE && num(must(last('playerDamage'), 'playerDamage')[1]) === SWORD_PVP_DAMAGE
+    && num(must(last('breakHit'), 'breakHit')[1]) === SWORD_DAMAGE, 'The sword routes enemy, player and prop damage');
+  assert(named('lunge').length === 0 && named('step').length === 1, 'A grounded slash steps in without a hop');
+  step(melee, 0.5, { ...neutral, fire: true });
+  assert(named('enemyDamage').length === 2 && melee.combo === 2, 'Held fire chains a second slash after the cooldown');
+  step(melee, 0.5);
   ctx.world.lineOfSight = () => false;
-  melee.startSlash(neutral); step(melee, 0.1);
-  assert(named('enemyDamage').length === 1, 'A knife cannot hit an enemy through a wall');
+  melee.startSlash(neutral); step(melee, 0.3);
+  assert(named('enemyDamage').length === 2, 'The sword cannot hit an enemy through a wall');
   ctx.world.lineOfSight = () => true;
+  step(melee, 0.5);
+  assert(melee.startSlash({ ...neutral, grounded: false }) && player.waves.length === 1 && named('lunge').length === 1, 'A slash in the air lunges and throws a wave');
+  step(melee, 0.5);
+  melee.startSlash({ ...neutral, grounded: false });
+  assert(player.waves.length === 1, 'The air slash has its own cooldown');
+  for (const wave of player.waves as { mesh: Mesh }[]) wave.mesh.removeFromParent();
+  player.waves.length = 0;
   melee.addBlood(0.84); melee.animate(neutral, 0);
-  const smears = melee.root.children.filter(child => child.name.startsWith('blood-smear-'));
-  assert(smears.length === 6 && smears.filter(smear => smear.visible).length === 5, 'Blood follows the knife smear thresholds');
+  const smears = must(melee.root.getObjectByName('blood'), 'blood').children.filter(child => child.name.startsWith('blood-smear-'));
+  assert(smears.length === 6 && smears.filter(smear => smear.visible).length === 5, 'Blood follows the smear thresholds');
   melee.resetAmmo();
-  assert(melee.blood === 0 && melee.combo === 0 && !melee.active && smears.every(smear => !smear.visible), 'Reset clears melee state');
+  assert(melee.blood === 0 && melee.combo === 0 && melee.waveCooldown === 0 && !melee.active && smears.every(smear => !smear.visible), 'Reset clears the sword state');
+  melee.unequip();
   ctx.enemies.inArc = () => [];
   ctx.game.playersInArc = () => [];
   ctx.game.breakablesInArc = () => [];

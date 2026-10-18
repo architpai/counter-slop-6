@@ -13,7 +13,9 @@ const wait = (page, fn, arg, timeout = 30000) => page.waitForFunction(fn, arg, {
 async function open(name) {
   const page = await (await browser.newContext({ viewport: { width: 1280, height: 720 } })).newPage();
   page.on('pageerror', error => errors.push(String(error)));
-  await page.addInitScript(name => { localStorage.setItem('cs6_name', name); localStorage.setItem('cs6_music', '0'); }, name);
+  // The host carries a sniper (slot 3); the client carries none, so its view borrows one.
+  await page.addInitScript(name => { localStorage.setItem('cs6_name', name); localStorage.setItem('cs6_music', '0');
+    localStorage.setItem('cs6_loadout', name.startsWith('Host') ? 'r4c,rifle,sniper' : 'r4c,pistol,sword'); }, name);
   await page.goto(url);
   await wait(page, () => !!window.__game, null, 120000);
   await page.locator('[data-act="online"]').click();
@@ -38,7 +40,7 @@ try {
   await Promise.all([host, client].map(p => wait(p, () => window.__game.gs.state === 'play')));
   for (const p of [host, client]) await armour(p);
   // The host holds the sniper; the client goes down and watches it.
-  await host.evaluate(() => window.__game.player.switchTo(3));
+  await host.evaluate(() => window.__game.player.switchTo(2));
   await client.evaluate(() => window.__game.player.takeDamage(1e9));
   await wait(client, () => window.__game.gs.state === 'dying');
   await client.waitForTimeout(1500);
@@ -47,8 +49,8 @@ try {
   await client.evaluate(() => { const i = window.__game.input; i.pressed = action => action === 'jump'; });
   await client.waitForTimeout(100);
   await client.evaluate(() => { delete window.__game.input.pressed; });
-  await wait(client, () => window.__game.player.watched?.slot === 3 && window.__game.player.weapon.kind === 'sniper' &&
-    window.__game.ctx.renderer.rig.visible && window.__game.player.weapon.root.visible);
+  await wait(client, () => window.__game.player.watched?.kind === 'sniper' && window.__game.player.view.kind === 'sniper' &&
+    window.__game.ctx.renderer.rig.visible && window.__game.player.view.root.visible);
   await client.waitForTimeout(800);
   await client.screenshot({ path: `${out}/eyes-hip.png` });
   // The host aims: the client sees the scope and the zoom.

@@ -12,6 +12,8 @@ When a checkpoint is saved, the main screen (play page) and the death screen sho
 
 ## Loadout and controls
 
+> Replaced in part by [Sword, loadouts and weapon handling](sword-loadouts.md): a loadout is now three picked weapons, and the knife is the sword, a loadout weapon.
+
 - Slots **1–5**: R4-C, MP5, shotgun, sniper, pistol. Wheel and controller next/previous cycle only these guns. `GUN_LOADOUT` in `stats.ts` owns both local and remote slot order. The revolver remains defined but is not issued.
 - The R4-C uses kind `r4c`, a longer railed handguard, box magazine, solid adjustable stock and the shared ACOG/Holo models and overlays. ACOG is the default at 38° ADS FOV; Holo uses 82°. It reuses the heavier `shot` audio cue locally and positionally online. R4-C and MP5 optic choices are independent.
 - The MP5 retains the internal `rifle` kind. It has a curved magazine, ribbed handguard, sliding stock, hooded front sight and tube ACOG. Its 38° ADS FOV gives about 2.5× magnification from the 82° base FOV. The overlay follows the classic NATO ACOG in Rainbow Six Siege: a thick circular housing, four corner bolts, side lugs, top adjustment cap and lower mount, with the surroundings visible outside the optic. A small red chevron has its outer tip exactly at screen centre; a red upper range scale continues into a thin black lower stem. There are no horizontal wings or floating scope labels. The lens and housing scale together with the viewport. Reference: [Ubisoft's ACOG comparison](https://www.ubisoft.com/en-gb/game/rainbow-six/siege/news-updates/77PNM7F9qztJpYi0WkRxoY/dev-blog-sights-scopes-in-y5s3).

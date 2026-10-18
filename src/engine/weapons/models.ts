@@ -60,7 +60,7 @@ export interface RealLook {
 export interface WeaponModel {
   root: THREE.Group;
   parts: ModelParts;
-  /** Gun: the barrel end. Melee: the knife tip. */
+  /** Gun: the barrel end. Sword: the blade tip. */
   muzzle: THREE.Object3D;
   bloodSmears: THREE.Mesh[];
   /** Scales the procedural part offsets: 1 on the flat models (their own units), `LOW_SCALE` on the Blender models (metres). */
@@ -387,17 +387,34 @@ export function makeGunModel(kind: GunKind): GunModel {
   return { root, parts: { ...parts, leftHand }, muzzle, eject, ...flash(muzzle), bloodSmears: result.bloodSmears, unit: 1 };
 }
 
-export function makeMeleeModel(): WeaponModel {
-  const { root, bloodSmears } = model('melee');
-  mesh(root, 'blade', boxGeo(0.012, 0.035, 0.42), charMat(0xcbdbe3), [0, 0, -0.25]);
-  mesh(root, 'blade-tip', boxGeo(0.012, 0.02, 0.07), charMat(0xcbdbe3), [0, 0.007, -0.49], [0.3, 0, 0]);
-  box(root, 'guard', [0.10, 0.07, 0.02], [0, 0, -0.04], DARK);
-  box(root, 'textured-grip', [0.035, 0.042, 0.18], [0, 0, 0.07], DARK);
-  for (let i = 0; i < 4; i++) box(root, `grip-ridge-${i}`, [0.041, 0.048, 0.018], [0, 0, 0.005 + i * 0.045], PRIMARY);
-  hand(root, 'striking-right-hand', [0, -0.005, 0.01], [0.5, -0.5, 1]);
-  const leftHand = hand(root, 'supporting-left-hand', [-0.05, -0.035, 0.12], [-0.4, -0.7, 1]);
-  const muzzle = group(root, 'tip', [0, 0, -0.47]);
-  smearsOn(root, bloodSmears);
+/** The flat sword's blade length past the guard, in the flat models' units (0.67 m at `LOW_SCALE`). */
+const SWORD_BLADE = 1.45;
+/** The flat knife's blade, which `smearsOn` lays its smears along, in the same units. */
+const SMEAR_BLADE = 0.45;
+
+/**
+ * The flat sword (low tier): a long single-edged blade with a dark spine,
+ * a square guard and a wrapped two-hand grip, held in both fists. The blade
+ * runs along -z from the guard at the origin, as the knife's did.
+ */
+export function makeSwordModel(): WeaponModel {
+  const { root, bloodSmears } = model('sword');
+  const steel = charMat(0xcbdbe3);
+  mesh(root, 'blade', boxGeo(0.014, 0.05, SWORD_BLADE), steel, [0, 0, -0.04 - SWORD_BLADE / 2]);
+  box(root, 'spine', [0.017, 0.012, SWORD_BLADE - 0.06], [0, 0.022, -0.07 - SWORD_BLADE / 2], DARK);
+  mesh(root, 'blade-tip', boxGeo(0.014, 0.034, 0.12), steel, [0, 0.008, -0.07 - SWORD_BLADE], [0.32, 0, 0]);
+  box(root, 'guard', [0.13, 0.11, 0.028], [0, 0, -0.03], DARK);
+  box(root, 'collar', [0.05, 0.06, 0.05], [0, 0, 0.0], PRIMARY);
+  box(root, 'grip', [0.042, 0.05, 0.52], [0, 0, 0.27], DARK);
+  for (let i = 0; i < 7; i++) box(root, `grip-wrap-${i}`, [0.048, 0.056, 0.022], [0, 0, 0.07 + i * 0.07], PRIMARY, [0, 0, i % 2 ? 0.4 : -0.4]);
+  box(root, 'pommel', [0.056, 0.064, 0.04], [0, 0, 0.55], DARK);
+  hand(root, 'striking-right-hand', [0, -0.005, 0.06], [0.5, -0.5, 1]);
+  const leftHand = hand(root, 'supporting-left-hand', [0, -0.01, 0.42], [-0.3, -0.6, 1]);
+  const muzzle = group(root, 'tip', [0, 0.008, -0.12 - SWORD_BLADE]);
+  // The knife's smears, drawn out along the longer, taller blade.
+  const smears = group(root, 'blood');
+  smears.scale.set(1, 1.5, SWORD_BLADE / SMEAR_BLADE);
+  smearsOn(smears, bloodSmears);
   return { root, parts: { leftHand }, muzzle, bloodSmears, unit: 1 };
 }
 
@@ -457,7 +474,7 @@ const REAL_REST: Readonly<Record<string, readonly [Triple, Triple, number | null
   pistol: [[0.12, -0.095, -0.33], [-0.04, 0.05, 0], -0.43],
   // A cheek weld on the fixed stock: the front post 0.57 m out, the rear notch 14 cm ahead of the eye.
   lmg: [[0.15, -0.13, -0.27], [-0.06, 0.04, 0], -0.20],
-  knife: [[0.20, -0.18, -0.28], [0.35, 0.10, -0.45], null],
+  sword: [[0.24, -0.15, -0.38], [0.70, 0.05, -0.95], null],
 };
 
 /**
@@ -536,17 +553,20 @@ export function makeRealGunModel(kind: GunKind, assets: WeaponAssets): GunModel 
   return { root, parts: { ...parts, leftHand }, muzzle, eject, ...realFlash(muzzle, REAL_FLASH[kind] ?? 1), bloodSmears: [], unit: LOW_SCALE, sights, real };
 }
 
-/** The realistic tiers' knife (R4): the Blender blade and gloved hands, and the flat knife's blood smears laid along the blade. */
-export function makeRealMeleeModel(assets: WeaponAssets): WeaponModel | null {
-  const made = realRoot(assets, 'knife', 'melee');
+/** The Blender sword's blade from its `smears` socket to the tip, in metres (tools/blender/weapons/sword.py). */
+const REAL_SWORD_BLADE = 0.658;
+
+/** The realistic tiers' sword (R4): the Blender blade and gloved hands, and the flat smears laid along the blade. */
+export function makeRealSwordModel(assets: WeaponAssets): WeaponModel | null {
+  const made = realRoot(assets, 'sword', 'sword');
   if (!made) return null;
   const { root, node, real } = made;
-  const leftHand = remember(socket(node, 'left-hand', 'knife'));
-  const muzzle = socket(node, 'tip', 'knife');
+  const leftHand = remember(socket(node, 'left-hand', 'sword'));
+  const muzzle = socket(node, 'tip', 'sword');
   const bloodSmears: THREE.Mesh[] = [];
-  // The smears are laid out in the flat knife's units; `smears` sits where its blade would.
-  const smears = group(socket(node, 'smears', 'knife'), 'blood');
-  smears.scale.setScalar(LOW_SCALE);
+  // The smears are laid out in the flat knife's units; `smears` sits at the blade's root.
+  const smears = group(socket(node, 'smears', 'sword'), 'blood');
+  smears.scale.set(LOW_SCALE, LOW_SCALE * 1.5, REAL_SWORD_BLADE / SMEAR_BLADE);
   smearsOn(smears, bloodSmears);
   return { root, parts: { leftHand }, muzzle, bloodSmears, unit: LOW_SCALE, real };
 }

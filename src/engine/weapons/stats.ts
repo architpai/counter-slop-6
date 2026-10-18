@@ -1,6 +1,34 @@
 export type GunKind = 'r4c' | 'rifle' | 'pistol' | 'shotgun' | 'sniper' | 'lmg' | 'revolver';
-/** Shared slot order for the local loadout and remote weapon props. `rifle` is the MP5. */
-export const GUN_LOADOUT = ['r4c', 'rifle', 'shotgun', 'sniper', 'pistol', 'lmg'] as const;
+/**
+ * Every weapon a loadout may hold, in the picker's order. A weapon's index here is its id on the
+ * wire (players.ts `encodeState`), so the order only grows at the end. `rifle` is the MP5.
+ */
+export const WEAPON_KINDS = ['r4c', 'rifle', 'shotgun', 'sniper', 'pistol', 'lmg', 'sword'] as const;
+export type WeaponKind = (typeof WEAPON_KINDS)[number];
+/** Weapons a player carries; picked in the menu (ui.ts `loadout`). */
+export const LOADOUT_SIZE = 3;
+export const DEFAULT_LOADOUT: readonly WeaponKind[] = ['r4c', 'pistol', 'sword'];
+export const isWeaponKind = (value: unknown): value is WeaponKind => WEAPON_KINDS.includes(value as WeaponKind);
+
+/** `LOADOUT_SIZE` different weapons, or null. */
+export function validLoadout(value: unknown): WeaponKind[] | null {
+  if (!Array.isArray(value) || value.length !== LOADOUT_SIZE || !value.every(isWeaponKind)) return null;
+  return new Set(value).size === LOADOUT_SIZE ? [...value] : null;
+}
+
+/**
+ * What the weapon in hand does to its carrier's movement. A light weapon runs faster, a heavy one
+ * slower, and the LMG also jumps lower and slides shorter.
+ */
+export interface Handling {
+  /** Multiplies walk, sprint, crouch and air speed. */
+  moveSpeed: number;
+  /** Multiplies jump speed and the slide's boost. */
+  mobility: number;
+}
+
+/** The sword's handling (weapons/sword.ts); a gun's is in its `GunStats`. */
+export const SWORD_HANDLING: Readonly<Handling> = { moveSpeed: 1.15, mobility: 1 };
 export type RifleOptic = 'acog' | 'holo';
 export type ScopeKind = RifleOptic | 'sniper';
 
@@ -17,7 +45,7 @@ export type Triple = [number, number, number];
 export type Falloff = [number, number, number];
 
 /** One row of `ARCHITECTURE.md` §6.11 / `weapons.md` §4, one field per table column. */
-export interface GunStats {
+export interface GunStats extends Handling {
   kind: GunKind;
   name: string;
   hint: string;
@@ -65,6 +93,7 @@ export interface GunStats {
 export const GUN_STATS: Record<GunKind, GunStats> = {
   r4c: {
     kind: 'r4c', name: 'R4-C', hint: 'auto · high damage · slow to aim and draw', scope: true,
+    moveSpeed: 0.95, mobility: 1,
     magSize: 30, startingReserve: 150, maxReserve: 300, fireInterval: 0.08, automatic: true,
     damage: 28, headMult: 2.5, pellets: 1, hipSpread: 0.022, adsSpread: 0.0025,
     spreadKick: 0.007, spreadMax: 0.065, moveSpread: 0.0012, adsFov: 38, adsSpeed: 0.7, drawTime: 0.42,
@@ -75,6 +104,7 @@ export const GUN_STATS: Record<GunKind, GunStats> = {
   },
   rifle: {
     kind: 'rifle', name: 'MP5', hint: 'auto · fast draw · full speed while aiming', scope: true,
+    moveSpeed: 1.05, mobility: 1,
     magSize: 30, startingReserve: 150, maxReserve: 300, fireInterval: 0.075, automatic: true,
     damage: 22, headMult: 2.6, pellets: 1, hipSpread: 0.012, adsSpread: 0.0015,
     spreadKick: 0.005, spreadMax: 0.05, moveSpread: 0.0005, adsFov: 38, adsSpeed: 1, drawTime: 0.22,
@@ -85,6 +115,7 @@ export const GUN_STATS: Record<GunKind, GunStats> = {
   },
   pistol: {
     kind: 'pistol', name: 'PISTOL', hint: 'semi-auto · close-range headshots · quick reload', scope: false,
+    moveSpeed: 1.08, mobility: 1,
     magSize: 15, startingReserve: 90, maxReserve: 180, fireInterval: 0.18, automatic: false,
     damage: 40, headMult: 2.6, pellets: 1, hipSpread: 0.008, adsSpread: 0.002,
     spreadKick: 0.006, spreadMax: 0.035, moveSpread: 0.0004, adsFov: 62, adsSpeed: 0.95, drawTime: 0.2,
@@ -95,6 +126,7 @@ export const GUN_STATS: Record<GunKind, GunStats> = {
   },
   shotgun: {
     kind: 'shotgun', name: 'SHOTGUN', hint: 'pump · devastating up close', scope: false,
+    moveSpeed: 1.0, mobility: 1,
     magSize: 6, startingReserve: 36, maxReserve: 72, fireInterval: 0.78, automatic: false,
     damage: 19, headMult: 1.8, pellets: 10, hipSpread: 0.062, adsSpread: 0.034,
     spreadKick: 0, spreadMax: 0.10, moveSpread: 0.0006, adsFov: 68, adsSpeed: 0.8, drawTime: 0.45,
@@ -105,6 +137,7 @@ export const GUN_STATS: Record<GunKind, GunStats> = {
   },
   sniper: {
     kind: 'sniper', name: 'SNIPER', hint: 'scoped bolt action · one shot, one kill', scope: true,
+    moveSpeed: 0.9, mobility: 1,
     magSize: 5, startingReserve: 25, maxReserve: 50, fireInterval: 0.2, automatic: false,
     damage: 150, headMult: 3, pellets: 1, hipSpread: 0.075, adsSpread: 0.0004,
     spreadKick: 0.05, spreadMax: 0.14, moveSpread: 0.004, adsFov: 20, adsSpeed: 0.55, drawTime: 0.6,
@@ -116,6 +149,7 @@ export const GUN_STATS: Record<GunKind, GunStats> = {
   // Belt-fed: the only gun that fires for eight seconds without a reload, and pays for it in every handling stat.
   lmg: {
     kind: 'lmg', name: 'LMG', hint: 'belt-fed · 100 rounds · slow to aim, draw and reload', scope: false,
+    moveSpeed: 0.82, mobility: 0.9,
     magSize: 100, startingReserve: 200, maxReserve: 300, fireInterval: 0.085, automatic: true,
     damage: 26, headMult: 2.2, pellets: 1, hipSpread: 0.034, adsSpread: 0.006,
     spreadKick: 0.0045, spreadMax: 0.085, moveSpread: 0.0018, adsFov: 58, adsSpeed: 0.5, drawTime: 0.65,
@@ -126,6 +160,7 @@ export const GUN_STATS: Record<GunKind, GunStats> = {
   },
   revolver: {
     kind: 'revolver', name: 'REVOLVER', hint: 'hand cannon · headshots delete', scope: false,
+    moveSpeed: 1.05, mobility: 1,
     magSize: 6, startingReserve: 36, maxReserve: 72, fireInterval: 0.3, automatic: false,
     damage: 62, headMult: 3, pellets: 1, hipSpread: 0.006, adsSpread: 0.002,
     spreadKick: 0.02, spreadMax: 0.06, moveSpread: 0.0015, adsFov: 52, adsSpeed: 0.9, drawTime: 0.3,

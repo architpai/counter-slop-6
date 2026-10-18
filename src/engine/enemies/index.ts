@@ -14,7 +14,7 @@ import { makeModel, syncModel, flash, spawnPose, animate, corpse, planDeath, DEA
 import type { Death, GroundJoints, EyeAnchors, HitSphere, ModelNodes } from './model';
 import { groundThink, wander, steer, follow, onHit, mirrorLaser } from './ai';
 import { flyerThink } from './flyer';
-import { updateProjectiles, clearProjectiles } from './projectiles';
+import { updateProjectiles, clearProjectiles, cutProjectiles } from './projectiles';
 import type { ProjectileRecord } from './projectiles';
 import { ATTACK_KINDS, mirrorAttack, mirrorAttackStep } from './boss';
 import type { BossAttack } from './boss';
@@ -484,7 +484,7 @@ export class EnemyManager {
       effects.debris(e.root, e.body.pos, vel, spin.set(rand(-9, 9), rand(-9, 9), rand(-9, 9)), { radius: 0.5, blood: true, life: 8, gone: e.figure.lend(e.root) });
       effects.blood(e.center, dir, 1, { tone }); done(true); return;
     }
-    const src = info.source, slash = src === 'melee' || src === 'focus';
+    const src = info.source, slash = src === 'melee' || src === 'wave' || src === 'focus';
     const overkill = -e.hp > 0.35 * e.maxHp || src === 'melee' || !!info.crit || src === 'deflect' || src === 'blast';
     if (overkill) {
       audio.gib(e.center);
@@ -581,6 +581,9 @@ export class EnemyManager {
     }
     return best;
   }
+
+  /** An air slash passed: every enemy bolt within `radius` of `p` is cut out of the air. How many. */
+  cutProjectiles(p: Vector3, radius: number): number { return cutProjectiles(this, p, radius); }
 
   inArc(p: Vector3, dir: Vector3, range: number, cosHalf: number): EnemyArcHit[] {
     const out: EnemyArcHit[] = [];

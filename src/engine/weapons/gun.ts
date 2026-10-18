@@ -65,7 +65,7 @@ interface Falloffable {
 
 const _eye = new Vector3();
 
-// Shared by guns and the always-available melee view model.
+// Shared by guns and the sword.
 export abstract class ViewModel<M extends WeaponModel = WeaponModel> {
   /** Set by the concrete weapon: a scoped gun hides its model at full aim. */
   abstract readonly scope: boolean;
@@ -423,6 +423,8 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
 
   get spreadPx() { return 5 + this._spread * 900; }
   get adsSpeed(): number { return this._stats.adsSpeed; }
+  get moveSpeed(): number { return this._stats.moveSpeed; }
+  get mobility(): number { return this._stats.mobility; }
   /** Raised far enough to fire. The raise takes `drawTime`; the last 15 % is settle. */
   get drawn(): boolean { return this._equipT >= 0.85; }
   get scopeKind(): ScopeKind { return this.kind === 'rifle' || this.kind === 'r4c' ? this.optic : 'sniper'; }

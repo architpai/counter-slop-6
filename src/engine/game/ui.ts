@@ -1,6 +1,8 @@
 import { clamp, store, SKEY } from '../util';
 import { LEVELS, validKey } from '../level/index';
 import { isOnlineMode } from './team-rules';
+import { GUN_STATS, LOADOUT_SIZE, SWORD_HANDLING, WEAPON_KINDS, isWeaponKind } from '../weapons/stats';
+import type { WeaponKind } from '../weapons/stats';
 import { AMBIENT_OCCLUSION, ANTIALIAS, EFFECTS, FPS_TARGETS, SHADOWS, TEXTURE_QUALITIES, VIEW_DISTANCES, isPreset } from '../render/quality';
 import type { FpsTarget, PresetChoice } from '../render/quality';
 import type { ScreenView, UiAction } from '../hud/screens';
@@ -17,6 +19,22 @@ export interface UiApi {
   readonly screen: ScreenName | null;
 }
 
+/** What the loadout picker shows of each weapon. */
+const ROLES: Record<WeaponKind, string> = {
+  r4c: 'Assault rifle · high damage · slow to aim',
+  rifle: 'SMG · fast · accurate on the move',
+  shotgun: 'Pump shotgun · devastating up close',
+  sniper: 'Bolt-action sniper · one shot, one kill',
+  pistol: 'Sidearm · quick draw · quick reload',
+  lmg: 'Belt-fed LMG · 100 rounds · heavy',
+  sword: 'Guard and parry · cuts bullets · air slash',
+};
+const LOADOUT_CHOICES = WEAPON_KINDS.map(kind => ({
+  kind, role: ROLES[kind],
+  name: kind === 'sword' ? 'SWORD' : GUN_STATS[kind].name,
+  speed: Math.round(100 * (kind === 'sword' ? SWORD_HANDLING.moveSpeed : GUN_STATS[kind].moveSpeed)),
+}));
+
 export function createUI(app: App): UiApi {
   const { ctx, gs, lobby, settings, quality } = app;
   const { hud, net } = ctx;
@@ -25,7 +43,31 @@ export function createUI(app: App): UiApi {
     msaaSoft: ctx.renderer?.msaaDepthReadable ?? true });
   const look = () => ({ sens: settings.sens, touchSens: settings.touchSens, touch: ctx.input.usingTouch, acogSens: settings.acogSens, sniperSens: settings.sniperSens,
     invert: settings.invert, music: settings.music, confirmKey: hud.key('confirm'), gfx: gfx() });
-  const weapons = () => ({ optic: settings.optic, r4cOptic: settings.r4cOptic });
+  /** A pick under way: fewer than `LOADOUT_SIZE` weapons. Saved (`pickLoadout`) once full. */
+  let draft: WeaponKind[] | null = null;
+  const weapons = () => ({ optic: settings.optic, r4cOptic: settings.r4cOptic, choices: LOADOUT_CHOICES,
+    loadout: [...(draft ?? settings.loadout)], loadoutNote: loadoutNote() });
+  function loadoutNote(): string {
+    if (draft) return `Pick ${LOADOUT_SIZE - draft.length} more.`;
+    const pending = !!ctx.player && ctx.player.loadout.join() !== settings.loadout.join();
+    if (!['play', 'dying', 'pause'].includes(gs.state)) return 'Saved on this device. You carry these from the start of the next run or match.';
+    if (gs.mode === 'training') return 'Training: changes apply at once.';
+    if (gs.mode === 'solo' || app.coop.active()) {
+      if (app.loadoutOpen()) return 'Between waves: changes apply now.';
+      return pending ? 'Applies when this wave is cleared.' : 'You can change weapons between waves.';
+    }
+    return pending ? 'Locked for this match. Applies from the next match.' : 'Locked for this match.';
+  }
+  function toggleLoadout(value: string | null): void {
+    if (!isWeaponKind(value)) return;
+    const next = draft ?? [...settings.loadout], at = next.indexOf(value);
+    if (at >= 0) next.splice(at, 1);
+    else if (next.length < LOADOUT_SIZE) next.push(value);
+    else return;
+    if (next.length === LOADOUT_SIZE && app.pickLoadout(next)) draft = null;
+    else draft = next;
+    redraw();
+  }
   function setOptic(field: 'optic' | 'r4cOptic', value: string | null): void {
     if (value !== 'acog' && value !== 'holo') return;
     settings[field] = value; app.applyOptic(); redraw();
@@ -134,6 +176,7 @@ export function createUI(app: App): UiApi {
     sniperSens: value => sensitivity('sniperSens', value, 150),
     optic: value => setOptic('optic', value),
     r4cOptic: value => setOptic('r4cOptic', value),
+    loadout: value => toggleLoadout(value),
     invert: value => { settings.invert = value === '1'; app.applyLook(); },
     music: value => { app.setMusic(value === '1'); },
     // Quality changes redraw through the subscription in `boot`, like every other listener.

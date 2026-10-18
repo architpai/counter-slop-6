@@ -10,8 +10,8 @@ import { NEAR, Renderer, VIEW_MODEL_FOV } from '@/engine/render/index';
 import { MATCH_QUIET_MS } from '@/engine/render/pacing';
 import { PRESET_VALUES } from '@/engine/render/quality';
 import { TEXTURE_MAPS } from '@/engine/render/surfaces';
-import { Gun, GUN_STATS, Melee } from '@/engine/weapons/index';
-import { SLASH_TIME } from '@/engine/weapons/melee';
+import { Gun, GUN_STATS, Sword } from '@/engine/weapons/index';
+import { SLASH_TIME } from '@/engine/weapons/sword';
 import { REAL_AIM_DEPTH, REAL_GUN, makeRealGunModel } from '@/engine/weapons/models';
 import type { GunKind } from '@/engine/weapons/index';
 import type { Ctx, Player, WeaponState } from '@/engine/types';
@@ -76,7 +76,7 @@ const ctx = {
 const player = { eye: new Vector3(), forward: new Vector3(0, 0, -1), right: new Vector3(1, 0, 0), headshotT: 0,
   recoil: () => {}, kickFov: () => {}, aimDir: (_s: number, out: Vector3) => out.set(0, 0, -1) } as unknown as Player;
 const guns = (['r4c', 'rifle', 'shotgun', 'sniper', 'pistol', 'lmg'] as const).map(kind => new Gun(ctx, player, kind));
-const melee = new Melee(ctx, player);
+const melee = new Sword(ctx, player);
 
 afterAll(() => {
   for (const weapon of [...guns, melee]) weapon.dispose();
@@ -88,8 +88,8 @@ test('tier selection, URLs and the download budget', () => {
   expect([PRESET_VALUES.medium, PRESET_VALUES.high, PRESET_VALUES.ultra].map(weaponTextureSize)).toEqual([512, 1024, 2048]);
   expect(weaponTextureSize({ look: 'lowpoly', textures: 'high' })).toBeNull();
   expect(weaponMapUrl('r4c', 1024, 'albedo')).toBe('/weapons/1024/r4c-albedo.ktx2');
-  // Small models stop at 1K, and so does the sixth gun, the LMG, to hold the download; the other long guns and the hands go to 2K on Ultra.
-  expect(['optics', 'pistol', 'knife', 'lmg'].map(set => weaponSetSize(set as never, 2048))).toEqual([1024, 1024, 1024, 1024]);
+  // Small models stop at 1K, and so do the sword and the sixth gun, the LMG, to hold the download; the other long guns and the hands go to 2K on Ultra.
+  expect(['optics', 'pistol', 'sword', 'lmg'].map(set => weaponSetSize(set as never, 2048))).toEqual([1024, 1024, 1024, 1024]);
   expect(weaponSetSize('r4c', 2048)).toBe(2048);
   expect(weaponSetSize('hands', 512)).toBe(512);
   const bytes = [512, 1024, 2048].map(size => weaponDownloadBytes(size as 512));
@@ -113,7 +113,8 @@ test('triangle budget per first-person model, hands and optics included', () => 
     const total = WEAPON_MANIFEST.models[model]!.total + (kind === 'r4c' || kind === 'rifle' ? optic : 0);
     expect(total, `${kind} (${model}) triangles`).toBeLessThanOrEqual(25_000);
   }
-  expect(WEAPON_MANIFEST.models.knife!.total).toBeLessThanOrEqual(25_000);
+  // The sword holds two hands on its long grip.
+  expect(WEAPON_MANIFEST.models.sword!.total).toBeLessThanOrEqual(30_000);
 });
 
 test('clip lengths match the gameplay timings in stats.ts', () => {
@@ -129,10 +130,11 @@ test('clip lengths match the gameplay timings in stats.ts', () => {
     }
     if (s.cycleDuration) expect(clips[`${model}.cycle`], `${model} cycle`).toBeCloseTo(s.cycleDuration, 6);
   }
-  expect(clips['knife.slash']).toBeCloseTo(SLASH_TIME, 6);
-  expect(clips['knife.slash-back']).toBeCloseTo(SLASH_TIME, 6);
-  // The guard runs on the block's blend, not a clock: it only has to be there.
-  expect(clips['knife.guard']).toBeGreaterThan(0);
+  expect(clips['sword.slash']).toBeCloseTo(SLASH_TIME, 6);
+  expect(clips['sword.slash-back']).toBeCloseTo(SLASH_TIME, 6);
+  // The guard runs on the block's blend, not a clock, and the draw on the raise's: they only have to be there.
+  expect(clips['sword.guard']).toBeGreaterThan(0);
+  expect(clips['sword.equip']).toBeGreaterThan(0);
 });
 
 test('streams in, swaps every view model, and frees everything on Low with nothing left behind', async () => {
@@ -351,7 +353,7 @@ test('a swap poses the new model at once, hip or aimed, with no frame to settle'
   gun.unequip();
 });
 
-test('Blender triggers pull while fire is held; the knife raises its guard; view-model lighting', async () => {
+test('Blender triggers pull while fire is held; the sword raises its guard; view-model lighting', async () => {
   assets.want(512);
   await stream(assets);
   const pistol = guns.find(gun => gun.kind === 'pistol')!, trigger = pistol._model.parts.trigger!;
@@ -367,7 +369,7 @@ test('Blender triggers pull while fire is held; the knife raises its guard; view
   expect(pistol._low.parts.trigger).toBeUndefined();
   melee.equip();
   for (let i = 0; i < 40; i++) melee.animate({ ...neutral, aim: true }, 1 / 60);
-  expect(melee._action?.getClip().name).toBe('knife.guard');
+  expect(melee._action?.getClip().name).toBe('sword.guard');
   expect(melee._action!.time / melee._action!.getClip().duration).toBeCloseTo(melee._blockAmt, 5);
   for (let i = 0; i < 60; i++) melee.animate(neutral, 1 / 60);
   expect(melee._action).toBeNull();

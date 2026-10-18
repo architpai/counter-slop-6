@@ -4,7 +4,8 @@ import { RemotePlayer, encodeState } from '../players';
 import { validKey } from '../level/index';
 import { TONE, VIEW_MODEL_FOV } from '../render/index';
 import { GUN_STATS } from '../weapons/stats';
-import { MELEE_PVP_DAMAGE } from '../weapons/melee';
+import { SWORD_PVP_DAMAGE } from '../weapons/sword';
+import { WAVE_PVP_DAMAGE } from '../weapons/wave';
 import type { Gun } from '../weapons/index';
 import { GRENADE_PVP_MAX, MAX_THROW_SPEED } from '../player/grenades';
 import type { BoardRow, OnlineInfo } from '../hud/screens';
@@ -26,10 +27,10 @@ const PS_INTERVAL = 0.05;
 // Host trusts a `take` only within this radius of the sender's avatar. Generous
 // vs the 1.5 m local collect: remotes render ~80 ms behind. ponytail: shrink if stealable.
 const TAKE_RANGE = 4;
-const HOW: Record<string, string> = { r4c: 'R4-C', rifle: 'MP5', pistol: 'pistol', shotgun: 'shotgun', sniper: 'sniper', lmg: 'LMG', melee: 'knife', grenade: 'grenade', deflect: 'their own bullet' };
+const HOW: Record<string, string> = { r4c: 'R4-C', rifle: 'MP5', pistol: 'pistol', shotgun: 'shotgun', sniper: 'sniper', lmg: 'LMG', melee: 'sword', wave: 'air slash', grenade: 'grenade', deflect: 'their own bullet' };
 
 /** Most one `pdmg` packet may claim per source: a point-blank headshot with every pellet. */
-const PVP_CAP: Record<string, number> = { melee: MELEE_PVP_DAMAGE, grenade: GRENADE_PVP_MAX };
+const PVP_CAP: Record<string, number> = { melee: SWORD_PVP_DAMAGE, wave: WAVE_PVP_DAMAGE, grenade: GRENADE_PVP_MAX };
 for (const [kind, g] of Object.entries(GUN_STATS)) PVP_CAP[kind] = g.pvp[0] * g.pvp[1] * g.pellets;
 /** When each peer last reported its own death, so one body cannot be counted every frame. */
 const lastDeath = new Map<string, number>();
@@ -542,7 +543,7 @@ export function createFFA(app: App): FfaApi {
     const src = h?.src;
     const how = killer && src !== undefined ? HOW[src] ?? null : null;
     if (gs.teamMatch && (gs.teamMatch.breakLeft > 0 || gs.over)) return;
-    net.broadcast('pdead', { killer, dir, over: !!h && (h.crit || h.amount >= 90 || h.src === 'melee'), how, crit: !!h?.crit,
+    net.broadcast('pdead', { killer, dir, over: !!h && (h.crit || h.amount >= 90 || h.src === 'melee' || h.src === 'wave'), how, crit: !!h?.crit,
       ...(gs.teamMatch ? { round: gs.teamMatch.round } : {}) });
     gs.respawnT = gs.teamMatch ? TEAM_RULES.WAVE - gs.teamMatch.elapsed % TEAM_RULES.WAVE : RESPAWN;
     gs.state = 'dying'; gs.deathT = 0;
@@ -576,7 +577,7 @@ export function createFFA(app: App): FfaApi {
     const cam = ctx.camera, p = ctx.player;
     // Through their eyes, this player's own gun stands in for theirs: the slot they hold, and their aim.
     const eyes = !!mate && firstPerson;
-    if (p) p.watched = eyes && mate && !mate.melee ? { slot: mate.slot, aim: mate.aiming } : null;
+    if (p) p.watched = eyes && mate?.kind ? { kind: mate.kind, aim: mate.aiming } : null;
     if (mate && eyes) {
       cam.position.copy(mate.eye);
       cam.lookAt(d1.copy(mate.eye).add(mate.forward));
@@ -589,8 +590,8 @@ export function createFFA(app: App): FfaApi {
       cam.position.copy(target).addScaledVector(d1, wall ? Math.max(0.1, wall.dist - 0.2) : 4.72);
       cam.lookAt(target);
     }
-    const aim = p?.watched ? clamp(p.weapon.aimAmt, 0, 1) : 0;
-    cam.fov = p?.watched ? lerp(82, p.weapon.adsFov, aim) : 82; cam.updateProjectionMatrix(); cam.updateMatrixWorld();
+    const aim = p?.watched ? clamp(p.view.aimAmt, 0, 1) : 0;
+    cam.fov = p?.watched ? lerp(82, p.view.adsFov, aim) : 82; cam.updateProjectionMatrix(); cam.updateMatrixWorld();
     ctx.renderer.rig.visible = !!p?.watched;
     ctx.renderer.setViewFov?.(lerp(VIEW_MODEL_FOV, cam.fov, aim));
     return mate;
@@ -723,14 +724,19 @@ export function createFFA(app: App): FfaApi {
   };
   const canHurt = (t: Target): boolean => isOnline() && t !== ctx.player &&
     (mode() === 'ffa' || (activeCombat() && 'id' in t && typeof t.id === 'string' && opponents(net.id, t.id)));
-  const guardRay = new THREE.Ray(), guardSphere = new THREE.Sphere(undefined, 0.42), guardHit = new THREE.Vector3();
+  /**
+   * A guard is a 0.42 m sphere ahead of the chest; a slash's cutting arc is wider (0.6 m), and its
+   * owner reports it open a little past its local window, as this peer draws it about 80 ms late.
+   */
+  const guardRay = new THREE.Ray(), guardSphere = new THREE.Sphere(), guardHit = new THREE.Vector3();
   function raycastPlayers(o: THREE.Vector3, d: THREE.Vector3, max: number): PlayerHit | null {
     let best: PlayerHit | null = null;
     for (const r of ctx.remotes.values()) {
       if (!r.alive || !canHurt(r)) continue;
       const hit = r.raycast(o, d, best ? best.dist : max);
       if (hit && (!best || hit.dist < best.dist)) best = { player: r, ...hit };
-      if (r.blocking) {
+      if (r.blocking || r.cutting) {
+        guardSphere.radius = r.cutting ? 0.6 : 0.42;
         guardSphere.center.copy(r.center).addScaledVector(r.forward, 0.5); guardSphere.center.y += 0.3;
         guardRay.set(o, d);
         if (guardRay.intersectSphere(guardSphere, guardHit)) {
@@ -768,10 +774,13 @@ export function createFFA(app: App): FfaApi {
     }
     const facing = t.blocking ? d1.subVectors(p.center, t.center).normalize().dot(t.forward) : -1;
     const frontHit = /^(head|torso|arm|fore)/.test(info.part ?? '');
-    if (facing > 0.6 && frontHit && info.source === 'melee' && t.parryWindow) {
+    // A sword strike meets a parry; an air slash meets any raised guard.
+    const parried = info.source === 'melee' ? t.parryWindow : info.source === 'wave' && t.blocking;
+    if (facing > 0.6 && frontHit && parried) {
       ctx.effects.strokeBurst(point, TONE.ACCENT, 10, 6, { life: 0.25, size: 0.04 });
       ctx.audio.shieldHit(t.center); hud.hitmarker(false, false, true); ctx.game.hitstop(0.08, 0.15);
-      p.melee.cooldown = Math.max(p.melee.cooldown, 0.6);
+      const sword = p.sword;
+      if (sword && info.source === 'melee') sword.cooldown = Math.max(sword.cooldown, 0.6);
       ctx.input.rumble(0.6, 0.3, 90); hud.tip('PARRIED', 0.9);
       return;
     }
@@ -1009,7 +1018,7 @@ export function createFFA(app: App): FfaApi {
     if (!roster(from) || !obj(d)) return;
     ctx.remotes.get(from)?.shots(d.k, d.e);
     // Watched through their eyes: their shot kicks the gun that stands in for theirs.
-    const w = ctx.player?.watched && watching === from ? ctx.player.weapon : null;
+    const w = ctx.player?.watched && watching === from ? ctx.player.view : null;
     if (w?.isGun) (w as Gun).echoShot();
   });
   net.on('cut', (d, from) => {

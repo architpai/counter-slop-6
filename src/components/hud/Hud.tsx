@@ -146,7 +146,8 @@ export const Slots = memo(function Slots({ store }: { store: HudStore }) {
           <span className="slot-badge">{index + 1}</span><span>{slot.name}</span><span className="slot-ammo">{slot.ammo}</span>
         </div>
       ))}
-      <div className="melee-hint"><b>{pad ? 'R1 / RB' : 'F / V'}</b> MELEE <span>∞</span></div>
+      {slots.some(slot => slot.name === 'SWORD')
+        ? <div className="melee-hint"><b>{pad ? 'R1 / RB' : 'F / V'}</b> QUICK SLASH <span>∞</span></div> : null}
     </div>
   );
 });

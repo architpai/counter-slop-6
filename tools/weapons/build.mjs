@@ -37,14 +37,14 @@ const textureDir = path.join(root, 'public/weapons');
 const manifestPath = path.join(root, 'src/engine/render/weapon-assets.json');
 const blender = process.env.BLENDER ?? '/opt/homebrew/bin/blender';
 /** Build order: the guns append the hands and preview the optics. */
-const SETS = ['hands', 'optics', 'r4c', 'mp5', 'shotgun', 'sniper', 'lmg', 'pistol', 'knife'];
+const SETS = ['hands', 'optics', 'r4c', 'mp5', 'shotgun', 'sniper', 'lmg', 'pistol', 'sword'];
 const SIZES = [512, 1024, 2048];
 /**
  * Small models stop at 1K: at the top tier their atlases' texels would be far finer on screen than
- * the guns' (the optics, the pistol and the knife cover a fraction of the screen a rifle does), and
- * the Ultra download stays within its 10 MB (docs/VISUALS.md, R4).
+ * the guns' (the optics and the pistol cover a fraction of the screen a rifle does; the sword is
+ * mostly a thin blade), and the Ultra download stays within its 10 MB (docs/VISUALS.md, R4).
  */
-const MAX_SIZE = { optics: 1024, pistol: 1024, knife: 1024, lmg: 1024 };
+const MAX_SIZE = { optics: 1024, pistol: 1024, sword: 1024, lmg: 1024 };
 const MAPS = ['albedo', 'normal', 'orm'];
 /** As the level textures (tools/textures/build.mjs): ETC1S, normals at the codec's normal-map tuning. */
 const ENCODE = {
@@ -106,13 +106,13 @@ for (const node of doc.getRoot().listNodes()) {
   node.setMesh(null).addChild(doc.createNode('').setMesh(mesh));
 }
 // ---- the enemy props' LODs (render/weapons.ts `prop`)
-/** An enemy's prop kind (render/figure.ts `WeaponPropKind`) and the model it is made from; the blade is a long knife. */
-const PROPS = { r4c: 'r4c', rifle: 'mp5', shotgun: 'shotgun', sniper: 'sniper', lmg: 'lmg', pistol: 'pistol', knife: 'knife', blade: 'knife' };
+/** An enemy's prop kind (render/figure.ts `WeaponPropKind`) and the model it is made from; the blade is the sword. */
+const PROPS = { r4c: 'r4c', rifle: 'mp5', shotgun: 'shotgun', sniper: 'sniper', lmg: 'lmg', pistol: 'pistol', blade: 'sword' };
 /** Where each prop's muzzle (or point) is in the flat props' frame (figure.ts `setWeapon`): projectiles leave from there. */
-const TIP = { r4c: 0.78, rifle: 0.59, shotgun: 0.78, sniper: 0.78, lmg: 0.78, pistol: 0.31, knife: 0.31, blade: 0.92 };
+const TIP = { r4c: 0.78, rifle: 0.59, shotgun: 0.78, sniper: 0.78, lmg: 0.78, pistol: 0.31, blade: 0.92 };
 /** The enemies' guns read as large as the flat props at range: the Blender guns, grip at the hand, a quarter up. */
 const PROP_SCALE = 1.25;
-/** How far a gun may slide along the hand for its muzzle to meet the tip; the rest is left as a gap. */
+/** How far a gun (or the sword) may slide along the hand for its muzzle (point) to meet the tip; the rest is left as a gap. */
 const PROP_SLIDE = 0.1;
 /**
  * Across the barrel (x and y, not along it): the characters are chunky and stylised, so a gun of
@@ -120,8 +120,12 @@ const PROP_SLIDE = 0.1;
  * still meets the tip.
  */
 const PROP_BULK = 1.3;
-/** The blade: the knife's handle and guard as they are, its blade (past the guard) drawn out to the tip, all a little thicker. */
-const BLADE = { guard: 0.114, thickness: 1.6 };
+/**
+ * The blade: the sword at the guns' 1.25 x, slid along the hand so its point meets the tip (no
+ * stretch), and a little thicker across than the guns, so the thin blade reads at range as the
+ * flat blade does (about 5 cm tall, a 10-12 cm guard).
+ */
+const BLADE_BULK = 1.4;
 /** Triangles a prop keeps: at 5-60 m a gun is a few dozen pixels long. */
 const PROP_TRIANGLES = 1200;
 await MeshoptSimplifier.ready;
@@ -129,7 +133,9 @@ const propTriangles = {};
 for (const [kind, model] of Object.entries(PROPS)) {
   const top = scene.listChildren().find(node => node.getName() === model);
   const pivot = doc.getRoot().listNodes().find(node => node.getName() === `${model}__pivot`);
-  const muzzle = doc.getRoot().listNodes().find(node => node.getName() === `${model}__${model === 'knife' ? 'tip' : 'muzzle'}`);
+  // A gun's muzzle, or a blade's point.
+  const muzzle = doc.getRoot().listNodes().find(node => node.getName() === `${model}__muzzle`)
+    ?? doc.getRoot().listNodes().find(node => node.getName() === `${model}__tip`);
   const material = doc.getRoot().listMaterials().find(m => m.getName() === model);
   if (!top || !pivot || !muzzle || !material) {
     console.warn(`no prop for ${kind}: ${model} is not built`);
@@ -138,9 +144,8 @@ for (const [kind, model] of Object.entries(PROPS)) {
   // The flat props' frame: the grip (the model's pivot) at the hand, forward +z (the models point down -z).
   const frame = new Matrix4().makeScale(-PROP_SCALE, PROP_SCALE, -PROP_SCALE).multiply(new Matrix4().fromArray(pivot.getWorldMatrix()).invert());
   const muzzleZ = new Vector3().setFromMatrixPosition(new Matrix4().fromArray(muzzle.getWorldMatrix())).applyMatrix4(frame).z;
-  const shift = kind === 'blade' ? 0 : Math.max(-PROP_SLIDE, Math.min(PROP_SLIDE, TIP[kind] - muzzleZ));
-  const stretch = kind === 'blade' ? (TIP.blade - BLADE.guard) / (muzzleZ - BLADE.guard) : 1;
-  const bulk = kind === 'blade' ? BLADE.thickness : PROP_BULK;
+  const shift = Math.max(-PROP_SLIDE, Math.min(PROP_SLIDE, TIP[kind] - muzzleZ));
+  const bulk = kind === 'blade' ? BLADE_BULK : PROP_BULK;
   const positions = [], normals = [], uvs = [], indices = [];
   const visit = node => {
     if (/-hand$/.test(node.getName())) return;
@@ -152,7 +157,6 @@ for (const [kind, model] of Object.entries(PROPS)) {
       const v = new Vector3(), el = [0, 0, 0];
       for (let i = 0; i < p.getCount(); i++) {
         v.fromArray(p.getElement(i, el)).applyMatrix4(matrix);
-        if (kind === 'blade' && v.z > BLADE.guard) v.z = BLADE.guard + (v.z - BLADE.guard) * stretch;
         positions.push(v.x * bulk, v.y * bulk, v.z + shift);
         // A normal takes the inverse of the widening, so the faces still shade as they face.
         v.fromArray(n.getElement(i, el)).applyMatrix3(normalMatrix);

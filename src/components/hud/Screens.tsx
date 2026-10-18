@@ -137,13 +137,15 @@ function Weapons({ model, onAction, collapsible = false }: {
   model: WeaponSettingsModel; onAction: Act; collapsible?: boolean;
 }) {
   const content = <div className="weapon-customization" data-ui-block="" data-ui-input-block="">
-    <p className="weapon-customization-note">Choose a scope for each weapon. Changes apply immediately and are saved on this device.</p>
+    <Loadout model={model} onAction={onAction} />
+    <h4 className="loadout-title">Scopes</h4>
+    <p className="weapon-customization-note">Choose a scope for each rifle. Changes apply immediately and are saved on this device.</p>
     {([
-      { name: 'R4-C', slot: '01', field: 'r4cOptic', role: 'Assault rifle · medium-range damage' },
-      { name: 'MP5', slot: '02', field: 'optic', role: 'SMG · accurate on the move' },
+      { name: 'R4-C', badge: 'AR', field: 'r4cOptic', role: 'Assault rifle · medium-range damage' },
+      { name: 'MP5', badge: 'SMG', field: 'optic', role: 'SMG · accurate on the move' },
     ] as const).map(weapon => <div className="weapon-customization-row" key={weapon.field}>
       <div className="weapon-identity">
-        <span className="slot-badge">{weapon.slot}</span>
+        <span className="slot-badge">{weapon.badge}</span>
         <div><h4>{weapon.name}</h4><p>{weapon.role}</p></div>
       </div>
       <fieldset className="optic-picker" aria-label={`${weapon.name} scope`}>
@@ -157,11 +159,35 @@ function Weapons({ model, onAction, collapsible = false }: {
     </div>)}
   </div>;
   return collapsible ? <details className="weapons-section" data-ui-block="" data-ui-input-block="">
-    <summary>Weapons <span>Scope customization</span></summary>
+    <summary>Weapons <span>Loadout and scopes</span></summary>
     {content}
   </details> : <section className="weapons-section" aria-label="Weapons">
     <h3>Weapon customization</h3>
     {content}
+  </section>;
+}
+
+/** Pick three weapons: a picked card shows its slot; tap it again to drop it. */
+function Loadout({ model, onAction }: { model: WeaponSettingsModel; onAction: Act }) {
+  const choices = list(model.choices), full = (model.loadout?.length ?? 0) >= 3;
+  const picked = Array.isArray(model.loadout) ? model.loadout.filter(kind => typeof kind === 'string') : [];
+  return <section className="loadout-picker" aria-label="Loadout">
+    <h4 className="loadout-title">Loadout <span>pick 3 · the weapon in hand sets your speed</span></h4>
+    <p className="weapon-customization-note" aria-live="polite">{model.loadoutNote}</p>
+    <div className="loadout-grid">
+      {choices.map(choice => {
+        const at = picked.indexOf(choice.kind);
+        return <button type="button" className="loadout-card" key={choice.kind} data-act="loadout" data-value={choice.kind}
+          aria-pressed={at >= 0} disabled={at < 0 && full} onClick={event => onAction('loadout', choice.kind, event.nativeEvent)}>
+          <span className="slot-badge">{at >= 0 ? at + 1 : '+'}</span>
+          <b>{choice.name}</b>
+          <small>{choice.role}</small>
+          <span className="loadout-speed" style={{ '--speed': `${Math.max(0, Math.min(100, (count(choice.speed) - 75) * 2.2))}%` } as CSSProperties}>
+            speed <em>{count(choice.speed)}%</em>
+          </span>
+        </button>;
+      })}
+    </div>
   </section>;
 }
 

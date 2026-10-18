@@ -1,16 +1,17 @@
 import type * as THREE from 'three';
 import type { Ctx, Player, WeaponState } from '../types';
 import { Gun } from './gun';
-import { Melee } from './melee';
-import { GUN_LOADOUT, type GunKind } from './stats';
+import { Sword } from './sword';
+import type { GunKind, WeaponKind } from './stats';
 
 export { GUN_STATS } from './stats';
-export type { GunKind, GunStats } from './stats';
-export { Gun, Melee };
+export type { GunKind, GunStats, WeaponKind } from './stats';
+export { Gun, Sword };
 
 /** What the player, the HUD and the focus system may ask of any held weapon. */
 export interface Weapon {
-  readonly kind: GunKind | 'melee';
+  /** A loadout's weapons are `WeaponKind`s; the revolver is a gun no loadout carries. */
+  readonly kind: GunKind | 'sword';
   readonly name: string;
   readonly hint: string;
   readonly isGun: boolean;
@@ -18,8 +19,12 @@ export interface Weapon {
   /** Child of `ctx.renderer.rig`. */
   readonly root: THREE.Group;
   readonly adsFov: number;
-  /** Walk-speed multiplier while aiming; the knife never aims. */
+  /** Walk-speed multiplier while aiming (the sword: while guarding). */
   readonly adsSpeed: number;
+  /** Multiplies walk, sprint, crouch and air speed while held (weapons/stats.ts `Handling`). */
+  readonly moveSpeed: number;
+  /** Multiplies jump speed and the slide's boost while held. */
+  readonly mobility: number;
   aimAmt: number;
   /** The scoped overlay's drift and scale (gun.ts `ViewModel`). */
   readonly sightX: number;
@@ -42,7 +47,7 @@ export interface Weapon {
   kickRot(x: number, y: number, z: number): void;
 }
 
-/** Five gun slots; the player owns a separate, always-available melee weapon. */
-export function makeLoadout(ctx: Ctx, player: Player): Weapon[] {
-  return GUN_LOADOUT.map(kind => new Gun(ctx, player, kind));
+/** A new weapon of `kind` for `player`. */
+export function makeWeapon(ctx: Ctx, player: Player, kind: WeaponKind): Weapon {
+  return kind === 'sword' ? new Sword(ctx, player) : new Gun(ctx, player, kind);
 }

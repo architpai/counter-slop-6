@@ -122,7 +122,7 @@ export function createSolo(app: App): SoloApi {
     ctx.audio.wave(); if (bossWave) ctx.audio.bossRoar(player.center);
     const tips = [
       `hold ${ctx.hud.key('grapple')} to reel in · tap it again to let go mid-swing`,
-      `hold ${ctx.hud.key('block')} after a melee strike to block and return bullets`,
+      `sword: hold ${ctx.hud.key('aim')} to guard and return bullets · slash bullets to cut them`,
       'kills in the air are worth more · stay off the floor',
       `${ctx.hud.key('grenade')} lobs a grenade · pickups give you more`,
       `${ctx.hud.key('dash')} in the air dashes · ${ctx.hud.key('jump')} on a wall jumps off it`,
@@ -228,10 +228,11 @@ export function createSolo(app: App): SoloApi {
     let points = e.stats.score, label: string | null = e.stats.boss ? e.stats.name : null;
     if (info.crit) { points += 60; label = 'HEADSHOT'; }
     if (info.source === 'melee') { points += 50; label = overkill ? 'SLICED' : 'CUT DOWN'; }
+    if (info.source === 'wave') { points += 60; label = 'AIR SLASH'; }
     if (info.source === 'focus') { points += 150; label = 'EXECUTED'; }
-    if (info.source === 'melee' || info.source === 'focus') {
+    if (info.source === 'melee' || info.source === 'wave' || info.source === 'focus') {
       gs.katanaStreak++;
-      player.melee.addBlood(0.42);
+      player.sword?.addBlood(0.42);
       if (gs.katanaStreak >= 3) enterFocus();
     } else if (info.source !== 'blast') gs.katanaStreak = 0;
     if (info.source === 'deflect') { points += 120; label = 'RETURN TO SENDER'; }
@@ -303,7 +304,7 @@ export function createSolo(app: App): SoloApi {
     if (player === null) return;
     player.dashLock = false; focus.dash = null; player.body.vel.set(0, 0, 0);
     if (blocked) {
-      player.melee.startSlash(neutralState(player));
+      player.quickSlash(neutralState(player));
       ctx.hud.tip('blocked · the dash did not reach', 1.2);
     }
   }
@@ -312,8 +313,8 @@ export function createSolo(app: App): SoloApi {
     if (player === null || enemies === null) return;
     const previousChain = focus.chain;
     endDash(false);
-    player.melee.startSlash(neutralState(player));
-    // Bosses take a quarter of their max HP instead of an instant kill; three knife kills is not a boss ticket.
+    player.quickSlash(neutralState(player));
+    // Bosses take a quarter of their max HP instead of an instant kill; three sword kills is not a boss ticket.
     enemies.damage(target, target.stats.boss ? target.maxHp * 0.25 : 100000, { source: 'focus', part: 'head', crit: true, point: target.center.clone(), dir: delta.subVectors(target.center, player.eye).normalize().clone() });
     ctx.audio.focusSlash(); ctx.game.hitstop(0.1, 0.08); ctx.effects.shake += 0.35;
     ctx.input.rumble(0.9, 0.7, 140); player.kickFov(6); player.heal(6);

@@ -7,7 +7,9 @@ import { STILL, type MotionInput } from './render/operator-motion';
 import { PS_FLAG } from './types';
 import type { Ctx, Enemy, Snap, StatePacket, Target } from './types';
 import type { Player } from './player/index';
-import { GUN_LOADOUT } from './weapons/stats';
+import { WEAPON_KINDS } from './weapons/stats';
+import type { WeaponKind } from './weapons/stats';
+import { SLASH_TIME } from './weapons/sword';
 
 /**
  * A hit sphere sits on a `FigureAnchors` joint, so its name is one of them.
@@ -71,7 +73,7 @@ function triple(arr: readonly unknown[], start = 0, limit = 10000) {
 function validState(arr: unknown): arr is ValidState {
   return isArray(arr) && [8, 11, 14].includes(arr.length) && triple(arr) &&
     finite(arr[3]) && bounded(arr[4], 1.6) && integer(arr[5]) &&
-    integer(arr[6]) && arr[6] >= 0 && arr[6] <= 1023 &&
+    integer(arr[6]) && arr[6] >= 0 && arr[6] <= 2047 &&
     finite(arr[7]) && arr[7] >= 0 && arr[7] <= 120 &&
     (arr.length < 11 || triple(arr, 8)) && (arr.length < 14 || triple(arr, 11));
 }
@@ -81,13 +83,16 @@ function cleanName(name: unknown): string {
 }
 
 export function encodeState(p: Player): StatePacket {
-  const grapple = p.grapple.mode !== 'idle';
+  const grapple = p.grapple.mode !== 'idle', slashing = p.holdingSword && !!p.sword?.slashing;
   const flags = (p.crouching ? PS_FLAG.CROUCHING : 0) | (p.sliding ? PS_FLAG.SLIDING : 0) | (p.blocking ? PS_FLAG.BLOCKING : 0) |
     (p.aiming ? PS_FLAG.AIMING : 0) | (p.body.onGround ? PS_FLAG.ON_GROUND : 0) | (p.firing ? PS_FLAG.FIRING : 0) |
-    (p.alive ? PS_FLAG.ALIVE : 0) | (grapple ? PS_FLAG.GRAPPLING : 0) | (p.parryWindow ? PS_FLAG.PARRY_WINDOW : 0) | (p.melee.active ? PS_FLAG.MELEE : 0);
+    (p.alive ? PS_FLAG.ALIVE : 0) | (grapple ? PS_FLAG.GRAPPLING : 0) | (p.parryWindow ? PS_FLAG.PARRY_WINDOW : 0) |
+    (slashing ? PS_FLAG.MELEE : 0) | (p.slashCutting(true) ? PS_FLAG.CUTTING : 0);
   const { pos, vel } = p.body;
+  // The weapon in hand by its `WEAPON_KINDS` id, not its slot: each player picks their own loadout.
+  const held = WEAPON_KINDS.indexOf(p.weapon.kind as WeaponKind);
   const state = [round2(pos.x), round2(pos.y), round2(pos.z), round2(p.yaw), round2(p.pitch),
-    p.wi, flags, Math.round(p.hp), round1(vel.x), round1(vel.y), round1(vel.z)];
+    Math.max(0, held), flags, Math.round(p.hp), round1(vel.x), round1(vel.y), round1(vel.z)];
   if (grapple) state.push(round1(p.grapple.hook.x), round1(p.grapple.hook.y), round1(p.grapple.hook.z));
   return state;
 }
@@ -109,7 +114,13 @@ export class RemotePlayer implements Target {
   crouching: boolean;
   sliding: boolean;
   blocking: boolean;
+  /** Holds its sword. */
   melee = false;
+  /** Mid-slash, and seconds into it (the figure's swing). */
+  slashing = false;
+  _slashAge = 0;
+  /** Its slash cuts bullets now: shots that meet the blade are blocked (ffa.ts `raycastPlayers`). */
+  cutting = false;
   aiming: boolean;
   firing: boolean;
   grappling: boolean;
@@ -129,7 +140,8 @@ export class RemotePlayer implements Target {
   /** What a worn operator's clips are told each step (R7), reused. */
   readonly _motion: MotionInput = { ...STILL, still: false };
   _flashT: number;
-  _wi: number;
+  /** The weapon it holds; null before its figure has one. */
+  _kind: WeaponKind | null;
   _disposed: boolean;
   _figure: Figure | null;
   _tag: Object3D | null;
@@ -163,7 +175,7 @@ export class RemotePlayer implements Target {
     this.onDamage = this.onKnock = null;
     this._a = this._b = null;
     this._yaw = this._pitch = this._phase = this._walk = this._flashT = 0;
-    this._wi = -1;
+    this._kind = null;
     this._disposed = false;
     this._figure = this._tag = null;
     this._rope = new Mesh(cylGeo(0.03, 1, 6), surfMat('dark'));
@@ -184,8 +196,8 @@ export class RemotePlayer implements Target {
   get root(): Object3D | null { return this._figure?.root ?? null; }
   get center() { return this._center; }
   get eye() { return this._eye; }
-  /** The loadout slot it holds; -1 before its figure has one. */
-  get slot() { return this._wi; }
+  /** The weapon it holds; null before its figure has one. */
+  get kind() { return this._kind; }
   get forward() { return this._forward; }
   get right() { return this._right; }
   get isLocal(): false { return false; }
@@ -206,14 +218,14 @@ export class RemotePlayer implements Target {
 
   _buildFigure(): Figure {
     const figure = makeFigure({ kind: 'humanoid', tactical: 'player', color: TONE_HEX[this._tone], scale: 1,
-      bodyWidth: 1, headSize: 1, limbR: 0.033, hat: 'cap', smile: false, shield: false, weapon: GUN_LOADOUT[0] });
+      bodyWidth: 1, headSize: 1, limbR: 0.033, hat: 'cap', smile: false, shield: false, weapon: 'r4c' });
     this._figure = figure;
     const { root } = figure;
     const anchors = anchorsOf(figure);
     for (const part of ['armL', 'armR'] as const) anchors[part].position.y = -0.15;
     for (const part of ['foreL', 'foreR'] as const) anchors[part].position.y = -0.14;
     for (const part of ['legL', 'legR', 'shinL', 'shinR'] as const) anchors[part].position.y = -0.21;
-    this._wi = -1;
+    this._kind = null;
     this._flashT = 0;
     this._walk = this._phase = 0;
     root.position.copy(this.body.pos);
@@ -245,14 +257,17 @@ export class RemotePlayer implements Target {
     const yaw = wrapAngle(arr[3]);
     this._a = this._b || { p: p.clone(), yaw, pitch: arr[4], t: now - 0.07 };
     this._b = { p, yaw, pitch: arr[4], t: now };
-    const wi = arr[5] >= 0 && arr[5] < GUN_LOADOUT.length ? arr[5] : 0;
-    const melee = !!(arr[6] & PS_FLAG.MELEE);
-    if (this._figure && (wi !== this._wi || melee !== this.melee || !this._figure.parts.weapon?.parent)) {
-      this._figure.setWeapon(melee ? 'knife' : GUN_LOADOUT[wi] ?? GUN_LOADOUT[0]);
-      this._wi = wi;
+    const kind: WeaponKind = WEAPON_KINDS[arr[5]] ?? WEAPON_KINDS[0];
+    if (this._figure && (kind !== this._kind || !this._figure.parts.weapon?.parent)) {
+      this._figure.setWeapon(kind === 'sword' ? 'blade' : kind);
+      this._kind = kind;
     }
-    this.melee = melee;
+    this.melee = kind === 'sword';
     const flags = arr[6];
+    const slashing = this.melee && !!(flags & PS_FLAG.MELEE);
+    if (slashing && !this.slashing) this._slashAge = 0;
+    this.slashing = slashing;
+    this.cutting = this.melee && !!(flags & PS_FLAG.CUTTING);
     this.crouching = !!(flags & PS_FLAG.CROUCHING);
     this.sliding = !!(flags & PS_FLAG.SLIDING);
     this.blocking = !!(flags & PS_FLAG.BLOCKING);
@@ -298,6 +313,7 @@ export class RemotePlayer implements Target {
     this._derive();
     if (!this.alive) this.deadT += dt;
     this._flashT = Math.max(0, this._flashT - dt);
+    if (this.slashing) this._slashAge += dt;
     if (this._figure) {
       this._pose(dt);
       if (this._tagName !== this.name) this._makeTag();
@@ -358,7 +374,15 @@ export class RemotePlayer implements Target {
     const blade = this.melee;
     const aim = blade ? 0 : this.aiming ? 1 : sp > 6.5 ? 0.8 : 0.95;
     const look = clamp(this._pitch, -1.1, 1.1);
-    if (blade) {
+    const swing = this.slashProgress;
+    if (blade && swing !== null) {
+      // A level sweep across the body, the same way each time: what reads at range is the arc.
+      const e = Math.sin(swing * Math.PI);
+      p.upperR.rotation.set(-1.5, 0, -1.2 + 2.2 * swing);
+      p.foreR.rotation.x = -0.3 - 0.4 * e;
+      p.upperL.rotation.set(-1.2, 0, -0.6 + 1.4 * swing);
+      p.foreL.rotation.x = -0.6;
+    } else if (blade) {
       const g = this.blocking ? 1 : 0;
       p.upperR.rotation.set(-0.9 - 0.9 * g - s * 0.6 * w * (1 - g), 0, -0.3 - 0.5 * g);
       p.foreR.rotation.x = -1.0 - 0.6 * g;
@@ -375,12 +399,17 @@ export class RemotePlayer implements Target {
     // A worn operator's clips (R7): the figure's +x is the player's left, as the root turns half round.
     if (!this._figure.rig?.worn) return;
     const lateral = sp > 0.2 ? (this.body.vel.x * -Math.cos(this._yaw) + this.body.vel.z * Math.sin(this._yaw)) / sp : 0;
-    const gun = GUN_LOADOUT[this._wi] ?? GUN_LOADOUT[0];
     const input = this._motion;
     input.speed = sp; input.phase = this._phase; input.lateral = lateral; input.aim = aim;
-    input.carry = blade ? 'blade' : gun === 'pistol' ? 'pistol' : 'long';
+    input.carry = blade ? 'blade' : this._kind === 'pistol' ? 'pistol' : 'long';
+    input.melee = swing;
     input.onGround = this.body.onGround; input.crouch = this.crouching || this.sliding;
     this._figure.rig.motion.update(dt, input);
+  }
+
+  /** 0..1 through its current slash, as this peer sees it; null between slashes. */
+  get slashProgress(): number | null {
+    return this.melee && this.slashing && this._slashAge < SLASH_TIME ? this._slashAge / SLASH_TIME : null;
   }
 
   raycast(origin: Vector3, direction: Vector3, max: number) {

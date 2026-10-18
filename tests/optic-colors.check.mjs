@@ -8,6 +8,8 @@ const out = process.argv[3] ?? '/tmp/shooter-optic-colors';
 await mkdir(out, { recursive: true });
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader'] });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+// Slots 1-2: R4-C, MP5.
+await page.addInitScript(() => localStorage.setItem('cs6_loadout', 'r4c,rifle,sword'));
 const errors = [];
 page.on('pageerror', error => errors.push(error.message));
 try {
