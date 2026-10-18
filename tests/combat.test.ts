@@ -269,7 +269,7 @@ test('real gun rays keep close-range kill thresholds for recruits and 110 HP onl
   const cases = [
     { kind: 'r4c', pve: [4, 2], pvp: [5, 3] },
     { kind: 'rifle', pve: [5, 2], pvp: [7, 4] },
-    { kind: 'pistol', pve: [3, 1], pvp: [4, 2] },
+    { kind: 'pistol', pve: [3, 1], pvp: [3, 2] },
     { kind: 'sniper', pve: [1, 1], pvp: [2, 1] },
   ];
   for (const row of cases) {

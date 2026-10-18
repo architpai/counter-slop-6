@@ -2,6 +2,7 @@
 
 > Current combat changes: [Combat rehaul](combat-rehaul.md). It replaces the old loadout, katana, rifle stats/sight and scope rules below.
 > Sword and loadouts: [Sword, loadouts and weapon handling](sword-loadouts.md). It replaces the knife, the fixed gun slots and the held-weapon wire field below.
+> The pistol: [The .50 pistol](heavy-pistol.md). It replaces the pistol's stats and adds the air-shot and quickdraw bonuses.
 
 This document describes the behaviour of the first-person weapons: three guns in the player's loadout (rifle, shotgun, sniper), one gun that is defined but not issued (revolver), and the katana. It covers stats, timing, state machines, view-model geometry and animation, hit detection, spawned effects, audio cues, and the contracts with the other subsystems.
 

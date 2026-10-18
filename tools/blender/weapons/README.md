@@ -1,10 +1,11 @@
 # First-person weapons and arms (R4)
 
-The realistic tiers' view models: the R4-C, the MP5, the pump shotgun, the sniper rifle, the LMG, the pistol,
-the tactical sword, the ACOG and holographic sights, and the gloved hands with sleeves. Every mesh,
-pose, clip and texture is made by the Python scripts in this folder, run headless in Blender. Nothing
-is downloaded: no model, image, scan or HDRI is read from disk. Low keeps the code-built guns of
-`src/engine/weapons/models.ts` and never loads any of this.
+The realistic tiers' view models: the R4-C, the MP5, the pump shotgun, the sniper rifle, the LMG, the pistol
+(a large-frame .50 of our own design: a tall slab slide over a full-length barrel, a ribbed top rail, a squared
+muzzle face, a spur hammer and an oversized base plate), the tactical sword, the ACOG and holographic sights,
+and the gloved hands with sleeves. Every mesh, pose, clip and texture is made by the Python scripts in this
+folder, run headless in Blender. Nothing is downloaded: no model, image, scan or HDRI is read from disk. Low
+keeps the code-built guns of `src/engine/weapons/models.ts` and never loads any of this.
 
 ## Regenerate everything
 

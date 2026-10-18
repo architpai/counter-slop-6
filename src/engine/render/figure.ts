@@ -397,10 +397,12 @@ function weaponProp(kind: WeaponPropKind, color: number): THREE.Group {
     addBox(0.09, 0.07, 0.025, 0, 0.04, -0.01, DARK);
     addBox(0.04, 0.045, 0.15, 0, 0.04, -0.10, DARK);
   } else if (kind === 'pistol') {
-    addBox(0.075, 0.09, 0.28, 0, 0.08, 0.10, DARK);
-    barrel(0.018, 0.18, 0, 0.07, 0.20);
-    addBox(0.06, 0.16, 0.09, 0, -0.04, 0.01, DARK).rotation.x = -0.2;
-    addBox(0.07, 0.025, 0.12, 0, -0.01, 0.13, color);
+    // The .50: a tall slab slide with a top rib and a squared muzzle face, a wide grip.
+    addBox(0.095, 0.115, 0.36, 0, 0.09, 0.13, DARK);
+    addBox(0.045, 0.025, 0.33, 0, 0.16, 0.13, DARK);
+    addBox(0.1, 0.12, 0.02, 0, 0.09, 0.305, color);
+    addBox(0.075, 0.19, 0.11, 0, -0.06, 0.0, DARK).rotation.x = -0.2;
+    addBox(0.085, 0.03, 0.15, 0, -0.005, 0.14, color);
   } else if (kind === 'blade') {
     addBox(0.02, 0.05, 0.95, 0, 0.04, 0.42, 0xcbdbe3);
     addBox(0.11, 0.11, 0.03, 0, 0.04, -0.06, DARK);

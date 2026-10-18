@@ -25,7 +25,7 @@ const ROLES: Record<WeaponKind, string> = {
   rifle: 'SMG · fast · accurate on the move',
   shotgun: 'Pump shotgun · devastating up close',
   sniper: 'Bolt-action sniper · one shot, one kill',
-  pistol: 'Sidearm · quick draw · quick reload',
+  pistol: 'Heavy .50 · harder hits in the air and off the draw',
   lmg: 'Belt-fed LMG · 100 rounds · heavy',
   sword: 'Guard and parry · cuts bullets · air slash',
 };

@@ -95,8 +95,8 @@ afterAll(() => { for (const weapon of all) weapon.dispose(); });
 test('loadout, view models and aim poses', () => {
   assert(loadout.map(w => w.kind).join(',') === 'r4c,rifle,shotgun,sniper,pistol,lmg', 'makeWeapon builds each gun');
   assert(melee instanceof Sword && melee.spreadPx === 4 && !melee.isGun && melee.kind === 'sword', 'The sword is a weapon with no ammo');
-  const muzzleZ: Record<GunKind, number> = { r4c: -1.16, rifle: -0.96, pistol: -0.42, shotgun: -1.09, sniper: -1.60, lmg: -1.32, revolver: -0.40 };
-  const expected: Record<GunKind, number[]> = { r4c: [30, 150, 300, 28, 38, 0.08], rifle: [30, 150, 300, 22, 38, 0.075], pistol: [15, 90, 180, 40, 62, 0.18], shotgun: [6, 36, 72, 19, 68, 0.78],
+  const muzzleZ: Record<GunKind, number> = { r4c: -1.16, rifle: -0.96, pistol: -0.44, shotgun: -1.09, sniper: -1.60, lmg: -1.32, revolver: -0.40 };
+  const expected: Record<GunKind, number[]> = { r4c: [30, 150, 300, 28, 38, 0.08], rifle: [30, 150, 300, 22, 38, 0.075], pistol: [9, 72, 144, 40, 62, 0.13], shotgun: [6, 36, 72, 19, 68, 0.78],
     sniper: [5, 25, 50, 150, 20, 0.20], lmg: [100, 200, 300, 26, 58, 0.085], revolver: [6, 36, 72, 62, 52, 0.30] };
   for (const gun of [r4c, rifle, pistol, shotgun, sniper, lmg, revolver]) {
     const stats = GUN_STATS[gun.kind], actual = [gun.mag, gun.reserve, stats.maxReserve, stats.damage, gun.adsFov, stats.fireInterval];
@@ -351,8 +351,8 @@ test('automatic yaw recoil walks a learnable pattern, not noise', () => {
 
 test('accepted spread and recoil settings', () => {
   expect(GUN_STATS.rifle).toMatchObject({ hipSpread: 0.012, moveSpread: 0.0005, spreadKick: 0.005 });
-  expect(GUN_STATS.pistol).toMatchObject({ hipSpread: 0.008, adsSpread: 0.002, spreadKick: 0.006,
-    spreadMax: 0.035, moveSpread: 0.0004, camKick: [0.014, 0.003] });
+  expect(GUN_STATS.pistol).toMatchObject({ hipSpread: 0.008, adsSpread: 0.002, spreadKick: 0.009,
+    spreadMax: 0.045, moveSpread: 0.0004, camKick: [0.02, 0.005] });
 });
 
 test('shotgun shell loading and the pump cycle', () => {
@@ -428,10 +428,10 @@ test('real rays use separate PvE and PvP damage, headshots and distance falloff'
     [r4c, 300, 28 * 0.55, 70 * 0.55, 11.7, 21.06],
     [rifle, 10, 22, 57.2, 18, 32.4],
     [rifle, 300, 8.8, 22.88, 7.2, 12.96],
-    [pistol, 12, 40, 104, 32, 64],
-    [pistol, 26, 20, 52, 16, 32],
-    [pistol, 40, 14, 36.4, 11.2, 22.4],
-    [pistol, 300, 14, 36.4, 11.2, 22.4],
+    [pistol, 12, 40, 104, 37, 74],
+    [pistol, 26, 20, 52, 18.5, 37],
+    [pistol, 40, 14, 36.4, 12.95, 25.9],
+    [pistol, 300, 14, 36.4, 12.95, 25.9],
     [sniper, 10, 150, 450, 100, 200],
     [sniper, 300, 150, 450, 100, 200],
     [shotgun, 9, 19, 34.2, 16, 25.6],
@@ -513,24 +513,58 @@ test('sword guard, strikes, held-fire chains, obstruction, air slash and blade b
 test('pistol fires once per press, cycles its slide and reloads', () => {
   pistol.resetAmmo(); draw(pistol); calls.length = 0;
   pistol.animate(fire, 0);
-  assert(pistol.mag === 14 && named('pistolFire').length === 1, 'Pistol fires on the trigger edge');
+  assert(pistol.mag === 8 && named('pistolFire').length === 1, 'Pistol fires on the trigger edge');
   const slide = must(pistol.root.getObjectByName('slide'), 'slide');
-  assert(slide.position.z > -0.10, 'Slide recoils on firing');
+  assert(slide.position.z > -0.15, 'Slide recoils on firing');
   step(pistol, 0.3, { ...neutral, fire: true });
-  assert(pistol.mag === 14 && near(slide.position.z, -0.10), 'Held trigger does not auto-fire and the slide returns');
+  assert(pistol.mag === 8 && near(slide.position.z, -0.15), 'Held trigger does not auto-fire and the slide returns');
   pistol.animate(fire, 0);
-  assert(pistol.mag === 13, 'A new press fires the next round');
+  assert(pistol.mag === 7, 'A new press fires the next round');
   // A press 60 ms before the interval ends is buffered and fires when it does.
-  pistol.animate(fire, 0.12);
-  assert(pistol.mag === 13, 'Buffered press waits for the interval');
+  pistol.animate(fire, 0.07);
+  assert(pistol.mag === 7, 'Buffered press waits for the interval');
   pistol.animate({ ...neutral, fire: false }, 0.07);
-  assert(pistol.mag === 12, 'Buffered press fires once the interval ends');
+  assert(pistol.mag === 6, 'Buffered press fires once the interval ends');
   step(pistol, 0.3, { ...neutral, fire: false });
-  assert(pistol.mag === 12, 'The buffer is consumed, not replayed');
+  assert(pistol.mag === 6, 'The buffer is consumed, not replayed');
   pistol.startReload(); step(pistol, 0.99, fire);
-  assert(pistol.mag === 12 && pistol.reloading, 'Pistol cannot reload or fire before one second');
+  assert(pistol.mag === 6 && pistol.reloading, 'Pistol cannot reload or fire before one second');
   pistol.animate(fire, 0.01);
-  assert(pistol.mag === 15 && pistol.reserve === 87 && !pistol.reloading, 'Pistol reload conserves ammo at one second');
+  assert(pistol.mag === 9 && pistol.reserve === 69 && !pistol.reloading, 'Pistol reload conserves ammo at one second');
+});
+
+test('the .50 hits harder off the draw and in the air; the two bonuses do not stack', () => {
+  const target: Foe = { center: new Vector3(), stats: { boss: false } };
+  const saved = { enemy: ctx.enemies.raycast, world: ctx.world.raycast };
+  ctx.world.raycast = () => null;
+  ctx.enemies.raycast = () => ({ enemy: target, part: 'torso', dist: 10, point: new Vector3(0, 0, -10) });
+  const dealt = () => num(must(last('enemyDamage'), 'enemyDamage')[1]);
+  try {
+    pistol.resetAmmo(); pistol.equip(); step(pistol, 0.2); calls.length = 0;
+    pistol.animate(fire, 0);
+    expect(dealt(), 'the first shot within 0.5 s of the draw').toBeCloseTo(40 * 1.4, 8);
+    step(pistol, 0.2);
+    pistol.animate(fire, 0);
+    expect(dealt(), 'the second shot is plain').toBeCloseTo(40, 8);
+    step(pistol, 0.2);
+    pistol.animate({ ...fire, grounded: false }, 0);
+    expect(dealt(), 'a shot off the ground').toBeCloseTo(40 * 1.25, 8);
+    step(pistol, 0.2);
+    pistol.animate({ ...fire, sliding: true }, 0);
+    expect(dealt(), 'a shot from a slide').toBeCloseTo(40 * 1.25, 8);
+    pistol.unequip(); pistol.equip(); step(pistol, 0.2);
+    pistol.animate({ ...fire, grounded: false }, 0);
+    expect(dealt(), 'off the draw in the air: the larger bonus only').toBeCloseTo(40 * 1.4, 8);
+    pistol.equip(); step(pistol, 0.6);
+    pistol.animate(fire, 0);
+    expect(dealt(), 'the draw bonus lapses after 0.5 s').toBeCloseTo(40, 8);
+    calls.length = 0;
+    rifle.resetAmmo(); draw(rifle); rifle.animate({ ...fire, grounded: false }, 0);
+    expect(dealt(), 'other guns have no air bonus').toBeCloseTo(22, 8);
+  } finally {
+    ctx.enemies.raycast = saved.enemy; ctx.world.raycast = saved.world;
+    pistol.unequip(); rifle.unequip(); pistol.resetAmmo(); rifle.resetAmmo();
+  }
 });
 
 test('real-time auto-reload', async () => {

@@ -27,11 +27,11 @@ const PS_INTERVAL = 0.05;
 // Host trusts a `take` only within this radius of the sender's avatar. Generous
 // vs the 1.5 m local collect: remotes render ~80 ms behind. ponytail: shrink if stealable.
 const TAKE_RANGE = 4;
-const HOW: Record<string, string> = { r4c: 'R4-C', rifle: 'MP5', pistol: 'pistol', shotgun: 'shotgun', sniper: 'sniper', lmg: 'LMG', melee: 'sword', wave: 'air slash', grenade: 'grenade', deflect: 'their own bullet' };
+const HOW: Record<string, string> = { r4c: 'R4-C', rifle: 'MP5', pistol: '.50 pistol', shotgun: 'shotgun', sniper: 'sniper', lmg: 'LMG', melee: 'sword', wave: 'air slash', grenade: 'grenade', deflect: 'their own bullet' };
 
-/** Most one `pdmg` packet may claim per source: a point-blank headshot with every pellet. */
+/** Most one `pdmg` packet may claim per source: a point-blank headshot with every pellet, and the gun's best bonus. */
 const PVP_CAP: Record<string, number> = { melee: SWORD_PVP_DAMAGE, wave: WAVE_PVP_DAMAGE, grenade: GRENADE_PVP_MAX };
-for (const [kind, g] of Object.entries(GUN_STATS)) PVP_CAP[kind] = g.pvp[0] * g.pvp[1] * g.pellets;
+for (const [kind, g] of Object.entries(GUN_STATS)) PVP_CAP[kind] = g.pvp[0] * g.pvp[1] * g.pellets * Math.max(g.airBonus, g.quickdraw?.[1] ?? 1);
 /** When each peer last reported its own death, so one body cannot be counted every frame. */
 const lastDeath = new Map<string, number>();
 

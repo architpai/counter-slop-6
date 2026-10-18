@@ -1,6 +1,6 @@
 {
  "version": 1,
- "glb": 1636236,
+ "glb": 1710156,
  "sets": {
   "hands": {
    "maxSize": 2048,
@@ -136,14 +136,14 @@
    "maxSize": 1024,
    "bytes": {
     "512": [
-     40149,
-     45081,
-     47586
+     60722,
+     56259,
+     59757
     ],
     "1024": [
-     106379,
-     135107,
-     125404
+     155097,
+     167613,
+     165421
     ]
    }
   },
@@ -251,14 +251,14 @@
   "pistol": {
    "set": "pistol",
    "triangles": {
-    "slide": 3568,
-    "magazine": 192,
+    "slide": 7604,
+    "magazine": 428,
     "trigger": 296,
     "right-hand": 4492,
     "left-hand": 4492,
-    "body": 2452
+    "body": 5014
    },
-   "total": 15492
+   "total": 22326
   },
   "sword": {
    "set": "sword",
@@ -289,7 +289,7 @@
   "lmg.equip": 0.65,
   "pistol.reload": 1,
   "pistol.reload-empty": 1,
-  "pistol.equip": 0.2,
+  "pistol.equip": 0.12,
   "sword.slash": 0.32,
   "sword.slash-back": 0.32,
   "sword.guard": 0.1,
@@ -301,7 +301,7 @@
   "shotgun": 1200,
   "sniper": 1200,
   "lmg": 1200,
-  "pistol": 1199,
+  "pistol": 1200,
   "blade": 1200
  }
 }
