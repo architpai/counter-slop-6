@@ -48,6 +48,22 @@ node perf/table.mjs perf/results/baseline-1.json perf/results/baseline-2.json pe
 node perf/image.mjs --selftest
 ```
 
+## Interleaved A/B (when the machine drifts)
+
+If HEAD itself moves against the baseline (desktop apps on the GPU, clock states), compare variants **paired, per
+cell**: every variant is built once into `$AB_WORK` (`/tmp/perf-ab`), then for each map x preset cell all variants
+run back to back (fresh browser each, `--no-trace`), in a rotation that gives each variant each position equally
+often. Two HEAD builds give the protocol's own noise (Round 1: HEAD/HEAD within 1.2 % on every preset aggregate).
+
+```sh
+git diff > /tmp/round.patch && git stash   # ab.sh resets src/ and tests/: it refuses a dirty tree
+perf/ab.sh x1 low,medium,high,ultra downtown,house,mexico,training 1 head headB /tmp/round.patch   # ≈30 min
+node perf/ab-agg.mjs x1   # paired geomean ratio vs head per preset (mean, median, p95); fails on missing cells
+```
+
+Results land in `perf/results/scratch-<tag>-*.json` (gitignored); put the `ab-agg` output in the round's notes
+(`perf/results/rN-ab.md`). `--no-trace` fights end in other fixed states than traced ones: compare within a mode.
+
 A round's change counts only if `compare` flags it **IMP** beyond the noise floor (see `NOISE.md`) on the cells it
 targets, flags no **REG** elsewhere, and `quality.mjs compare baseline <label>` passes. Then `npm run typecheck` and
 `npm test` (≈2.5 min) before the commit.
@@ -63,6 +79,7 @@ targets, flags no **REG** elsewhere, and `quality.mjs compare baseline <label>` 
 | `compare.mjs` | per cell deltas vs the noise floor |
 | `noise.mjs` | noise floor from repeated runs → `noise.json` (per cell, and the suite aggregates) |
 | `table.mjs` | median table of several bench results |
+| `ab.sh`, `ab-agg.mjs` | per-cell interleaved A/B of patches vs HEAD, and its paired aggregate |
 | `quality.mjs` | screenshot capture and SSIM gate |
 | `image.mjs` | PNG decode/encode (node:zlib), SSIM, diff heat maps |
 | `results/` | bench JSONs (≈185 kB, committed; `scratch-*` and `*-raw*` ignored); `baseline-1..3` are the reference, `baseline-profile` the profile |

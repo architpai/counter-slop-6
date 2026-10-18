@@ -182,7 +182,138 @@ Ranked by expected gain × breadth. All must keep pixels (SSIM gate) and preset 
 | `node perf/quality.mjs capture <label>` (56 images) | 2.2-2.6 min |
 | `node perf/quality.mjs compare baseline <label>` | ≈9 s |
 | `npm run typecheck` / `npm test` | <1 s / ≈2.3 min |
+| `perf/ab.sh` full matrix, 3 variants / 4 variants, 1 round | ≈30 / ≈40 min |
+
+## Round 1 — wasted GPU work in the main pass, post chain and shadow pass
+
+Commit `221ffb1` (on `c7a65d8`), 2026-10-18. Survey: four read-only Opus agents (main-pass shading, post chain,
+Low, per-frame CPU); implementation: three agents on disjoint files; review: GPT-6.1-Sol (below).
+
+**Round baseline.** HEAD had no `src/` change since `be47535`, so `baseline-1..3` stood in for `r1-pre`. But the
+machine drifted during the round: the user's desktop Chrome was open on the GPU, and HEAD re-run on its own read
++5.3 % (low) and up to +16 % (ultra) frame mean vs the baseline at times. A plain full-matrix run vs the baseline
+was therefore unreliable (the first full run of the exact set flagged REG on every preset; the HEAD re-run showed
+the same drift). Verdicts in this round come from **per-cell interleaved A/B runs** (`perf/ab.sh`,
+`perf/ab-agg.mjs`, new): every variant is built once, and for each map x preset cell all variants run back to back
+(fresh browser each, `--no-trace`), so drift hits them alike. The metric is the geomean of the paired
+variant/HEAD ratio over the 32 cell-scenarios. Run x5 used a balanced rotation and a second HEAD build as noise
+control: **HEAD/HEAD differs by 1.2 % or less on every preset aggregate** (frame mean, median and p95). All runs:
+`perf/results/r1-ab.md`. Fight state hashes are identical across all variants in every cell (`--no-trace` fights
+end in other, equally fixed, states than traced ones: compare within a mode only).
+
+### Result
+
+| | low | medium | high | ultra | all |
+|---|---|---|---|---|---|
+| **paired vs HEAD, x5** (frame mean) | 1.703 → 1.658 ms (-2.6 %) | 2.732 → 2.304 (-15.7 %) | 3.501 → 2.988 (-14.7 %) | 4.625 → 3.924 (-15.1 %) | 2.946 → 2.587 (-12.2 %) |
+| frame median | -3.4 % (-0.06 ms) | -14.2 % (-0.41) | -10.2 % (-0.36) | -18.0 % (-0.84) | -11.6 % (-0.35) |
+| frame p95 | -2.1 % (-0.06 ms) | -11.0 % (-0.44) | -13.8 % (-0.68) | -11.2 % (-0.68) | -9.6 % (-0.42) |
+| HEAD/HEAD noise, x5 (mean / med / p95) | -0.5 / -0.6 / +0.4 % | -0.9 / -1.2 / 0.0 % | +1.1 / +0.6 / +0.3 % | 0.0 / -0.3 / -0.2 % | -0.1 / -0.4 / +0.1 % |
+| **`r1-post` vs baseline-1..3** (frame mean) | 1.615 → 1.662 (+2.9 %, noise) | 3.289 → 2.643 (-19.6 % IMP) | 3.911 → 3.246 (-17.0 % IMP) | 4.900 → 3.975 (-18.9 % IMP) | 3.170 → 2.744 (-13.4 % IMP) |
+| frame median | 1.781 → 1.830 (+2.8 % REG*) | 3.217 → 2.807 (-12.7 % IMP) | 3.875 → 3.380 (-12.8 % IMP) | 4.815 → 3.923 (-18.5 % IMP) | 3.222 → 2.873 (-10.8 % IMP) |
+| frame p95 | 2.847 → 2.992 (+5.1 %) | 4.957 → 4.178 (-15.7 % IMP) | 5.805 → 4.800 (-17.3 % IMP) | 6.885 → 5.572 (-19.1 % IMP) | 4.873 → 4.276 (-12.3 % IMP) |
+| js mean (traced) | 0.636 → 0.571 (-10.3 %) | 1.380 → 1.073 (-22.2 % IMP) | 1.755 → 1.361 (-22.4 %) | 2.214 → 1.564 (-29.3 % IMP) | 1.360 → 1.069 (-21.4 % IMP) |
+
+\* Low vs the baseline is drift, not the change: HEAD alone read +2.4 % (median) / +5.3 % (mean) on Low vs the
+baseline in this session, and paired with HEAD the round is faster on Low in all 8 Low cells (7 of 8 vs headB):
+-0.02 to -0.08 ms per cell. Low's gain is real but small (about 5x the paired noise, below the 6.6 % full-matrix
+threshold). `r1-post` (traced, full matrix) is the next round's reference: `perf/results/r1-post.json`
+(`node perf/table.mjs perf/results/r1-post.json`).
+
+### Changes kept
+
+Paired frame-mean deltas (mean / median / p95), from the A/B run named; each line is the change on top of the
+variant in brackets. `js` is not measured by the A/B runs (`--no-trace`); the traced `r1-post` shows js -21 % overall.
+
+| change | where | low | medium | high | ultra | pixels |
+|---|---|---|---|---|---|---|
+| **A1** clear the scene target inside `render` (autoClear), after the shadow maps, not before: no store + reload of the cleared target on a tiled GPU | `render/index.ts` frame render | -0.5 / +1.4 / -0.7 % (≈0 ms) | -5.6 / -5.5 / -10.0 % (-0.20 / -0.19 / -0.55 ms) | -4.2 / -2.9 / -2.9 % (-0.18 / -0.12 / -0.17) | -1.3 / -1.0 / -0.8 % (-0.08 / -0.05 / -0.07) | exact |
+| **A2-A7** post targets [x4, vs HEAD]: Medium skips the unused MSAA depth resolve (`resolveDepthBuffer`); canvas `depth: false`; shaft targets RG16F; post scene matrices frozen; SMAA edges RG8; colour clear before passes that overwrite their whole target (`_fills`: no tile load) | `postfx.ts`, `render/index.ts` | -2.6 / -1.9 / -2.4 % (-0.04 / -0.03 / -0.07) | -10.9 / -5.6 / -8.8 % (-0.35 / -0.18 / -0.42) | -7.7 / -7.4 / -6.1 % (-0.29 / -0.27 / -0.32) | -2.0 / -3.1 / +4.0 % (-0.10 / -0.15 / +0.26) | exact |
+| **B2 + B7 + C** [x4, vs HEAD]: dark cascade lights skip `RE_Direct` at compile time; skinned twin of the level depth material (no `getProgram` per skinned/static switch in a cascade); `syncModel` reads hit centres off the fresh matrices; empty instanced effect pools leave the draw list; fewer per-frame allocations in the effects step (same `rand` order) | `shadows.ts`, `materials.ts`, `operators.ts`, `enemies/model.ts`, `effects*.ts` | -1.1 / -0.5 / -1.1 % (-0.02 / -0.01 / -0.03) | -4.7 / -1.0 / -4.4 % (-0.15 / -0.03 / -0.21) | -2.9 / -2.8 / -0.4 % (-0.11 / -0.10 / -0.02) | -3.1 / -4.2 / -1.3 % (-0.15 / -0.21 / -0.08) | exact |
+| **B3** packed ORM texture read once (`ORM_PACKED`, also in the program key) [x2, on the exact set] | `materials.ts` | +0.1 / +0.3 / 0.0 % | -2.6 / +0.1 / -0.4 % (-0.08 ms mean) | -1.5 / -2.8 / +1.5 % (-0.06) | -1.2 / -0.5 / +0.1 % (-0.06) | 1-3/255 on a few px |
+| **B1** skip the FX point light while dark, and fragments outside its reach [x2, on exact set + B3] | `shadows.ts` | -0.5 / -0.3 / -1.3 % | -7.2 / -3.9 / -8.0 % (-0.22 / -0.12 / -0.38) | -1.9 / -0.3 / -3.9 % (-0.07 / -0.01 / -0.23) | -2.5 / -2.5 / -2.9 % (-0.13 / -0.13 / -0.20) | 1-3/255; 3 px ≤ 23 |
+
+The parts overlap (ultra gains more from the whole set, -15.1 %, than from the parts' sum: the GPU bottleneck moves).
+A1 + A2-A7 + B2 + B7 + C alone (the exact set, x2): low -3.0 %, medium -11.5 %, high -8.6 %, ultra -11.5 % mean.
+Draw calls, triangles and program counts match the baseline in every cell (`r1-post`; mexico/ultra fight
+triangle median 870636 is baseline-3's value, baselines 1-2 read 857525). Every traced fight hash matches the baseline.
+
+### Quality gate
+
+`node perf/quality.mjs compare baseline r1`: **PASS, 56/56, every SSIM 1.0000.** Low: 14/14 byte-identical. The
+exact set alone (A1-A7, B2, B7, C) gave 56/56 byte-identical images (`scratch-e2`). B1 and B3 move **284 pixels in
+total over the 42 realistic images** (~87 M px), 1-21 px per image, all by 1-3/255, except 3 adjacent pixels in
+high/fight-mid (x 1360-1362, y 627: 10, 23 and 14/255). A 10x crop of base vs new there shows no visible
+difference; it reads as one SMAA edge decision flipped by a 1-LSB input change. Cause: both changes are exact in
+exact arithmetic (a SwiftShader float32 render was bit-identical for B3 and within 1 ulp for B1, from the reordered
+branch), but Metal compiles with fast math, so any edit of shared shader text can reassociate float ops elsewhere.
+Bisected per change on medium/ultra downtown+training (whole maps; see gotchas): A6, A1-A5, A7, B2, B7 and C are
+byte-exact; B3 alone gives max 3/255, B1 alone max 2/255 (23 in the fight view).
+
+### Review (GPT-6.1-Sol, high effort)
+
+Round 1 (`perf-loop-r1-review-1`): no correctness bug found (autoClear restored in `finally`; C1 keeps the detached
+fallback; `particle()` copies the scratch velocity at once; no hook overwrite, cache-key collision or new compile
+path); B1/B3 diffs acceptable under the SSIM rule with this explanation; A1's clear colour hidden by the dome; A6
+keeps the binary edges; A7's readers clamp. Findings, all on measurement, all addressed: (1) Low had no gain past its
+noise floor → x5 paired Low result with a HEAD/HEAD control (above; still small and stated as such); (2) the A/B
+order rotation was unbalanced (by name length) → `perf/ab.sh` uses a cyclic rotation over consecutive cells, x5
+reran with it; (3) the old thresholds do not validate the new protocol → x5 measured the HEAD/HEAD noise of the
+protocol (≤ 1.2 %); (4) the aggregator could drop cells silently → `perf/ab-agg.mjs` fails on any incomplete set
+(x1-x5 all complete). Before the review, the B3 define was in the shader text only; it is now in the program key
+(`ormKey`) so a material with separate AO/roughness maps can never share a packed program (no such material exists
+today; no program count changed).
+
+### Hot spot leads for later rounds (refreshed)
+
+1. **Fight CPU submission** (lead 1, unchanged): per-figure material copies; share while the tint is black. New
+   detail (B7 survey): gibs reuse the body's skinned material copy (`render/operators.ts:668`), so the main pass
+   re-runs `getProgram` at every body/gib switch: give gibs their own non-skinned copy.
+2. **Ray pre-reject** (lead 8): an exact union-of-hit-spheres bound per figure in `syncModel`, `ray.intersectSphere`
+   before `updateWorldMatrix` + recursive intersect; mostly training (22-35 figures per frame, 0.2-0.5 ms).
+3. **Shadow casters per cascade** (lead 2) and **hardware shadow compare** (lead 3): still open; render.shadows CPU
+   0.8-1.2 ms on ultra fights. Low's shadow redraw is ~1.4 ms on its frames and mostly memory traffic, not
+   triangles (17k): A1 did not move it.
+4. **GTAO shader cost on ultra** (lead 5) and **one `render()` for the whole post chain** (`renderBufferDirect` per
+   pass, keep `_pass`/`_antialias` hooks for the harness): 0.05-0.1 ms CPU.
+5. **Allocation churn** (lead 9): `particle()` spec copies, `splice` in particle/pool/tracer/shell loops (swap-remove
+   changes instance order: not exact), `_sprite` option objects.
+6. Shader text edits that only branch at run time move LSBs on Metal (B1, B3, B4, B5, B6); compile-time removal
+   (`#if`, B2) stayed exact. Prefer `#if`/defines, and expect to explain LSB diffs otherwise.
+7. Small exact leftovers: hemisphere light at 0 with the sky in (`index.ts:795`), AO alpha write on low/medium
+   (`postfx.ts:113-118`), `vMacroPos`/`vGridPos` duplicate varying.
+
+### Gotchas (new)
+
+- **Drift**: judge with `perf/ab.sh` (HEAD vs patches, with a `headB` control) when HEAD itself moves vs the
+  baseline; report the official full matrix too.
+- **Partial captures**: `quality.mjs capture --views a,b` changes the per-map view order and state, so its images
+  are not comparable with a full set (training-overview read SSIM 0.995 with a pixel-exact change). Bisect with
+  `--maps` (whole maps), never `--views`.
+- `perf/ab.sh` resets `src/` and `tests/` between builds: it refuses to start on a dirty tree; save the round's
+  diff as a patch first.
 
 ## Tried / rejected ideas
 
-(None yet. Format: round, idea, where, result numbers vs the noise floor, why rejected.)
+Format: round, idea, where, result numbers vs the noise floor, why rejected.
+
+- **r1, A8: invalidate depth nobody reads** (`gl.invalidateFramebuffer` on each shadow map's depth renderbuffer after
+  it is drawn, and on Low's scene-target depth after the main render; `render/index.ts` shadow wrapper). Exact.
+  Paired x1 on top of the exact set: low +0.4 %, medium -1.1 %, high -0.6 %, ultra -1.4 % frame mean (all -0.7 %),
+  inside the protocol's ±1.2 % noise; an earlier non-interleaved ultra run even read it as slower. ANGLE Metal likely
+  ends the pass's store anyway. Rejected (could be retried alone on ultra with `perf/ab.sh`, 2+ rounds).
+- **r1, B4: skip the fog tint where fog is 0** (`atmosphere.ts` fog chunk, `if (f > 0.0) mix(...)`). Exact in
+  arithmetic, but with B5 it moved 1/255 on a few pixels in 2 of 16 images (Metal fast math). Gain ~20 ALU per
+  fragment, not measurable alone. Rejected for pixels.
+- **r1, B5: skip the macro noise where `macro` is 0** (glass, water; `materials.ts`). Same as B4 (tested together).
+  Rejected for pixels.
+- **r1, B6: share per-axis hash work in the macro noise** (`materials.ts` `macroNoise`/`macroHash`). Bit-exact on
+  SwiftShader; depends on B5; part of the first full set that moved pixels. Rejected for pixels (Metal fast math).
+  Not tried alone.
+- **r1, SMAA weights target RGBA8** (reference SMAA's format). Not exact by analysis (continuous weights, gamma
+  blend: 1-2 LSB on edges). Not tried.
+- **r1, SMAA stencil early-out.** ≈0.03 ms at best, needs a shared depth-stencil; not tried.
+- **r1, `matrixAutoUpdate = false` on static level/props.** `Scene.matrixAutoUpdate` forces the walk anyway and the
+  level is a few merged meshes: < 0.03 ms by analysis. Not tried.
+- **r1, skip Low's shadow redraw when the snapped box did not move.** Never triggers in the bench (the path moves
+  ~20 texels between redraws; figures move in fights). Not tried.

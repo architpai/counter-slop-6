@@ -71,3 +71,12 @@ A change counts as a real gain only if **all** of these hold:
 Compare against the three baselines' median (comma-separated base list, as above), or against the previous round's
 committed result when stacking rounds. Partial matrices (`--maps`/`--presets`) are fine for iteration, but their
 aggregates cover fewer cells and are noisier than the thresholds assume; the verdict needs the full matrix.
+
+## Paired A/B noise (Round 1)
+
+On 2026-10-18 evening the machine read HEAD up to +5 % (low) and +16 % (ultra) slower than the baseline above
+(desktop Chrome open on the GPU), so full-matrix runs against the baseline flagged changes as regressions that were
+drift. `perf/ab.sh` runs variants back to back per cell instead; with two HEAD builds in one balanced run (x5,
+`perf/results/r1-ab.md`) the paired geomean ratio HEAD/HEAD was within **1.2 %** on every preset aggregate (frame
+mean, median and p95; Low -0.5 / -0.6 / +0.4 %). That is one run: treat a paired change under about 2 % as
+unproven, and repeat the run (or add rounds) near that line.
