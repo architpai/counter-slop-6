@@ -137,10 +137,28 @@ export function makeModel(stats: EnemyType): { figure: Figure; root: Group; hits
   return { figure, root: figure.root, hits, nodes };
 }
 
+/**
+ * Put the hit spheres and the centre where the figure stands now. The root's
+ * ancestors are brought up to date first and then the whole figure, so a part
+ * still under the root reads its fresh world matrix as it is; a part handed to
+ * the debris (no longer under the root) asks its own chain, as before. Each
+ * matrix comes from the same inputs by the same products as `getWorldPosition`
+ * would recompute, so the centres are the same to the bit.
+ */
 export function syncModel(e: EnemyRecord): void {
-  e.root.updateMatrixWorld(true);
-  for (const hit of e.hits) hit.obj.getWorldPosition(hit.center);
-  (e.figure.anchors as EyeAnchors).torso.getWorldPosition(e.center);
+  const root = e.root;
+  root.parent?.updateWorldMatrix(true, false);
+  root.updateMatrixWorld(true);
+  for (const hit of e.hits) worldPosition(hit.obj, root, hit.center);
+  worldPosition((e.figure.anchors as EyeAnchors).torso, root, e.center);
+}
+
+/** `obj`'s world position into `out`: read straight off its matrix when it is in `root`'s just-updated tree. */
+function worldPosition(obj: Object3D, root: Object3D, out: Vector3): void {
+  for (let node: Object3D | null = obj; node; node = node.parent) {
+    if (node === root) { out.setFromMatrixPosition(obj.matrixWorld); return; }
+  }
+  obj.getWorldPosition(out);
 }
 
 /** Run the hit tint's clock (`flashT`, seconds left) by `dt` and put its tint on the figure. */

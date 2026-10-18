@@ -345,8 +345,18 @@ export class Composite {
   readonly _shaftBlur: THREE.ShaderMaterial;
   readonly _shaftMaskUniforms: ShaftMaskUniforms;
   readonly _shaftBlurUniforms: ShaftBlurUniforms;
-  /** Light shafts (R8): the mask, then the blur's ping-pong; `[0]` holds the rays the tone pass adds. Allocated while shafts are on. */
-  readonly _shafts = [floatTarget(THREE.RGBAFormat, THREE.LinearFilter), floatTarget(THREE.RGBAFormat, THREE.LinearFilter)] as const;
+  /**
+   * The passes that write every pixel of their viewport with blending off; `_pass` clears their target first
+   * (colour only), so a tiled GPU starts it without loading the old frame. The clear covers the whole target (no
+   * scissor on these): under dynamic resolution the texels it adds beyond the viewport are ones every reader
+   * already clamps away (uvMax, aoLast, bloomMax, shaftMax). Not the additive bloom upsample.
+   */
+  readonly _fills: ReadonlySet<THREE.ShaderMaterial>;
+  /**
+   * Light shafts (R8): the mask, then the blur's ping-pong; `[0]` holds the rays the tone pass adds. Allocated while
+   * shafts are on. Two channels: every pass writes and reads red (rays) and green (open sky) only.
+   */
+  readonly _shafts = [floatTarget(THREE.RGFormat, THREE.LinearFilter), floatTarget(THREE.RGFormat, THREE.LinearFilter)] as const;
   /** The map's shaft strength (`Atmosphere.shafts`), where the sun is (world, towards it) and its hue, from the renderer. */
   _shaftStrength = 0;
   readonly _sunDir = new THREE.Vector3(0, 1, 0);
@@ -821,9 +831,14 @@ export class Composite {
       [this._gtao, 'gtao'], [this._blur, 'ao-blur'], [this._prefilter, 'bloom-prefilter'], [this._down, 'bloom-down'], [this._up, 'bloom-up'],
       [this._shaftMask, 'shaft-mask'], [this._shaftBlur, 'shaft-blur']];
     for (const [material, name] of names) material.name = `post:${name}`;
+    this._fills = new Set([this._low, this._tone, this._gtao, this._blur, this._prefilter, this._down, this._shaftMask, this._shaftBlur]);
     this.triangle = new THREE.Mesh(geometry, this._low);
     this.triangle.frustumCulled = false;
     this.scene.add(this.triangle);
+    // Nothing here moves and VERTEX ignores the matrices: the triangle and the camera keep their identity
+    // matrices, so no pass recomputes them.
+    this.scene.matrixWorldAutoUpdate = this.camera.matrixWorldAutoUpdate = false;
+    this.triangle.matrixAutoUpdate = false;
     this.setGrade(GRADE.neutral);
   }
 
@@ -951,6 +966,9 @@ export class Composite {
       if (!depth) this._depth = null;
       this.target.depthTexture = this._depth;
     }
+    // The MSAA resolve copies depth only for the depth texture: without one (Medium) nothing reads the resolved
+    // depth, and three reads this flag at every resolve.
+    this.target.resolveDepthBuffer = depth;
     this.uniforms.depth.value = this._gtaoUniforms.depth.value = this._shaftMaskUniforms.depth.value = this._depth;
     if (before.ao !== config.ao) {
       this._sizeAo();
@@ -960,6 +978,11 @@ export class Composite {
       this._smaa = new SMAAPass(this._width, this._height);
       // Its edge pass discards non-edges, so stale edges must be cleared each frame (see `draw`).
       this._smaa.clear = true;
+      // Edges are 0 or 1 in red and green, as the reference keeps them (RG8); three gives them RGBA16F. Set
+      // before the target's first use, and `setSize` keeps the texture's format.
+      const edges = this._smaa.edgesRT.texture;
+      edges.format = THREE.RGFormat;
+      edges.type = THREE.UnsignedByteType;
     }
     if (!config.smaa && this._smaa) {
       this._smaa.dispose();
@@ -1064,6 +1087,8 @@ export class Composite {
   _pass(renderer: THREE.WebGLRenderer, material: THREE.ShaderMaterial, target: THREE.WebGLRenderTarget | null): void {
     this.triangle.material = material;
     renderer.setRenderTarget(target);
+    // The canvas (null) is cleared in `draw`.
+    if (target !== null && this._fills.has(material)) renderer.clear(true, false, false);
     renderer.render(this.scene, this.camera);
   }
 

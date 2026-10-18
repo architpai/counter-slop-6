@@ -255,7 +255,14 @@ vGridPos = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;
 }
 
 const gridded = new WeakSet<THREE.Material>();
-const gridKey = (): string => 'probe-grid';
+function gridKey(this: THREE.Material): string {
+  return `probe-grid${ormKey(this)}`;
+}
+/** `gridLit`'s hook: the probe grid, and the Blender weapons' packed ORM map read once (`packedOrm`). */
+function gridShader(this: THREE.Material, shader: THREE.WebGLProgramParametersWithUniforms): void {
+  withGrid(shader);
+  packedOrm(this, shader);
+}
 /**
  * Light a moving thing's material from the probe grid (R3): the view model
  * and figures (\`charMat\`); the characters' own materials below add it too. One patch for
@@ -266,7 +273,7 @@ export function gridLit<T extends THREE.Material>(material: T, viewModel = false
   if (gridded.has(material)) return material;
   gridded.add(material);
   if (viewModel) material.defines = { ...material.defines, GRID_VIEW_MODEL: '' };
-  material.onBeforeCompile = withGrid;
+  material.onBeforeCompile = gridShader;
   material.customProgramCacheKey = gridKey;
   return material;
 }
@@ -341,8 +348,11 @@ export function characterMat(): THREE.MeshStandardMaterial {
 function propShader(this: THREE.Material, shader: THREE.WebGLProgramParametersWithUniforms): void {
   withGrid(shader);
   tintShader(shader, owned.get(this) ?? baseOwned());
+  packedOrm(this, shader);
 }
-const propKey = (): string => 'prop';
+function propKey(this: THREE.Material): string {
+  return `prop${ormKey(this)}`;
+}
 
 let prop: THREE.MeshToonMaterial | undefined;
 /**
@@ -417,8 +427,11 @@ irradiance *= fill;
 iblIrradiance *= fill;
 reflectedLight.directDiffuse *= ${OPERATOR_LIGHT.key.toFixed(2)};
 #include <lights_fragment_end>`);
+  packedOrm(this, shader);
 }
-const operatorKey = (): string => 'operator';
+function operatorKey(this: THREE.Material): string {
+  return `operator${ormKey(this)}`;
+}
 /**
  * How far the remote player's team carrier is lightened from its team's tone (`operatorShader`): a saturated
  * blue or red reads dark (their luma is low) and sank into dark floors. It is lightened mostly through green,
@@ -500,11 +513,52 @@ export function standInMaps(set: TextureSet, info: SetInfo): SetMaps {
   return maps;
 }
 
-/** Put a set's maps on a realistic material: albedo, normal, and ORM as occlusion, roughness and metalness. */
+/**
+ * Put a set's maps on a realistic material: albedo, normal, and ORM as occlusion, roughness and metalness. The
+ * only writer of those three slots on the patched materials below, so they always hold one texture (`packedOrm`).
+ */
 export function wearMaps(material: THREE.MeshStandardMaterial, maps: SetMaps): void {
   material.map = maps.albedo;
   material.normalMap = maps.normal;
   material.aoMap = material.roughnessMap = material.metalnessMap = maps.orm;
+}
+
+/**
+ * The packed ORM map read once: with `ORM_PACKED` defined, three's metalness and occlusion chunks reuse the
+ * roughness chunk's texel (`texelRoughness`, in scope for the rest of `main`) instead of fetching the same
+ * texture twice more. One texture in all three slots means one channel, one uv transform (each slot's transform
+ * uniform is that texture's matrix) and one sampler, so the three uvs and texels are the same values: every pixel
+ * is as before. Without the define the chunks are three's, word for word.
+ */
+const ORM_METALNESS = THREE.ShaderChunk.metalnessmap_fragment.replace('vec4 texelMetalness = texture2D( metalnessMap, vMetalnessMapUv );',
+  '#ifdef ORM_PACKED\n\tvec4 texelMetalness = texelRoughness;\n\t#else\n\tvec4 texelMetalness = texture2D( metalnessMap, vMetalnessMapUv );\n\t#endif');
+const ORM_AO = THREE.ShaderChunk.aomap_fragment.replace('float ambientOcclusion = ( texture2D( aoMap, vAoMapUv ).r - 1.0 ) * aoMapIntensity + 1.0;',
+  '#ifdef ORM_PACKED\n\tfloat ambientOcclusion = ( texelRoughness.r - 1.0 ) * aoMapIntensity + 1.0;\n\t#else\n\tfloat ambientOcclusion = ( texture2D( aoMap, vAoMapUv ).r - 1.0 ) * aoMapIntensity + 1.0;\n\t#endif');
+if (ORM_METALNESS === THREE.ShaderChunk.metalnessmap_fragment || ORM_AO === THREE.ShaderChunk.aomap_fragment
+  || !THREE.ShaderChunk.roughnessmap_fragment.includes('vec4 texelRoughness = texture2D( roughnessMap, vRoughnessMapUv );')) {
+  throw new Error('three changed its ORM chunks: update render/materials.ts');
+}
+THREE.ShaderChunk.metalnessmap_fragment = ORM_METALNESS;
+THREE.ShaderChunk.aomap_fragment = ORM_AO;
+
+/** One texture fills a material's occlusion, roughness and metalness slots (`wearMaps`): its ORM map can be read once. */
+function ormPacked(material: THREE.Material): boolean {
+  const { aoMap, roughnessMap, metalnessMap } = material as THREE.MeshStandardMaterial;
+  return !!aoMap && aoMap === roughnessMap && aoMap === metalnessMap;
+}
+/**
+ * Read a material's ORM texture once (above), from its own hook: only when one texture fills all three slots
+ * (`ormPacked`). three's program key holds which slots are filled but not with what, so the hooks' keys add
+ * `ormKey`: a material with three different textures never takes a packed program, which would read the
+ * roughness map for all three. Both read `ormPacked`, so the define and the key always agree. `wearMaps` is the
+ * only writer of the slots on these materials and keeps them packed, so a key never changes under a program.
+ */
+function packedOrm(material: THREE.Material, shader: THREE.WebGLProgramParametersWithUniforms): void {
+  if (ormPacked(material)) shader.fragmentShader = `#define ORM_PACKED\n${shader.fragmentShader}`;
+}
+/** The program key's part for `packedOrm`: `|orm` on a packed material, else nothing. */
+function ormKey(material: THREE.Material): string {
+  return ormPacked(material) ? '|orm' : '';
 }
 
 /** Every realistic level material made so far (they are cached like the flat ones). */
@@ -608,9 +662,10 @@ iblIrradiance = vec3( 0.0 );`);
     if (!this.userData.far) withGrid(shader);
     shader.fragmentShader = shader.fragmentShader.replace('#include <lights_fragment_maps>', '#include <lights_fragment_maps>\niblIrradiance = vec3( 0.0 );');
   }
+  packedOrm(this, shader);
 }
 function macroKey(this: THREE.Material): string {
-  return this.userData.baked ? 'level-pbr-baked' : this.userData.far ? 'level-pbr-far' : 'level-pbr';
+  return `${this.userData.baked ? 'level-pbr-baked' : this.userData.far ? 'level-pbr-far' : 'level-pbr'}${ormKey(this)}`;
 }
 
 /**
@@ -810,6 +865,17 @@ export function weaponPropMaterial(set: string): THREE.MeshStandardMaterial {
 }
 
 let levelDepth: THREE.MeshDepthMaterial | undefined;
+let levelDepthSkinned: THREE.MeshDepthMaterial | undefined;
+function levelDepthShader(shader: THREE.WebGLProgramParametersWithUniforms): void {
+  shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>', '');
+}
+const levelDepthKey = (): string => 'level-depth';
+const makeLevelDepth = (): THREE.MeshDepthMaterial => {
+  const material = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+  material.onBeforeCompile = levelDepthShader;
+  material.customProgramCacheKey = levelDepthKey;
+  return material;
+};
 /**
  * The shadow pass of the textured level and of the realistic operators
  * (render/operators.ts). three's shared depth material takes each caster's
@@ -819,14 +885,16 @@ let levelDepth: THREE.MeshDepthMaterial | undefined;
  * (neither has cut-outs), so no streamed texture reaches the shadow pass.
  */
 export function levelDepthMat(): THREE.MeshDepthMaterial {
-  if (levelDepth === undefined) {
-    levelDepth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
-    levelDepth.onBeforeCompile = shader => {
-      shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>', '');
-    };
-    levelDepth.customProgramCacheKey = () => 'level-depth';
-  }
-  return levelDepth;
+  return levelDepth ??= makeLevelDepth();
+}
+
+/**
+ * `levelDepthMat`'s twin for skinned casters (the realistic operators' bodies): the same material, patch and key,
+ * so the same program. three binds a mesh's depth material as it is, and one material drawn skinned, then not,
+ * looks its program up again (parameters, key and uniforms) at every switch between them in a shadow pass.
+ */
+export function levelDepthSkinnedMat(): THREE.MeshDepthMaterial {
+  return levelDepthSkinned ??= makeLevelDepth();
 }
 
 /**

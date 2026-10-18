@@ -9,7 +9,7 @@ import {
 import { LOOPS, OperatorMotion, RUN_FULL, loopWeights } from '@/engine/render/operator-motion';
 import type { MotionInput } from '@/engine/render/operator-motion';
 import { makeFigure, raycastFigure, useOperatorSource, usePropSource } from '@/engine/render/figure';
-import { levelDepthMat } from '@/engine/render/materials';
+import { levelDepthSkinnedMat } from '@/engine/render/materials';
 import type { Figure } from '@/engine/render/figure';
 import { TACTICAL_MODELS, TACTICAL_NODES } from '@/engine/render/tactical';
 import { PRESET_VALUES } from '@/engine/render/quality';
@@ -370,7 +370,7 @@ test('worn operators cull by their kind\'s bounds, cast through a map-free depth
           // Culled per camera and cascade, by the kind's sphere, never by skinning on the CPU.
           expect(mesh.frustumCulled, kind).toBe(true);
           expect(mesh.boundingSphere, kind).toBe(template.bounds);
-          expect(mesh.customDepthMaterial, kind).toBe(levelDepthMat());
+          expect(mesh.customDepthMaterial, kind).toBe(levelDepthSkinnedMat());
           // The sphere holds those poses' skinned vertices.
           let reach = 0;
           const vertex = new Vector3();

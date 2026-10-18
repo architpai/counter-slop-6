@@ -11,13 +11,34 @@ import * as THREE from 'three';
  * blends into the next one over the outer eighth of the box, and fades to lit
  * over the outer 1/24 of the last (about 2 m: a wider fade reads as smudged,
  * half-faded shadows from a rooftop). The sun's light is then applied once,
- * shadowed by that. With
- * a single shadow light (Low, Medium) the original chunk runs, unchanged.
+ * shadowed by that. With a single shadow light (Low, Medium) three's own
+ * directional loop runs, unchanged.
  *
  * No per-material setup: the lambert, toon and standard shaders all build
  * from this chunk, including the GLB and effects materials made later.
  */
-const CHUNK = THREE.ShaderChunk.lights_fragment_begin;
+const THREE_CHUNK = THREE.ShaderChunk.lights_fragment_begin;
+
+/**
+ * The point lights (render/index.ts `FX_LIGHTS`, the shots' and blasts'
+ * pooled light) sit at zero most of the time, but three's loop still works
+ * out each one's falloff and runs the whole BRDF for it in every lit
+ * fragment. Here a light whose colour is zero (intensity 0: the same uniform
+ * for the whole draw) is skipped, and a lit one only shades the fragments in
+ * its reach (`visible`: its colour after the falloff is not zero). Either way
+ * the skipped light would only have added zero, so every pixel is as before.
+ */
+const POINT = THREE_CHUNK.indexOf('#if ( NUM_POINT_LIGHTS > 0 ) && defined( RE_Direct )');
+const SPOT = THREE_CHUNK.indexOf('#if ( NUM_SPOT_LIGHTS > 0 ) && defined( RE_Direct )');
+// The packaged chunks have no blank lines or comments, so the patterns go by the statements alone.
+const POINT_INFO = /getPointLightInfo\( pointLight, geometryPosition, directLight \);/;
+const POINT_DIRECT = /(RE_Direct\( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight \);\s*)(\}\s*#pragma unroll_loop_end)/;
+const POINTS = POINT < 0 || SPOT < POINT ? '' : THREE_CHUNK.slice(POINT, SPOT);
+if (!POINT_INFO.test(POINTS) || !POINT_DIRECT.test(POINTS)) throw new Error('three changed lights_fragment_begin: update render/shadows.ts');
+const CHUNK = THREE_CHUNK.slice(0, POINT) + POINTS
+  .replace(POINT_INFO, 'if ( pointLight.color != vec3( 0.0 ) ) {\n\t\tgetPointLightInfo( pointLight, geometryPosition, directLight );')
+  .replace(POINT_DIRECT, 'if ( directLight.visible ) $1}\n\t$2') + THREE_CHUNK.slice(SPOT);
+
 const DIRECTIONAL = CHUNK.indexOf('#if ( NUM_DIR_LIGHTS > 0 ) && defined( RE_Direct )');
 const AFTER = CHUNK.indexOf('#if ( NUM_RECT_AREA_LIGHTS > 0 )');
 if (DIRECTIONAL < 0 || AFTER < DIRECTIONAL) throw new Error('three changed lights_fragment_begin: update render/shadows.ts');
@@ -47,15 +68,20 @@ const CASCADED = /* glsl */`
 
 	cascadeLit += cascadeLeft;
 
+	// The sun (light 0: three puts shadow casters first, and the sun is added before the cascades) and any light
+	// past the cascades. Lights 1 to NUM_DIR_LIGHT_SHADOWS - 1 are the cascades: they must stay dark (intensity 0,
+	// render/index.ts _setBoxes), as their light is not applied at all.
 	#pragma unroll_loop_start
 	for ( int i = 0; i < NUM_DIR_LIGHTS; i ++ ) {
 
+		#if ( UNROLLED_LOOP_INDEX == 0 ) || ( UNROLLED_LOOP_INDEX >= NUM_DIR_LIGHT_SHADOWS )
 		directionalLight = directionalLights[ i ];
 		getDirectionalLightInfo( directionalLight, directLight );
 		#if ( UNROLLED_LOOP_INDEX < NUM_DIR_LIGHT_SHADOWS )
 		directLight.color *= ( directLight.visible && receiveShadow ) ? cascadeLit : 1.0;
 		#endif
 		RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
+		#endif
 
 	}
 	#pragma unroll_loop_end

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import manifest from './operator-assets.json';
-import { OPERATOR_AO, levelDepthMat, operatorMaterial, wearMaps } from './materials';
+import { OPERATOR_AO, levelDepthMat, levelDepthSkinnedMat, operatorMaterial, wearMaps } from './materials';
 import { ClipLibrary, LOOPS, ONE_SHOTS, type ClipGroup, type OperatorMotion } from './operator-motion';
 import { ANISOTROPY, TEXTURE_MAPS, TEXTURE_SIZE } from './surfaces';
 import { textureBytes } from './textures';
@@ -270,7 +270,7 @@ export class OperatorAssets implements OperatorSource {
         mesh.frustumCulled = false;
         // Warmed as the figures draw it: into the shadow maps too, with their depth material.
         mesh.castShadow = mesh.receiveShadow = true;
-        mesh.customDepthMaterial = levelDepthMat();
+        mesh.customDepthMaterial = levelDepthSkinnedMat();
         return { geometry, set };
       });
       const template: KindTemplate = {
@@ -605,7 +605,7 @@ export class OperatorBody {
       // Culled per camera and per shadow cascade by the kind's sphere, never by its skinned vertices.
       mesh.boundingSphere = template.bounds;
       mesh.castShadow = mesh.receiveShadow = true;
-      mesh.customDepthMaterial = levelDepthMat();
+      mesh.customDepthMaterial = levelDepthSkinnedMat();
       // Rays test the flat model; a skinned mesh's own test would skin every vertex on the CPU.
       mesh.raycast = () => {};
       this.armature.add(mesh);

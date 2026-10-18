@@ -49,6 +49,36 @@ export const DECAL_GREY: Readonly<Partial<Record<SurfaceFamily, readonly [rim: n
 /** Metres a decal sits off the surface the ray hit (effects.ts lifts the flat discs 1.2-3 cm). */
 const DECAL_LIFT = 0.03;
 
+/** The material each instanced pool's mesh was last drawn with (`trackDrawn`). */
+const drawnWith = new WeakMap<THREE.InstancedMesh, THREE.Material>();
+
+/**
+ * Note when three has drawn `mesh` with its own material (not a pass's
+ * override), and so linked its program: until then `showFilled` keeps it in
+ * the draw list.
+ */
+export function trackDrawn(mesh: THREE.InstancedMesh): void {
+  mesh.onAfterRender = (_renderer, _scene, _camera, _geometry, material) => { drawnWith.set(mesh, material); };
+}
+
+/**
+ * An instanced pool's mesh is drawn only while it has instances: an empty one
+ * in the draw list costs three a program and state switch for a draw it then
+ * skips. One not yet drawn with its material stays in the list, so its program
+ * still links where it did (the menu's draws), not at the first instance in a
+ * fight. Called wherever `count` changes.
+ */
+export function showFilled(mesh: THREE.InstancedMesh): void {
+  mesh.visible = mesh.count > 0 || drawnWith.get(mesh) !== mesh.material;
+}
+
+/** Upload the first `n` floats of a per-frame instance attribute. */
+export function flushInstances(attribute: THREE.InstancedBufferAttribute, n: number): void {
+  attribute.clearUpdateRanges();
+  attribute.addUpdateRange(0, n);
+  attribute.needsUpdate = true;
+}
+
 /** Pool sizes at full detail. */
 export const REAL_CAPACITY = { fire: 192, lit: 320, decals: 288, shells: 48, lights: 2 } as const;
 
@@ -225,6 +255,8 @@ export class RealEffects {
   _drying: { index: number; stamp: number; age: number; hex: number }[] = [];
   _dryT = 0;
   readonly _shells: Record<'brass' | 'shotshell', { mesh: THREE.InstancedMesh; items: Shell[]; limit: number }>;
+  /** `_shells`' pools in its key order, for the frame step. */
+  readonly _shellList: readonly { mesh: THREE.InstancedMesh; items: Shell[]; limit: number }[];
   readonly _lights: Light[];
   /** The stamp new sprites take: a cloud's while it emits (`_emitClouds`), else 0, which no handle stops. */
   _tag = 0;
@@ -262,6 +294,7 @@ export class RealEffects {
     this._decals.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this._decals.setColorAt(0, color.setRGB(1, 1, 1));
     this._decalLimit = REAL_CAPACITY.decals;
+    trackDrawn(this._decals);
     ctx.scene.add(this._decals);
 
     const brass = new THREE.CylinderGeometry(0.5, 0.5, 1, 8, 1);
@@ -285,6 +318,7 @@ export class RealEffects {
       return { mesh, items: [] as Shell[], limit: REAL_CAPACITY.shells };
     };
     this._shells = { brass: shellPool(brass, 'brass'), shotshell: shellPool(hull, 'shotshell') };
+    this._shellList = [this._shells.brass, this._shells.shotshell];
     this._lights = ctx.lights.map(light => ({ light, time: 0, duration: 0, peak: 0, priority: -1 }));
     for (const { light } of this._lights) light.intensity = 0;
     this.setDetail(detail);
@@ -299,6 +333,7 @@ export class RealEffects {
     }
     this._decalLimit = Math.max(1, Math.floor(REAL_CAPACITY.decals * this.detail));
     this._decals.count = this._decalCount = Math.min(this._decalCount, this._decalLimit);
+    showFilled(this._decals);
     this._decalNext %= this._decalLimit;
     for (const pool of Object.values(this._shells)) {
       pool.limit = Math.max(4, Math.floor(REAL_CAPACITY.shells * this.detail));
@@ -477,6 +512,7 @@ export class RealEffects {
     this._decalNext = (index + 1) % this._decalLimit;
     this._decalCount = Math.min(this._decalLimit, this._decalCount + 1);
     this._decals.count = this._decalCount;
+    showFilled(this._decals);
     transform.quaternion.setFromUnitVectors(FRONT, axis.copy(normal).normalize());
     // Turned about the normal: so the cell's +u points `along` (in the surface's plane), or at random.
     let turn = rand(0, TAU);
@@ -660,6 +696,7 @@ export class RealEffects {
     this._stepShells(dt);
     this._dry(dt);
     this._growPools(dt);
+    showFilled(this._decals);
     for (const l of this._lights) {
       if (l.time >= l.duration) { l.light.intensity = 0; l.priority = -1; continue; }
       // This frame shows the light at its age so far, then it ages: a new one is at its peak whatever the frame rate.
@@ -753,15 +790,14 @@ export class RealEffects {
     }
     geometry.instanceCount = order.length;
     pool.mesh.visible = order.length > 0;
-    for (const attribute of [pos, col, frm, ax]) {
-      attribute.clearUpdateRanges();
-      attribute.addUpdateRange(0, order.length * 4);
-      attribute.needsUpdate = true;
-    }
+    flushInstances(pos, order.length * 4);
+    flushInstances(col, order.length * 4);
+    flushInstances(frm, order.length * 4);
+    flushInstances(ax, order.length * 4);
   }
 
   _stepShells(dt: number): void {
-    for (const pool of Object.values(this._shells)) {
+    for (const pool of this._shellList) {
       let drawn = 0;
       for (let i = pool.items.length - 1; i >= 0; i--) {
         const s = pool.items[i]!;
@@ -810,6 +846,7 @@ export class RealEffects {
     this._draw(this._fire);
     this._draw(this._lit);
     this._decals.count = this._decalCount = this._decalNext = 0;
+    showFilled(this._decals);
     for (const pool of Object.values(this._shells)) { pool.items.length = 0; pool.mesh.count = 0; }
     this._clouds.length = 0;
     this._cleared++;

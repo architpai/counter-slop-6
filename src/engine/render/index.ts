@@ -383,7 +383,9 @@ export class Renderer {
   _disposed = false;
 
   constructor(canvas: HTMLCanvasElement) {
-    this.three = new THREE.WebGLRenderer({ canvas, antialias: false, stencil: false, powerPreference: 'high-performance' });
+    // No depth buffer on the canvas: every draw into it is a post pass over the whole frame, with no depth test
+    // (SMAA's blend pass tests, but alone on a cleared canvas it always passes, as with no depth buffer).
+    this.three = new THREE.WebGLRenderer({ canvas, antialias: false, depth: false, stencil: false, powerPreference: 'high-performance' });
     this.three.outputColorSpace = THREE.SRGBColorSpace;
     this.three.toneMapping = THREE.NoToneMapping;
     this.three.autoClear = false;
@@ -1609,8 +1611,18 @@ export class Renderer {
     this.operators.frame(this.camera);
     this.props.update(this.camera);
     this.three.setRenderTarget(this.post.target);
-    this.three.clear();
-    this.three.render(this.scene, this.camera);
+    // The scene target is cleared inside `render`, after the shadow maps (three's background step clears with
+    // autoClear on), not before it: a clear and then a switch to the shadow targets would make a tiled GPU store
+    // the cleared target and load it again. It clears as the explicit clear did: colour, depth and stencil, every
+    // mask on, inside the target's scissor (three puts it back after the shadows). Its colour is the fog in the
+    // target's linear space (the explicit clear took whatever the last render had set); the dome covers every
+    // pixel, so it is never seen.
+    this.three.autoClear = true;
+    try {
+      this.three.render(this.scene, this.camera);
+    } finally {
+      this.three.autoClear = false;
+    }
     if (this._softFx && this.fxScene.children.some(child => child.visible)) {
       // Into their own layer, reading the depth the scene's render left (postfx.ts `drawSoft`).
       this.fxScene.fog = this.scene.fog;
