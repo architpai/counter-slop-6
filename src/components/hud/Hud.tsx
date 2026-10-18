@@ -60,7 +60,7 @@ export function Hud({ store, children }: HudProps) {
         <>
           <Scope store={store} />
           <FocusMeter store={store} />
-          <FocusMark store={store} />
+          <ExecMarks store={store} />
           <Stragglers store={store} />
           <SquadMarks store={store} />
           <Crosshair store={store} />
@@ -211,7 +211,7 @@ export const FocusMeter = memo(function FocusMeter({ store }: { store: HudStore 
     <div className={`focus-meter${state.show ? ' is-visible' : ''}${state.ready ? ' ready' : ''}`} data-hud="focusMeter" aria-hidden={!state.show}>
       <div className="focus-label" data-hud="focusLabel">{state.label}</div>
       <div className="focus-tube"><div className="focus-fill" data-hud="focusFill" /><div className="focus-flames"><i /><i /><i /></div></div>
-      <div className="focus-ready">SLASH READY</div>
+      <div className="focus-ready">EXECUTE READY</div>
     </div>
   );
 });
@@ -232,10 +232,15 @@ export const SquadMarks = memo(function SquadMarks({ store }: { store: HudStore 
   </div>;
 });
 
-export const FocusMark = memo(function FocusMark({ store }: { store: HudStore }) {
+/** The samurai execution's targets: brackets on each, red and numbered once locked. */
+export const ExecMarks = memo(function ExecMarks({ store }: { store: HudStore }) {
   rendered();
-  const shown = useHud(store, 'focusMark');
-  return <div className={`focus-mark${shown ? ' is-visible' : ''}`} data-hud="focusMark" aria-hidden={!shown}><i /><i /><i /><i /></div>;
+  const marks = useHud(store, 'execMarks');
+  return <div className="exec-marks" data-hud="execMarks" aria-hidden="true">
+    {marks.map((n, i) => <div key={i} className={`exec-mark${n ? ' locked' : ''}`} style={{ transform: `var(--exec-${i})` }}>
+      <i /><i /><i /><i />{n ? <span>{n}</span> : null}
+    </div>)}
+  </div>;
 });
 
 export const Breath = memo(function Breath({ store }: { store: HudStore }) {

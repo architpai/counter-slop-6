@@ -7,6 +7,7 @@ import type { Gun, Weapon } from '../weapons/index';
 import { DEFAULT_LOADOUT, isWeaponKind, validLoadout } from '../weapons/stats';
 import type { WeaponKind } from '../weapons/stats';
 import { updateWaves, clearWaves } from '../weapons/wave';
+import { PARRY_CHARGE } from '../weapons/sword';
 import type { SlashWave } from '../weapons/wave';
 import { MAX_GRENADES } from '../types';
 import type { Ctx, Enemy, HitInfo, LastHit, Projectile, Target, WeaponState } from '../types';
@@ -89,6 +90,8 @@ export class Player implements Target {
   waves: SlashWave[] = [];
   /** Set while down and watching a teammate through their eyes: this player's own gun stands in for theirs. */
   watched: WatchedGun | null = null;
+  /** A samurai execution is under way (game/execution.ts): nothing hurts or pushes this player. */
+  executing = false;
 
   constructor(ctx: Ctx) {
     this.ctx = ctx;
@@ -168,6 +171,14 @@ export class Player implements Target {
     return null;
   }
 
+  /** Draw the loadout's sword, if it has one and it is not in hand. True if the sword is in hand after. */
+  drawSword(): boolean {
+    const index = this.weapons.findIndex(w => w instanceof Sword);
+    if (index < 0) return false;
+    if (index !== this.wi) this.switchTo(index, true);
+    return true;
+  }
+
   /** The sword is in hand. */
   get holdingSword(): boolean { return this.weapons[this.wi] instanceof Sword; }
 
@@ -244,6 +255,7 @@ export class Player implements Target {
     this.clearNades();
     clearWaves(this);
     this._lend(null);
+    this.executing = false;
     this.body.pos.copy(pos);
     this.body.vel.set(0, 0, 0);
     this.body.onGround = false;
@@ -406,7 +418,7 @@ export class Player implements Target {
   }
 
   takeDamage(amount: number, from: Vector3 | null = null): void {
-    if (!this.alive || this.ctx.game.mode === 'training' || !Number.isFinite(amount) || amount <= 0) return;
+    if (!this.alive || this.executing || this.ctx.game.mode === 'training' || !Number.isFinite(amount) || amount <= 0) return;
     this.hp = Math.max(0, this.hp - amount);
     this.sinceDamage = 0;
     this.hurtFx = Math.min(1, this.hurtFx + amount / 40);
@@ -431,7 +443,7 @@ export class Player implements Target {
   }
 
   knockback(dir: Vector3, amount: number): void {
-    if (!validVector(dir) || !Number.isFinite(amount)) return;
+    if (this.executing || !validVector(dir) || !Number.isFinite(amount)) return;
     this.body.vel.addScaledVector(dir, amount);
     this.body.vel.y += amount * 0.5;
     this.body.onGround = false;
@@ -479,6 +491,8 @@ export class Player implements Target {
     this.ctx.effects.shake += 0.06;
     this.flashFx = perfect ? 0.35 : 0.1;
     this.ctx.game.addScore(perfect ? 60 : 15, cut ? 'BULLET CUT' : perfect ? 'PERFECT PARRY' : 'BLOCKED');
+    // A perfect parry or a bullet cut adds a little to the sword gauge (game/execution.ts).
+    if (perfect) this.ctx.game.charge?.(PARRY_CHARGE);
     return { perfect, returned };
   }
 

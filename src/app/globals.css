@@ -22,7 +22,6 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 #game { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
 .game-hud {
   --spread: 10px; --health: 100%; --breath: 100%; --focus: 0%; --boss: 100%;
-  --focus-mark-x: 50%; --focus-mark-y: 50%;
   position: fixed; inset: 0; overflow: hidden; pointer-events: none; user-select: none;
   font-family: var(--font-display), var(--font-body), system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-weight: 500; color: var(--fg); line-height: 1.2; font-variant-numeric: tabular-nums;
@@ -31,7 +30,7 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .game-hud [hidden] { display: none !important; }
 .game-hud b, .game-hud strong { font-weight: 700; }
 .hud-block { position: absolute; text-shadow: 0 1px 2px rgba(10, 18, 24, .9); }
-.no-gameplay :is(.hud-block, .crosshair, .grapple-reticle, .hit-marker, .kill-marker, .kill-feed, .tip-line, .spectate-bar, .boss-bar, .scope, .focus-mark, .stragglers, .squad-marks, .focus-meter) { display: none; }
+.no-gameplay :is(.hud-block, .crosshair, .grapple-reticle, .hit-marker, .kill-marker, .kill-feed, .tip-line, .spectate-bar, .boss-bar, .scope, .exec-marks, .stragglers, .squad-marks, .focus-meter) { display: none; }
 .game-hud .pad-only { display: none; }
 .game-hud.gamepad .pad-only { display: initial; }
 .game-hud.gamepad .keyboard-only { display: none; }
@@ -171,12 +170,18 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .focus-meter.ready .focus-fill { background: var(--hot); }
 .focus-meter.ready .focus-flames { display: block; }
 .focus-meter.ready .focus-ready { visibility: visible; animation: blink 1s ease-in-out infinite; }
-.focus-mark { position: absolute; left: var(--focus-mark-x); top: var(--focus-mark-y); width: 60px; height: 60px; opacity: 0; transform: translate(-50%, -50%); transition: opacity .1s; }
-.focus-mark.is-visible { opacity: 1; animation: focus-pulse .5s ease-in-out infinite alternate; }
-.focus-mark > i { position: absolute; width: 20px; height: 20px; border: solid var(--hot); border-width: 3px 0 0 3px; }
-.focus-mark > i:nth-child(2) { right: 0; border-width: 3px 3px 0 0; }
-.focus-mark > i:nth-child(3) { left: 0; bottom: 0; border-width: 0 0 3px 3px; }
-.focus-mark > i:nth-child(4) { right: 0; bottom: 0; border-width: 0 3px 3px 0; }
+.exec-mark { position: absolute; left: 0; top: 0; }
+.exec-mark > i { position: absolute; width: 14px; height: 14px; border: solid rgba(255, 255, 255, .85); animation: exec-breathe .45s ease-in-out infinite alternate; }
+.exec-mark > i:nth-child(1) { left: -26px; top: -26px; border-width: 2px 0 0 2px; }
+.exec-mark > i:nth-child(2) { left: 12px; top: -26px; border-width: 2px 2px 0 0; }
+.exec-mark > i:nth-child(3) { left: -26px; top: 12px; border-width: 0 0 2px 2px; }
+.exec-mark > i:nth-child(4) { left: 12px; top: 12px; border-width: 0 2px 2px 0; }
+.exec-mark.locked > i { border-color: var(--hot); border-width: 4px; animation: none; }
+.exec-mark.locked > i:nth-child(1) { border-width: 4px 0 0 4px; }
+.exec-mark.locked > i:nth-child(2) { border-width: 4px 4px 0 0; }
+.exec-mark.locked > i:nth-child(3) { border-width: 0 0 4px 4px; }
+.exec-mark.locked > i:nth-child(4) { border-width: 0 4px 4px 0; }
+.exec-mark > span { position: absolute; left: 0; top: -48px; transform: translateX(-50%); min-width: 22px; padding: 2px 5px; background: var(--hot); color: #fff; text-align: center; font: 800 15px/1.1 var(--font-display), system-ui, sans-serif; }
 .stragglers > i { position: absolute; left: 0; top: 0; }
 .squad-marks > i { position: absolute; left: 0; top: 0; }
 .squad-marks > i::before { content: ''; position: absolute; left: -8px; top: -8px; width: 12px; height: 12px; border: 2px solid #000; background: var(--signal); transform: rotate(45deg); }
@@ -348,7 +353,7 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 @keyframes flame { from { transform: scaleY(.8); opacity: .75; } to { transform: scaleY(1.15); opacity: 1; } }
-@keyframes focus-pulse { from { transform: translate(-50%, -50%) scale(1); } to { transform: translate(-50%, -50%) scale(1.18); } }
+@keyframes exec-breathe { from { opacity: .55; } to { opacity: 1; } }
 /* Compact layouts stay readable before the overflow safety fit is needed. */
 @media (max-width: 900px), (max-height: 700px) {
   .screen-panel { padding: 20px 24px; }

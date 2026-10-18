@@ -13,6 +13,7 @@ import { EnemyManager } from './enemies/index';
 import { Player } from './player/index';
 import { makeGameState } from './game/state';
 import { createSolo } from './game/solo';
+import { CHARGE_FULL, EXEC_SLOW } from './game/execution';
 import { createTraining } from './game/training';
 import { Gun } from './weapons/gun';
 import { DEFAULT_LOADOUT, validLoadout } from './weapons/stats';
@@ -258,6 +259,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
   // ---- hooks 9
   const game: GameHooks = {
     hitstop(d, s) { gs.hitstopT = Math.max(gs.hitstopT, d); gs.hitstopScale = s; },
+    charge: amount => app.solo.addCharge(amount),
     addScore(points, label = null) {
       const awarded = Math.round(points * (1 + 0.25 * Math.min(gs.combo, 9)));
       gs.score += awarded; app.coop.points(awarded);
@@ -545,10 +547,11 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
 
     let scale = 1;
     if (gs.hitstopT > 0) { gs.hitstopT -= dt; scale = gs.hitstopScale; }
-    else if (gs.focus.active) scale = 0.26;
+    else if (gs.focus.active) scale = EXEC_SLOW;
     const sdt = dt * scale;
 
-    if (gs.state === 'play' && gs.mode !== 'ffa') app.solo.updateFocus(dt);
+    // The samurai execution: solo, training and co-op (where it slows this player's view only; the host's enemies run on).
+    if (gs.state === 'play' && (gs.mode !== 'ffa' || app.coop.active())) app.solo.updateFocus(dt);
     else app.solo.endFocus();
 
     if (game.playing()) {
@@ -605,10 +608,12 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     hud.setSpread(w.spreadPx);
     syncTouch();
     hud.update(dt);
-    if (game.isOnline()) hud.setFocusMeter(game.playing(), player.breath, false, 'GRAPPLE');
+    // PvP shows the grapple's breath; solo, training and co-op the sword's execution gauge.
+    if (game.isOnline() && !app.coop.active()) hud.setFocusMeter(game.playing(), player.breath, false, 'GRAPPLE');
     else {
-      const show = game.playing() && ((player.holdingSword && !!player.sword?.active) || gs.katanaStreak > 0 || gs.focus.active);
-      hud.setFocusMeter(show, gs.focus.active ? 1 : clamp(gs.katanaStreak / 3, 0, 1), gs.focus.active, 'SWORD');
+      const ready = gs.focus.active || gs.katanaStreak >= CHARGE_FULL;
+      const show = game.playing() && !!player.sword && ((player.holdingSword && !!player.sword.active) || gs.katanaStreak > 0 || gs.focus.active);
+      hud.setFocusMeter(show, gs.focus.active ? 1 : clamp(gs.katanaStreak / CHARGE_FULL, 0, 1), ready, 'SWORD');
     }
     if (gs.boss) {
       if (gs.boss.alive) hud.setBoss(gs.boss.stats.name, gs.boss.hp / gs.boss.maxHp);

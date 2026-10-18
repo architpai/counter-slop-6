@@ -445,6 +445,18 @@ export class Audio {
     this.#tone({ freq: 1200, end: 420, duration: 0.45, gain: 0.3 });
     this.#noise({ type: 'bandpass', freq: 2400, end: 500, Q: 1.2, duration: 0.35, gain: 0.2 });
   }
+  /** A target locked for an execution: a short rising tick, higher for each. */
+  markTick(n = 1): void {
+    const freq = 900 + 260 * Math.min(3, Math.max(1, n));
+    this.#tone({ type: 'square', freq, end: freq * 1.35, duration: 0.07, gain: 0.12 });
+    this.#noise({ type: 'highpass', freq: 4200, duration: 0.03, gain: 0.12 });
+  }
+  /** The blade back in its scabbard: a slide and a click, as the cut fall. */
+  sheathe(): void {
+    this.#noise({ type: 'bandpass', freq: 3200, end: 1800, Q: 2, duration: 0.16, gain: 0.22 });
+    this.#tone({ type: 'square', freq: 2400, end: 1600, duration: 0.03, gain: 0.18, delay: 0.15 });
+    this.#noise({ type: 'highpass', freq: 5000, duration: 0.025, gain: 0.25, delay: 0.15 });
+  }
   focusSlash(): void {
     this.#noise({ type: 'bandpass', freq: 600, end: 4000, Q: 1.2, duration: 0.3, gain: 0.55 });
     this.#tone({ type: 'triangle', freq: 180, end: 60, duration: 0.3, gain: 0.55 });

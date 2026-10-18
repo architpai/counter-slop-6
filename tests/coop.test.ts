@@ -138,7 +138,7 @@ function makePeer(hub: ReturnType<typeof makeHub>, id: string, ids: string[], la
     arenaSpawns: [], teamSpawns: [], shadow: { center: new Vector3(), radius: 40 } };
   const hud = {
     kill: vi.fn(), message: vi.fn(), tip: noop, hitmarker: vi.fn(), setMarks: noop, setSpectate: vi.fn(), setBoss: noop, setModifier: vi.fn(), setWave: vi.fn(), setTimer: vi.fn(),
-    setScore: noop, setPvpScore: vi.fn(), setBoard: noop, setGameplayVisible: noop, hideScreen: noop, setFocusMark: noop, key: () => 'F',
+    setScore: noop, setPvpScore: vi.fn(), setBoard: noop, setGameplayVisible: noop, hideScreen: noop, setExecMarks: noop, key: () => 'F',
   };
   const ctx = {
     world: land.world, scene, nav: land.nav, bossNav: land.nav, level, player, remotes, net, hud,

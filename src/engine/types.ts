@@ -93,6 +93,8 @@ export interface PlayerHit {
 export interface GameHooks {
   hitstop(duration: number, scale: number): void;
   addScore(points: number, label?: string | null): void;
+  /** Add to the sword's execution gauge (game/execution.ts); absent where there is none. */
+  charge?(amount: number): void;
   onPlayerDeath(): void;
 
   /** Local player first, then remotes. */

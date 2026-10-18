@@ -60,6 +60,8 @@ const SWORD_ARC = Math.cos(0.9);
  */
 export const CUT_WINDOW: readonly [number, number] = [0.04, 0.22];
 export const PVP_CUT_GRACE = 0.08;
+/** What a perfect parry or a bullet cut adds to the execution gauge (game/execution.ts `CHARGE_FULL` is 3). */
+export const PARRY_CHARGE = 0.25;
 /** Seconds between two air slashes. */
 export const WAVE_COOLDOWN = 1.5;
 
@@ -210,6 +212,15 @@ export class Sword extends ViewModel implements Weapon {
       launchWave(this._ctx, this._player, side);
     }
     return true;
+  }
+
+  /**
+   * A slash now, whatever the cooldown, that hits nothing itself: each cut of
+   * an execution swings the blade, and the execution deals the damage (game/execution.ts).
+   */
+  forceSlash(st: WeaponState): void {
+    this.cooldown = this._slashT = 0;
+    if (this.startSlash({ ...st, grounded: true, sprinting: false, blockFire: false })) this._hitDone = true;
   }
 
   _arcPoint(angle: number, side: number, out: Vector3) {
