@@ -579,7 +579,7 @@ export class EnemyManager {
     for (const e of this.list) {
       if (!e.alive || e === ignore) continue;
       const hit = raycastFigure(e.root, origin, dir, best ? best.dist : max);
-      if (hit && (!best || hit.dist < best.dist)) best = { enemy: e, ...hit };
+      if (hit && (!best || hit.dist < best.dist)) best = { enemy: e, part: hit.part, dist: hit.dist, point: hit.point };
     }
     return best;
   }

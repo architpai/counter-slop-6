@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import manifest from './operator-assets.json';
-import { OPERATOR_AO, levelDepthMat, levelDepthSkinnedMat, operatorMaterial, wearMaps } from './materials';
+import { OPERATOR_AO, levelDepthMat, levelDepthSkinnedMat, operatorMaterial, quietly, twinMaterial, wearMaps } from './materials';
 import { ClipLibrary, LOOPS, ONE_SHOTS, type ClipGroup, type OperatorMotion } from './operator-motion';
 import { ANISOTROPY, TEXTURE_MAPS, TEXTURE_SIZE } from './surfaces';
 import { textureBytes } from './textures';
@@ -129,6 +129,17 @@ export class OperatorAssets implements OperatorSource {
   #clips: ClipLibrary | null = null;
   #loading: OperatorLod | null = null;
   #materials = new Map<OperatorSet, THREE.MeshStandardMaterial>();
+  /**
+   * The set materials' shared twins (`twinMaterial`) that the figures' meshes wear while their tint is off
+   * (`FigureRig.wear`), skinned and the gibs' rigid ones apart (a material that switches between the two looks its
+   * program up again), each in the order made: three draws opaque meshes by material id, so a kind takes twins
+   * whose order is its meshes', the order its own copies had (`#twins`). Made on first use, after the level's
+   * materials, as the copies were.
+   */
+  readonly #skinned: THREE.MeshStandardMaterial[] = [];
+  readonly #rigid: THREE.MeshStandardMaterial[] = [];
+  /** Each kind's twins, per mesh, skinned and rigid. */
+  readonly #kindTwins = new Map<string, readonly THREE.Material[]>();
   #maps: Maps[] = [];
   #worn: Maps | null = null;
   #failed = false;
@@ -166,13 +177,10 @@ export class OperatorAssets implements OperatorSource {
   /** Figures wearing an operator now. */
   get worn(): number { return this.#bodies.size; }
 
-  /** The baked occlusion's strength (`OPERATOR_AO`, by the AO setting), on the set materials and every figure's copies. */
+  /** The baked occlusion's strength (`OPERATOR_AO`, by the AO setting), on the set materials: their twins and the figures' copies read it there. */
   occlusion(intensity: number): void {
     this.#occlusion = intensity;
     for (const material of this.#materials.values()) material.aoMapIntensity = intensity;
-    for (const body of this.#bodies.values()) {
-      for (const mesh of body.meshes) (mesh.material as THREE.MeshStandardMaterial).aoMapIntensity = intensity;
-    }
   }
 
   want(spec: { lod: OperatorLod; size: TextureSize } | null): void {
@@ -407,7 +415,31 @@ export class OperatorAssets implements OperatorSource {
   #put(rig: FigureRig): void {
     const template = this.#kinds.get(rig.kind);
     if (!template || this.#bodies.has(rig)) return;
-    this.#bodies.set(rig, new OperatorBody(rig, template, set => this.#materials.get(set)!));
+    this.#bodies.set(rig, new OperatorBody(rig, template, rigid => this.#twins(template, rigid)));
+  }
+
+  /**
+   * A kind's shared twins, one per mesh, from the chain (`#skinned` or `#rigid`): for each mesh in turn the first
+   * twin of its set made after the previous mesh's, or a new one. Their ids then rise in its meshes' order, so a
+   * figure's meshes draw in the order its copies gave them (the operator's glb puts `kit` before `operator` on one
+   * kind and after it on others).
+   */
+  #twins(template: KindTemplate, rigid: boolean): readonly THREE.Material[] {
+    const key = `${template.kind}${rigid ? '|rigid' : ''}`;
+    let twins = this.#kindTwins.get(key);
+    if (!twins) {
+      const chain = rigid ? this.#rigid : this.#skinned;
+      let at = -1;
+      twins = template.meshes.map(({ set }) => {
+        let i = chain.findIndex((twin, k) => k > at && twin.name === set);
+        // Made at a spawn, inside the step: off its random draws.
+        if (i < 0) i = chain.push(quietly(() => twinMaterial(this.#materials.get(set)!))) - 1;
+        at = i;
+        return chain[i]!;
+      });
+      this.#kindTwins.set(key, twins);
+    }
+    return twins;
   }
 
   #take(rig: FigureRig): void {
@@ -424,6 +456,7 @@ export class OperatorAssets implements OperatorSource {
     for (const kind of this.#kinds.values()) for (const gibs of kind.gibs.values()) for (const gib of gibs) gib.dispose();
     this.#template = null;
     this.#kinds.clear();
+    this.#kindTwins.clear();
     this.#clips = null;
     this.#lod = null;
   }
@@ -439,8 +472,9 @@ export class OperatorAssets implements OperatorSource {
     for (const maps of this.#maps) this.#free(maps);
     this.#maps = [];
     this.#worn = null;
-    for (const material of this.#materials.values()) material.dispose();
+    for (const material of [...this.#materials.values(), ...this.#skinned, ...this.#rigid]) material.dispose();
     this.#materials.clear();
+    this.#skinned.length = this.#rigid.length = 0;
   }
 
   get stats(): { textures: number; residentBytes: number; model: boolean; worn: number } {
@@ -582,12 +616,13 @@ export class OperatorBody {
   readonly #support = new THREE.Vector3();
   readonly #gibs: THREE.Mesh[] = [];
   #prop: THREE.Object3D | null = null;
-  readonly #materials: (set: OperatorSet) => THREE.Material;
+  /** The kind's shared twins of the set materials, per mesh, for the skinned meshes or the rigid gibs (`OperatorAssets.#twins`). */
+  readonly #twins: (rigid: boolean) => readonly THREE.Material[];
 
-  constructor(rig: FigureRig, template: KindTemplate, materials: (set: OperatorSet) => THREE.Material) {
+  constructor(rig: FigureRig, template: KindTemplate, twins: (rigid: boolean) => readonly THREE.Material[]) {
     this.rig = rig;
     this.template = template;
-    this.#materials = materials;
+    this.#twins = twins;
     this.armature.name = 'operator';
     this.bones = template.bones.map(({ name, position }) => {
       const bone = new THREE.Bone();
@@ -598,8 +633,11 @@ export class OperatorBody {
     template.bones.forEach(({ parent }, i) => (parent >= 0 ? this.bones[parent]! : this.armature).add(this.bones[i]!));
     this.sources = template.bones.map(({ name }) => rig.parts[name as keyof typeof rig.parts] ?? rig.root.getObjectByName(name) ?? null);
     this.skeleton = new THREE.Skeleton(this.bones, template.boneInverses);
-    this.meshes = template.meshes.map(({ geometry, set }) => {
-      const mesh = new THREE.SkinnedMesh(geometry, rig.own(materials(set)));
+    const worn = twins(false);
+    this.meshes = template.meshes.map(({ geometry, set }, i) => {
+      const mesh = new THREE.SkinnedMesh(geometry, worn[i]!);
+      // The figure's tinted copy while it flashes.
+      rig.wear(mesh, worn[i]!);
       mesh.name = `operator ${set}`;
       mesh.bind(this.skeleton, new THREE.Matrix4());
       // Culled per camera and per shadow cascade by the kind's sphere, never by its skinned vertices.
@@ -612,7 +650,7 @@ export class OperatorBody {
       return mesh;
     });
     rig.root.add(this.armature);
-    rig.worn = true;
+    rig.worn = true; rig.armature = this.armature;
     for (const mesh of rig.low) mesh.layers.set(HIT_LAYER);
     const fore = this.bones[template.bones.findIndex(b => b.name === 'foreR')];
     if (fore && rig.parts.gunMount) fore.add(this.socket);
@@ -664,8 +702,13 @@ export class OperatorBody {
     const name = this.template.bones[at]?.name;
     const gibs = name ? this.template.gibs.get(name) : undefined;
     if (!gibs) return;
+    // Rigid twins and copies of their own: on the skinned meshes' materials, every switch between a body and a gib in
+    // the draw list looked the program up again (three keys it on skinning).
+    const rigid = this.#twins(true);
     gibs.forEach((geometry, i) => {
-      const gib = new THREE.Mesh(geometry, this.meshes[i]!.material);
+      const gib = new THREE.Mesh(geometry, rigid[i]!);
+      // A limb is torn off inside the step: its copies are made off the step's random draws (`quietly`).
+      quietly(() => this.rig.wear(gib, rigid[i]!));
       gib.name = `operator gib ${name}`;
       // The geometry's (quantised) space to the bone's: its inverse bind matrix.
       gib.matrixAutoUpdate = false;
@@ -752,7 +795,7 @@ export class OperatorBody {
     this.armature.removeFromParent();
     this.skeleton.dispose();
     this.rig.onWeapon = this.rig.onLend = null;
-    this.rig.worn = false;
+    this.rig.worn = false; this.rig.armature = null;
     this.rig.disown();
   }
 }

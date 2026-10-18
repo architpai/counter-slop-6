@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { BufferAttribute, BufferGeometry, DataTexture, Frustum, Group, Material, Matrix4, Mesh, MeshBasicMaterial, PerspectiveCamera, Quaternion, Raycaster, Scene, SkinnedMesh, Vector3 } from 'three';
+import { BufferAttribute, BufferGeometry, DataTexture, Frustum, Group, Material, Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial, PerspectiveCamera, Quaternion, Raycaster, Scene, SkinnedMesh, Vector3 } from 'three';
 import type { Intersection, Object3D, Texture } from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
@@ -8,8 +8,8 @@ import {
 } from '@/engine/render/operators';
 import { LOOPS, OperatorMotion, RUN_FULL, loopWeights } from '@/engine/render/operator-motion';
 import type { MotionInput } from '@/engine/render/operator-motion';
-import { makeFigure, raycastFigure, useOperatorSource, usePropSource } from '@/engine/render/figure';
-import { levelDepthSkinnedMat } from '@/engine/render/materials';
+import { boundFigure, HIT_TINT, makeFigure, raycastFigure, useOperatorSource, usePropSource } from '@/engine/render/figure';
+import { characterMat, levelDepthSkinnedMat, quietly, sharedMaterial, tintable } from '@/engine/render/materials';
 import type { Figure } from '@/engine/render/figure';
 import { TACTICAL_MODELS, TACTICAL_NODES } from '@/engine/render/tactical';
 import { PRESET_VALUES } from '@/engine/render/quality';
@@ -248,6 +248,8 @@ test('an operator goes on at spawn, or later only out of view, and hit areas sta
         expect(draws(worn.root), kind).toBeLessThanOrEqual(15);
         worn.root.updateMatrixWorld(true);
         flat.root.updateMatrixWorld(true);
+        // The worn one bounded as an enemy's is (enemies/model.ts `syncModel`): its rays test only the flat surfaces.
+        boundFigure(worn.root);
         const stats = kind === 'player' ? null : TYPES[kind as EnemyKind];
         const scale = stats?.scale ?? 1;
         const height = (stats?.kind === 'humanoid' || !stats ? 2 : stats.flying ? 1.2 : 1.4) * scale, width = 1.2 * scale;
@@ -325,6 +327,104 @@ test('bones follow the pivots and the clips, a torn-off limb takes a rigid copy,
     useOperatorSource(null, assets);
   }
   expect(GIB_BONES).toContain('head');
+});
+
+test('an untinted enemy wears the shared twins, a flash its own copies and back; a player keeps its copies', async () => {
+  const meshes = (figure: Figure, skinned: boolean) => {
+    const out: Mesh[] = [];
+    figure.root.traverse(node => { if (node instanceof Mesh && node instanceof SkinnedMesh === skinned && tintable(node.material as Material)) out.push(node); });
+    return out;
+  };
+  const materials = (figure: Figure, skinned: boolean) => meshes(figure, skinned).map(mesh => mesh.material as Material);
+  // Low: the flat model's parts and its prop.
+  const [a, b] = [figureOf('grunt'), figureOf('grunt')];
+  const flat = figureOf('player');
+  try {
+    expect(materials(a, false)).toEqual(materials(b, false));
+    expect(materials(a, false)).toContain(sharedMaterial(characterMat()));
+    expect(new Set(materials(flat, false)).has(sharedMaterial(characterMat()))).toBe(false);
+    const player = materials(flat, false);
+    a.setTint(HIT_TINT, 0xff4757);
+    const flashed = materials(a, false);
+    expect(flashed.some(material => materials(b, false).includes(material))).toBe(false);
+    a.setTint(HIT_TINT / 2, 0xff4757);
+    expect(materials(a, false)).toEqual(flashed);
+    a.setTint(0, 0xff4757);
+    expect(materials(a, false)).toEqual(materials(b, false));
+    flat.setTint(HIT_TINT, 0x4c7dff);
+    flat.setTint(0, 0x4c7dff);
+    expect(materials(flat, false)).toEqual(player);
+  } finally {
+    for (const figure of [a, b, flat]) figure.dispose();
+  }
+
+  const assets = new OperatorAssets(loaders);
+  useOperatorSource(assets);
+  const camera = new PerspectiveCamera();
+  try {
+    assets.want({ lod: 1, size: 512 });
+    await stream(assets);
+    const figures = ['grunt', 'grunt', 'medic', 'turret', 'flyer', 'player'].map(figureOf);
+    assets.frame(camera);
+    const [one, two, medic, turret, flyer, player] = figures as [Figure, Figure, Figure, Figure, Figure, Figure];
+    expect(materials(one, true)).toEqual(materials(two, true));
+    // A kind's twins rise in its meshes' order, as a figure's copies did: the turret has `kit` first, the medic last.
+    for (const figure of [medic, turret, flyer]) {
+      const ids = materials(figure, true).map(material => material.id);
+      expect(ids, figure.rig!.kind).toEqual([...ids].sort((x, y) => x - y));
+    }
+    expect(meshes(turret, true).map(mesh => mesh.name)).toEqual(['operator kit', 'operator operator']);
+    // The AO setting reaches the twins and the copies.
+    assets.occlusion(0.25);
+    one.setTint(HIT_TINT, 0xff4757);
+    const copies = materials(one, true);
+    expect(copies.some(material => materials(two, true).includes(material))).toBe(false);
+    for (const material of [...copies, ...materials(two, true)]) expect((material as MeshStandardMaterial).aoMapIntensity).toBe(0.25);
+    assets.occlusion(0.5);
+    // A torn-off head's gib takes a rigid copy while the figure flashes, its rigid twin once it stops.
+    const scene = new Group();
+    scene.attach(one.parts.head!);
+    const back = one.lend(one.parts.head!);
+    const rigid = () => one.parts.head!.children.filter(node => node.name === 'operator gib head').map(node => (node as Mesh).material as Material);
+    expect(rigid().length).toBeGreaterThan(0);
+    expect(rigid().some(material => copies.includes(material))).toBe(false);
+    one.setTint(0, 0xff4757);
+    expect(materials(one, true)).toEqual(materials(two, true));
+    const twins = rigid();
+    expect(twins.some(material => materials(two, true).includes(material)), 'rigid twins, not the skinned ones').toBe(false);
+    one.setTint(HIT_TINT, 0xff4757);
+    expect(rigid().some(material => twins.includes(material))).toBe(false);
+    one.setTint(0, 0xff4757);
+    expect(rigid()).toEqual(twins);
+    back();
+    // The player wears its own copies, untinted too.
+    const own = materials(player, true);
+    expect(own.some(material => figures.slice(0, 5).some(figure => materials(figure, true).includes(material)))).toBe(false);
+    player.setTint(HIT_TINT, 0x4c7dff);
+    player.setTint(0, 0x4c7dff);
+    expect(materials(player, true)).toEqual(own);
+    for (const figure of figures) figure.dispose();
+  } finally {
+    assets.clear();
+    useOperatorSource(null, assets);
+  }
+});
+
+test('the shared twins are made off the random stream the simulation runs on (three\'s uuids draw from it)', () => {
+  const random = Math.random, original = new MeshStandardMaterial();
+  let draws = 0;
+  Math.random = () => { draws++; return random(); };
+  try {
+    const twin = sharedMaterial(original);
+    quietly(() => new MeshBasicMaterial()).dispose();
+    expect(draws).toBe(0);
+    expect(Math.random).not.toBe(random);
+    new MeshBasicMaterial().dispose();
+    expect(draws).toBe(4);
+    twin.dispose();
+  } finally {
+    Math.random = random;
+  }
 });
 
 test('worn operators cull by their kind\'s bounds, cast through a map-free depth material, and hold the gun by its grip', async () => {
@@ -422,10 +522,11 @@ test('three Low <-> realistic trips leave no map or operator behind', async () =
       expect(live.textures).toBe(base);
       for (const figure of figures) expect(figure.root.getObjectByName('operator')).toBeUndefined();
     }
-    // Figures that go free their own copies of the operator materials.
+    // Figures that go free their own copies of the operator materials (worn while they flash).
     assets.want({ lod: 1, size: 512 });
     await stream(assets);
     assets.frame(camera);
+    for (const figure of figures) figure.setTint(HIT_TINT, 0xff4757);
     const owned = new Set<Material>();
     for (const figure of figures) figure.root.traverse(node => { if (node instanceof SkinnedMesh) owned.add(node.material as Material); });
     let freed = 0;

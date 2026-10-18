@@ -1,7 +1,7 @@
 import { Vector3, Mesh, Quaternion, SphereGeometry } from 'three';
 import type { Group, Object3D } from 'three';
 import { makeFigure, TONE_HEX, unlitMat } from '../render/index';
-import { flashAmount } from '../render/figure';
+import { boundFigure, flashAmount, unboundFigure } from '../render/figure';
 import { STILL, type MotionInput } from '../render/operator-motion';
 import type { Figure, FigureAnchorName, FigureAnchors, FigureParts, WeaponPropKind } from '../render/figure';
 import { clamp, damp, rand, wrapAngle } from '../util';
@@ -143,14 +143,32 @@ export function makeModel(stats: EnemyType): { figure: Figure; root: Group; hits
  * still under the root reads its fresh world matrix as it is; a part handed to
  * the debris (no longer under the root) asks its own chain, as before. Each
  * matrix comes from the same inputs by the same products as `getWorldPosition`
- * would recompute, so the centres are the same to the bit.
+ * would recompute, so the centres are the same to the bit. A worn
+ * operator's armature is left out: the renderer poses it and brings it up to
+ * date before it draws (render/operators.ts `frame`, three's scene update),
+ * its own reach does as well, and a ray that tests the whole tree updates it
+ * first (`raycastFigure`); nothing else reads it. Then the hit surfaces are
+ * bounded for `raycastFigure`.
  */
 export function syncModel(e: EnemyRecord): void {
-  const root = e.root;
+  const root = e.root, skip = e.figure.rig?.armature;
   root.parent?.updateWorldMatrix(true, false);
-  root.updateMatrixWorld(true);
+  if (skip?.parent === root) updateBut(root, skip);
+  else root.updateMatrixWorld(true);
   for (const hit of e.hits) worldPosition(hit.obj, root, hit.center);
   worldPosition((e.figure.anchors as EyeAnchors).torso, root, e.center);
+  boundFigure(root);
+}
+
+/** three's `updateMatrixWorld(true)` on `root` (a plain group), less the subtree `skip`. */
+function updateBut(root: Object3D, skip: Object3D): void {
+  if (root.matrixAutoUpdate) root.updateMatrix();
+  if (root.matrixWorldAutoUpdate) {
+    if (root.parent === null) root.matrixWorld.copy(root.matrix);
+    else root.matrixWorld.multiplyMatrices(root.parent.matrixWorld, root.matrix);
+  }
+  root.matrixWorldNeedsUpdate = false;
+  for (const child of root.children) if (child !== skip) child.updateMatrixWorld(true);
 }
 
 /** `obj`'s world position into `out`: read straight off its matrix when it is in `root`'s just-updated tree. */
@@ -313,6 +331,7 @@ export function animate(e: EnemyRecord, dt: number): void {
  */
 export function corpse(e: EnemyRecord, dt: number): void {
   e.deadT += dt;
+  unboundFigure(e.root);
   flash(e, dt);
   if (e.figure.rig?.worn) e.figure.rig.motion.update(dt, STILL);
   if (e.rootDetached || !e.death) return;

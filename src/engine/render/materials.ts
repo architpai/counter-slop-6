@@ -293,8 +293,11 @@ const NO_TINT: HitTint = { value: new THREE.Color(0, 0, 0) };
 /** player-mark in tactical.glb: the remote players' parts that wear their team tone (`ownMaterial`). */
 const MARK = new THREE.Color(0.075, 0.24, 0.65);
 const owned = new WeakMap<THREE.Material, Owned>();
-/** The maps a figure's copy of a material reads from the original (`ownMaterial`). */
-const TEXTURE_SLOTS = ['map', 'normalMap', 'aoMap', 'roughnessMap', 'metalnessMap'] as const;
+/**
+ * What a figure's copy of a material reads from the original (`twinMaterial`): the maps, and the occlusion
+ * strength the operators' set materials take from the AO setting (render/operators.ts `occlusion`).
+ */
+const SHARED_SLOTS = ['map', 'normalMap', 'aoMap', 'roughnessMap', 'metalnessMap', 'aoMapIntensity'] as const;
 const baseOwned = (): Owned => ({ tint: NO_TINT, mark: { value: MARK } });
 /** An emission at `vPbr.z` of this much of the surface's colour is the GLB's brightest glow (the bomber's arming light, at 2). */
 export const CHARACTER_GLOW = 4;
@@ -370,22 +373,76 @@ export function propMat(): THREE.MeshToonMaterial {
 }
 
 /**
- * A figure's own copy of a character or prop material, bound to its `tint`
- * (and `mark`, the player's colour, on the character material). It shares
- * the original's program: the patch and its key are the same, only the
- * uniforms differ. The owner frees it; the original must stay alive, as it
- * holds the program between figures (render/tactical.ts keeps them).
+ * A copy of a character, operator or prop material that shares the
+ * original's program (the patch and its key are the same) and reads its
+ * maps and occlusion strength from it (`SHARED_SLOTS`): a realistic set
+ * swaps its maps there (render/weapons.ts `#wear`, render/operators.ts) and
+ * frees the old ones. The original must stay alive, as it holds the program
+ * between figures (render/tactical.ts keeps them). Unbound (`ownMaterial`
+ * binds one), it draws as the original does: no tint, the default mark.
  */
-export function ownMaterial<T extends THREE.Material>(material: T, tint: HitTint, mark?: number): T {
+export function twinMaterial<T extends THREE.Material>(material: T): T {
   const copy = material.clone() as T;
   copy.onBeforeCompile = material.onBeforeCompile;
   copy.customProgramCacheKey = material.customProgramCacheKey;
-  // The maps stay the original's: a realistic prop's set swaps them there (render/weapons.ts `#wear`) and frees the old ones.
-  for (const slot of TEXTURE_SLOTS) {
+  for (const slot of SHARED_SLOTS) {
     if (slot in material) Object.defineProperty(copy, slot, { get: () => (material as Record<string, unknown>)[slot], set: () => {}, configurable: true });
   }
+  return copy;
+}
+
+/**
+ * A figure's own copy of a character or prop material (`twinMaterial`),
+ * bound to its `tint` (and `mark`, the player's colour, on the character
+ * material). The owner frees it.
+ */
+export function ownMaterial<T extends THREE.Material>(material: T, tint: HitTint, mark?: number): T {
+  const copy = twinMaterial(material);
   owned.set(copy, { tint, mark: { value: mark === undefined ? MARK : new THREE.Color(mark) } });
   return copy;
+}
+
+const shared = new WeakMap<THREE.Material, THREE.Material>();
+/**
+ * The one unbound twin (`twinMaterial`) of a character or prop material that
+ * every enemy figure wears while its tint is off (render/figure.ts): its
+ * uniforms are an untinted copy's, so the figures draw one after another
+ * with no material switch. Made as the first figure's copies were (three
+ * draws opaque meshes by material id: it keeps their place after the
+ * level's), and freed with the original.
+ */
+export function sharedMaterial<T extends THREE.Material>(material: T): T {
+  let twin = shared.get(material);
+  if (!twin) {
+    const made = twin = quietly(() => twinMaterial(material));
+    shared.set(material, made);
+    material.addEventListener('dispose', () => made.dispose());
+  }
+  return twin as T;
+}
+
+let uuidState = 0x2f6b9d31;
+/** mulberry32: the uuids of what `quietly` makes. */
+function uuidRandom(): number {
+  let t = uuidState = (uuidState + 0x6d2b79f5) | 0;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+/**
+ * Make three objects without drawing from `Math.random` (three's uuids do).
+ * The figures' shared twins and their gibs' copies are made in the middle
+ * of a step (a spawn, a torn-off limb): the step's own random draws, which
+ * the simulation runs on, must stay the ones it had without them.
+ */
+export function quietly<T>(make: () => T): T {
+  const random = Math.random;
+  Math.random = uuidRandom;
+  try {
+    return make();
+  } finally {
+    Math.random = random;
+  }
 }
 
 /**
