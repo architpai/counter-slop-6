@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { choose, clamp, lerp, rand, TAU } from './util';
-import { TONE, TONE_HEX, WHITE_HEX, SMOKE_HEX, unlitMat } from './render/index';
+import { BLOOD, TONE, TONE_HEX, WHITE_HEX, SMOKE_HEX, unlitMat } from './render/index';
 import { flatDecalMaterial, lowGlowMaterial, splatMaterial, tracerGeometry, tracerMaterial } from './render/fx';
 import { impactFor, surfaceAt } from './render/impacts';
 import { RealEffects } from './effects-real';
@@ -22,7 +22,17 @@ export interface ParticleSpec {
   rate?: number; emitDir?: THREE.Vector3;
   /** A drop drawn additively, fading out over its life (the flat grenade's fire). */
   glow?: boolean;
+  /** Its colour, over `tone`'s. */
+  hex?: number;
+  /** Blood: it lands as a blood decal (`bloodDecal`), shaped by how it lands. */
+  blood?: boolean;
 }
+
+/** A blood decal's shape: thrown along a direction, a round splash, or runs down a wall (decal atlas cells 13-15). */
+export type BloodShape = 'spatter' | 'splat' | 'drip';
+/** The gore setting (Settings): how much blood there is. 0 is none. */
+export type Gore = 'off' | 'reduced' | 'full';
+export const GORE_SCALE: Readonly<Record<Gore, number>> = { off: 0, reduced: 0.5, full: 1 };
 
 /** A live particle: a spec with every default resolved. */
 interface Particle {
@@ -35,7 +45,7 @@ interface Particle {
   collide: 'none' | 'decal';
   stretch: number; fixedLen: number; axis: THREE.Vector3 | null;
   decalSize: number; shrink: boolean; grow: number;
-  rate: number; acc: number; emitDir: THREE.Vector3; hex: number; glow: boolean;
+  rate: number; acc: number; emitDir: THREE.Vector3; hex: number; glow: boolean; blood: boolean;
 }
 
 /** One instanced-mesh ring buffer. `generations` stamps every reuse of a slot. */
@@ -221,6 +231,8 @@ export class Effects {
   shakePush: number;
   /** Share of cosmetic particles, decals and debris kept (the effects-detail setting). Tracers are exempt. */
   detail: number;
+  /** The gore setting's share of blood (`GORE_SCALE`): 0 draws none. */
+  gore = 1;
   _thin: number;
   _particles: Particle[];
   _growing: Growing[];
@@ -336,7 +348,8 @@ export class Effects {
       axis: finiteVector(p.axis) ? unit(p.axis.clone()) : null,
       decalSize: Math.max(0, finite(p.decalSize, 3)), shrink: p.shrink !== false,
       grow: Math.max(0, finite(p.grow, 0)), rate: Math.max(0, finite(p.rate, 0)), acc: 0,
-      emitDir: finiteVector(p.emitDir) ? p.emitDir.clone() : UP.clone(), hex: toneHex(p.tone), glow: p.glow === true && p.kind === 'drop',
+      emitDir: finiteVector(p.emitDir) ? p.emitDir.clone() : UP.clone(), hex: p.hex !== undefined && Number.isFinite(p.hex) ? p.hex : toneHex(p.tone),
+      glow: p.glow === true && p.kind === 'drop', blood: p.blood === true,
     });
   }
 
@@ -355,7 +368,7 @@ export class Effects {
           p.acc--;
           this.particle({ kind: 'drop', pos: p.pos,
             vel: randomVector().multiplyScalar(1.2).addScaledVector(p.emitDir, rand(2, 5)),
-            size: rand(0.02, 0.05), life: rand(1, 2), tone: p.tone,
+            size: rand(0.02, 0.05), life: rand(1, 2), tone: p.tone, hex: p.hex, blood: p.blood,
             collide: 'decal', gravity: 22, decalSize: 6 });
         }
         continue;
@@ -371,8 +384,8 @@ export class Effects {
           motion.divideScalar(moved);
           const hit = this.world.raycast(previous, motion, moved + p.size * 0.5, seeThrough);
           if (hit) {
-            this.splat(hit.point, hit.normal, p.tone, p.size * p.decalSize * 0.75,
-              motion, p.size > 0.035 ? 2 : 1);
+            if (p.blood) this._bloodLand(hit, p, motion);
+            else this.splat(hit.point, hit.normal, p.tone, p.size * p.decalSize * 0.75, motion, p.size > 0.035 ? 2 : 1);
             this._particles.splice(i, 1);
             continue;
           }
@@ -455,6 +468,11 @@ export class Effects {
 
   decal(point: THREE.Vector3, normal: THREE.Vector3, tone: number, size: number,
     kind: 'splat' | 'hole' = 'splat', streakDir: THREE.Vector3 | null = null, stretch = 1): void {
+    this._markHex(point, normal, toneHex(tone), size, kind, streakDir, stretch);
+  }
+
+  _markHex(point: THREE.Vector3, normal: THREE.Vector3, hex: number, size: number,
+    kind: 'splat' | 'hole' = 'splat', streakDir: THREE.Vector3 | null = null, stretch = 1): void {
     if (!finiteVector(point) || !finiteVector(normal) || !Number.isFinite(size) || size <= 0) return;
     const pool = kind === 'hole' ? this._holes : choose(this._splats);
     const index = slot(pool), streak = face(normal, streakDir);
@@ -462,7 +480,7 @@ export class Effects {
     transform.scale.set(streak ? size * rand(0.6, 0.85) : size,
       streak ? size * Math.max(0, finite(stretch, 1)) * rand(0.9, 1.5) : size * rand(0.7, 1.3), 1);
     transform.updateMatrix();
-    put(pool, index, transform.matrix, toneHex(tone));
+    put(pool, index, transform.matrix, hex);
   }
 
   _surfaceAt(point: THREE.Vector3, normal: THREE.Vector3, delta: THREE.Vector3): RayHit | null {
@@ -480,8 +498,13 @@ export class Effects {
 
   splat(point: THREE.Vector3, normal: THREE.Vector3, tone: number, size: number,
     streakDir: THREE.Vector3 | null = null, cluster = 3): void {
+    this._splatHex(point, normal, toneHex(tone), size, streakDir, cluster);
+  }
+
+  _splatHex(point: THREE.Vector3, normal: THREE.Vector3, hex: number, size: number,
+    streakDir: THREE.Vector3 | null = null, cluster = 3): void {
     if (!finiteVector(point) || !finiteVector(normal) || !Number.isFinite(size) || size <= 0) return;
-    this.decal(point, normal, tone, size * rand(0.55, 0.8), 'splat', streakDir);
+    this._markHex(point, normal, hex, size * rand(0.55, 0.8), 'splat', streakDir);
     for (let i = 0; i < Math.max(0, finite(cluster, 3)); i++) {
       // decal changes the shared normal, so rebuild the original surface basis for each mark.
       surfaceBasis(normal);
@@ -489,18 +512,48 @@ export class Effects {
       offset.copy(tangent).multiplyScalar(Math.cos(a) * radius).addScaledVector(bitangent, Math.sin(a) * radius);
       if (finiteVector(streakDir)) offset.addScaledVector(streakDir, size * rand(0, 0.7));
       const hit = this._surfaceAt(point, surfaceNormal, offset);
-      if (hit) this.decal(hit.point, hit.normal, tone, size * rand(0.2, 0.5), 'splat', streakDir);
+      if (hit) this._markHex(hit.point, hit.normal, hex, size * rand(0.2, 0.5), 'splat', streakDir);
     }
     if (Math.abs(normal.y) < 0.55 && rand() < 0.75) {
       surfaceBasis(normal);
       offset.copy(DOWN).multiplyScalar(size * rand(0.5, 1.3));
       const hit = this._surfaceAt(point, surfaceNormal, offset);
-      if (hit) this.decal(hit.point, hit.normal, tone, size * rand(0.16, 0.3), 'splat', DOWN, rand(2.5, 5));
+      if (hit) this._markHex(hit.point, hit.normal, hex, size * rand(0.16, 0.3), 'splat', DOWN, rand(2.5, 5));
     }
+  }
+
+  /** The colour blood of `tone` takes: HOSTILE is blood (crimson on the realistic tiers, a deep red on Low); others keep theirs. */
+  bloodHex(tone: number = TONE.HOSTILE): number {
+    return toneId(tone) === TONE.HOSTILE ? (this._real ? BLOOD.fresh : BLOOD.low) : toneHex(tone);
+  }
+
+  /**
+   * A blood mark of `shape` at `point`: the decal atlas's blood cells on the
+   * realistic tiers (`along` points a spatter's throw), the flat discs on Low
+   * (a spatter streaks along `along`, a drip runs down).
+   */
+  bloodDecal(point: THREE.Vector3, normal: THREE.Vector3, shape: BloodShape, size: number,
+    along: THREE.Vector3 | null, hex: number): void {
+    if (!finiteVector(point) || !finiteVector(normal) || !Number.isFinite(size) || size <= 0) return;
+    if (this._real?.bloodDecal(point, normal, shape, size, along, hex)) return;
+    if (shape === 'drip') this._markHex(point, normal, hex, size * 0.5, 'splat', DOWN, rand(2.5, 4));
+    else this._splatHex(point, normal, hex, size, shape === 'spatter' ? along : null, shape === 'spatter' ? 4 : 3);
+  }
+
+  /** A blood drop landed: a spatter where it skids in at a slant, a round splash where it falls straight, a run on a wall. */
+  _bloodLand(hit: RayHit, p: Particle, motion: THREE.Vector3): void {
+    const size = p.size * p.decalSize * 0.7, slant = 1 - Math.abs(motion.dot(hit.normal));
+    if (hit.normal.y < 0.5 && hit.normal.y > -0.5 && p.size > 0.03 && rand() < 0.45) {
+      this.bloodDecal(hit.point, hit.normal, 'drip', size, null, p.hex);
+    } else this.bloodDecal(hit.point, hit.normal, slant > 0.45 ? 'spatter' : 'splat', size, motion, p.hex);
   }
 
   bloodPool(pos: THREE.Vector3, size = 1.3, tone: number = TONE.HOSTILE): void {
     if (!finiteVector(pos) || !Number.isFinite(size) || size <= 0) return;
+    // Blood pools follow the gore setting; a blast's scorch and coloured splats do not.
+    const blood = toneId(tone) === TONE.HOSTILE;
+    if (blood && this.gore <= 0) return;
+    if (blood) size *= 0.6 + 0.4 * this.gore;
     probe.copy(pos).addScaledVector(UP, 0.5);
     const floor = this.world.raycast(probe, DOWN, 5, seeThrough);
     if (!floor) return;
@@ -518,7 +571,7 @@ export class Effects {
       transform.position.copy(hit.point).addScaledVector(surfaceNormal, rand(0.02, 0.04));
       const g = { pool, index, generation: pool.generations[index] ?? 0, time: 0, duration: rand(0.5, 1.1),
         size: size * (i === 0 ? rand(0.75, 1) : rand(0.3, 0.6)),
-        pos: transform.position.clone(), quat: transform.quaternion.clone(), hex: toneHex(tone) };
+        pos: transform.position.clone(), quat: transform.quaternion.clone(), hex: blood ? (this._real ? BLOOD.dry : BLOOD.low) : toneHex(tone) };
       this._growing.push(g);
       transform.scale.set(0, 0, 1);
       transform.updateMatrix();
@@ -585,19 +638,19 @@ export class Effects {
             d.angVel.multiplyScalar(0.5);
           }
           d.bounces++;
-          if (d.blood && d.bounces <= 3) this.splat(hit.point, hit.normal, TONE.HOSTILE, rand(0.4, 0.85), null, 2);
+          if (d.blood && this.gore > 0 && d.bounces <= 3) this.bloodDecal(hit.point, hit.normal, 'splat', rand(0.35, 0.75), null, this.bloodHex());
           if (d.vel.lengthSq() < 1 && hit.normal.y > 0.5) { d.atRest = true; d.vel.set(0, 0, 0); }
         }
       }
       d.mesh.rotation.x += d.angVel.x * dt;
       d.mesh.rotation.y += d.angVel.y * dt;
       d.mesh.rotation.z += d.angVel.z * dt;
-      if (d.blood && d.vel.lengthSq() > 3) {
+      if (d.blood && this.gore > 0 && d.vel.lengthSq() > 3) {
         d.trailT += dt;
-        while (d.trailT >= 0.05) {
-          d.trailT -= 0.05;
+        while (d.trailT >= 0.05 / this.gore) {
+          d.trailT -= 0.05 / this.gore;
           this.particle({ kind: 'drop', pos: d.pos, vel: randomVector().addScaledVector(d.vel, 0.3),
-            size: rand(0.02, 0.045), life: 1.5, tone: TONE.HOSTILE, collide: 'decal', gravity: 22, decalSize: 6 });
+            size: rand(0.02, 0.045), life: 1.5, hex: this.bloodHex(), blood: true, collide: 'decal', gravity: 22, decalSize: 6 });
         }
       }
       if (d.pos.y < -8) d.life = 0;
@@ -756,28 +809,58 @@ export class Effects {
     return this._real && finiteVector(pos) ? this._real.smokeCloud(pos, radius, duration) : null;
   }
 
-  blood(pos: THREE.Vector3, dir: THREE.Vector3, amount = 1, o: { tone?: number } = {}): void {
-    if (!finiteVector(dir) || !Number.isFinite(amount) || amount <= 0) return;
-    const tone = o.tone ?? TONE.HOSTILE;
-    for (let i = 0; i < Math.round(14 * amount); i++) this.particle({ kind: 'drop', pos, tone,
-      vel: randomVector(-0.5, 1.2).multiplyScalar(rand(1, 4.5)).addScaledVector(dir, rand(1, 6)),
-      size: rand(0.02, 0.065), life: rand(1.2, 2.6), collide: 'decal', gravity: 22, decalSize: rand(4, 8) });
-    for (let i = 0; i < Math.round(7 * amount); i++) this.particle({ kind: 'stroke', pos, tone,
-      vel: randomVector(-0.3, 1).multiplyScalar(rand(1, 4)).addScaledVector(dir, rand(6, 15)),
-      size: rand(0.02, 0.04), life: rand(0.3, 0.6), collide: 'decal', gravity: 12, stretch: 0.05, decalSize: 5 });
-    for (let i = 0; i < Math.round(6 * amount); i++) this.particle({ kind: 'drop', pos, tone,
-      vel: randomVector(-0.2, 1).multiplyScalar(rand(0.5, 2.5)).addScaledVector(dir, rand(0, 2)),
-      size: rand(0.012, 0.03), life: rand(0.3, 0.7), gravity: 6, drag: 2 });
+  /**
+   * A wound: a short mist at the hit, a cone of fast drops thrown along the
+   * shot that streak where they land, heavier drops that fall nearer, a little
+   * spatter back towards the shooter, and, past a light hit, a spatter on
+   * whatever stands up to 2.5 m behind along the shot. `amount` scales it (a
+   * sniper's or a .50's hit is about 2, an MP5's under 1); `fan` (a sword's
+   * cut) throws more of it sideways along the swing. The gore setting scales
+   * all of it, and Off draws none.
+   */
+  blood(pos: THREE.Vector3, dir: THREE.Vector3, amount = 1, o: { tone?: number; fan?: boolean } = {}): void {
+    if (!finiteVector(pos) || !finiteVector(dir) || !Number.isFinite(amount) || amount <= 0 || this.gore <= 0) return;
+    const hex = this.bloodHex(o.tone), a = amount * this.gore;
+    const forward = unit(previous.copy(dir));
+    const spray = (n: number, fn: (i: number) => ParticleSpec) => { for (let i = 0; i < Math.round(n); i++) this.particle(fn(i)); };
+    // The exit cone: fast, thin, stretched along their flight.
+    spray(16 * a, () => ({ kind: 'stroke', pos, hex, blood: true,
+      vel: randomVector(-0.35, 0.6).multiplyScalar(rand(0.6, 2.4)).addScaledVector(forward, rand(3, 9)),
+      size: rand(0.01, 0.022), life: rand(0.8, 1.6), collide: 'decal', gravity: 18, stretch: 0.025, decalSize: rand(5, 8) }));
+    // Heavier drops: slower, falling nearer, the floor's splashes.
+    spray(7 * a, () => ({ kind: 'drop', pos, hex, blood: true,
+      vel: randomVector(-0.2, 0.9).multiplyScalar(rand(0.6, 1.8)).addScaledVector(forward, rand(1.2, 4)),
+      size: rand(0.022, 0.045), life: rand(1.2, 2.2), collide: 'decal', gravity: 20, decalSize: rand(5, 8) }));
+    // Back spatter towards the shooter.
+    spray(4 * a, () => ({ kind: 'drop', pos, hex, blood: true,
+      vel: randomVector(-0.2, 0.7).multiplyScalar(rand(0.4, 1.4)).addScaledVector(forward, -rand(1, 3)),
+      size: rand(0.01, 0.02), life: rand(0.5, 1), collide: 'decal', gravity: 16, decalSize: 4 }));
+    // A sword's cut throws an arc of it sideways along the swing.
+    if (o.fan) spray(12 * a, () => ({ kind: 'stroke', pos, hex, blood: true,
+      vel: randomVector(-0.1, 0.9, 0.5).multiplyScalar(rand(0.5, 1.5)).addScaledVector(forward, rand(4, 10)),
+      size: rand(0.012, 0.026), life: rand(0.8, 1.4), collide: 'decal', gravity: 16, stretch: 0.03, decalSize: rand(5, 8) }));
+    // The mist: a soft red puff on the realistic tiers; on Low, fine drops that hang and fade.
+    if (this._real) this._real.bloodMist(pos, forward, a, BLOOD.mist);
+    else spray(6 * a, () => ({ kind: 'drop', pos, hex, vel: randomVector(-0.3, 0.8).multiplyScalar(rand(0.3, 1.2)).addScaledVector(forward, rand(0.5, 2)),
+      size: rand(0.012, 0.025), life: rand(0.25, 0.5), gravity: 3, drag: 4 }));
+    // The wall behind: a spatter thrown along the shot.
+    if (a >= 0.45) {
+      const hit = this.world.raycast(pos, forward, 2.5, seeThrough);
+      if (hit) this.bloodDecal(hit.point, hit.normal, 'spatter', clamp(0.55 + 0.35 * amount, 0.55, 1.5) * rand(0.85, 1.15) * (0.7 + 0.3 * this.gore), forward, hex);
+    }
   }
 
   drip(pos: THREE.Vector3, amount = 1): void {
+    if (this.gore <= 0) return;
     this.particle({ kind: 'drop', pos, vel: randomVector(-0.4, 0.2, 0.3),
       size: rand(0.018, 0.03) + 0.02 * finite(amount, 1), life: rand(1, 1.8),
-      tone: TONE.HOSTILE, collide: 'decal', gravity: 20, decalSize: 5 });
+      hex: this.bloodHex(), blood: true, collide: 'decal', gravity: 20, decalSize: 5 });
   }
 
   fountain(pos: THREE.Vector3, dir: THREE.Vector3, dur = 0.8, tone: number = TONE.HOSTILE): void {
-    this.particle({ kind: 'emitter', pos, life: dur, emitDir: dir, rate: 40, tone });
+    const blood = toneId(tone) === TONE.HOSTILE;
+    if (blood && this.gore <= 0) return;
+    this.particle({ kind: 'emitter', pos, life: dur, emitDir: dir, rate: 40 * (blood ? this.gore : 1), tone, hex: this.bloodHex(tone), blood });
   }
 
   /** A spent casing: the realistic tiers' bouncing brass (or shotshell) of `kind`, the flat look's stroke. */

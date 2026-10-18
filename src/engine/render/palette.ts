@@ -8,6 +8,12 @@ export type ToneId = (typeof TONE)[keyof typeof TONE];
 export type ByTone<T> = { readonly [K in ToneId]: T };
 export const TONE_HEX: ByTone<number> & readonly number[] =
   Object.freeze([0x4c7dff, 0xff4757, 0x2a3140, 0xffb020, 0x37d67a, 0xc56bff] as const);
+/**
+ * Blood (effects.ts `blood`): a deep crimson that darkens as it dries on the
+ * realistic tiers, and one deep red on Low. It replaced `TONE.HOSTILE`, the
+ * HUD's alarm pink, which read as paint. Machines keep `TONE.DARK` (oil).
+ */
+export const BLOOD = Object.freeze({ fresh: 0x7a0c10, dry: 0x3c0608, mist: 0x8a1416, low: 0x9a1119 });
 export const SURF = Object.freeze({
   sky: 0xa8d2e2, fog: 0xcbdde2, ground: 0xb5b7ad, road: 0x52606a,
   block: 0xe5e4d9, blockAlt: 0x96a9b4, blockDeep: 0x405562, roof: 0xc87651,

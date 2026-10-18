@@ -422,7 +422,9 @@ export class EnemyManager {
       return;
     }
     e.flinch = 1; e.flashT = FLASH_TIME; flash(e, 0);
-    effects.blood(point, dir, clamp(0.5 + amount / 70, 0.5, 2.2) * (e.stats.boss ? 1.6 : 1), { tone: this._bloodTone(e) });
+    // A sword's cut (and its wave and executions) throws its blood sideways along the swing as well.
+    const cut = info.source === 'melee' || info.source === 'wave' || info.source === 'focus';
+    effects.blood(point, dir, clamp(0.5 + amount / 70, 0.5, 2.2) * (e.stats.boss ? 1.6 : 1), { tone: this._bloodTone(e), fan: cut });
     if (this.mirror) {
       this.ctx.player?.onHeadshot(info);
       if (info.crit) audio.headshot(); else audio.hitEnemy();

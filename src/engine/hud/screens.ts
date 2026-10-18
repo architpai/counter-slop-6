@@ -15,7 +15,7 @@ import type { OnlineMode, Team } from '../game/team-rules';
 export const UI_ACTIONS = [
   'start', 'online', 'back', 'quickPlay', 'create', 'join', 'joinCode',
   'visibility', 'name', 'pickMap', 'onlineMode', 'team', 'mainMenu', 'startMatch',
-  'leave', 'leaveMatch', 'sens', 'touchSens', 'resume', 'acogSens', 'sniperSens', 'optic', 'r4cOptic', 'loadout', 'training', 'invert', 'music',
+  'leave', 'leaveMatch', 'sens', 'touchSens', 'resume', 'acogSens', 'sniperSens', 'optic', 'r4cOptic', 'loadout', 'training', 'invert', 'music', 'gore',
   'gfxPreset', 'gfx', 'gfxFps', 'gfxReset', 'gfxLower',
   'startWave',
 ] as const;
@@ -64,6 +64,8 @@ export interface GfxModel {
 export interface LookModel {
   sens: number; acogSens: number; sniperSens: number; touchSens?: number; touch?: boolean;
   invert: boolean; music: boolean; confirmKey: string;
+  /** How much blood (effects.ts `Gore`). */
+  gore?: 'off' | 'reduced' | 'full';
   gfx: GfxModel;
 }
 export interface MainModel extends LookModel, WeaponSettingsModel {

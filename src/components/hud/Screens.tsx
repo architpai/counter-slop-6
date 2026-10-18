@@ -305,6 +305,12 @@ function Settings({ model, onAction }: { model: SettingsModel; onAction: Act }) 
         */}
         <label className="settings-row"><input type="checkbox" data-act="invert" key={`invert-${model.invert}`} defaultChecked={model.invert} onChange={event => onAction('invert', event.target.checked ? '1' : '0', event.nativeEvent)} /> invert vertical look</label>
         <label className="settings-row"><input type="checkbox" data-act="music" key={`music-${model.music}`} defaultChecked={model.music} onChange={event => onAction('music', event.target.checked ? '1' : '0', event.nativeEvent)} /> music <span className="dim">(M)</span></label>
+        <fieldset className="settings-row optic-picker gore-picker" aria-label="Blood">
+          <legend>Blood</legend>
+          {(['off', 'reduced', 'full'] as const).map(level => <button type="button" className="screen-button" key={level}
+            data-act="gore" data-value={level} aria-pressed={(model.gore ?? 'full') === level}
+            onClick={event => onAction('gore', level, event.nativeEvent)}>{level === 'off' ? 'Off' : level === 'reduced' ? 'Reduced' : 'Full'}</button>)}
+        </fieldset>
       </div>
       <Graphics model={model.gfx} onAction={onAction} />
     </div>

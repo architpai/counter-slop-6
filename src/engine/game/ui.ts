@@ -42,7 +42,7 @@ export function createUI(app: App): UiApi {
   const gfx = () => ({ choice: quality.choice, auto: quality.autoPreset, values: { ...quality.values }, fpsCounter: quality.fpsCounter,
     msaaSoft: ctx.renderer?.msaaDepthReadable ?? true });
   const look = () => ({ sens: settings.sens, touchSens: settings.touchSens, touch: ctx.input.usingTouch, acogSens: settings.acogSens, sniperSens: settings.sniperSens,
-    invert: settings.invert, music: settings.music, confirmKey: hud.key('confirm'), gfx: gfx() });
+    invert: settings.invert, music: settings.music, gore: settings.gore, confirmKey: hud.key('confirm'), gfx: gfx() });
   /** A pick under way: fewer than `LOADOUT_SIZE` weapons. Saved (`pickLoadout`) once full. */
   let draft: WeaponKind[] | null = null;
   const weapons = () => ({ optic: settings.optic, r4cOptic: settings.r4cOptic, choices: LOADOUT_CHOICES,
@@ -179,6 +179,7 @@ export function createUI(app: App): UiApi {
     loadout: value => toggleLoadout(value),
     invert: value => { settings.invert = value === '1'; app.applyLook(); },
     music: value => { app.setMusic(value === '1'); },
+    gore: value => { if (value === 'off' || value === 'reduced' || value === 'full') { app.setGore(value); redraw(); } },
     // Quality changes redraw through the subscription in `boot`, like every other listener.
     gfxPreset: value => { if (isChoice(value)) quality.setPreset(value); },
     gfx: value => setGfx(value),

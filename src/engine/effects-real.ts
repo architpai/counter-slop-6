@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { clamp, rand, TAU } from './util';
+import { BLOOD } from './render/palette';
 import { cells, decalMaterial, flipbookFrame, shellMaterial, spriteGeometry, spriteMaterial, FX_MANIFEST } from './render/fx';
 import type { Frame } from './render/fx';
 import type { Impact, SurfaceFamily } from './render/impacts';
@@ -49,7 +50,7 @@ export const DECAL_GREY: Readonly<Partial<Record<SurfaceFamily, readonly [rim: n
 const DECAL_LIFT = 0.03;
 
 /** Pool sizes at full detail. */
-export const REAL_CAPACITY = { fire: 192, lit: 320, decals: 192, shells: 48, lights: 2 } as const;
+export const REAL_CAPACITY = { fire: 192, lit: 320, decals: 288, shells: 48, lights: 2 } as const;
 
 interface Sprite {
   pos: THREE.Vector3;
@@ -116,6 +117,11 @@ export interface SmokeHandle {
 const UP = new THREE.Vector3(0, 1, 0);
 const DOWN = new THREE.Vector3(0, -1, 0);
 const FRONT = new THREE.Vector3(0, 0, 1);
+const bloodAxis = new THREE.Vector3(), bloodLocal = new THREE.Vector3();
+/** The blood decals' tint over their colour: it makes up for the atlas cells' grey where the blood is thick. */
+const BLOOD_GAIN = 1.35;
+/** Blood dried on a surface (render/palette.ts `BLOOD.dry`). */
+const dried = new THREE.Color(BLOOD.dry);
 const frame: Frame = { a: 0, b: 0, blend: 0 };
 const previous = new THREE.Vector3();
 const motion = new THREE.Vector3();
@@ -212,6 +218,11 @@ export class RealEffects {
   _decalCount = 0;
   _decalNext = 0;
   _decalLimit: number;
+  /** Bumped at every write of a decal slot, so a drying blood mark knows when its slot was reused. */
+  _decalStamps: number[] = new Array<number>(REAL_CAPACITY.decals).fill(0);
+  /** Blood marks still drying: their slot, its stamp, and seconds since they landed. */
+  _drying: { index: number; stamp: number; age: number; hex: number }[] = [];
+  _dryT = 0;
   readonly _shells: Record<'brass' | 'shotshell', { mesh: THREE.InstancedMesh; items: Shell[]; limit: number }>;
   readonly _lights: Light[];
   /** The stamp new sprites take: a cloud's while it emits (`_emitClouds`), else 0, which no handle stops. */
@@ -377,17 +388,78 @@ export class RealEffects {
     if (hit) this._decal(hit.point, hit.normal, cells('decals', 'scorch'), size, 1, 1, 1);
   }
 
-  _decal(point: THREE.Vector3, normal: THREE.Vector3, run: readonly [number, number], size: number, r: number, g: number, b: number): void {
+  /** A blood mist at a wound: a few small red puffs of the smoke flipbook, thrown along the shot, gone in a third of a second. */
+  bloodMist(pos: THREE.Vector3, dir: THREE.Vector3, amount: number, hex: number): void {
+    for (let i = 0; i < this._n(Math.round(2 + 2 * amount)); i++) {
+      const vel = scratch.set(rand(-0.4, 0.4), rand(-0.1, 0.5), rand(-0.4, 0.4)).addScaledVector(dir, rand(0.6, 2.2));
+      this._sprite(this._lit, pos, { life: rand(0.22, 0.4), size: rand(0.06, 0.1) * (0.8 + 0.3 * amount), grow: 3.2, hex, alpha: 0.55,
+        vel, cells: cells('smoke', 'smoke'), span: 0.5, gravity: 1.5, drag: 4, spin: rand(-1, 1), fadeIn: 0.04, fadeOut: 0.45 });
+    }
+  }
+
+  /**
+   * A blood mark from the decal atlas's blood cells (13 spatter thrown along
+   * +u, 14 round splat, 15 drip running down -v), tinted `hex` and drying
+   * darker over a few seconds. `along` points a spatter's throw; a drip runs
+   * down the wall. False when the atlas has no blood cells (the caller draws
+   * the flat discs).
+   */
+  bloodDecal(point: THREE.Vector3, normal: THREE.Vector3, shape: 'spatter' | 'splat' | 'drip', size: number,
+    along: THREE.Vector3 | null, hex: number): boolean {
+    const run = FX_MANIFEST.decals.layout.blood;
+    if (!run) return false;
+    const cell = run[0] + (shape === 'spatter' ? 0 : shape === 'splat' ? 1 : 2);
+    let dir: THREE.Vector3 | null = null;
+    if (shape === 'drip') {
+      // The cell's +v (up the run) along the wall's up: its +u is then up x normal.
+      dir = bloodAxis.copy(UP).addScaledVector(normal, -UP.dot(normal));
+      dir = dir.lengthSq() > 1e-4 ? bloodAxis.crossVectors(dir.normalize(), normal) : null;
+    } else if (shape === 'spatter' && along) dir = bloodAxis.copy(along);
+    // The atlas's thick blood is about 0.75 grey (it is tinted, not coloured): the tint makes up for it.
+    color.setHex(hex).multiplyScalar(BLOOD_GAIN);
+    const index = this._decal(point, normal, [cell, 1], size * (shape === 'drip' ? 0.8 : 1), color.r, color.g, color.b, dir,
+      shape === 'spatter' ? rand(1.1, 1.5) : 1);
+    if (this._drying.length >= 96) this._drying.shift();
+    this._drying.push({ index, stamp: this._decalStamps[index] ?? 0, age: 0, hex });
+    return true;
+  }
+
+  /** Every quarter second, the blood still drying darkens towards dried blood, over 6 s. */
+  _dry(dt: number): void {
+    this._dryT += dt;
+    if (this._dryT < 0.25 || this._drying.length === 0) return;
+    const step = this._dryT;
+    this._dryT = 0;
+    for (let i = this._drying.length - 1; i >= 0; i--) {
+      const d = this._drying[i]!;
+      d.age += step;
+      if (this._decalStamps[d.index] !== d.stamp) { this._drying.splice(i, 1); continue; }
+      const f = Math.min(1, d.age / 6);
+      this._decals.setColorAt(d.index, color.setHex(d.hex).lerp(dried, f * f * (3 - 2 * f)).multiplyScalar(BLOOD_GAIN));
+      if (f >= 1) this._drying.splice(i, 1);
+    }
+    if (this._decals.instanceColor) this._decals.instanceColor.needsUpdate = true;
+  }
+
+  _decal(point: THREE.Vector3, normal: THREE.Vector3, run: readonly [number, number], size: number, r: number, g: number, b: number,
+    along: THREE.Vector3 | null = null, stretch = 1): number {
     const index = this._decalNext;
+    this._decalStamps[index] = (this._decalStamps[index] ?? 0) + 1;
     this._decalNext = (index + 1) % this._decalLimit;
     this._decalCount = Math.min(this._decalLimit, this._decalCount + 1);
     this._decals.count = this._decalCount;
     transform.quaternion.setFromUnitVectors(FRONT, axis.copy(normal).normalize());
-    transform.quaternion.multiply(spin.setFromAxisAngle(FRONT, rand(0, TAU)));
+    // Turned about the normal: so the cell's +u points `along` (in the surface's plane), or at random.
+    let turn = rand(0, TAU);
+    if (along) {
+      const local = bloodLocal.copy(along).applyQuaternion(spin.copy(transform.quaternion).invert());
+      if (local.x * local.x + local.y * local.y > 1e-6) turn = Math.atan2(local.y, local.x);
+    }
+    transform.quaternion.multiply(spin.setFromAxisAngle(FRONT, turn));
     // Lifted off the collider as the flat look's discs are: a floor's visible paving or a wall's trim
     // can stand a few centimetres proud of its collider. The polygon offset settles the rest.
     transform.position.copy(point).addScaledVector(axis, DECAL_LIFT);
-    transform.scale.set(size, size, 1);
+    transform.scale.set(size * stretch, size, 1);
     transform.updateMatrix();
     this._decals.setMatrixAt(index, transform.matrix);
     this._decals.setColorAt(index, color.setRGB(r, g, b));
@@ -396,6 +468,7 @@ export class RealEffects {
     this._decals.instanceMatrix.needsUpdate = true;
     if (this._decals.instanceColor) this._decals.instanceColor.needsUpdate = true;
     this._decalCells.needsUpdate = true;
+    return index;
   }
 
   /**
@@ -556,6 +629,7 @@ export class RealEffects {
     this._draw(this._fire);
     this._draw(this._lit);
     this._stepShells(dt);
+    this._dry(dt);
     for (const l of this._lights) {
       if (l.time >= l.duration) { l.light.intensity = 0; l.priority = -1; continue; }
       // This frame shows the light at its age so far, then it ages: a new one is at its peak whatever the frame rate.

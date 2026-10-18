@@ -6,7 +6,8 @@ import { NavGrid, BOSS_CLEARANCE, BOSS_HEADROOM } from './nav';
 import { Audio } from './audio';
 import { Net } from './net';
 import { Input } from './input';
-import { Effects } from './effects';
+import { Effects, GORE_SCALE } from './effects';
+import type { Gore } from './effects';
 import { buildLevel, disposeLevel, validKey } from './level/index';
 import { figureTemplate } from './render/figure';
 import { EnemyManager } from './enemies/index';
@@ -50,6 +51,8 @@ export interface Settings {
   sniperSens: number;
   optic: RifleOptic;
   r4cOptic: RifleOptic;
+  /** How much blood (Settings → Blood). */
+  gore: Gore;
   /** The picked loadout. The player carries it from the next point `loadoutOpen` allows (`applyLoadout`). */
   loadout: WeaponKind[];
   invert: boolean;
@@ -75,6 +78,8 @@ export interface App {
   loadLevel(arena: boolean, key?: unknown, force?: boolean): void;
   applyLook(): void;
   applyOptic(): void;
+  /** Set and save the blood level. */
+  setGore(level: Gore): void;
   /** Save `kinds` as the loadout; true if it was a valid one. The player takes it up when `loadoutOpen` allows. */
   pickLoadout(kinds: readonly WeaponKind[]): boolean;
   /** The player may change weapons now: in training, between co-op or solo waves, or before a run or match. */
@@ -177,6 +182,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     optic: store.getStr(SKEY.OPTIC, 'acog') === 'holo' ? 'holo' : 'acog',
     r4cOptic: store.getStr(SKEY.R4C_OPTIC, 'acog') === 'holo' ? 'holo' : 'acog',
     loadout: validLoadout(store.getStr(SKEY.LOADOUT, '').split(',')) ?? [...DEFAULT_LOADOUT],
+    gore: (['off', 'reduced', 'full'] as const).find(level => level === store.getStr(SKEY.GORE, 'full')) ?? 'full',
     invert: store.getBool(SKEY.INVERT, false),
   };
 
@@ -378,6 +384,8 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     applyQuality();
     if (app.screen) app.ui.redraw();
   }));
+  effects.gore = GORE_SCALE[settings.gore];
+  app.setGore = level => { settings.gore = level; store.set(SKEY.GORE, level); effects.gore = GORE_SCALE[level]; };
   app.setMusic = on => {
     settings.music = on; store.set(SKEY.MUSIC, on); audio.music(on);
   };

@@ -134,5 +134,5 @@ export const SKEY = {
   MAP: 'cs6_map', BEST: 'cs6_best', MUSIC: 'cs6_music', CHECKPOINT: 'cs6_checkpoint', START_WAVE: 'cs6_start_wave',
   NAME: 'cs6_name', SENS: 'cs6_sens', TOUCH_SENS: 'cs6_touch_sens', INVERT: 'cs6_invert',
   ACOG_SENS: 'cs6_acog_sens', SNIPER_SENS: 'cs6_sniper_sens', OPTIC: 'cs6_optic', R4C_OPTIC: 'cs6_r4c_optic',
-  LOADOUT: 'cs6_loadout',
+  LOADOUT: 'cs6_loadout', GORE: 'cs6_gore',
 };
