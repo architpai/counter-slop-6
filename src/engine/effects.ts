@@ -557,6 +557,7 @@ export class Effects {
     probe.copy(pos).addScaledVector(UP, 0.5);
     const floor = this.world.raycast(probe, DOWN, 5, seeThrough);
     if (!floor) return;
+    const hex = blood ? (this._real ? BLOOD.dry : BLOOD.low) : toneHex(tone);
     for (let i = 0; i < 3; i++) {
       let hit: RayHit | null = floor;
       if (i > 0) {
@@ -566,17 +567,43 @@ export class Effects {
         hit = this._surfaceAt(floor.point, surfaceNormal, offset);
         if (!hit) continue;
       }
+      // Only as wide as the flat ground under it: on a stair it shrinks to its step, not over the edge as a slab.
+      const wanted = size * (i === 0 ? rand(0.75, 1) : rand(0.3, 0.6)), fits = this._flatRadius(hit, wanted / 2);
+      if (fits < 0.12) continue;
+      // The realistic tiers' pools: the decal atlas's round blood splat, grown in place.
+      if (blood && this._real?.bloodPool(hit.point, hit.normal, fits * 2, rand(0.5, 1.1), BLOOD.fresh)) continue;
       const pool = choose(this._splats), index = slot(pool);
       face(hit.normal, null);
       transform.position.copy(hit.point).addScaledVector(surfaceNormal, rand(0.02, 0.04));
-      const g = { pool, index, generation: pool.generations[index] ?? 0, time: 0, duration: rand(0.5, 1.1),
-        size: size * (i === 0 ? rand(0.75, 1) : rand(0.3, 0.6)),
-        pos: transform.position.clone(), quat: transform.quaternion.clone(), hex: blood ? (this._real ? BLOOD.dry : BLOOD.low) : toneHex(tone) };
+      const g = { pool, index, generation: pool.generations[index] ?? 0, time: 0, duration: rand(0.5, 1.1), size: fits * 2,
+        pos: transform.position.clone(), quat: transform.quaternion.clone(), hex };
       this._growing.push(g);
       transform.scale.set(0, 0, 1);
       transform.updateMatrix();
       put(pool, index, transform.matrix, g.hex);
     }
+  }
+
+  /**
+   * The largest radius, up to `radius`, at which the ground round `hit` is
+   * flat: eight points on the rim find ground within 4 cm of its height. A
+   * pool sized to it lies on its step instead of hanging off the edge.
+   */
+  _flatRadius(hit: RayHit, radius: number): number {
+    if (hit.normal.y < 0.9) return radius;
+    surfaceBasis(hit.normal);
+    const t = tangent.clone(), b = bitangent.clone();
+    for (let r = radius, tries = 0; tries < 5; tries++, r *= 0.65) {
+      let flat = true;
+      for (let k = 0; k < 8 && flat; k++) {
+        const a = k / 8 * TAU;
+        probe.copy(hit.point).addScaledVector(t, Math.cos(a) * r).addScaledVector(b, Math.sin(a) * r).addScaledVector(UP, 0.3);
+        const ground = this.world.raycast(probe, DOWN, 0.4, seeThrough);
+        flat = !!ground && Math.abs(ground.point.y - hit.point.y) < 0.04;
+      }
+      if (flat) return r;
+    }
+    return 0;
   }
 
   /**

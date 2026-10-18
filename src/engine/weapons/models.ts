@@ -1,10 +1,12 @@
 import * as THREE from 'three';
-import { TONE, toneMat, unlitMat, charMat, boxGeo, cylGeo, sphereGeo, torusGeo, starGeo } from '../render/index';
+import { TONE, toneMat, unlitMat, charMat, bladeMaterial, boxGeo, cylGeo, sphereGeo, torusGeo, starGeo } from '../render/index';
 import { cells, flashMaterial, lowFlashMaterial, FX_MANIFEST } from '../render/fx';
 import type { GunKind, ScopeKind, Triple } from './stats';
 import { tacticalPart } from '../render/tactical';
 import { OPTIC_COLOR } from '../render/palette';
 import type { WeaponAssets } from '../render/weapons';
+import { bladeBlood } from './blade-blood';
+import type { BladeBlood } from './blade-blood';
 
 const PRIMARY = TONE.PRIMARY, DARK = TONE.DARK, SIGHT = TONE.HOSTILE;
 /** The flat models are built in their own units at this scale; the Blender models are in metres. */
@@ -18,12 +20,6 @@ export interface RestPose {
 
 /** three types `userData` as `any`; this is the one place that shape is named. */
 export const restPose = (node: THREE.Object3D): RestPose => node.userData as RestPose;
-
-/** Blood level at which a blade smear becomes visible. */
-interface SmearData {
-  threshold: number;
-}
-export const smearThreshold = (smear: THREE.Mesh): number => (smear.userData as SmearData).threshold;
 
 /** Moving parts, by the name the animators use. Each model builds only its own. */
 export interface ModelParts {
@@ -62,7 +58,8 @@ export interface WeaponModel {
   parts: ModelParts;
   /** Gun: the barrel end. Sword: the blade tip. */
   muzzle: THREE.Object3D;
-  bloodSmears: THREE.Mesh[];
+  /** The sword's blade blood (weapons/blade-blood.ts); absent on the guns. */
+  blood?: BladeBlood | null;
   /** Scales the procedural part offsets: 1 on the flat models (their own units), `LOW_SCALE` on the Blender models (metres). */
   unit: number;
   /** The Blender model's clips and hip pose; absent on the flat look. */
@@ -203,14 +200,13 @@ function realFlash(muzzle: THREE.Object3D, scale: number): { flash: THREE.Group;
 interface Draft {
   root: THREE.Group;
   parts: Partial<ModelParts>;
-  bloodSmears: THREE.Mesh[];
 }
 
 function model(name: string): Draft {
   const root = group(null, `${name}-viewmodel`);
   root.scale.setScalar(0.46);
   root.visible = false;
-  return { root, parts: {}, bloodSmears: [] };
+  return { root, parts: {} };
 }
 
 export function makeGunModel(kind: GunKind): GunModel {
@@ -392,13 +388,11 @@ export function makeGunModel(kind: GunKind): GunModel {
   }
   const muzzle = group(root, 'muzzle', muzzlePos);
   const eject = group(root, 'eject', ejectPos);
-  return { root, parts: { ...parts, leftHand }, muzzle, eject, ...flash(muzzle), bloodSmears: result.bloodSmears, unit: 1 };
+  return { root, parts: { ...parts, leftHand }, muzzle, eject, ...flash(muzzle), unit: 1 };
 }
 
 /** The flat sword's blade length past the guard, in the flat models' units (0.67 m at `LOW_SCALE`). */
 const SWORD_BLADE = 1.45;
-/** The flat knife's blade, which `smearsOn` lays its smears along, in the same units. */
-const SMEAR_BLADE = 0.45;
 
 /**
  * The flat sword (low tier): a long single-edged blade with a dark spine,
@@ -406,8 +400,9 @@ const SMEAR_BLADE = 0.45;
  * runs along -z from the guard at the origin, as the knife's did.
  */
 export function makeSwordModel(): WeaponModel {
-  const { root, bloodSmears } = model('sword');
-  const steel = charMat(0xcbdbe3);
+  const { root } = model('sword');
+  // Its own steel, not the shared cache's: the blade's blood is drawn in it (blade-blood.ts).
+  const steel = bladeMaterial(0xcbdbe3);
   mesh(root, 'blade', boxGeo(0.014, 0.05, SWORD_BLADE), steel, [0, 0, -0.04 - SWORD_BLADE / 2]);
   box(root, 'spine', [0.017, 0.012, SWORD_BLADE - 0.06], [0, 0.022, -0.07 - SWORD_BLADE / 2], DARK);
   mesh(root, 'blade-tip', boxGeo(0.014, 0.034, 0.12), steel, [0, 0.008, -0.07 - SWORD_BLADE], [0.32, 0, 0]);
@@ -419,37 +414,8 @@ export function makeSwordModel(): WeaponModel {
   hand(root, 'striking-right-hand', [0, -0.005, 0.06], [0.5, -0.5, 1]);
   const leftHand = hand(root, 'supporting-left-hand', [0, -0.01, 0.42], [-0.3, -0.6, 1]);
   const muzzle = group(root, 'tip', [0, 0.008, -0.12 - SWORD_BLADE]);
-  // The knife's smears, drawn out along the longer, taller blade.
-  const smears = group(root, 'blood');
-  smears.scale.set(1, 1.5, SWORD_BLADE / SMEAR_BLADE);
-  smearsOn(smears, bloodSmears);
-  return { root, parts: { leftHand }, muzzle, bloodSmears, unit: 1 };
-}
-
-/** The blade's blood smears, in the flat knife's units along its blade; each shows once blood passes its threshold. */
-function smearsOn(parent: THREE.Object3D, bloodSmears: THREE.Mesh[]): void {
-  const smears: [number, number, number, number][] = [[-0.15, 0.12, 0, 1], [-0.29, 0.11, 0.18, -1], [-0.42, 0.08, 0.40, 1], [-0.22, 0.10, 0.58, -1], [-0.10, 0.08, 0.74, 1], [-0.36, 0.09, 0.88, -1]];
-  smears.forEach(([center, length, threshold, side], i) => {
-    const bottom = -0.92 * 0.0168, top: Triple[] = [], vertices: number[] = [];
-    for (let k = 0; k <= 12; k++) {
-      const t = k / 12, u = -length / 2 + length * t;
-      const taper = Math.sin(Math.PI * Math.min(1, 1.15 * t));
-      const v = bottom + 1.84 * 0.0168 * (0.30 + 0.70 * taper * (0.55 + 0.45 * Math.abs(Math.sin(7 * t + 2.1 * i))));
-      top.push([0, v, u]);
-    }
-    for (let k = 0; k < 12; k++) {
-      const from = top[k], to = top[k + 1];
-      if (!from || !to) continue;
-      const a: Triple = [0, bottom, from[2]], b: Triple = [0, bottom, to[2]];
-      vertices.push(...a, ...from, ...to, ...a, ...to, ...b);
-    }
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-    const smear = mesh(parent, `blood-smear-${i}`, twoSided(geometry), toneMat(SIGHT), [side * 0.0067, 0, center]);
-    smear.userData.threshold = threshold;
-    smear.visible = false;
-    bloodSmears.push(smear);
-  });
+  const blood = bladeBlood(steel, root, -0.04, -0.13 - SWORD_BLADE, 0, 0.025, false);
+  return { root, parts: { leftHand }, muzzle, blood, unit: 1 };
 }
 
 // ---------------------------------------------------------------- Blender models (R4)
@@ -559,23 +525,23 @@ export function makeRealGunModel(kind: GunKind, assets: WeaponAssets): GunModel 
   sights.acog = aim(parts.acog?.getObjectByName('sight'));
   sights.holo = aim(parts.holo?.getObjectByName('sight'));
   sights[kind === 'sniper' ? 'sniper' : 'iron'] = aim(node.getObjectByName('sight'));
-  return { root, parts: { ...parts, leftHand }, muzzle, eject, ...realFlash(muzzle, REAL_FLASH[kind] ?? 1), bloodSmears: [], unit: LOW_SCALE, sights, real };
+  return { root, parts: { ...parts, leftHand }, muzzle, eject, ...realFlash(muzzle, REAL_FLASH[kind] ?? 1), unit: LOW_SCALE, sights, real };
 }
 
-/** The Blender sword's blade from its `smears` socket to the tip, in metres (tools/blender/weapons/sword.py). */
-const REAL_SWORD_BLADE = 0.658;
-
-/** The realistic tiers' sword (R4): the Blender blade and gloved hands, and the flat smears laid along the blade. */
+/** The realistic tiers' sword (R4): the Blender blade and gloved hands, its blade's blood drawn in the set's material. */
 export function makeRealSwordModel(assets: WeaponAssets): WeaponModel | null {
   const made = realRoot(assets, 'sword', 'sword');
   if (!made) return null;
   const { root, node, real } = made;
   const leftHand = remember(socket(node, 'left-hand', 'sword'));
   const muzzle = socket(node, 'tip', 'sword');
-  const bloodSmears: THREE.Mesh[] = [];
-  // The smears are laid out in the flat knife's units; `smears` sits at the blade's root.
-  const smears = group(socket(node, 'smears', 'sword'), 'blood');
-  smears.scale.set(LOW_SCALE, LOW_SCALE * 1.5, REAL_SWORD_BLADE / SMEAR_BLADE);
-  smearsOn(smears, bloodSmears);
-  return { root, parts: { leftHand }, muzzle, bloodSmears, unit: LOW_SCALE, real };
+  // The glb joins the blade with the guard and grip (`body`, in the set's material): the blood is masked to the
+  // blade by its place along it, from the `smears` socket at its root (the frame) to the `tip`, which also gives
+  // how far the curved blade rises.
+  const frame = socket(node, 'smears', 'sword'), body = node.getObjectByName('body');
+  const material = body instanceof THREE.Mesh ? body.material as THREE.Material : null;
+  root.updateWorldMatrix(true, true);
+  const point = frame.worldToLocal(muzzle.getWorldPosition(new THREE.Vector3()));
+  const blood = material ? bladeBlood(material, frame, 0, point.z, 0, 0.018, true, point.y) : null;
+  return { root, parts: { leftHand }, muzzle, blood, unit: LOW_SCALE, real };
 }

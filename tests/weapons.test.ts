@@ -499,11 +499,12 @@ test('sword guard, strikes, held-fire chains, obstruction, air slash and blade b
   assert(player.waves.length === 1, 'The air slash has its own cooldown');
   for (const wave of player.waves as { mesh: Mesh }[]) wave.mesh.removeFromParent();
   player.waves.length = 0;
+  melee.equip();
   melee.addBlood(0.84); melee.animate(neutral, 0);
-  const smears = must(melee.root.getObjectByName('blood'), 'blood').children.filter(child => child.name.startsWith('blood-smear-'));
-  assert(smears.length === 6 && smears.filter(smear => smear.visible).length === 5, 'Blood follows the smear thresholds');
+  const blood = must(melee._model.blood, 'blade blood');
+  assert(near(blood.amount, 0.84) && !melee.root.getObjectByName('blood'), 'The blade shows its blood in its own material, no smear quads');
   melee.resetAmmo();
-  assert(melee.blood === 0 && melee.combo === 0 && melee.waveCooldown === 0 && !melee.active && smears.every(smear => !smear.visible), 'Reset clears the sword state');
+  assert(melee.blood === 0 && melee.combo === 0 && melee.waveCooldown === 0 && !melee.active && blood.amount === 0, 'Reset clears the sword state');
   melee.unequip();
   ctx.enemies.inArc = () => [];
   ctx.game.playersInArc = () => [];

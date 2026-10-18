@@ -117,7 +117,8 @@ export interface SmokeHandle {
 const UP = new THREE.Vector3(0, 1, 0);
 const DOWN = new THREE.Vector3(0, -1, 0);
 const FRONT = new THREE.Vector3(0, 0, 1);
-const bloodAxis = new THREE.Vector3(), bloodLocal = new THREE.Vector3();
+const bloodAxis = new THREE.Vector3(), bloodLocal = new THREE.Vector3(), scaleOut = new THREE.Vector3();
+const matrix = new THREE.Matrix4();
 /** The blood decals' tint over their colour: it makes up for the atlas cells' grey where the blood is thick. */
 const BLOOD_GAIN = 1.35;
 /** Blood dried on a surface (render/palette.ts `BLOOD.dry`). */
@@ -424,6 +425,34 @@ export class RealEffects {
     return true;
   }
 
+  /** Pools growing in place: their slot, its stamp, where, how big, and how far grown. */
+  _pools: { index: number; stamp: number; pos: THREE.Vector3; quat: THREE.Quaternion; size: number; time: number; duration: number }[] = [];
+
+  /** A blood pool: the atlas's round splat, `size` across, growing to it over `duration` s and drying. False without blood cells. */
+  bloodPool(point: THREE.Vector3, normal: THREE.Vector3, size: number, duration: number, hex: number): boolean {
+    if (!this.bloodDecal(point, normal, 'splat', size, null, hex)) return false;
+    const index = (this._decalNext + this._decalLimit - 1) % this._decalLimit, pos = new THREE.Vector3(), quat = new THREE.Quaternion();
+    this._decals.getMatrixAt(index, matrix);
+    matrix.decompose(pos, quat, scaleOut);
+    this._pools.push({ index, stamp: this._decalStamps[index] ?? 0, pos, quat, size, time: 0, duration });
+    this._growPools(0);
+    return true;
+  }
+
+  _growPools(dt: number): void {
+    if (this._pools.length === 0) return;
+    for (let i = this._pools.length - 1; i >= 0; i--) {
+      const g = this._pools[i]!;
+      if (this._decalStamps[g.index] !== g.stamp) { this._pools.splice(i, 1); continue; }
+      g.time += dt;
+      const f = Math.min(1, g.time / g.duration), e = 1 - (1 - f) ** 2;
+      matrix.compose(g.pos, g.quat, scaleOut.set(Math.max(1e-3, g.size * e), Math.max(1e-3, g.size * e), 1));
+      this._decals.setMatrixAt(g.index, matrix);
+      if (f >= 1) this._pools.splice(i, 1);
+    }
+    this._decals.instanceMatrix.needsUpdate = true;
+  }
+
   /** Every quarter second, the blood still drying darkens towards dried blood, over 6 s. */
   _dry(dt: number): void {
     this._dryT += dt;
@@ -630,6 +659,7 @@ export class RealEffects {
     this._draw(this._lit);
     this._stepShells(dt);
     this._dry(dt);
+    this._growPools(dt);
     for (const l of this._lights) {
       if (l.time >= l.duration) { l.light.intensity = 0; l.priority = -1; continue; }
       // This frame shows the light at its age so far, then it ages: a new one is at its peak whatever the frame rate.

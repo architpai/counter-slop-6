@@ -71,6 +71,11 @@ try {
   await shot('cut');
   await page.evaluate(() => window.__frames(90));
   await shot('cut-marks');
+  // A blooded blade after a few kills, at rest and on guard.
+  await page.evaluate(() => { const p = window.__game.player; p.sword.addBlood(0.84); window.__frames(30); });
+  await shot('blade');
+  await page.evaluate(() => { const p = window.__game.player; p.sword.addBlood(-0.5); window.__frames(10); });
+  await shot('blade-light');
   assert.deepEqual(errors, []);
   console.log(`OK: blood screenshots in ${out}`);
 } finally {

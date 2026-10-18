@@ -32,7 +32,7 @@ import type { PropRequest } from './props';
 import type { Level, LevelSurface, Mood } from '../types';
 
 export { TONE, TONE_HEX, WHITE_HEX, SMOKE_HEX, SURF, BLOOD } from './palette';
-export { surfMat, charMat, toneMat, unlitMat, cloudMat } from './materials';
+export { surfMat, charMat, bladeMaterial, toneMat, unlitMat, cloudMat } from './materials';
 export { boxGeo, cylGeo, sphereGeo, coneGeo, torusGeo, starGeo, ringGeo } from './prims';
 export { makeFigure, makeWeaponProp, makeNameTag } from './figure';
 export type { PostFX } from './postfx';

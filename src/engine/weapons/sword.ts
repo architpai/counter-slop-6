@@ -1,7 +1,7 @@
 import { Matrix4, Quaternion, Vector3 } from 'three';
 import { clamp, damp, easeInOut, rand } from '../util';
 import { ViewModel } from './gun';
-import { makeSwordModel, makeRealSwordModel, smearThreshold } from './models';
+import { makeSwordModel, makeRealSwordModel } from './models';
 import { SWORD_HANDLING } from './stats';
 import { launchWave } from './wave';
 import { SlashTrail } from './slash-trail';
@@ -138,9 +138,9 @@ export class Sword extends ViewModel implements Weapon {
 
   _buildReal(assets: WeaponAssets): WeaponModel | null { return makeRealSwordModel(assets); }
 
-  /** A new model shows the blade's blood from the next frame; until then its smears stay hidden. */
+  /** A new model shows the blade's blood as it is now. */
   _wore(model: WeaponModel): void {
-    for (const smear of model.bloodSmears) smear.visible = false;
+    model.blood?.update(this.blood);
   }
 
   /** Slashing or guarding: the HUD's melee crosshair and the focus meter show. */
@@ -167,7 +167,7 @@ export class Sword extends ViewModel implements Weapon {
     this._hitDone = false;
     this._resetPose();
     this._trail.hide();
-    for (const smear of this._model.bloodSmears) smear.visible = false;
+    this._model.blood?.update(0);
   }
 
   /** Drop the swing and guard without touching blood or combo (a focus dash takes the hands). */
@@ -226,6 +226,11 @@ export class Sword extends ViewModel implements Weapon {
     // The smear samples the blade where the pose and clip have just put it, through the sweep only (not the wind-up).
     const t = this._slashT > 0 ? 1 - this._slashT / SLASH_TIME : -1;
     this._trail.update(dt, t >= 0.12 && t <= 0.75, this.root, this._model.muzzle);
+    // The blade's blood, in its frame where the pose and clip put it this frame.
+    if (this._model.blood) {
+      this.root.updateMatrixWorld(true);
+      this._model.blood.update(this.blood);
+    }
   }
 
   _update(st: WeaponState, dt: number) {
@@ -241,14 +246,6 @@ export class Sword extends ViewModel implements Weapon {
     if (this._comboT <= 0) this.combo = 0;
     this._parrySwing = Math.max(0, this._parrySwing - 4.5 * dt);
     this.blood = Math.max(0, this.blood - 0.05 * dt);
-    for (const smear of this._model.bloodSmears) {
-      const threshold = smearThreshold(smear);
-      smear.visible = this.blood > threshold;
-      if (smear.visible) {
-        const f = clamp((this.blood - threshold) / 0.28, 0.2, 1);
-        smear.scale.set(1, 0.35 + 0.65 * f, 0.4 + 0.6 * f);
-      }
-    }
     const wantBlock = st.aim && this._slashT <= 0 && this.cooldown <= 0;
     if (wantBlock && !this.blocking) this.blockT = 0;
     this.blocking = wantBlock;

@@ -61,3 +61,18 @@ test('a sword cut throws more of it along the swing', () => {
   cut.effects.blood(wound, shot, 1, { fan: true });
   expect(cut.effects._particles.length).toBeGreaterThan(plain.effects._particles.length + 8);
 });
+
+test('a pool on a stair keeps to its step instead of hanging over the edge', () => {
+  const scene = new THREE.Scene(), world = new World();
+  // A step: the floor at 0 for z > 0, a riser up to 0.3 m for z < 0.
+  world.addBox(new THREE.Vector3(-5, -1, 0), new THREE.Vector3(5, 0, 5));
+  world.addBox(new THREE.Vector3(-5, -1, -5), new THREE.Vector3(5, 0.3, 0));
+  world.finalize();
+  const effects = new Effects(scene, world);
+  effects.bloodPool(new THREE.Vector3(0, 0.5, 0.35), 1.3);
+  expect(effects._growing.length).toBeGreaterThan(0);
+  for (const g of effects._growing) expect(g.pos.z - g.size / 2, 'no pool reaches over the step edge at z = 0').toBeGreaterThanOrEqual(-0.01);
+  const open = new Effects(new THREE.Scene(), world);
+  open.bloodPool(new THREE.Vector3(0, 0.5, 3), 1.3);
+  expect(Math.max(...open._growing.map(g => g.size)), 'on open floor it keeps its size').toBeGreaterThan(0.9);
+});

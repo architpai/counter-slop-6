@@ -40,6 +40,17 @@ Blood no longer uses `TONE.HOSTILE` (#FF4757, the HUD's alarm pink, which read a
 - **Low tier:** the flat blob discs in the Low colour. A spatter streaks along its throw with satellite drops, and a drip runs down.
 - **Pools** under bodies and the trails and splats of bloody gibs use the same colours and follow the gore setting.
 
+## Blood on the sword (`weapons/blade-blood.ts`)
+
+The blade's blood is drawn in its own material, not by quads. The old knife's six smear quads were flat, unlit HUD pink, and on the long sword they stood off its edge.
+- **Mask:** each fragment's world position is taken into the blade's frame. On the realistic tier that frame is the glb's `smears` socket at the blade's root to the `tip` socket, which also gives the curved blade's rise; there, blade, guard and grip are one mesh in one material. On Low it is the flat model's root, and the blade gets its own material, separate from the shared cache.
+- **Coverage:** with `t` running 0 at the guard to 1 at the tip and `h` the height across the blade (−1 at the edge), coverage = blood × 0.8 − (1 − t) × 0.9 + edge × 0.2 + noise. The noise is stretched along the blade. So blood starts at the tip, runs towards the guard in streaks as `Sword.blood` grows (+0.42 a kill, drying away at 0.05/s), and sits heavier along the edge.
+- **Look:** where it only just reaches it is a half-transparent film over the steel, and where it is thick it is opaque. Its colour goes from dried towards fresh with the amount, it is wet (roughness 0.2) and not metal. Nothing shows outside the blade's span.
+
+## Pools on uneven ground
+
+A pool is only as wide as the flat ground under it. `_flatRadius` checks eight points round its rim, at shrinking radii, until they all find ground within 4 cm of its height. So on a stair a pool keeps to its step, where it used to hang over the edge as a dark slab. On the realistic tiers a pool is the atlas's round splat, grown in place over 0.5–1.1 s and drying.
+
 ## Gore setting
 
 Settings → **Blood**: Off, Reduced or Full (default Full), saved as `cs6_gore`. `Effects.gore` is 0, 0.5 or 1 (`GORE_SCALE`). It scales every blood count, and pool sizes by 0.6 + 0.4 × the share. Off draws no blood, mist, decals, pools, drips or gib trails. Gibs still fly.
