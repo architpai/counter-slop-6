@@ -22,7 +22,6 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 #game { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
 .game-hud {
   --spread: 10px; --health: 100%; --breath: 100%; --focus: 0%; --boss: 100%;
-  --focus-mark-x: 50%; --focus-mark-y: 50%;
   position: fixed; inset: 0; overflow: hidden; pointer-events: none; user-select: none;
   font-family: var(--font-display), var(--font-body), system-ui, -apple-system, 'Segoe UI', sans-serif;
   font-weight: 500; color: var(--fg); line-height: 1.2; font-variant-numeric: tabular-nums;
@@ -31,7 +30,7 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .game-hud [hidden] { display: none !important; }
 .game-hud b, .game-hud strong { font-weight: 700; }
 .hud-block { position: absolute; text-shadow: 0 1px 2px rgba(10, 18, 24, .9); }
-.no-gameplay :is(.hud-block, .crosshair, .grapple-reticle, .hit-marker, .kill-marker, .kill-feed, .tip-line, .spectate-bar, .boss-bar, .scope, .focus-mark, .stragglers, .squad-marks, .focus-meter) { display: none; }
+.no-gameplay :is(.hud-block, .crosshair, .grapple-reticle, .hit-marker, .kill-marker, .kill-feed, .tip-line, .spectate-bar, .boss-bar, .scope, .exec-marks, .stragglers, .squad-marks, .focus-meter) { display: none; }
 .game-hud .pad-only { display: none; }
 .game-hud.gamepad .pad-only { display: initial; }
 .game-hud.gamepad .keyboard-only { display: none; }
@@ -171,12 +170,18 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .focus-meter.ready .focus-fill { background: var(--hot); }
 .focus-meter.ready .focus-flames { display: block; }
 .focus-meter.ready .focus-ready { visibility: visible; animation: blink 1s ease-in-out infinite; }
-.focus-mark { position: absolute; left: var(--focus-mark-x); top: var(--focus-mark-y); width: 60px; height: 60px; opacity: 0; transform: translate(-50%, -50%); transition: opacity .1s; }
-.focus-mark.is-visible { opacity: 1; animation: focus-pulse .5s ease-in-out infinite alternate; }
-.focus-mark > i { position: absolute; width: 20px; height: 20px; border: solid var(--hot); border-width: 3px 0 0 3px; }
-.focus-mark > i:nth-child(2) { right: 0; border-width: 3px 3px 0 0; }
-.focus-mark > i:nth-child(3) { left: 0; bottom: 0; border-width: 0 0 3px 3px; }
-.focus-mark > i:nth-child(4) { right: 0; bottom: 0; border-width: 0 3px 3px 0; }
+.exec-mark { position: absolute; left: 0; top: 0; }
+.exec-mark > i { position: absolute; width: 14px; height: 14px; border: solid rgba(255, 255, 255, .85); animation: exec-breathe .45s ease-in-out infinite alternate; }
+.exec-mark > i:nth-child(1) { left: -26px; top: -26px; border-width: 2px 0 0 2px; }
+.exec-mark > i:nth-child(2) { left: 12px; top: -26px; border-width: 2px 2px 0 0; }
+.exec-mark > i:nth-child(3) { left: -26px; top: 12px; border-width: 0 0 2px 2px; }
+.exec-mark > i:nth-child(4) { left: 12px; top: 12px; border-width: 0 2px 2px 0; }
+.exec-mark.locked > i { border-color: var(--hot); border-width: 4px; animation: none; }
+.exec-mark.locked > i:nth-child(1) { border-width: 4px 0 0 4px; }
+.exec-mark.locked > i:nth-child(2) { border-width: 4px 4px 0 0; }
+.exec-mark.locked > i:nth-child(3) { border-width: 0 0 4px 4px; }
+.exec-mark.locked > i:nth-child(4) { border-width: 0 4px 4px 0; }
+.exec-mark > span { position: absolute; left: 0; top: -48px; transform: translateX(-50%); min-width: 22px; padding: 2px 5px; background: var(--hot); color: #fff; text-align: center; font: 800 15px/1.1 var(--font-display), system-ui, sans-serif; }
 .stragglers > i { position: absolute; left: 0; top: 0; }
 .squad-marks > i { position: absolute; left: 0; top: 0; }
 .squad-marks > i::before { content: ''; position: absolute; left: -8px; top: -8px; width: 12px; height: 12px; border: 2px solid #000; background: var(--signal); transform: rotate(45deg); }
@@ -240,6 +245,25 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 .optic-picker legend { padding: 0 0 8px; color: var(--fg-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
 .optic-picker .screen-button { min-height: 44px; padding: 10px 14px; font-size: 14px; }
 .optic-picker .screen-button[aria-pressed="true"] { border-color: var(--signal); background: var(--signal); color: var(--ink); }
+.loadout-picker { margin-bottom: 26px; }
+.loadout-title { margin: 6px 0 0; color: var(--signal); font: 400 30px/1 var(--font-poster), var(--font-display), sans-serif; letter-spacing: .03em; text-transform: uppercase; }
+.loadout-title span { margin-left: 10px; color: var(--fg-dim); font: 400 13px/1 var(--font-body), sans-serif; letter-spacing: 0; text-transform: none; }
+.loadout-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+.loadout-card { position: relative; display: grid; gap: 6px; align-content: start; min-height: 132px; padding: 14px 14px 12px; border: 2px solid var(--line); border-radius: 0; background: var(--panel-2); color: var(--fg); text-align: left; cursor: pointer; transition: background .12s, border-color .12s, color .12s, transform .12s; }
+.loadout-card:hover:not(:disabled) { border-color: var(--signal); transform: translate(-2px, -2px); box-shadow: 4px 4px 0 var(--alarm); }
+.loadout-card:disabled { opacity: .4; cursor: not-allowed; }
+.loadout-card b { font: 400 26px/1 var(--font-poster), var(--font-display), sans-serif; letter-spacing: .03em; }
+.loadout-card small { color: var(--fg-dim); font: 400 12px/1.35 var(--font-body), sans-serif; }
+.loadout-card .slot-badge { position: absolute; top: 10px; right: 10px; min-width: 26px; padding: 4px; border-color: var(--line); border-radius: 0; font: 700 14px/1 var(--font-display), sans-serif; }
+.loadout-card[aria-pressed="true"] { border-color: var(--signal); background: var(--signal); color: var(--ink); box-shadow: 5px 5px 0 var(--alarm); }
+.loadout-card[aria-pressed="true"] small { color: rgba(17, 17, 17, .75); }
+.loadout-card[aria-pressed="true"] .slot-badge { border-color: var(--ink); background: var(--ink); color: var(--signal); }
+.loadout-speed { position: relative; display: flex; justify-content: space-between; margin-top: auto; padding-top: 10px; font: 700 11px/1 var(--font-display), sans-serif; letter-spacing: 1px; text-transform: uppercase; }
+.loadout-speed::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; background: rgba(255, 255, 255, .12); }
+.loadout-speed::after { content: ''; position: absolute; top: 0; left: 0; width: var(--speed, 50%); height: 4px; background: var(--signal); }
+.loadout-card[aria-pressed="true"] .loadout-speed::before { background: rgba(17, 17, 17, .18); }
+.loadout-card[aria-pressed="true"] .loadout-speed::after { background: var(--ink); }
+.loadout-speed em { font-style: normal; }
 .settings-row label { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 10px; }
 .settings input[type="range"] { width: 160px; max-width: 100%; min-width: 100px; accent-color: var(--cool); cursor: pointer; }
 .settings output { min-width: 55px; font-weight: 700; color: var(--hot); }
@@ -329,7 +353,7 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
 
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 @keyframes flame { from { transform: scaleY(.8); opacity: .75; } to { transform: scaleY(1.15); opacity: 1; } }
-@keyframes focus-pulse { from { transform: translate(-50%, -50%) scale(1); } to { transform: translate(-50%, -50%) scale(1.18); } }
+@keyframes exec-breathe { from { opacity: .55; } to { opacity: 1; } }
 /* Compact layouts stay readable before the overflow safety fit is needed. */
 @media (max-width: 900px), (max-height: 700px) {
   .screen-panel { padding: 20px 24px; }

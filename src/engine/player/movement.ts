@@ -74,12 +74,14 @@ export function updateMovement(p: Player, dt: number): void {
     if (input.pressed('sprint')) p.sprintToggle = !p.sprintToggle;
     if (p.move.y < 0.1) p.sprintToggle = false;
   } else p.sprintToggle = input.down('sprint');
-  p.aiming = input.down('aim') && !p.melee.active && !input.down('melee');
-  // Firing drops out of the sprint: no full-speed hip-fire from the lowered pose.
-  p.sprinting = p.sprintToggle && p.move.y > 0.1 && !p.crouching && !p.aiming && !input.down('fire');
+  p.aiming = input.down('aim');
+  // The weapon in hand sets the pace: a sword runs fastest, an LMG slowest and jumps lowest (weapons/stats.ts `Handling`).
+  const { moveSpeed, mobility } = p.weapon;
+  // Firing drops out of the sprint: no full-speed hip-fire from the lowered pose. A sword slashes on the run.
+  p.sprinting = p.sprintToggle && p.move.y > 0.1 && !p.crouching && !p.aiming && !(input.down('fire') && p.weapon.isGun);
   let speed = Math.hypot(v.x, v.z);
   if (input.pressed('crouch') && b.onGround && speed > 6.3 && !p.sliding) {
-    const boost = clamp(12.8 - speed, 0, 4.5);
+    const boost = clamp(12.8 - speed, 0, 4.5) * mobility;
     v.x *= (speed + boost) / speed;
     v.z *= (speed + boost) / speed;
     speed += boost;
@@ -123,13 +125,13 @@ export function updateMovement(p: Player, dt: number): void {
       const friction = Math.exp(-(p.landGrace > 0 ? 2 : 8) * dt);
       v.x *= friction;
       v.z *= friction;
-      const maxSpeed = p.crouching ? 3.6 : p.sprinting ? 10.6 : 6.6 * (p.aiming ? p.weapon.adsSpeed : 1);
+      const maxSpeed = moveSpeed * (p.crouching ? 3.6 : p.sprinting ? 10.6 : 6.6 * (p.aiming ? p.weapon.adsSpeed : 1));
       accelerate(v, p.wish, wishLen, maxSpeed, 140 * dt);
     }
   } else {
     p.coyote -= dt;
     p.airTime += dt;
-    accelerate(v, p.wish, wishLen, 7.5, 36 * dt);
+    accelerate(v, p.wish, wishLen, 7.5 * moveSpeed, 36 * dt);
   }
   p.jumpBuffer = input.pressed('jump') ? 0.15 : p.jumpBuffer - dt;
   p.wallJumpCd -= dt;
@@ -144,7 +146,7 @@ export function updateMovement(p: Player, dt: number): void {
       p.detachGrapple(true);
     } else if (b.onGround || p.coyote > 0) {
       p.jumpBuffer = p.coyote = 0;
-      v.y = JUMP_SPEED;
+      v.y = JUMP_SPEED * mobility;
       b.onGround = false;
       p.airJumps = AIR_JUMPS;
       if (p.sliding) {

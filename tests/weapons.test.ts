@@ -1,6 +1,7 @@
 import { afterAll, expect, test } from 'vitest';
 import { Group, Mesh, MeshToonMaterial, Vector3 } from 'three';
-import { Gun, Melee, GUN_STATS, makeLoadout } from '@/engine/weapons/index';
+import { Gun, Sword, GUN_STATS, makeWeapon } from '@/engine/weapons/index';
+import { SLASH_TIME, SWORD_DAMAGE, SWORD_PVP_DAMAGE } from '@/engine/weapons/sword';
 import type { GunKind } from '@/engine/weapons/index';
 import type { Breakable, Ctx, Player, WeaponState } from '@/engine/types';
 import type { Box } from '@/engine/physics';
@@ -37,10 +38,11 @@ interface PlayerHitLike { player: Foe; part: string; dist: number; point: Vector
 // The slice of `Ctx` a weapon touches. A real one needs WebGL, a level and a net peer.
 const ctx = {
   renderer: { rig: new Group() },
+  scene: new Group(),
   camera: { position: new Vector3(2, 3, 4) },
   input: { rumble: record('rumble') },
   audio: Object.fromEntries(['shot', 'mp5Fire', 'pistolFire', 'shotgunFire', 'sniperFire', 'revolver', 'reload', 'shellCue', 'cylinder',
-    'empty', 'pump', 'ricochet', 'katanaSwing', 'katanaHit'].map(name => [name, record(name)])),
+    'empty', 'pump', 'ricochet', 'katanaSwing', 'katanaHit', 'dash'].map(name => [name, record(name)])),
   effects: { shake: 0, realistic: false, ...Object.fromEntries(['strokeBurst', 'muzzleSmoke', 'muzzleLight', 'shell', 'bulletImpact'].map(name => [name, record(name)])),
     tracer: (a: Vector3, b: Vector3, ...args: unknown[]) => calls.push({ name: 'tracer', args: [a.clone(), b.clone(), ...args] }),
     bulletTracer: (a: Vector3, b: Vector3, ...args: unknown[]) => calls.push({ name: 'tracer', args: [a.clone(), b.clone(), ...args] }) },
@@ -67,20 +69,20 @@ const ctx = {
   },
 };
 
-const player = { eye: new Vector3(2, 3, 4), forward: new Vector3(0, 0, -1), right: new Vector3(1, 0, 0),
+const player = { eye: new Vector3(2, 3, 4), forward: new Vector3(0, 0, -1), right: new Vector3(1, 0, 0), waves: [] as unknown[],
   recoil: record('recoil'), kickFov: record('kickFov'), lunge: record('lunge'), step: record('step'),
   aimDir: (spread: number, out: Vector3) => { calls.push({ name: 'spread', args: [spread] }); return out.copy(player.forward); } };
 
 const engineCtx = ctx as unknown as Ctx;
 const enginePlayer = player as unknown as Player;
-const loadout = makeLoadout(engineCtx, enginePlayer), revolver = new Gun(engineCtx, enginePlayer, 'revolver');
+const loadout = (['r4c', 'rifle', 'shotgun', 'sniper', 'pistol', 'lmg'] as const).map(kind => makeWeapon(engineCtx, enginePlayer, kind)), revolver = new Gun(engineCtx, enginePlayer, 'revolver');
 const gunAt = (i: number): Gun => {
   const weapon = loadout[i];
   if (!(weapon instanceof Gun)) throw new Error(`slot ${i} is not a gun`);
   return weapon;
 };
 const r4c = gunAt(0), rifle = gunAt(1), shotgun = gunAt(2), sniper = gunAt(3), pistol = gunAt(4), lmg = gunAt(5);
-const melee = new Melee(engineCtx, enginePlayer);
+const melee = new Sword(engineCtx, enginePlayer);
 const all = [...loadout, revolver, melee];
 const step = (weapon: { animate(st: WeaponState, dt: number): void }, duration: number, state: WeaponState = neutral) => {
   for (let left = duration; left > 1e-9;) { const dt = Math.min(0.01, left); weapon.animate(state, dt); left -= dt; }
@@ -91,10 +93,10 @@ const draw = (weapon: { equip(): void; animate(st: WeaponState, dt: number): voi
 afterAll(() => { for (const weapon of all) weapon.dispose(); });
 
 test('loadout, view models and aim poses', () => {
-  assert(loadout.map(w => w.kind).join(',') === 'r4c,rifle,shotgun,sniper,pistol,lmg', 'Loadout keeps six guns and independent melee');
-  assert(melee instanceof Melee && melee.spreadPx === 4 && !melee.isGun, 'Melee exposes its independent state');
-  const muzzleZ: Record<GunKind, number> = { r4c: -1.16, rifle: -0.96, pistol: -0.42, shotgun: -1.09, sniper: -1.60, lmg: -1.32, revolver: -0.40 };
-  const expected: Record<GunKind, number[]> = { r4c: [30, 150, 300, 28, 38, 0.08], rifle: [30, 150, 300, 22, 38, 0.075], pistol: [15, 90, 180, 40, 62, 0.18], shotgun: [6, 36, 72, 19, 68, 0.78],
+  assert(loadout.map(w => w.kind).join(',') === 'r4c,rifle,shotgun,sniper,pistol,lmg', 'makeWeapon builds each gun');
+  assert(melee instanceof Sword && melee.spreadPx === 4 && !melee.isGun && melee.kind === 'sword', 'The sword is a weapon with no ammo');
+  const muzzleZ: Record<GunKind, number> = { r4c: -1.16, rifle: -0.96, pistol: -0.44, shotgun: -1.09, sniper: -1.60, lmg: -1.32, revolver: -0.40 };
+  const expected: Record<GunKind, number[]> = { r4c: [30, 150, 300, 28, 38, 0.08], rifle: [30, 150, 300, 22, 38, 0.075], pistol: [9, 72, 144, 40, 62, 0.13], shotgun: [6, 36, 72, 19, 68, 0.78],
     sniper: [5, 25, 50, 150, 20, 0.20], lmg: [100, 200, 300, 26, 58, 0.085], revolver: [6, 36, 72, 62, 52, 0.30] };
   for (const gun of [r4c, rifle, pistol, shotgun, sniper, lmg, revolver]) {
     const stats = GUN_STATS[gun.kind], actual = [gun.mag, gun.reserve, stats.maxReserve, stats.damage, gun.adsFov, stats.fireInterval];
@@ -140,7 +142,7 @@ test('loadout, view models and aim poses', () => {
   assert(rifle.root.getObjectByName('magazine-lower'), 'MP5 magazine has a curved lower section');
   const blade = must(melee.root.getObjectByName('blade'), 'blade');
   if (!(blade instanceof Mesh)) throw new Error('blade is not a mesh');
-  assert((blade.material as MeshToonMaterial).color.getHex() === 0xcbdbe3, 'Knife blade uses pale cool steel');
+  assert((blade.material as MeshToonMaterial).color.getHex() === 0xcbdbe3, 'The sword blade uses pale cool steel');
 });
 
 test('R4-C and MP5 optics change independently without changing combat stats', () => {
@@ -349,8 +351,8 @@ test('automatic yaw recoil walks a learnable pattern, not noise', () => {
 
 test('accepted spread and recoil settings', () => {
   expect(GUN_STATS.rifle).toMatchObject({ hipSpread: 0.012, moveSpread: 0.0005, spreadKick: 0.005 });
-  expect(GUN_STATS.pistol).toMatchObject({ hipSpread: 0.008, adsSpread: 0.002, spreadKick: 0.006,
-    spreadMax: 0.035, moveSpread: 0.0004, camKick: [0.014, 0.003] });
+  expect(GUN_STATS.pistol).toMatchObject({ hipSpread: 0.008, adsSpread: 0.002, spreadKick: 0.009,
+    spreadMax: 0.045, moveSpread: 0.0004, camKick: [0.02, 0.005] });
 });
 
 test('shotgun shell loading and the pump cycle', () => {
@@ -426,10 +428,10 @@ test('real rays use separate PvE and PvP damage, headshots and distance falloff'
     [r4c, 300, 28 * 0.55, 70 * 0.55, 11.7, 21.06],
     [rifle, 10, 22, 57.2, 18, 32.4],
     [rifle, 300, 8.8, 22.88, 7.2, 12.96],
-    [pistol, 12, 40, 104, 32, 64],
-    [pistol, 26, 20, 52, 16, 32],
-    [pistol, 40, 14, 36.4, 11.2, 22.4],
-    [pistol, 300, 14, 36.4, 11.2, 22.4],
+    [pistol, 12, 40, 104, 37, 74],
+    [pistol, 26, 20, 52, 18.5, 37],
+    [pistol, 40, 14, 36.4, 12.95, 25.9],
+    [pistol, 300, 14, 36.4, 12.95, 25.9],
     [sniper, 10, 150, 450, 100, 200],
     [sniper, 300, 150, 450, 100, 200],
     [shotgun, 9, 19, 34.2, 16, 25.6],
@@ -464,33 +466,46 @@ test('real rays use separate PvE and PvP damage, headshots and distance falloff'
   }
 });
 
-test('melee guard, single strikes, obstruction and blade blood', () => {
+test('sword guard, strikes, held-fire chains, obstruction, air slash and blade blood', () => {
   const foe: Foe = { center: new Vector3(0, 1, -2), stats: { boss: false } }, remote: Foe = { center: new Vector3(0, 1, -2), stats: { boss: false } }, prop: Prop = { pos: new Vector3(0, 1, -1) };
-  melee.equip();
+  draw(melee);
   calls.length = 0;
   melee.animate({ ...neutral, aim: true }, 0.05);
-  assert(melee.blocking && near(melee.blockT, 0.05), 'Held melee raises the guard');
+  assert(melee.blocking && near(melee.blockT, 0.05), 'Held aim raises the guard');
   melee.animate({ ...neutral, blockFire: true }, 0.05);
-  assert(!melee.blocking && !melee.root.visible, 'Dead state clears melee');
+  assert(!melee.blocking && !melee.active, 'Dead state drops the guard');
   ctx.enemies.inArc = () => [{ enemy: foe, dist: 2 }];
   ctx.game.playersInArc = () => [remote];
   ctx.game.breakablesInArc = () => [prop];
-  melee.startSlash(neutral);
-  step(melee, 0.08);
-  assert(!last('enemyDamage'), 'Melee damage waits for contact');
-  step(melee, 0.01);
-  assert(num(must(last('enemyDamage'), 'enemyDamage')[1]) === 75 && num(must(last('playerDamage'), 'playerDamage')[1]) === 55 && num(must(last('breakHit'), 'breakHit')[1]) === 75, 'Melee routes enemy, player and prop damage');
-  step(melee, 0.3, { ...neutral, fire: true });
-  assert(named('enemyDamage').length === 1 && melee.combo === 1, 'One strike hits once; holding gun fire does not chain it');
+  assert(melee.startSlash(neutral), 'A free blade slashes');
+  step(melee, 0.4 * SLASH_TIME - 0.01);
+  assert(!last('enemyDamage'), 'Damage waits for contact');
+  assert(melee.cutting() && melee.cutting(true), 'The middle of the slash cuts bullets');
+  step(melee, 0.02);
+  assert(num(must(last('enemyDamage'), 'enemyDamage')[1]) === SWORD_DAMAGE && num(must(last('playerDamage'), 'playerDamage')[1]) === SWORD_PVP_DAMAGE
+    && num(must(last('breakHit'), 'breakHit')[1]) === SWORD_DAMAGE, 'The sword routes enemy, player and prop damage');
+  assert(named('lunge').length === 0 && named('step').length === 1, 'A grounded slash steps in without a hop');
+  step(melee, 0.5, { ...neutral, fire: true });
+  assert(named('enemyDamage').length === 2 && melee.combo === 2, 'Held fire chains a second slash after the cooldown');
+  step(melee, 0.5);
   ctx.world.lineOfSight = () => false;
-  melee.startSlash(neutral); step(melee, 0.1);
-  assert(named('enemyDamage').length === 1, 'A knife cannot hit an enemy through a wall');
+  melee.startSlash(neutral); step(melee, 0.3);
+  assert(named('enemyDamage').length === 2, 'The sword cannot hit an enemy through a wall');
   ctx.world.lineOfSight = () => true;
+  step(melee, 0.5);
+  assert(melee.startSlash({ ...neutral, grounded: false }) && player.waves.length === 1 && named('lunge').length === 1, 'A slash in the air lunges and throws a wave');
+  step(melee, 0.5);
+  melee.startSlash({ ...neutral, grounded: false });
+  assert(player.waves.length === 1, 'The air slash has its own cooldown');
+  for (const wave of player.waves as { mesh: Mesh }[]) wave.mesh.removeFromParent();
+  player.waves.length = 0;
+  melee.equip();
   melee.addBlood(0.84); melee.animate(neutral, 0);
-  const smears = melee.root.children.filter(child => child.name.startsWith('blood-smear-'));
-  assert(smears.length === 6 && smears.filter(smear => smear.visible).length === 5, 'Blood follows the knife smear thresholds');
+  const blood = must(melee._model.blood, 'blade blood');
+  assert(near(blood.amount, 0.84) && !melee.root.getObjectByName('blood'), 'The blade shows its blood in its own material, no smear quads');
   melee.resetAmmo();
-  assert(melee.blood === 0 && melee.combo === 0 && !melee.active && smears.every(smear => !smear.visible), 'Reset clears melee state');
+  assert(melee.blood === 0 && melee.combo === 0 && melee.waveCooldown === 0 && !melee.active && blood.amount === 0, 'Reset clears the sword state');
+  melee.unequip();
   ctx.enemies.inArc = () => [];
   ctx.game.playersInArc = () => [];
   ctx.game.breakablesInArc = () => [];
@@ -499,24 +514,58 @@ test('melee guard, single strikes, obstruction and blade blood', () => {
 test('pistol fires once per press, cycles its slide and reloads', () => {
   pistol.resetAmmo(); draw(pistol); calls.length = 0;
   pistol.animate(fire, 0);
-  assert(pistol.mag === 14 && named('pistolFire').length === 1, 'Pistol fires on the trigger edge');
+  assert(pistol.mag === 8 && named('pistolFire').length === 1, 'Pistol fires on the trigger edge');
   const slide = must(pistol.root.getObjectByName('slide'), 'slide');
-  assert(slide.position.z > -0.10, 'Slide recoils on firing');
+  assert(slide.position.z > -0.15, 'Slide recoils on firing');
   step(pistol, 0.3, { ...neutral, fire: true });
-  assert(pistol.mag === 14 && near(slide.position.z, -0.10), 'Held trigger does not auto-fire and the slide returns');
+  assert(pistol.mag === 8 && near(slide.position.z, -0.15), 'Held trigger does not auto-fire and the slide returns');
   pistol.animate(fire, 0);
-  assert(pistol.mag === 13, 'A new press fires the next round');
+  assert(pistol.mag === 7, 'A new press fires the next round');
   // A press 60 ms before the interval ends is buffered and fires when it does.
-  pistol.animate(fire, 0.12);
-  assert(pistol.mag === 13, 'Buffered press waits for the interval');
+  pistol.animate(fire, 0.07);
+  assert(pistol.mag === 7, 'Buffered press waits for the interval');
   pistol.animate({ ...neutral, fire: false }, 0.07);
-  assert(pistol.mag === 12, 'Buffered press fires once the interval ends');
+  assert(pistol.mag === 6, 'Buffered press fires once the interval ends');
   step(pistol, 0.3, { ...neutral, fire: false });
-  assert(pistol.mag === 12, 'The buffer is consumed, not replayed');
+  assert(pistol.mag === 6, 'The buffer is consumed, not replayed');
   pistol.startReload(); step(pistol, 0.99, fire);
-  assert(pistol.mag === 12 && pistol.reloading, 'Pistol cannot reload or fire before one second');
+  assert(pistol.mag === 6 && pistol.reloading, 'Pistol cannot reload or fire before one second');
   pistol.animate(fire, 0.01);
-  assert(pistol.mag === 15 && pistol.reserve === 87 && !pistol.reloading, 'Pistol reload conserves ammo at one second');
+  assert(pistol.mag === 9 && pistol.reserve === 69 && !pistol.reloading, 'Pistol reload conserves ammo at one second');
+});
+
+test('the .50 hits harder off the draw and in the air; the two bonuses do not stack', () => {
+  const target: Foe = { center: new Vector3(), stats: { boss: false } };
+  const saved = { enemy: ctx.enemies.raycast, world: ctx.world.raycast };
+  ctx.world.raycast = () => null;
+  ctx.enemies.raycast = () => ({ enemy: target, part: 'torso', dist: 10, point: new Vector3(0, 0, -10) });
+  const dealt = () => num(must(last('enemyDamage'), 'enemyDamage')[1]);
+  try {
+    pistol.resetAmmo(); pistol.equip(); step(pistol, 0.2); calls.length = 0;
+    pistol.animate(fire, 0);
+    expect(dealt(), 'the first shot within 0.5 s of the draw').toBeCloseTo(40 * 1.4, 8);
+    step(pistol, 0.2);
+    pistol.animate(fire, 0);
+    expect(dealt(), 'the second shot is plain').toBeCloseTo(40, 8);
+    step(pistol, 0.2);
+    pistol.animate({ ...fire, grounded: false }, 0);
+    expect(dealt(), 'a shot off the ground').toBeCloseTo(40 * 1.25, 8);
+    step(pistol, 0.2);
+    pistol.animate({ ...fire, sliding: true }, 0);
+    expect(dealt(), 'a shot from a slide').toBeCloseTo(40 * 1.25, 8);
+    pistol.unequip(); pistol.equip(); step(pistol, 0.2);
+    pistol.animate({ ...fire, grounded: false }, 0);
+    expect(dealt(), 'off the draw in the air: the larger bonus only').toBeCloseTo(40 * 1.4, 8);
+    pistol.equip(); step(pistol, 0.6);
+    pistol.animate(fire, 0);
+    expect(dealt(), 'the draw bonus lapses after 0.5 s').toBeCloseTo(40, 8);
+    calls.length = 0;
+    rifle.resetAmmo(); draw(rifle); rifle.animate({ ...fire, grounded: false }, 0);
+    expect(dealt(), 'other guns have no air bonus').toBeCloseTo(22, 8);
+  } finally {
+    ctx.enemies.raycast = saved.enemy; ctx.world.raycast = saved.world;
+    pistol.unequip(); rifle.unequip(); pistol.resetAmmo(); rifle.resetAmmo();
+  }
 });
 
 test('real-time auto-reload', async () => {

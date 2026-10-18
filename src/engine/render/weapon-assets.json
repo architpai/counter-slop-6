@@ -1,6 +1,6 @@
 {
  "version": 1,
- "glb": 1602848,
+ "glb": 1710156,
  "sets": {
   "hands": {
    "maxSize": 2048,
@@ -136,29 +136,29 @@
    "maxSize": 1024,
    "bytes": {
     "512": [
-     40149,
-     45081,
-     47586
+     60722,
+     56259,
+     59757
     ],
     "1024": [
-     106379,
-     135107,
-     125404
+     155097,
+     167613,
+     165421
     ]
    }
   },
-  "knife": {
+  "sword": {
    "maxSize": 1024,
    "bytes": {
     "512": [
-     40967,
-     51379,
-     51777
+     35364,
+     30086,
+     35480
     ],
     "1024": [
-     105039,
-     151174,
-     137909
+     91457,
+     92898,
+     87794
     ]
    }
   }
@@ -251,23 +251,23 @@
   "pistol": {
    "set": "pistol",
    "triangles": {
-    "slide": 3568,
-    "magazine": 192,
+    "slide": 7604,
+    "magazine": 428,
     "trigger": 296,
     "right-hand": 4492,
     "left-hand": 4492,
-    "body": 2452
+    "body": 5014
    },
-   "total": 15492
+   "total": 22326
   },
-  "knife": {
-   "set": "knife",
+  "sword": {
+   "set": "sword",
    "triangles": {
     "right-hand": 4492,
     "left-hand": 4492,
-    "body": 3962
+    "body": 15698
    },
-   "total": 12946
+   "total": 24682
   }
  },
  "clips": {
@@ -289,10 +289,11 @@
   "lmg.equip": 0.65,
   "pistol.reload": 1,
   "pistol.reload-empty": 1,
-  "pistol.equip": 0.2,
-  "knife.slash": 0.27,
-  "knife.slash-back": 0.27,
-  "knife.guard": 0.1
+  "pistol.equip": 0.12,
+  "sword.slash": 0.32,
+  "sword.slash-back": 0.32,
+  "sword.guard": 0.1,
+  "sword.equip": 0.3
  },
  "props": {
   "r4c": 1200,
@@ -300,8 +301,7 @@
   "shotgun": 1200,
   "sniper": 1200,
   "lmg": 1200,
-  "pistol": 1199,
-  "knife": 1200,
+  "pistol": 1200,
   "blade": 1200
  }
 }

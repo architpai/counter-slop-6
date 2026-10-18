@@ -2309,14 +2309,16 @@ export interface GunStats { /* W section 4, one field per table row */ }
 export const GUN_STATS: Record<GunKind, GunStats>;
 
 export interface Weapon {
-  readonly kind: string;            // GunKind | 'katana'
+  readonly kind: GunKind | 'sword';  // a loadout's are WeaponKinds (spec/sword-loadouts.md)
   readonly name: string;
   readonly hint: string;
   readonly isGun: boolean;
   readonly scope: boolean;
   readonly root: THREE.Group;       // child of ctx.renderer.rig
   readonly adsFov: number;
-  readonly adsSpeed: number;        // walk-speed multiplier while aiming; 1 for the knife
+  readonly adsSpeed: number;        // walk-speed multiplier while aiming (the sword: guarding)
+  readonly moveSpeed: number;       // held: multiplies walk, sprint, crouch and air speed
+  readonly mobility: number;        // held: multiplies jump speed and the slide boost
   aimAmt: number;
   mag: number; reserve: number; magSize: number; reloading: boolean;
   readonly spreadPx: number;
@@ -2335,23 +2337,26 @@ export class Gun implements Weapon {
   startReload(): void;
 }
 
-export class Katana implements Weapon {
+export class Sword implements Weapon {
   constructor(ctx: Ctx, player: Player);
-  blocking: boolean; blockT: number; cooldown: number; blood: number; combo: number;
-  startSlash(st: WeaponState): void;      // also used by the focus system
-  addBlood(amount: number): void;         // +0.42 per katana/focus kill
+  blocking: boolean; blockT: number; cooldown: number; waveCooldown: number; blood: number; combo: number;
+  startSlash(st: WeaponState): boolean;   // a slash off the ground also throws a wave (weapons/wave.ts)
+  cutting(pvp?: boolean): boolean;        // the slash's bullet-cutting window
+  addBlood(amount: number): void;         // +0.42 per sword/wave/focus kill
   onDeflect(perfect: boolean): void;      // parry flick
 }
 
-export function makeLoadout(ctx: Ctx, player: Player): Weapon[];  // [rifle, shotgun, sniper, katana]
+export function makeWeapon(ctx: Ctx, player: Player, kind: WeaponKind): Weapon;
+// The player owns its loadout: Player.setLoadout(kinds) carries LOADOUT_SIZE (3) different WEAPON_KINDS,
+// built once each in its armoury; Player.sword, quickSlash() (the melee key and focus executions).
 ```
 
 **Two looks of every view model (R4).** Each weapon keeps its flat model (`makeGunModel`,
-`makeMeleeModel`: the code-built guns and hands, Low's look, built in their own units at scale
+`makeSwordModel`: the code-built guns and hands, Low's look, built in their own units at scale
 0.46) for its whole life. On the realistic tiers, once `renderer.weapons` has `weapons.glb` and its
 maps in, every view model (`ViewModel._syncLook`, on the assets' subscription) builds its Blender
-model (`makeRealGunModel`, `makeRealMeleeModel`: an instance of the glb's model, its optics on the
-`optic-mount`, the knife's blood smears laid along its blade) and swaps to it; when the assets go
+model (`makeRealGunModel`, `makeRealSwordModel`: an instance of the glb's model, its optics on the
+`optic-mount`, the blood smears laid along the sword's blade) and swaps to it; when the assets go
 (Low) it swaps back and drops it. `root` is the model in use, so the swap changes what draws the
 weapon and nothing of its state; the springs, sway, aim and visibility carry over, the root moved
 from the old model's hip and aim poses to the new one's, so even a paused game shows it posed. A

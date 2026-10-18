@@ -1,38 +1,18 @@
 import * as THREE from 'three';
 import { clamp, choose, rand, wrapAngle } from '../util';
 import { TYPES, BOSS_ORDER } from '../enemies/index';
-import { TONE } from '../render/index';
-import type { EnemyKind, HitInfo, Target, WeaponState } from '../types';
+import type { EnemyKind, HitInfo, Target } from '../types';
 import type { EnemyRecord } from '../enemies/index';
-import type { Player } from '../player/index';
 import type { App } from '../boot';
 import { ROSTER, MUTATIONS, mutationCount, nextSpawn } from '../enemies/progression';
 import { validBossPerch } from '../level/boss-perch';
 import { COOP, coopScale } from './coop-rules';
 import { LAST_FEW, showStragglers, stragglerMark, type StragglerMark } from './stragglers';
+import { createExecution } from './execution';
 const MODS: ReadonlyArray<readonly [string, number, number]> = [
   ['', 1, 1], ['CAFFEINATED · they move fast', 1.35, 0.85],
   ['JUICED · they hit harder', 0.9, 1.4], ['SWARM · more of them, thinner', 1.15, 0.9],
 ];
-
-/** The live shape of `gs.focus` while solo runs. `makeGameState` builds exactly this. */
-interface FocusDash {
-  target: EnemyRecord;
-  elapsed: number;
-  trail: THREE.Vector3;
-  trailT: number;
-  stuckY: number;
-}
-
-interface SoloFocus {
-  active: boolean;
-  remaining: number;
-  chain: number;
-  target: EnemyRecord | null;
-  dash: FocusDash | null;
-  arm: number;
-  ready: boolean;
-}
 
 export interface SoloApi {
   /** The current wave's HUD modifier line and subtitle, for the co-op state. */
@@ -48,19 +28,21 @@ export interface SoloApi {
   onBoss(e: EnemyRecord): void;
   /** Every frame: marks the last few enemies of a wave (of a boss wave, once the boss is down). */
   markStragglers(): void;
+  /** The samurai execution (game/execution.ts), every frame with real time. */
   updateFocus(dt: number): void;
-  endFocus(): void;
-  enterFocus(): void;
-  candidate(): EnemyRecord | null;
+  /** Stop an execution; `spent` empties the sword gauge. */
+  endFocus(spent?: boolean): void;
+  /** Fill the sword gauge by `amount` thirds. */
+  addCharge(amount: number): void;
 }
 
 export function createSolo(app: App): SoloApi {
   const { ctx, gs } = app;
   const delta = new THREE.Vector3(), min = new THREE.Vector3(), max = new THREE.Vector3();
-  const projected = new THREE.Vector3(), look = new THREE.Vector3(), trail = new THREE.Vector3();
+  const projected = new THREE.Vector3();
   // `makeGameState` builds exactly this shape; the declared `FocusState` only
   // names `active`, so the downcast goes through `unknown`.
-  const focus = gs.focus as unknown as SoloFocus;
+  const execution = createExecution(app);
   /** Bearings (player -> spawn) of the last few spawns, so the next one comes from somewhere else. */
   const recentBearings: number[] = [];
   const intro = { label: '', sub: '' };
@@ -122,7 +104,7 @@ export function createSolo(app: App): SoloApi {
     ctx.audio.wave(); if (bossWave) ctx.audio.bossRoar(player.center);
     const tips = [
       `hold ${ctx.hud.key('grapple')} to reel in · tap it again to let go mid-swing`,
-      `hold ${ctx.hud.key('block')} after a melee strike to block and return bullets`,
+      `sword: hold ${ctx.hud.key('aim')} to guard and return bullets · slash bullets to cut them`,
       'kills in the air are worth more · stay off the floor',
       `${ctx.hud.key('grenade')} lobs a grenade · pickups give you more`,
       `${ctx.hud.key('dash')} in the air dashes · ${ctx.hud.key('jump')} on a wall jumps off it`,
@@ -228,15 +210,15 @@ export function createSolo(app: App): SoloApi {
     let points = e.stats.score, label: string | null = e.stats.boss ? e.stats.name : null;
     if (info.crit) { points += 60; label = 'HEADSHOT'; }
     if (info.source === 'melee') { points += 50; label = overkill ? 'SLICED' : 'CUT DOWN'; }
+    if (info.source === 'wave') { points += 60; label = 'AIR SLASH'; }
     if (info.source === 'focus') { points += 150; label = 'EXECUTED'; }
-    if (info.source === 'melee' || info.source === 'focus') {
-      gs.katanaStreak++;
-      player.melee.addBlood(0.42);
-      if (gs.katanaStreak >= 3) enterFocus();
-    } else if (info.source !== 'blast') gs.katanaStreak = 0;
+    // Sword kills fill the gauge, which keeps between kills; an execution's own kills do not refill it.
+    if (info.source === 'melee' || info.source === 'wave' || info.source === 'focus') player.sword?.addBlood(0.42);
+    if (info.source === 'melee' || info.source === 'wave') execution.addCharge(1);
     if (info.source === 'deflect') { points += 120; label = 'RETURN TO SENDER'; }
     if (info.source === 'fall') label = 'FELL OFF THE MAP';
-    else if (!player.body.onGround && info.source !== 'deflect') { points += 40; label = label ? `${label} · AIRBORNE` : 'AIRBORNE'; }
+    // An execution's dash leaves the ground; that is not an air kill.
+    else if (!player.body.onGround && info.source !== 'deflect' && info.source !== 'focus') { points += 40; label = label ? `${label} · AIRBORNE` : 'AIRBORNE'; }
     app.addScore(points, label); ctx.audio.kill(Boolean(info.crit || e.stats.boss));
   }
   function drop(e: EnemyRecord): void {
@@ -268,115 +250,6 @@ export function createSolo(app: App): SoloApi {
     }
     ctx.hud.setStragglers(marks);
   }
-  function candidate(): EnemyRecord | null {
-    const player = ctx.player;
-    if (player === null) return null;
-    let selected: EnemyRecord | null = null, best = -Infinity;
-    for (const e of ctx.enemies?.list ?? []) {
-      if (!e.alive || e.state === 'spawn') continue;
-      delta.subVectors(e.center, player.eye); const d = delta.length();
-      if (d < 0.5 || d > 24) continue;
-      const aim = delta.dot(player.forward) / d, rank = 3 * aim - d / 24;
-      if (aim >= 0.4 && rank > best && ctx.world.lineOfSight(player.eye, e.center)) { best = rank; selected = e; }
-    }
-    return selected;
-  }
-  function enterFocus(): void {
-    if (gs.mode === 'ffa' || focus.chain >= 2 || !candidate()) return;
-    const fresh = !focus.active;
-    focus.active = true; focus.remaining = 2.6; focus.chain++; focus.arm = 0.18; focus.ready = false;
-    if (fresh) { ctx.audio.focusIn(); ctx.hud.tip(`SLASH READY · hold ${ctx.hud.key('focus')} to dash`, 2.2); }
-  }
-  function endFocus(): void {
-    if (!focus.active && !focus.dash) return;
-    const player = ctx.player;
-    focus.active = false; focus.target = null; focus.chain = 0; focus.dash = null; gs.katanaStreak = 0;
-    if (player !== null) player.dashLock = false;
-    ctx.hud.setFocusMark(null);
-  }
-  function neutralState(player: Player): WeaponState {
-    const st = player.weaponState();
-    return { ...st, fire: false, firePressed: false, aim: false, reloadPressed: false, meleePressed: false, sprinting: false, speed: 0, blockFire: !player.alive };
-  }
-  function endDash(blocked: boolean): void {
-    const player = ctx.player;
-    if (player === null) return;
-    player.dashLock = false; focus.dash = null; player.body.vel.set(0, 0, 0);
-    if (blocked) {
-      player.melee.startSlash(neutralState(player));
-      ctx.hud.tip('blocked · the dash did not reach', 1.2);
-    }
-  }
-  function execute(target: EnemyRecord): void {
-    const player = ctx.player, enemies = ctx.enemies;
-    if (player === null || enemies === null) return;
-    const previousChain = focus.chain;
-    endDash(false);
-    player.melee.startSlash(neutralState(player));
-    // Bosses take a quarter of their max HP instead of an instant kill; three knife kills is not a boss ticket.
-    enemies.damage(target, target.stats.boss ? target.maxHp * 0.25 : 100000, { source: 'focus', part: 'head', crit: true, point: target.center.clone(), dir: delta.subVectors(target.center, player.eye).normalize().clone() });
-    ctx.audio.focusSlash(); ctx.game.hitstop(0.1, 0.08); ctx.effects.shake += 0.35;
-    ctx.input.rumble(0.9, 0.7, 140); player.kickFov(6); player.heal(6);
-    // A survivor (a boss) spends the focus outright; otherwise the held dash would re-execute every frame.
-    if (target.alive) { endFocus(); return; }
-    if (previousChain === focus.chain) focus.remaining = Math.min(focus.remaining, 0.35);
-    focus.target = null; ctx.hud.setFocusMark(null);
-  }
-  function updateDash(dt: number): void {
-    const dash = focus.dash;
-    const p = ctx.player;
-    if (dash === null || p === null) return;
-    const target = dash.target, body = p.body;
-    dash.elapsed += dt;
-    if (!target.alive || dash.elapsed > 1.2) { endDash(false); return; }
-    const dx = target.body.pos.x - body.pos.x, dz = target.body.pos.z - body.pos.z;
-    const flat = Math.hypot(dx, dz), nx = flat > 0 ? dx / flat : 0, nz = flat > 0 ? dz / flat : 0;
-    p.yaw = Math.atan2(-dx, -dz); look.subVectors(target.center, p.eye);
-    p.pitch = clamp(Math.atan2(look.y, Math.hypot(look.x, look.z)), -1.2, 1.2);
-    const want = Math.max(0, flat - 1.1), distance = Math.min(46 * dt, want);
-    let moved = 0;
-    while (moved < distance - 1e-8) {
-      const step = Math.min(0.22, distance - moved);
-      body.pos.x += nx * step; body.pos.z += nz * step;
-      if (ctx.world.overlapsBody(body)) {
-        body.pos.y += 0.65;
-        if (ctx.world.overlapsBody(body)) { body.pos.y -= 0.65; body.pos.x -= nx * step; body.pos.z -= nz * step; break; }
-      }
-      moved += step;
-    }
-    const dy = target.body.pos.y + (target.stats.flying ? 0.2 : 0) - body.pos.y;
-    if (Math.abs(dy) > 0.05) {
-      const step = clamp(dy, -46 * dt, 46 * dt); body.pos.y += step;
-      if (ctx.world.overlapsBody(body)) { body.pos.y -= step; dash.stuckY += dt; } else dash.stuckY = 0;
-    }
-    dash.trailT += dt;
-    if (dash.trailT > 0.02) {
-      dash.trailT = 0; trail.copy(body.pos).y += body.height * 0.55;
-      ctx.effects.tracer(dash.trail, trail, TONE.PRIMARY, 0.045, 0.28); dash.trail.copy(trail);
-      ctx.effects.strokeBurst(trail, TONE.PRIMARY, 2, 5, { life: 0.22, size: 0.03 });
-    }
-    if (Math.hypot(flat, Math.max(0, Math.abs(dy) - 0.6)) <= 1.5) execute(target);
-    else if (moved < 0.0001 && want > 0.05 && dash.stuckY > 0.08) endDash(true);
-  }
-  function updateFocus(dt: number): void {
-    if (!focus.active) return;
-    const player = ctx.player;
-    if (player === null) return;
-    if (focus.dash) { updateDash(dt); return; }
-    focus.remaining -= dt; focus.arm -= dt;
-    if (focus.remaining <= 0 || !player.alive) { endFocus(); return; }
-    const held = (ctx.input.down('aim') && ctx.input.down('fire')) || ctx.input.down('dash');
-    if (!held) focus.ready = true;
-    const target = candidate(); focus.target = target;
-    if (!target) { ctx.hud.setFocusMark(null); return; }
-    ctx.camera.updateMatrixWorld(); projected.copy(target.center).project(ctx.camera);
-    if (projected.z >= -1 && projected.z < 1) ctx.hud.setFocusMark((projected.x * 0.5 + 0.5) * ctx.renderer.three.domElement.clientWidth, (-projected.y * 0.5 + 0.5) * ctx.renderer.three.domElement.clientHeight);
-    else ctx.hud.setFocusMark(null);
-    if (held && focus.ready && focus.arm <= 0) {
-      ctx.input.consume('fire'); focus.dash = { target, elapsed: 0, trail: player.center.clone(), trailT: 0, stuckY: 0 };
-      player.dashLock = true; player.body.vel.set(0, 0, 0); ctx.audio.dash(); player.kickFov(5);
-      ctx.input.rumble(0.5, 0.4, 120); ctx.hud.setFocusMark(null);
-    }
-  }
-  return { intro, startWave, spawnPosition, update, onKill, reward, drop, onBoss, markStragglers, updateFocus, endFocus, enterFocus, candidate };
+  return { intro, startWave, spawnPosition, update, onKill, reward, drop, onBoss, markStragglers,
+    updateFocus: execution.update, endFocus: execution.end, addCharge: execution.addCharge };
 }

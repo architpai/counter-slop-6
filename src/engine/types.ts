@@ -93,6 +93,8 @@ export interface PlayerHit {
 export interface GameHooks {
   hitstop(duration: number, scale: number): void;
   addScore(points: number, label?: string | null): void;
+  /** Add to the sword's execution gauge (game/execution.ts); absent where there is none. */
+  charge?(amount: number): void;
   onPlayerDeath(): void;
 
   /** Local player first, then remotes. */
@@ -154,7 +156,7 @@ export type HitPart =
   | 'legL' | 'legR' | 'shinL' | 'shinR' | 'shield' | 'blade';
 
 export type DamageSource =
-  | 'r4c' | 'rifle' | 'shotgun' | 'sniper' | 'revolver' | 'pistol' | 'lmg' | 'melee' | 'focus'
+  | 'r4c' | 'rifle' | 'shotgun' | 'sniper' | 'revolver' | 'pistol' | 'lmg' | 'melee' | 'wave' | 'focus'
   | 'deflect' | 'blast' | 'fall' | 'grenade';
 
 /** One record for every damage event, from any source, to any victim. */
@@ -569,7 +571,10 @@ export const PS_FLAG = {
   ALIVE: 64,
   GRAPPLING: 128,
   PARRY_WINDOW: 256,
+  /** A sword slash is under way. */
   MELEE: 512,
+  /** The slash's blade cuts bullets now (`Player.slashCutting(true)`). */
+  CUTTING: 1024,
 } as const;
 
 /** A remote snapshot pair used for interpolation. `t` is local arrival time. */
@@ -607,10 +612,10 @@ export interface Lobby {
 export interface WeaponState {
   fire: boolean;
   firePressed: boolean;
-  /** Gun ADS; the separate melee action maps its guard to this field. */
+  /** Gun ADS; the sword's guard. */
   aim: boolean;
   reloadPressed: boolean;
-  /** A dedicated melee press, independent of the selected gun. */
+  /** The melee key: draw the sword, if the loadout has one, and slash. */
   meleePressed: boolean;
   sprinting: boolean;
   grounded: boolean;

@@ -5,6 +5,7 @@
 > Online extension: [Online co-op survival](online-coop.md) defines the v3 namespace, the `coop` mode, host-owned enemies, and the messages that carry them. It replaces section 9.10.
 
 > Current combat changes: [Combat rehaul](combat-rehaul.md). It replaces slot 3, extends flags to 1023 and adds addressed headshot confirmation.
+> Sword and loadouts: [Sword, loadouts and weapon handling](sword-loadouts.md). Field 5 is now the held weapon's id, bit 512 a sword slash, bit 1024 its bullet cut; flags go to 2047.
 
 This document describes the multiplayer networking of the game: peer-to-peer transport, lobby discovery, the message protocol, state replication, hit validation, score authority, and the representation of remote players. It is written so that an implementer can build identical gameplay from it alone.
 

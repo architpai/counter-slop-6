@@ -99,7 +99,8 @@ function makePeer(hub: ReturnType<typeof makeHub>, id: string, ids: string[], la
     name: id, alive: true, hp: 120, maxHp: 120, shieldT: 0, team: 0, dashLock: false, isLocal: true, body,
     get center() { return body.pos.clone().add(new Vector3(0, 1, 0)); }, get eye() { return body.pos.clone().add(new Vector3(0, 1.6, 0)); },
     forward: new Vector3(0, 0, -1), right: new Vector3(1, 0, 0), yaw: 0, pitch: 0, wi: 0, weapon: { kind: 'rifle' }, weapons: [],
-    grapple: { mode: 'idle', hook: new Vector3() }, melee: { active: false, cooldown: 0, addBlood: noop },
+    grapple: { mode: 'idle', hook: new Vector3() }, sword: { active: false, cooldown: 0, addBlood: noop }, holdingSword: false,
+    slashCutting: () => false, quickSlash: () => false,
     speed: 0, aiming: false, firing: false, blockRadius: 0, crouching: false, sliding: false, blocking: false, parryWindow: false,
     nades: [], grenades: 1, maxGrenades: 5, addAmmoAll: noop, lastHitBy: null as string | null, lastHit: null as unknown,
     onHeadshot: vi.fn(), tryDeflect: () => false as const, tryBlockMelee: () => false, detachGrapple: noop, throwGrenade: noop, clearNades: noop,
@@ -137,7 +138,7 @@ function makePeer(hub: ReturnType<typeof makeHub>, id: string, ids: string[], la
     arenaSpawns: [], teamSpawns: [], shadow: { center: new Vector3(), radius: 40 } };
   const hud = {
     kill: vi.fn(), message: vi.fn(), tip: noop, hitmarker: vi.fn(), setMarks: noop, setSpectate: vi.fn(), setBoss: noop, setModifier: vi.fn(), setWave: vi.fn(), setTimer: vi.fn(),
-    setScore: noop, setPvpScore: vi.fn(), setBoard: noop, setGameplayVisible: noop, hideScreen: noop, setFocusMark: noop, key: () => 'F',
+    setScore: noop, setPvpScore: vi.fn(), setBoard: noop, setGameplayVisible: noop, hideScreen: noop, setExecMarks: noop, key: () => 'F',
   };
   const ctx = {
     world: land.world, scene, nav: land.nav, bossNav: land.nav, level, player, remotes, net, hud,

@@ -30,6 +30,11 @@ export function charMat(color: number): THREE.MeshToonMaterial {
   return material;
 }
 
+/** A flat character material of its own, not the shared cache's (the flat sword's blade, which draws blood in it). */
+export function bladeMaterial(color: number): THREE.MeshToonMaterial {
+  return gridLit(new THREE.MeshToonMaterial({ color, gradientMap: gradient }));
+}
+
 export function toneMat(tone: number): THREE.MeshToonMaterial {
   return charMat(TONE_HEX[tone] ?? TONE_HEX[TONE.PRIMARY]);
 }

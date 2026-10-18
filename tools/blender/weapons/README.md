@@ -1,10 +1,11 @@
 # First-person weapons and arms (R4)
 
-The realistic tiers' view models: the R4-C, the MP5, the pump shotgun, the sniper rifle, the LMG, the pistol,
-the combat knife, the ACOG and holographic sights, and the gloved hands with sleeves. Every mesh,
-pose, clip and texture is made by the Python scripts in this folder, run headless in Blender. Nothing
-is downloaded: no model, image, scan or HDRI is read from disk. Low keeps the code-built guns of
-`src/engine/weapons/models.ts` and never loads any of this.
+The realistic tiers' view models: the R4-C, the MP5, the pump shotgun, the sniper rifle, the LMG, the pistol
+(a large-frame .50 of our own design: a tall slab slide over a full-length barrel, a ribbed top rail, a squared
+muzzle face, a spur hammer and an oversized base plate), the tactical sword, the ACOG and holographic sights,
+and the gloved hands with sleeves. Every mesh, pose, clip and texture is made by the Python scripts in this
+folder, run headless in Blender. Nothing is downloaded: no model, image, scan or HDRI is read from disk. Low
+keeps the code-built guns of `src/engine/weapons/models.ts` and never loads any of this.
 
 ## Regenerate everything
 
@@ -28,21 +29,25 @@ npm run weapons -- --glb           # pack the glb again only (the maps and their
    meshes welded, quantised and meshopt-compressed. A part the game moves keeps the transform it
    was authored with (its pivot); its mesh hangs on a child node, since quantisation folds a
    dequantisation transform into the mesh's node. It adds the enemies' props (V12): for each
-   prop kind a node `prop__<kind>` (`PROPS`: `rifle` is the MP5, `blade` the knife with its blade
-   drawn out to the flat blade's 0.92 m), the model without hands, glass or clips, merged into one
-   mesh of its set's material in the flat props' frame (grip at the hand, +z forward, 1.25 × life
-   size and 1.3 × thicker across the barrel, `PROP_BULK`, 1.6 × on the blade, so it reads in the
-   chunky figures' hands; slid up to 10 cm so the muzzle meets the flat prop's tip) and simplified to 1,200
-   triangles; a kept triangle whose corners come from different UV islands takes one flat texel
-   from inside one of them, so it samples no atlas between islands;
+   prop kind a node `prop__<kind>` (`PROPS`: `rifle` is the MP5, `blade` the sword), the model
+   without hands, glass or clips, merged into one mesh of its set's material in the flat props'
+   frame (grip at the hand, +z forward, 1.25 × life size and 1.3 × thicker across the barrel,
+   `PROP_BULK`, 1.4 × on the blade, so it reads in the chunky figures' hands; slid up to 10 cm so
+   the muzzle, or the sword's point, meets the flat prop's tip) and simplified to 1,200 triangles;
+   a kept triangle whose corners come from different UV islands takes one flat texel from inside
+   one of them, so it samples no atlas between islands;
 3. encodes the maps to KTX2 (Basis ETC1S with mipmaps) as `public/weapons/<size>/<set>-<map>.ktx2`.
-   The optics, pistol, knife and LMG stop at 1024 (`MAX_SIZE`), so Ultra stays within 10.5 MB;
+   The optics, pistol, sword and LMG stop at 1024 (`MAX_SIZE`), so Ultra stays within 10.5 MB;
 4. writes `src/engine/render/weapon-assets.json`: file sizes per set and size, triangles per model
    and node, every clip's length, and the props' triangles. The game and `tests/weapon-assets.test.ts` read it.
 
 Commit the regenerated `public/models/weapons.glb`, `public/weapons/` and `weapon-assets.json`.
 
 ### Blender on another machine
+
+The usual one is the MSI (see `AGENTS.md`): `BLENDER=tools/blender/msi.sh npm run weapons -- <set>` runs step 1 there over
+ssh on CUDA and brings the set's folder back; the manual steps below are what it does.
+
 
 Step 1 can run on a second machine (the bakes use an NVIDIA card through OptiX or CUDA where there is no
 Metal). The scripts read and write only under the repository root, so copy the two folders they need and
@@ -74,7 +79,7 @@ the hip). `--quick` bakes with a few samples, to check the pipeline.
 
 - **Axes and units.** Blender +Y is forward (the barrel), +Z up, +X right; the glTF export turns
   that into three's -Z forward, +Y up. Metres. Each model's origin sits where the flat model's
-  does (the receiver, or the knife's grip), so the hip and aim poses carry over.
+  does (the receiver, or the sword's grip), so the hip and aim poses carry over.
 - **Nodes.** A model is a root empty (`r4c`), a `pivot` under it and its parts. Blender names are
   `<model>__<part>` (unique across the merged glb); the game strips the prefix. The game's
   procedural pose moves the root; clips move the `pivot` (the whole gun, for a reload's roll) and
@@ -85,13 +90,13 @@ the hip). `--quick` bakes with a few samples, to check the pipeline.
 - **Sockets** are empties: `muzzle` (tracers, flash and smoke leave from it), `eject` (shells),
   `sight` (the point the aim pose puts on the screen centre: the iron sight's post, the sniper's
   eyepiece, an optic's axis at its eyepiece), `optic-mount` (the rifles' rail, where the game hangs
-  the ACOG or holo), and the knife's `tip` and `smears` (the flat knife's blade frame on this blade,
-  where the game lays the blood smears).
+  the ACOG or holo), and the sword's `tip` and `smears` (the blade's centre line at its root, past the
+  collar, where the game lays the blood smears along the blade).
 - **Clips** run at 100 frames a second, so every gameplay duration in `weapons/stats.ts` is a whole
   number of frames, and each clip is exactly as long as the timing it shows: `reload` and
   `reload-empty` (`reloadDuration`), `equip` (`drawTime`), `cycle` (`cycleDuration`: the pump, the
-  bolt), `shell` (the shotgun's per-shell `reloadDuration`), the knife's `slash` and `slash-back`
-  (`SLASH_TIME`); the knife's `guard` plays at the block's blend, so its length only sets its
+  bolt), `shell` (the shotgun's per-shell `reloadDuration`), the sword's `slash` and `slash-back`
+  (`SLASH_TIME`) and its `equip` (the draw); the sword's `guard` plays at the block's blend, so its length only sets its
   frames. `lib.Clip` keys each part relative to its rest pose (or to a key's `base`), at shares of
   the clip, with rest keys at both ends; each clip becomes an NLA track `<model>.<clip>` on every node it moves,
   which the exporter merges into one glTF animation. The game drives a clip from its own timer
@@ -113,7 +118,7 @@ the hip). `--quick` bakes with a few samples, to check the pipeline.
   (stippling, knurling, weave, grain). Ambient occlusion is baked from the set's own geometry. The
   optic shells bake near white; the game tints them with `OPTIC_COLOR`, so model and overlay match.
 - **Identity.** The player blue stays as small accents: magazine base plates, the R4-C's
-  charging-handle latch, the knife's spacer; the shotgun's front sight fibre is the flat look's
+  charging-handle latch, the sword's spacer; the shotgun's front sight fibre is the flat look's
   red accent, and its saddle shells are a stock dark red, not a block of blue at the hip. The
   sleeves are a muted blue-grey, the gloves a neutral charcoal (a warm grey read olive under the
   evening maps' light).
@@ -122,6 +127,6 @@ the hip). `--quick` bakes with a few samples, to check the pipeline.
 
 `src/engine/render/weapons.ts` (`WeaponAssets`, owned by the renderer) streams the glb and the maps
 at the Textures size from the first realistic frame, in the upload slots after the bake's, and frees
-them on Low. `src/engine/weapons/models.ts` (`makeRealGunModel`, `makeRealMeleeModel`) builds a
+them on Low. `src/engine/weapons/models.ts` (`makeRealGunModel`, `makeRealSwordModel`) builds a
 weapon's model from an instance of it, and every view model (`weapons/gun.ts`, `ViewModel`) swaps
 to it once the assets are in and back when they go.

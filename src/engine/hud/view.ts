@@ -55,7 +55,8 @@ export interface HudView {
   setScopeDrift(x: number, y: number, scale: number): void;
   setGrappleTarget(state: 0 | 1 | 2): void;
   setFocusMeter(show: boolean, frac: number, ready: boolean, label: string): void;
-  setFocusMark(x: number | null, y?: number): void;
+  /** The samurai execution's markers, in screen pixels; `n` is the lock number, 0 if not locked. */
+  setExecMarks(marks: readonly { x: number; y: number; n: number }[]): void;
   setBoss(name: string | null, frac?: number): void;
   /** Arrows at the last enemies of a boss wave; an empty list hides them. */
   setStragglers(marks: readonly { x: number; y: number; a: number }[]): void;

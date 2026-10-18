@@ -9,12 +9,12 @@ import type { LoadTexture, SetMaps } from './textures';
 
 /**
  * The realistic tiers' first-person weapons and arms (docs/VISUALS.md, R4):
- * `weapons.glb` (every gun, the knife, the optics and the posed hands, with
+ * `weapons.glb` (every gun, the sword, the optics and the posed hands, with
  * their clips and sockets) and one KTX2 texture set per model, at the size
  * the Textures setting shows. Made by `tools/weapons/build.mjs` from the
  * Blender scripts in `tools/blender/weapons/`. Low loads none of it.
  */
-export const WEAPON_SETS = ['hands', 'optics', 'r4c', 'mp5', 'shotgun', 'sniper', 'lmg', 'pistol', 'knife'] as const;
+export const WEAPON_SETS = ['hands', 'optics', 'r4c', 'mp5', 'shotgun', 'sniper', 'lmg', 'pistol', 'sword'] as const;
 export type WeaponSet = (typeof WEAPON_SETS)[number];
 export const WEAPONS_GLB = '/models/weapons.glb';
 
@@ -53,7 +53,7 @@ export function weaponTextureSize(values: Pick<GfxValues, 'look' | 'textures'>):
   return values.look === 'realistic' ? TEXTURE_SIZE[values.textures] : null;
 }
 
-/** The size a set is worn at when a tier asks for `size`: the optics, pistol and knife stop at 1K. */
+/** The size a set is worn at when a tier asks for `size`: the optics, pistol, sword and LMG stop at 1K. */
 export function weaponSetSize(set: WeaponSet, size: TextureSize): TextureSize {
   return Math.min(size, WEAPON_MANIFEST.sets[set]!.maxSize) as TextureSize;
 }

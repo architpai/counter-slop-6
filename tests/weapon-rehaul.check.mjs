@@ -63,26 +63,29 @@ try {
   }
   await page.setViewportSize({ width: 1280, height: 720 });
   assert.equal(await page.locator('.grapple-reticle').evaluate(e => getComputedStyle(e).opacity), '0');
+  // The default loadout carries the sword: F draws it and slashes; aim held brings the guard up after.
   await page.keyboard.down('f');
   const melee = await page.evaluate(() => {
     window.rehaulFrame(1);
     const p = window.__game.player;
-    return { slot: p.wi, active: p.melee.active, scope: window.__game.hud.scope.shown, gun: p.weapon.root.visible };
+    return { kind: p.weapon.kind, slashing: p.sword.slashing, scope: window.__game.hud.scope.shown };
   });
-  assert.deepEqual(melee, { slot: 0, active: true, scope: false, gun: false });
+  assert.deepEqual(melee, { kind: 'sword', slashing: true, scope: false });
+  await page.keyboard.up('f');
   await page.evaluate(() => window.rehaulFrame(7));
-  assert.equal(await page.evaluate(() => window.__game.player.melee.root.visible), true);
-  await shot('knife');
+  assert.equal(await page.evaluate(() => window.__game.player.weapon.root.visible), true);
+  await shot('sword');
   await page.evaluate(() => window.rehaulFrame(45));
   assert.equal(await page.evaluate(() => window.__game.player.blocking), true);
-  await shot('knife-guard');
-  await page.keyboard.up('f');
+  await shot('sword-guard');
   await page.mouse.up({ button: 'right' });
   await page.evaluate(() => window.rehaulFrame(60));
   assert.equal(await page.evaluate(() => window.__game.player.weapon.root.visible), true);
 
-  for (const [key, kind] of [['1', 'r4c'], ['2', 'rifle'], ['3', 'shotgun'], ['4', 'sniper'], ['5', 'pistol'], ['6', 'lmg']]) {
-    await page.keyboard.down(key); await page.evaluate(() => window.rehaulFrame(60)); await page.keyboard.up(key);
+  // Each gun in turn, carried in slot 1 of a loadout.
+  for (const kind of ['r4c', 'rifle', 'shotgun', 'sniper', 'pistol', 'lmg']) {
+    await page.evaluate(kind => window.__game.player.setLoadout([kind, ...['pistol', 'sword', 'r4c'].filter(k => k !== kind).slice(0, 2)]), kind);
+    await page.keyboard.down('1'); await page.evaluate(() => window.rehaulFrame(60)); await page.keyboard.up('1');
     assert.equal(await page.evaluate(() => window.__game.player.weapon.kind), kind);
     await shot(kind);
     if (kind === 'sniper' || kind === 'rifle') {
@@ -92,8 +95,9 @@ try {
       await page.mouse.up({ button: 'right' }); await page.evaluate(() => window.rehaulFrame(60));
     }
   }
-  // Back to the pistol: one shot for each press.
-  await page.keyboard.down('5'); await page.evaluate(() => window.rehaulFrame(60)); await page.keyboard.up('5');
+  // The pistol: one shot for each press.
+  await page.evaluate(() => window.__game.player.setLoadout(['r4c', 'pistol', 'sword']));
+  await page.keyboard.down('2'); await page.evaluate(() => window.rehaulFrame(60)); await page.keyboard.up('2');
   await page.mouse.down(); await page.evaluate(() => window.rehaulFrame(1));
   const first = await page.evaluate(() => window.__game.player.weapon.mag);
   await page.evaluate(() => window.rehaulFrame(30));
@@ -102,9 +106,9 @@ try {
   await page.mouse.up(); await page.evaluate(() => window.rehaulFrame(1));
 
   await page.keyboard.down('v'); await page.evaluate(() => window.rehaulFrame(1));
-  assert.deepEqual(await page.evaluate(() => ({ slot: window.__game.player.wi, melee: window.__game.player.melee.active })), { slot: 4, melee: true });
+  assert.deepEqual(await page.evaluate(() => ({ slot: window.__game.player.wi, slashing: window.__game.player.sword.slashing })), { slot: 2, slashing: true });
   await page.keyboard.up('v'); await page.evaluate(() => window.rehaulFrame(60));
-  for (const [deltaY, slot] of [[1, 5], [1, 0], [-1, 5]]) {
+  for (const [deltaY, slot] of [[1, 0], [1, 1], [-1, 0]]) {
     await page.evaluate(deltaY => { window.dispatchEvent(new WheelEvent('wheel', { deltaY })); window.rehaulFrame(1); }, deltaY);
     assert.equal(await page.evaluate(() => window.__game.player.wi), slot);
     await page.evaluate(() => window.rehaulFrame(1));
@@ -129,5 +133,5 @@ try {
     await shot(`mask-${kind}`);
   }
   assert.deepEqual(errors, []);
-  console.log('OK R4-C and MP5/ACOG, independent melee, six gun slots, wheel wrap, sniper scope, semiauto pistol and 10 mask portraits');
+  console.log('OK R4-C and MP5/ACOG, sword quick slash and guard, six guns, wheel wrap, sniper scope, semiauto pistol and 10 mask portraits');
 } finally { await browser.close(); }

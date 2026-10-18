@@ -1,5 +1,7 @@
 # Game Loop and Orchestration Specification
 
+> Samurai execution: [Samurai execution](samurai-execution.md). It replaces the focus slash (§15) and the `focus`/`katanaStreak` state below.
+
 > Online extension: [Online team modes](online-team-modes.md) adds Team Deathmatch and Flag Hold, shared respawn waves, and team match rules. It supersedes the FFA-only statements below.
 
 This document describes the top-level game orchestration subsystem. It covers boot, the main loop, game modes, match lifecycle, lobbies, waves, scoring, the kill feed, pickups, breakable props, spawn placement, remote-player bookkeeping, menus, and win/lose rules. An implementer must be able to rebuild identical gameplay from this document alone.

@@ -270,16 +270,7 @@ def _args():
 def _scene(size, samples):
     scene = bpy.context.scene
     scene.render.engine = 'CYCLES'
-    prefs = bpy.context.preferences.addons['cycles'].preferences
-    try:
-        prefs.compute_device_type = 'METAL'
-        prefs.get_devices()
-        gpus = [d for d in prefs.devices if d.type == 'METAL']
-        for d in prefs.devices:
-            d.use = d.type == 'METAL'
-        scene.cycles.device = 'GPU' if gpus else 'CPU'
-    except (TypeError, ValueError):
-        scene.cycles.device = 'CPU'
+    gpu(scene)
     scene.cycles.samples = samples
     scene.cycles.use_denoising = False
     scene.render.bake.margin = 0
@@ -368,3 +359,28 @@ def run(name, tile, build, samples=8, ao_radius=0.02, ao_depth=0.01, ao_strength
     with open(os.path.join(folder, 'meta.json'), 'w') as file:
         json.dump(meta, file, indent=1)
     print(f'{name}: baked {size}px into {folder}')
+
+
+def gpu(scene):
+    """
+    Render on a GPU: Apple's first, then an NVIDIA card (the MSI build machine,
+    tools/blender/msi.sh), else the CPU. CYCLES_DEVICE=CPU (or OPTIX, CUDA, METAL)
+    picks one, as tools/blender/weapons/lib.py does.
+    """
+    prefs = bpy.context.preferences.addons['cycles'].preferences
+    scene.cycles.device = 'CPU'
+    wanted = os.environ.get('CYCLES_DEVICE', '').upper()
+    for kind in ([wanted] if wanted else ['METAL', 'OPTIX', 'CUDA']):
+        if kind == 'CPU':
+            return
+        try:
+            prefs.compute_device_type = kind
+        except (TypeError, ValueError):
+            continue
+        prefs.get_devices()
+        if not any(d.type == kind for d in prefs.devices):
+            continue
+        for d in prefs.devices:
+            d.use = d.type == kind
+        scene.cycles.device = 'GPU'
+        return

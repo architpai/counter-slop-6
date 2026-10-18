@@ -14,8 +14,10 @@ import { HudStore } from '@/engine/hud/store';
 import { World } from '@/engine/physics';
 import { Gun } from '@/engine/weapons/index';
 import { createBreakables } from '@/engine/game/breakables';
+import { spawnProjectile } from '@/engine/enemies/projectiles';
+import { updateWaves, WAVE_DAMAGE } from '@/engine/weapons/wave';
 import type { PickupsApi } from '@/engine/game/pickups';
-import type { Ctx } from '@/engine/types';
+import type { Ctx, Projectile } from '@/engine/types';
 
 const cleanups: (() => void)[] = [];
 afterEach(() => { cleanups.splice(0).forEach(fn => fn()); vi.restoreAllMocks(); });
@@ -39,7 +41,7 @@ function setup() {
   const key = (code: string, down: boolean) => window.dispatchEvent(new KeyboardEvent(down ? 'keydown' : 'keyup', { code }));
   cleanups.push(() => {
     input.dispose(); canvas.remove(); enemies.clear();
-    p.weapons.forEach(w => w.dispose()); p.melee.dispose();
+    p.disposeWeapons();
     scene.traverse(o => { if (o instanceof Mesh) o.geometry.dispose(); });
   });
   return { p, ctx, hud, enemies, frame, key };
@@ -89,78 +91,132 @@ test('the grapple awards a yank only when the moderator cast window accepts it',
   attach(); expect(score).toHaveBeenCalledTimes(1);
 });
 
-test('melee is independent of all five guns, empty ammo, aim and reload', () => {
-  const { p, hud, frame, key } = setup();
-  for (let slot = 0; slot < 5; slot++) {
-    p.switchTo(slot);
-    p.weapon.mag = p.weapon.reserve = 0;
-    key('KeyF', true); frame();
-    expect(p.wi).toBe(slot);
-    expect(p.melee.active).toBe(true);
-    expect(p.weapon.root.visible).toBe(false);
-    expect(hud.scope.shown).toBe(false);
-    key('KeyF', false);
-    for (let i = 0; i < 60; i++) frame();
-    expect(p.wi).toBe(slot);
-    expect(p.weapon.root.visible).toBe(true);
-    expect(p.weapon.mag).toBe(0);
-    expect(p.melee.active).toBe(false);
-  }
-  const pistol = p.weapon as Gun;
-  pistol.resetAmmo(); pistol.mag = 3; pistol.startReload();
-  key('KeyV', true); frame(); key('KeyV', false);
-  for (let i = 0; i < 130; i++) frame();
-  expect(pistol.mag).toBe(15);
-  expect(pistol.reserve).toBe(78);
-  expect(p.wi).toBe(4);
-  key('Digit1', true); frame(); key('Digit1', false); frame();
-  expect(p.wi).toBe(0);
-  key('KeyF', true); frame();
-  key('Digit5', true); frame(); key('Digit5', false); key('KeyF', false);
-  for (let i = 0; i < 60; i++) frame();
-  expect(p.wi).toBe(4);
-  expect(p.weapon.kind).toBe('pistol');
-});
-
-test('six digit slots and wheel wrap use the same loadout order, and melee keeps the slot', () => {
+test('a loadout is three slots: digits past it do nothing, the wheel wraps, and a new pick keeps kept ammo', () => {
   const { p, frame, key } = setup();
-  const kinds = ['r4c', 'rifle', 'shotgun', 'sniper', 'pistol', 'lmg'];
-  for (const [slot, kind] of kinds.entries()) {
+  expect(p.loadout).toEqual(['r4c', 'pistol', 'sword']);
+  for (const [slot, kind] of ['r4c', 'pistol', 'sword'].entries()) {
     key(`Digit${slot + 1}`, true); frame(); key(`Digit${slot + 1}`, false); frame();
     expect(p.wi).toBe(slot);
     expect(p.weapon.kind).toBe(kind);
-    expect(p.melee.active).toBe(false);
   }
-  key('KeyV', true); frame();
-  expect(p.wi).toBe(5);
-  expect(p.melee.active).toBe(true);
-  key('KeyV', false);
-  for (let i = 0; i < 60; i++) frame();
+  key('Digit4', true); frame(); key('Digit4', false); frame();
+  expect(p.wi).toBe(2);
   window.dispatchEvent(new WheelEvent('wheel', { deltaY: 1 })); frame();
-  expect(p.wi).toBe(0);
   expect(p.weapon.kind).toBe('r4c');
   frame();
   window.dispatchEvent(new WheelEvent('wheel', { deltaY: -1 })); frame();
-  expect(p.wi).toBe(5);
-  expect(p.weapon.kind).toBe('lmg');
+  expect(p.weapon.kind).toBe('sword');
+  expect(p.setLoadout(['lmg', 'lmg', 'sword'])).toBe(false);
+  expect(p.setLoadout(['lmg', 'sword'])).toBe(false);
+  expect(p.loadout).toEqual(['r4c', 'pistol', 'sword']);
+  const pistol = p.weapons[1] as Gun;
+  pistol.mag = 3;
+  expect(p.setLoadout(['lmg', 'pistol', 'sniper'])).toBe(true);
+  expect(p.loadout).toEqual(['lmg', 'pistol', 'sniper']);
+  expect(p.weapons[1]).toBe(pistol);
+  expect(pistol.mag, 'a weapon kept in the loadout keeps its ammo').toBe(3);
+  expect(p.weapons[0]!.mag).toBe(100);
+  expect(p.wi).toBe(0);
+  expect(p.sword).toBeNull();
 });
 
-test('holding melee guards without stealing aim, and death cancels pending contact', () => {
+test('the melee key draws the sword and slashes; without a sword it does nothing', () => {
   const { p, frame, key, hud } = setup();
-  key('KeyF', true);
-  for (let i = 0; i < 50; i++) frame();
-  expect(p.blocking).toBe(true);
-  expect(p.aiming).toBe(false);
+  p.weapon.mag = 0;
+  key('KeyF', true); frame(); key('KeyF', false);
+  expect(p.holdingSword).toBe(true);
+  expect(p.sword?.slashing).toBe(true);
   expect(hud.scope.shown).toBe(false);
-  key('KeyF', false);
-  for (let i = 0; i < 50; i++) frame();
-  key('KeyF', true); frame();
+  for (let i = 0; i < 60; i++) frame();
+  expect(p.sword?.slashing).toBe(false);
+  p.setLoadout(['r4c', 'rifle', 'lmg']);
+  key('KeyV', true); frame(); key('KeyV', false); frame();
+  expect(p.wi).toBe(0);
+  expect(p.weapon.kind).toBe('r4c');
+});
+
+test('the sword guards without zooming, holding fire chains slashes, and death clears it', () => {
+  const { p, frame } = setup();
+  const mouse = (button: number, down: boolean) => window.dispatchEvent(new MouseEvent(down ? 'mousedown' : 'mouseup', { button }));
+  p.switchTo(2, true);
+  for (let i = 0; i < 40; i++) frame();
+  mouse(2, true);
+  for (let i = 0; i < 30; i++) frame();
+  expect(p.blocking).toBe(true);
+  expect(p.weapon.aimAmt).toBe(0);
+  expect(p.weapon.adsFov).toBe(82);
+  mouse(2, false);
+  for (let i = 0; i < 10; i++) frame();
+  expect(p.blocking).toBe(false);
+  mouse(0, true);
+  let slashes = 0, was = false;
+  for (let i = 0; i < 100; i++) { frame(); const now = !!p.sword?.slashing; if (now && !was) slashes++; was = now; }
+  mouse(0, false);
+  expect(slashes, 'one second of held fire is two or three slashes').toBeGreaterThanOrEqual(2);
   p.die(); frame();
-  expect(p.melee.active).toBe(false);
-  expect(p.melee.root.visible).toBe(false);
+  expect(p.sword?.active).toBe(false);
   p.reset(new Vector3());
   expect(p.weapon.kind).toBe('r4c');
   expect(p.headshotT).toBe(0);
+});
+
+test('the weapon in hand sets the pace: sword fastest, LMG slowest and lowest jump', () => {
+  const { p } = setup();
+  const speed = (kind: string) => { p.setLoadout(kind === 'sword' ? ['sword', 'pistol', 'r4c'] : [kind as 'lmg', 'pistol', 'sword']); return p.weapon.moveSpeed; };
+  const order = ['sword', 'pistol', 'rifle', 'shotgun', 'r4c', 'sniper', 'lmg'].map(speed);
+  expect([...order].sort((a, b) => b - a)).toEqual(order);
+  expect(speed('rifle')).toBeGreaterThan(speed('r4c'));
+  speed('lmg');
+  expect(p.weapon.mobility).toBeLessThan(1);
+});
+
+test('walking pace follows the weapon in hand: about 7.6 m/s with the sword, 5.4 with the LMG', () => {
+  const { p, ctx, key } = setup();
+  ctx.world.addBox(new Vector3(-100, -1, -100), new Vector3(100, 0, 100)); ctx.world.finalize();
+  const pace = (kinds: ['sword' | 'lmg', 'pistol', 'r4c']) => {
+    p.setLoadout(kinds); p.reset(new Vector3());
+    key('KeyW', true);
+    for (let i = 0; i < 120; i++) { ctx.input.update(1 / 60); p.update(1 / 60); }
+    key('KeyW', false);
+    return Math.hypot(p.body.vel.x, p.body.vel.z);
+  };
+  expect(pace(['sword', 'pistol', 'r4c'])).toBeCloseTo(6.6 * 1.15, 1);
+  expect(pace(['lmg', 'pistol', 'r4c'])).toBeCloseTo(6.6 * 0.82, 1);
+});
+
+test('an air slash flies about 12 m: it cuts an enemy at 10 m but not at 16 m, and cuts bolts in its path', () => {
+  const { p, enemies } = setup();
+  p.body.pos.set(0, 0, 0); p.yaw = p.pitch = 0;
+  const close = enemies.spawn('grunt', new Vector3(0.5, 0, -10)), far = enemies.spawn('grunt', new Vector3(-0.5, 0, -16));
+  for (const e of [close, far]) e.state = 'hunt';
+  const bolt = spawnProjectile(enemies, new Vector3(0, 1.4, -6), new Vector3(0, 0, 1), 0.001, 10, null, 0, 0.2, false);
+  p.switchTo(2, true);
+  expect(p.sword?.startSlash({ ...p.weaponState(), grounded: false })).toBe(true);
+  expect(p.waves.length).toBe(1);
+  for (let i = 0; i < 60; i++) updateWaves(p, 1 / 60);
+  expect(p.waves.length, 'the wave is gone after its range').toBe(0);
+  expect(close.hp).toBe(close.maxHp - WAVE_DAMAGE);
+  expect(far.hp).toBe(far.maxHp);
+  expect(enemies.projectiles).not.toContain(bolt);
+});
+
+test('the middle of a slash cuts bolts from the front and always returns them', () => {
+  const { p } = setup();
+  p.switchTo(2, true);
+  const sword = p.sword!;
+  const bolt = (vz = 30) => ({ pos: p.eye.clone().add(new Vector3(0, 0, -0.8)), vel: new Vector3(0, 0, vz) }) as Projectile;
+  expect(p.tryDeflect(bolt())).toBe(false);
+  sword.startSlash(p.weaponState());
+  for (let i = 0; i < 8; i++) sword.animate(p.weaponState(), 0.01);
+  expect(p.slashCutting()).toBe(true);
+  expect(p.blockRadius).toBe(1.2);
+  expect(p.tryDeflect(bolt())).toEqual({ perfect: true, returned: true });
+  expect(p.tryDeflect(bolt()), 'a slash cuts more than one bolt').toEqual({ perfect: true, returned: true });
+  expect(p.tryDeflect(bolt(-30)), 'never one from behind').toBe(false);
+  for (let i = 0; i < 20; i++) sword.animate(p.weaponState(), 0.01);
+  expect(p.slashCutting()).toBe(false);
+  expect(p.slashCutting(true), 'online the window stays open a little longer').toBe(true);
+  expect(p.tryDeflect(bolt())).toBe(false);
 });
 
 test('melee can hit a prop through its own collider but not through a wall', () => {
@@ -213,11 +269,11 @@ test('real gun rays keep close-range kill thresholds for recruits and 110 HP onl
   const cases = [
     { kind: 'r4c', pve: [4, 2], pvp: [5, 3] },
     { kind: 'rifle', pve: [5, 2], pvp: [7, 4] },
-    { kind: 'pistol', pve: [3, 1], pvp: [4, 2] },
+    { kind: 'pistol', pve: [3, 1], pvp: [3, 2] },
     { kind: 'sniper', pve: [1, 1], pvp: [2, 1] },
   ];
   for (const row of cases) {
-    const gun = p.weapons.find(w => w.kind === row.kind) as Gun;
+    const gun = p._arm(row.kind as 'r4c') as Gun;
     expect(gun).toBeDefined();
     for (const [index, part] of ['torso', 'head'].entries()) {
       enemies.clear();
@@ -344,21 +400,24 @@ test('a spectator through a teammate\'s eyes holds their gun, aims with them, an
   const { p, ctx, hud } = setup();
   p.takeDamage(9999);
   expect(p.alive).toBe(false);
-  p.watched = { slot: 3, aim: true };
+  p.watched = { kind: 'sniper', aim: true };
   for (let i = 0; i < 60; i++) { ctx.input.update(1 / 60); p.update(1 / 60); }
-  const sniper = p.weapon as Gun;
-  expect(p.wi).toBe(3);
+  // No sniper in this loadout: one is lent to the view, and the loadout's own stays put.
+  const sniper = p.view as Gun;
+  expect(p.loadout).not.toContain('sniper');
   expect(sniper.kind).toBe('sniper');
+  expect(p.weapon.root.visible).toBe(false);
   expect(sniper.aimAmt).toBeGreaterThan(0.95);
   expect(hud.scope).toEqual({ shown: true, kind: 'sniper' });
   const mag = sniper.mag;
   sniper.echoShot();
   for (let i = 0; i < 5; i++) { ctx.input.update(1 / 60); p.update(1 / 60); }
   expect(sniper.mag, 'a watched shot costs nothing').toBe(mag);
-  // Back to the shoulder view: the gun rests and the scope goes.
+  // Back to the shoulder view: the lent gun goes, the loadout's own comes back, and the scope goes.
   p.watched = null;
   for (let i = 0; i < 60; i++) { ctx.input.update(1 / 60); p.update(1 / 60); }
-  expect(sniper.aimAmt).toBeLessThan(0.05);
+  expect(p.view).toBe(p.weapon);
+  expect(sniper.root.visible).toBe(false);
   expect(hud.scope.shown).toBe(false);
 });
 

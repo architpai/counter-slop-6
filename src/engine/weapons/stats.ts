@@ -1,6 +1,34 @@
 export type GunKind = 'r4c' | 'rifle' | 'pistol' | 'shotgun' | 'sniper' | 'lmg' | 'revolver';
-/** Shared slot order for the local loadout and remote weapon props. `rifle` is the MP5. */
-export const GUN_LOADOUT = ['r4c', 'rifle', 'shotgun', 'sniper', 'pistol', 'lmg'] as const;
+/**
+ * Every weapon a loadout may hold, in the picker's order. A weapon's index here is its id on the
+ * wire (players.ts `encodeState`), so the order only grows at the end. `rifle` is the MP5.
+ */
+export const WEAPON_KINDS = ['r4c', 'rifle', 'shotgun', 'sniper', 'pistol', 'lmg', 'sword'] as const;
+export type WeaponKind = (typeof WEAPON_KINDS)[number];
+/** Weapons a player carries; picked in the menu (ui.ts `loadout`). */
+export const LOADOUT_SIZE = 3;
+export const DEFAULT_LOADOUT: readonly WeaponKind[] = ['r4c', 'pistol', 'sword'];
+export const isWeaponKind = (value: unknown): value is WeaponKind => WEAPON_KINDS.includes(value as WeaponKind);
+
+/** `LOADOUT_SIZE` different weapons, or null. */
+export function validLoadout(value: unknown): WeaponKind[] | null {
+  if (!Array.isArray(value) || value.length !== LOADOUT_SIZE || !value.every(isWeaponKind)) return null;
+  return new Set(value).size === LOADOUT_SIZE ? [...value] : null;
+}
+
+/**
+ * What the weapon in hand does to its carrier's movement. A light weapon runs faster, a heavy one
+ * slower, and the LMG also jumps lower and slides shorter.
+ */
+export interface Handling {
+  /** Multiplies walk, sprint, crouch and air speed. */
+  moveSpeed: number;
+  /** Multiplies jump speed and the slide's boost. */
+  mobility: number;
+}
+
+/** The sword's handling (weapons/sword.ts); a gun's is in its `GunStats`. */
+export const SWORD_HANDLING: Readonly<Handling> = { moveSpeed: 1.15, mobility: 1 };
 export type RifleOptic = 'acog' | 'holo';
 export type ScopeKind = RifleOptic | 'sniper';
 
@@ -17,7 +45,7 @@ export type Triple = [number, number, number];
 export type Falloff = [number, number, number];
 
 /** One row of `ARCHITECTURE.md` §6.11 / `weapons.md` §4, one field per table column. */
-export interface GunStats {
+export interface GunStats extends Handling {
   kind: GunKind;
   name: string;
   hint: string;
@@ -42,6 +70,10 @@ export interface GunStats {
   drawTime: number;
   /** `[pitch, yaw]` */
   camKick: [number, number];
+  /** Damage multiplier on a shot fired off the ground, sliding or on the grapple. 1: none. */
+  airBonus: number;
+  /** `[seconds, multiplier]`: the first shot within `seconds` of drawing deals `multiplier` × damage. Null: none. */
+  quickdraw: [number, number] | null;
   /** `[posX, posY, posZ, rotX, rotY, rotZ]` spring kicks. */
   modelKick: [number, number, number, number, number, number];
   fovKick: number;
@@ -65,50 +97,57 @@ export interface GunStats {
 export const GUN_STATS: Record<GunKind, GunStats> = {
   r4c: {
     kind: 'r4c', name: 'R4-C', hint: 'auto · high damage · slow to aim and draw', scope: true,
+    moveSpeed: 0.95, mobility: 1,
     magSize: 30, startingReserve: 150, maxReserve: 300, fireInterval: 0.08, automatic: true,
     damage: 28, headMult: 2.5, pellets: 1, hipSpread: 0.022, adsSpread: 0.0025,
     spreadKick: 0.007, spreadMax: 0.065, moveSpread: 0.0012, adsFov: 38, adsSpeed: 0.7, drawTime: 0.42,
-    camKick: [0.0105, 0.0035], modelKick: [0.18, 0.3, 2.5, -3.3, 0.7, 1], fovKick: 1.1,
+    airBonus: 1, quickdraw: null, camKick: [0.0105, 0.0035], modelKick: [0.18, 0.3, 2.5, -3.3, 0.7, 1], fovKick: 1.1,
     reloadDuration: 2.2, reloadType: 'magazine', falloff: [28, 88, 0.55],
     tracerThickness: 0.024, flashScale: 1.25, fireCue: 'shot', casing: [0.024, 3], cycleDuration: 0,
     pvp: [26, 1.8, [24, 74, 0.45]], restPos: [0.20, -0.17, -0.36], sight: [0, 0.145, -0.10], eyeDistance: 0.34,
   },
   rifle: {
     kind: 'rifle', name: 'MP5', hint: 'auto · fast draw · full speed while aiming', scope: true,
+    moveSpeed: 1.05, mobility: 1,
     magSize: 30, startingReserve: 150, maxReserve: 300, fireInterval: 0.075, automatic: true,
     damage: 22, headMult: 2.6, pellets: 1, hipSpread: 0.012, adsSpread: 0.0015,
     spreadKick: 0.005, spreadMax: 0.05, moveSpread: 0.0005, adsFov: 38, adsSpeed: 1, drawTime: 0.22,
-    camKick: [0.007, 0.0025], modelKick: [0.15, 0.2, 1.7, -2.2, 0.5, 0.7], fovKick: 0.7,
+    airBonus: 1, quickdraw: null, camKick: [0.007, 0.0025], modelKick: [0.15, 0.2, 1.7, -2.2, 0.5, 0.7], fovKick: 0.7,
     reloadDuration: 1.65, reloadType: 'magazine', falloff: [18, 55, 0.4],
     tracerThickness: 0.02, flashScale: 1, fireCue: 'mp5Fire', casing: [0.02, 3], cycleDuration: 0,
     pvp: [18, 1.8, [15, 45, 0.4]], restPos: [0.20, -0.17, -0.36], sight: [0, 0.145, -0.10], eyeDistance: 0.34,
   },
+  // The .50: the fastest kill in the game if every semi-auto shot lands, and it hits harder still off the ground or straight off the draw.
   pistol: {
-    kind: 'pistol', name: 'PISTOL', hint: 'semi-auto · close-range headshots · quick reload', scope: false,
-    magSize: 15, startingReserve: 90, maxReserve: 180, fireInterval: 0.18, automatic: false,
+    kind: 'pistol', name: '.50 PISTOL', hint: 'semi-auto .50 · +25% in the air · first shot off the draw +40%', scope: false,
+    moveSpeed: 1.08, mobility: 1,
+    magSize: 9, startingReserve: 72, maxReserve: 144, fireInterval: 0.13, automatic: false,
     damage: 40, headMult: 2.6, pellets: 1, hipSpread: 0.008, adsSpread: 0.002,
-    spreadKick: 0.006, spreadMax: 0.035, moveSpread: 0.0004, adsFov: 62, adsSpeed: 0.95, drawTime: 0.2,
-    camKick: [0.014, 0.003], modelKick: [0.15, 0.3, 1.8, -4, 0.4, 0.7], fovKick: 1,
+    spreadKick: 0.009, spreadMax: 0.045, moveSpread: 0.0004, adsFov: 62, adsSpeed: 0.95, drawTime: 0.12,
+    camKick: [0.02, 0.005], airBonus: 1.25, quickdraw: [0.5, 1.4],
+    modelKick: [0.2, 0.45, 2.6, -6.5, 0.6, 1.1], fovKick: 1.6,
     reloadDuration: 1, reloadType: 'magazine', falloff: [12, 40, 0.35],
-    tracerThickness: 0.018, flashScale: 0.9, fireCue: 'pistolFire', casing: [0.018, 3], cycleDuration: 0,
-    pvp: [32, 2, [12, 40, 0.35]], restPos: [0.22, -0.19, -0.34], sight: [0, 0.11, -0.10], eyeDistance: 0.30,
+    tracerThickness: 0.024, flashScale: 1.3, fireCue: 'pistolFire', casing: [0.024, 3], cycleDuration: 0,
+    pvp: [37, 2, [12, 40, 0.35]], restPos: [0.2, -0.18, -0.42], sight: [0, 0.19, -0.37], eyeDistance: 0.5,
   },
   shotgun: {
     kind: 'shotgun', name: 'SHOTGUN', hint: 'pump · devastating up close', scope: false,
+    moveSpeed: 1.0, mobility: 1,
     magSize: 6, startingReserve: 36, maxReserve: 72, fireInterval: 0.78, automatic: false,
     damage: 19, headMult: 1.8, pellets: 10, hipSpread: 0.062, adsSpread: 0.034,
     spreadKick: 0, spreadMax: 0.10, moveSpread: 0.0006, adsFov: 68, adsSpeed: 0.8, drawTime: 0.45,
-    camKick: [0.05, 0.012], modelKick: [0.4, 0.6, 5, -9, 2, 3], fovKick: 4,
+    airBonus: 1, quickdraw: null, camKick: [0.05, 0.012], modelKick: [0.4, 0.6, 5, -9, 2, 3], fovKick: 4,
     reloadDuration: 0.45, reloadType: 'shells', falloff: [11, 32, 0.22],
     tracerThickness: 0.014, flashScale: 1.9, fireCue: 'shotgunFire', casing: [0.035, 1], cycleDuration: 0.45,
     pvp: [16, 1.6, [9, 26, 0.15]], restPos: [0.20, -0.19, -0.34], sight: [0, 0.095, -1], eyeDistance: 0.52,
   },
   sniper: {
     kind: 'sniper', name: 'SNIPER', hint: 'scoped bolt action · one shot, one kill', scope: true,
+    moveSpeed: 0.9, mobility: 1,
     magSize: 5, startingReserve: 25, maxReserve: 50, fireInterval: 0.2, automatic: false,
     damage: 150, headMult: 3, pellets: 1, hipSpread: 0.075, adsSpread: 0.0004,
     spreadKick: 0.05, spreadMax: 0.14, moveSpread: 0.004, adsFov: 20, adsSpeed: 0.55, drawTime: 0.6,
-    camKick: [0.055, 0.008], modelKick: [0.25, 0.8, 4.5, -11, 1.2, 2], fovKick: 4.5,
+    airBonus: 1, quickdraw: null, camKick: [0.055, 0.008], modelKick: [0.25, 0.8, 4.5, -11, 1.2, 2], fovKick: 4.5,
     reloadDuration: 2.1, reloadType: 'magazine', falloff: null,
     tracerThickness: 0.03, flashScale: 1.7, fireCue: 'sniperFire', casing: [0.03, 3], cycleDuration: 0.85,
     pvp: [100, 2, null], restPos: [0.21, -0.19, -0.36], sight: [0, 0.135, 0], eyeDistance: 0.42,
@@ -116,20 +155,22 @@ export const GUN_STATS: Record<GunKind, GunStats> = {
   // Belt-fed: the only gun that fires for eight seconds without a reload, and pays for it in every handling stat.
   lmg: {
     kind: 'lmg', name: 'LMG', hint: 'belt-fed · 100 rounds · slow to aim, draw and reload', scope: false,
+    moveSpeed: 0.82, mobility: 0.9,
     magSize: 100, startingReserve: 200, maxReserve: 300, fireInterval: 0.085, automatic: true,
     damage: 26, headMult: 2.2, pellets: 1, hipSpread: 0.034, adsSpread: 0.006,
     spreadKick: 0.0045, spreadMax: 0.085, moveSpread: 0.0018, adsFov: 58, adsSpeed: 0.5, drawTime: 0.65,
-    camKick: [0.0085, 0.0045], modelKick: [0.2, 0.3, 2.2, -2.6, 0.9, 1.2], fovKick: 0.9,
+    airBonus: 1, quickdraw: null, camKick: [0.0085, 0.0045], modelKick: [0.2, 0.3, 2.2, -2.6, 0.9, 1.2], fovKick: 0.9,
     reloadDuration: 3.6, reloadType: 'magazine', falloff: [26, 80, 0.5],
     tracerThickness: 0.024, flashScale: 1.35, fireCue: 'shot', casing: [0.024, 3], cycleDuration: 0,
     pvp: [21, 1.6, [22, 68, 0.45]], restPos: [0.20, -0.18, -0.36], sight: [0, 0.125, -0.95], eyeDistance: 0.52,
   },
   revolver: {
     kind: 'revolver', name: 'REVOLVER', hint: 'hand cannon · headshots delete', scope: false,
+    moveSpeed: 1.05, mobility: 1,
     magSize: 6, startingReserve: 36, maxReserve: 72, fireInterval: 0.3, automatic: false,
     damage: 62, headMult: 3, pellets: 1, hipSpread: 0.006, adsSpread: 0.002,
     spreadKick: 0.02, spreadMax: 0.06, moveSpread: 0.0015, adsFov: 52, adsSpeed: 0.9, drawTime: 0.3,
-    camKick: [0.038, 0.007], modelKick: [0.3, 0.9, 3.2, -10, 1.5, 2.5], fovKick: 2.5,
+    airBonus: 1, quickdraw: null, camKick: [0.038, 0.007], modelKick: [0.3, 0.9, 3.2, -10, 1.5, 2.5], fovKick: 2.5,
     reloadDuration: 1.9, reloadType: 'cylinder', falloff: null,
     tracerThickness: 0.026, flashScale: 1.35, fireCue: 'revolver', casing: null, cycleDuration: 0,
     pvp: [52, 2.9, [9, 34, 0.42]], restPos: [0.19, -0.20, -0.30], sight: [0, 0.08, -0.34], eyeDistance: 0.42,

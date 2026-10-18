@@ -38,7 +38,7 @@ export type HudKey =
   | 'ammo' | 'slots' | 'grenades' | 'health' | 'score' | 'wave' | 'modifier'
   | 'timer' | 'weapon' | 'boss' | 'focus' | 'crosshair' | 'scope' | 'grapple'
   | 'message' | 'tip' | 'killFeed' | 'damage' | 'hitmarker' | 'pvp' | 'board'
-  | 'screen' | 'device' | 'mobile' | 'gameplay' | 'breath' | 'focusMark' | 'stragglers' | 'marks' | 'spectate' | 'fps' | 'qualityPrompt';
+  | 'screen' | 'device' | 'mobile' | 'gameplay' | 'breath' | 'execMarks' | 'stragglers' | 'marks' | 'spectate' | 'fps' | 'qualityPrompt';
 
 export interface AmmoState {
   magazine: string;
@@ -94,7 +94,8 @@ export interface HudState {
   mobile: MobileState;
   gameplay: boolean;
   breath: BreathState;
-  focusMark: boolean;
+  /** One entry per execution marker: 0 unlocked, else its lock number; each one's place is `--exec-<i>`. */
+  execMarks: readonly number[];
   /** How many straggler arrows; each one's place is the `--straggler-<i>` variable. */
   stragglers: number;
   /** One label for each squad mark; each one's place is the `--mark-<i>` variable. */
@@ -130,7 +131,7 @@ export class HudStore implements HudView {
   grenades = 0;
   health: HealthState = { hp: 100, max: 100, low: false };
   breath: BreathState = { shown: false, low: false, percent: 100 };
-  focusMark = false;
+  execMarks: readonly number[] = [];
   stragglers = 0;
   marks: readonly string[] = [];
   spectate: SpectateState = { name: '', status: '' };
@@ -380,15 +381,12 @@ export class HudStore implements HudView {
     this.#emit('focus');
   }
 
-  setFocusMark(x: number | null, y?: number): void {
-    const show = x !== null && y !== undefined && Number.isFinite(x) && Number.isFinite(y);
-    if (show) {
-      this.#setVar('--focus-mark-x', `${Math.round(x)}px`);
-      this.#setVar('--focus-mark-y', `${Math.round(y)}px`);
-    }
-    if (show === this.focusMark) return;
-    this.focusMark = show;
-    this.#emit('focusMark');
+  setExecMarks(marks: readonly { x: number; y: number; n: number }[]): void {
+    const rows = marks.filter(m => Number.isFinite(m.x) && Number.isFinite(m.y));
+    rows.forEach((m, i) => this.#setVar(`--exec-${i}`, `translate(${Math.round(m.x)}px, ${Math.round(m.y)}px)`));
+    if (rows.length === this.execMarks.length && rows.every((m, i) => m.n === this.execMarks[i])) return;
+    this.execMarks = rows.map(m => count(m.n));
+    this.#emit('execMarks');
   }
 
   setStragglers(marks: readonly { x: number; y: number; a: number }[]): void {

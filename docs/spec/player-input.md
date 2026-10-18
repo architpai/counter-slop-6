@@ -1,6 +1,7 @@
 # Player and Input Subsystem Specification
 
 > Current combat changes: [Combat rehaul](combat-rehaul.md). It replaces the old katana slot/controls, quick-melee switching and related camera rules below.
+> Sword and loadouts: [Sword, loadouts and weapon handling](sword-loadouts.md). It replaces the knife, the slots and the walk speeds below: the weapon in hand now scales them.
 
 This document describes, in full, the behaviour of the first-person player and the input layer of the design. It is a specification: it says WHAT happens, with every constant, formula, state and timing, so that an implementer can build identical gameplay from it alone.
 

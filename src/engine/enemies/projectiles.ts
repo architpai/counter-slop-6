@@ -148,6 +148,20 @@ export function deflect(m: EnemyManager, p: ProjectileRecord, perfect: boolean):
   m.ctx.effects.strokeBurst(p.pos, TONE.PRIMARY, 8, 4, { life: 0.2 });
 }
 
+/** Remove every enemy bolt (not a blast, not one already returned) within `radius` of `pos`. */
+export function cutProjectiles(m: EnemyManager, pos: Vector3, radius: number): number {
+  let n = 0;
+  for (let i = m.projectiles.length - 1; i >= 0; i--) {
+    const p = m.projectiles[i];
+    if (!p || p.deflected || p.blast || p.pos.distanceToSquared(pos) > radius * radius) continue;
+    dir.copy(p.vel).normalize().negate();
+    m.ctx.effects.sparks(p.pos, dir, TONE.ACCENT, 6, 6);
+    removeProjectile(m, i);
+    n++;
+  }
+  return n;
+}
+
 export function deflectArc(m: EnemyManager, pos: Vector3, direction: Vector3, range: number, cosHalf: number): number {
   let n = 0;
   for (const p of m.projectiles) {

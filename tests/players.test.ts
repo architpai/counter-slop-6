@@ -39,9 +39,9 @@ const ctx = {
 
 const player = {
   body: { pos: new Vector3(1.234, 2.346, -3.456), vel: new Vector3(1.24, -2.36, 3.45), onGround: true },
-  yaw: 0.234, pitch: -0.456, wi: 3, hp: 100.6,
+  yaw: 0.234, pitch: -0.456, hp: 100.6, weapon: { kind: 'sword' },
   crouching: true, sliding: true, blocking: true, aiming: true, firing: true, alive: true, parryWindow: true,
-  melee: { active: true },
+  holdingSword: true, sword: { slashing: true }, slashCutting: () => true,
   grapple: { mode: 'on', hook: new Vector3(8.16, 9.24, -10.38) },
 } as unknown as Player;
 
@@ -59,8 +59,8 @@ afterAll(() => {
 });
 
 test('state encoding', () => {
-  assert(JSON.stringify(packet) === JSON.stringify([1.23, 2.35, -3.46, 0.23, -0.46, 3, 1023, 101, 1.2, -2.4, 3.5, 8.2, 9.2, -10.4]),
-    'State encoding keeps field order, rounding, all ten flags, and grapple coordinates.');
+  assert(JSON.stringify(packet) === JSON.stringify([1.23, 2.35, -3.46, 0.23, -0.46, 6, 2047, 101, 1.2, -2.4, 3.5, 8.2, 9.2, -10.4]),
+    'State encoding keeps field order, rounding, the held weapon id, all eleven flags, and grapple coordinates.');
   player.grapple.mode = 'idle';
   assert(encodeState(player).length === 11 && !(must(encodeState(player)[6], 'flags') & 128), 'Idle grapple has no hook fields or flag.');
 });
@@ -83,7 +83,7 @@ test('a remote decodes its first state', () => {
   const figure = must(remote._figure, 'figure');
   near(must(figure.anchors.armL, 'armL anchor').position.y, -0.15, 'Remote upper-arm hit anchor uses the midpoint.');
   near(must(figure.anchors.foreL, 'foreL anchor').position.y, -0.14, 'Remote forearm hit anchor uses the midpoint.');
-  assert(must(figure.parts.upperR, 'upperR').rotation.x === -1.8, 'Knife guard raises the right arm.');
+  assert(must(figure.parts.upperR, 'upperR').rotation.x === -1.5, 'A sword slash swings the right arm level.');
 });
 
 test('remote hit registration follows the visible head and boots', () => {
@@ -104,7 +104,7 @@ test('invalid packets are rejected whole', () => {
   const seen = remote.lastSeen;
   const invalid: unknown[] = [null, {}, [], packet.slice(0, 10), [...packet, 2]];
   const mutations: [number, number][] = [[0, Infinity], [2, 10001], [3, NaN], [4, 1.61], [5, 0.2],
-    [6, 1024], [7, -1], [7, 121], [8, 10001], [12, NaN]];
+    [6, 2048], [7, -1], [7, 121], [8, 10001], [12, NaN]];
   for (const [index, value] of mutations) {
     const bad = [...packet]; bad[index] = value; invalid.push(bad);
   }
@@ -138,34 +138,33 @@ test('optional triples, weapon fallback and the name tag', () => {
   remote.update(0.05, 3.08);
   assert(!remote.grappling && remote.hook.equals(hook) && remote.body.vel.lengthSq() === 0,
     'Missing optional triples zero velocity and retain the unused hook.');
-  assert(remote._wi === 0 && remote.body.height === 1.75 && remote._figure?.parts.weapon?.name === 'r4c', 'Unknown weapon uses R4-C and standing height returns.');
-  remote.push(state(0, 0, 80, 4), 3.01);
-  assert(remote._figure?.parts.weapon?.name === 'pistol', 'Slot 5 renders the pistol, not a blade.');
-  remote.push(state(0, 0, 80 | 512, 4), 3.02);
-  assert(remote._figure?.parts.weapon?.name === 'knife' && remote._wi === 4, 'Melee renders independently of the pistol slot.');
+  assert(remote.kind === 'r4c' && remote.body.height === 1.75 && remote._figure?.parts.weapon?.name === 'r4c', 'Unknown weapon uses R4-C and standing height returns.');
+  remote.push(state(0, 0, 80 | 512, 4), 3.01);
+  assert(remote._figure?.parts.weapon?.name === 'pistol' && !remote.melee && !remote.slashing, 'Id 4 renders the pistol; a slash flag without a sword is ignored.');
+  remote.push(state(0, 0, 80 | 512 | 1024, 6), 3.02);
+  assert(remote._figure?.parts.weapon?.name === 'blade' && remote.kind === 'sword' && remote.melee && remote.slashing && remote.cutting,
+    'Id 6 is the sword: it renders the blade and reads the slash and cut flags.');
   remote.push(state(0, 0, 80, 4), 3.03);
-  assert(remote._figure?.parts.weapon?.name === 'pistol', 'Ending melee restores the selected gun.');
+  assert(remote._figure?.parts.weapon?.name === 'pistol' && !remote.melee, 'Swapping back restores the gun.');
   remote.name = '<script>name';
   remote.update(0.01, 3.09);
   assert(remote._tagName === '<script>name', 'A bounded name change rebuilds the canvas label.');
 });
 
-test('remote slots render six guns with a distinct R4-C prop and independent melee', () => {
+test('remote weapon ids render six guns with a distinct R4-C prop, and the sword', () => {
   const target = new RemotePlayer(ctx, 'loadout', 'loadout');
   const sizes: Vector3[] = [];
   try {
     for (const [slot, kind] of ['r4c', 'rifle', 'shotgun', 'sniper', 'pistol', 'lmg'].entries()) {
       target.push(state(0, 0, 80, slot), 1 + slot);
-      expect(target._wi).toBe(slot);
+      expect(target.kind).toBe(kind);
       const prop = must(target._figure?.parts.weapon, 'remote weapon');
       expect(prop.name).toBe(kind);
       sizes.push(new Box3().setFromObject(prop).getSize(new Vector3()));
-      target.push(state(0, 0, 80 | 512, slot), 1.1 + slot);
-      expect(target._wi).toBe(slot);
-      expect(target._figure?.parts.weapon?.name).toBe('knife');
-      target.push(state(0, 0, 80, slot), 1.2 + slot);
-      expect(target._figure?.parts.weapon?.name).toBe(kind);
     }
+    target.push(state(0, 0, 80, 6), 8);
+    expect(target.kind).toBe('sword');
+    expect(target._figure?.parts.weapon?.name).toBe('blade');
     expect(sizes[0]!.distanceTo(sizes[1]!)).toBeGreaterThan(0.01);
     target.shots('r4c', [1, 2, 3]);
     expect(calls.sounds.at(-1)).toBe('r4c');
@@ -234,10 +233,10 @@ test('death, ragdoll and respawn', () => {
   assert(calls.debris.length === debrisCount, 'Ragdoll happens once per life.');
   remote.push(state(8, 0, 80, 2), 5);
   remote.update(0, 5);
-  assert(remote.alive && remote.visible && remote.body.pos.x === 8 && remote._a === null && remote._wi === -1,
+  assert(remote.alive && remote.visible && remote.body.pos.x === 8 && remote._a === null && remote.kind === null,
     'Respawn clears the old interpolation and uses the default gun for one packet.');
   remote.push(state(8, 0, 80, 2), 5.05);
-  assert(remote._wi === 2, 'The packet after respawn applies the selected weapon.');
+  assert(remote.kind === 'shotgun', 'The packet after respawn applies the selected weapon.');
 });
 
 test('a ragdoll lets go of its figure: one prop listener per remote', () => {

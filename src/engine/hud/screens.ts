@@ -15,7 +15,7 @@ import type { OnlineMode, Team } from '../game/team-rules';
 export const UI_ACTIONS = [
   'start', 'online', 'back', 'quickPlay', 'create', 'join', 'joinCode',
   'visibility', 'name', 'pickMap', 'onlineMode', 'team', 'mainMenu', 'startMatch',
-  'leave', 'leaveMatch', 'sens', 'touchSens', 'resume', 'acogSens', 'sniperSens', 'optic', 'r4cOptic', 'training', 'invert', 'music',
+  'leave', 'leaveMatch', 'sens', 'touchSens', 'resume', 'acogSens', 'sniperSens', 'optic', 'r4cOptic', 'loadout', 'training', 'invert', 'music', 'gore',
   'gfxPreset', 'gfx', 'gfxFps', 'gfxReset', 'gfxLower',
   'startWave',
 ] as const;
@@ -33,7 +33,24 @@ export interface OnlineInfo {
   status?: string;
 }
 
-export interface WeaponSettingsModel { optic: RifleOptic; r4cOptic: RifleOptic }
+/** One weapon the loadout picker offers. */
+export interface LoadoutChoice {
+  /** The `loadout` action's value. */
+  kind: string;
+  name: string;
+  role: string;
+  /** Movement speed while held, percent of the base. */
+  speed: number;
+}
+export interface WeaponSettingsModel {
+  optic: RifleOptic; r4cOptic: RifleOptic;
+  /** Every weapon on offer, in order. */
+  choices?: LoadoutChoice[];
+  /** The picked kinds in slot order: `LOADOUT_SIZE` of them, or fewer while a pick is under way. */
+  loadout?: string[];
+  /** When the pick takes effect, or how many are left to pick. */
+  loadoutNote?: string;
+}
 /** The Graphics section. `gfx` actions carry `key:value`, for example `shadows:high`. */
 export interface GfxModel {
   choice: PresetChoice;
@@ -47,6 +64,8 @@ export interface GfxModel {
 export interface LookModel {
   sens: number; acogSens: number; sniperSens: number; touchSens?: number; touch?: boolean;
   invert: boolean; music: boolean; confirmKey: string;
+  /** How much blood (effects.ts `Gore`). */
+  gore?: 'off' | 'reduced' | 'full';
   gfx: GfxModel;
 }
 export interface MainModel extends LookModel, WeaponSettingsModel {

@@ -1,6 +1,7 @@
 # HUD, Menus and Audio — Specification
 
 > Current combat changes: [Combat rehaul](combat-rehaul.md). It replaces weapon/guard labels, adds MP5/pistol cues and an ACOG overlay, and separates melee from gun ammo.
+> Sword and loadouts: [Sword, loadouts and weapon handling](sword-loadouts.md). It adds the loadout picker to the Weapons page; the HUD lists three slots and shows the quick-slash hint only with a sword.
 
 This document describes the heads-up display, every menu screen, the controls help, and every sound in the game. It describes behaviour only. An implementer who has not seen the design must be able to rebuild identical gameplay from this document.
 

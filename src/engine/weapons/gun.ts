@@ -65,7 +65,7 @@ interface Falloffable {
 
 const _eye = new Vector3();
 
-// Shared by guns and the always-available melee view model.
+// Shared by guns and the sword.
 export abstract class ViewModel<M extends WeaponModel = WeaponModel> {
   /** Set by the concrete weapon: a scoped gun hides its model at full aim. */
   abstract readonly scope: boolean;
@@ -360,6 +360,10 @@ export interface Gun {
   /** Shots in the current burst, and seconds since the last shot (the wisp of smoke when a burst ends). */
   _burst: number;
   _sinceShot: number;
+  /** Seconds since the gun was drawn; Infinity once the draw's first shot is spent (`GunStats.quickdraw`). */
+  _sinceDraw: number;
+  /** The current shot's damage multiplier: the quickdraw or air bonus, whichever is larger. They do not stack. */
+  _shotBonus: number;
 }
 
 export class Gun extends ViewModel<GunModel> implements Weapon {
@@ -423,6 +427,8 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
 
   get spreadPx() { return 5 + this._spread * 900; }
   get adsSpeed(): number { return this._stats.adsSpeed; }
+  get moveSpeed(): number { return this._stats.moveSpeed; }
+  get mobility(): number { return this._stats.mobility; }
   /** Raised far enough to fire. The raise takes `drawTime`; the last 15 % is settle. */
   get drawn(): boolean { return this._equipT >= 0.85; }
   get scopeKind(): ScopeKind { return this.kind === 'rifle' || this.kind === 'r4c' ? this.optic : 'sniper'; }
@@ -452,7 +458,8 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
     this.reserve = this._stats.startingReserve;
     this.reloading = false;
     this._fireT = this._reloadTime = this._flashT = this._pumpT = this._fireBuffer = this._burst = 0;
-    this._sinceShot = Infinity;
+    this._sinceShot = this._sinceDraw = Infinity;
+    this._shotBonus = 1;
     this._pumped = this._racked = this._needPump = this._reloadEmpty = false;
     this._triggerPull = 0;
     this._spread = this._stats.hipSpread;
@@ -477,6 +484,7 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
   /** Drawing an empty gun starts its reload, as the auto-reload would have. */
   equip() {
     super.equip();
+    this._sinceDraw = 0;
     if (this.mag === 0) this.startReload();
   }
 
@@ -508,6 +516,7 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
       if (this._flashT <= 0) this._model.flash.visible = false;
     }
     this._sinceShot += dt;
+    this._sinceDraw += dt;
     if (this._burst > 0 && this._sinceShot > this._stats.fireInterval + 0.1) {
       // A burst (or a single heavy shot) is over: a thin wisp rises off the barrel on the realistic tiers.
       if (this._burst >= WISP_AFTER || !this._stats.automatic) {
@@ -561,18 +570,25 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
     this.mag--;
     const spreadNow = this._spread;
     this._spread = Math.min(this._spread + s.spreadKick * followUp, s.spreadMax);
+    // Off the ground, sliding or swinging, or the first shot off the draw: the larger bonus, not both.
+    const airborne = !st.grounded || st.sliding || (this._player as Partial<Player>).grapple?.mode === 'on';
+    const quick = s.quickdraw && this._sinceDraw <= s.quickdraw[0] ? s.quickdraw[1] : 1;
+    this._sinceDraw = Infinity;
+    this._shotBonus = Math.max(quick, airborne ? s.airBonus : 1);
+    const heavy = this._shotBonus > 1 ? 1.3 : 1;
     this._socket(this._model.muzzle, this._muzzle);
     let hits = 0;
     for (let i = 0; i < s.pellets; i++) {
       this._player.aimDir(spreadNow, this._dir);
       if (this._ray(this._dir)) hits++;
     }
+    this._shotBonus = 1;
     const flash = this._model.flash, core = this._model.flashCore;
     flash.visible = core.visible = true;
     this._flashT = 0.045;
     if (this._model.parts.slide) this._model.parts.slide.position.z = restPose(this._model.parts.slide).restPos.z + 0.07 * this._model.unit;
     // Each gun's own size (a Blender gun's is its model's), smaller at the hip, with a bright core on the first frame (V5).
-    const size = ((flash.userData.scale as number | null) ?? s.flashScale) * (HIP_FLASH + (1 - HIP_FLASH) * this.aimAmt);
+    const size = ((flash.userData.scale as number | null) ?? s.flashScale) * (HIP_FLASH + (1 - HIP_FLASH) * this.aimAmt) * heavy;
     flash.rotation.z = rand(0, TAU);
     flash.scale.setScalar(size * rand(0.85, 1.15));
     core.scale.setScalar(size);
@@ -593,8 +609,8 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
       if (s.reloadType === 'shells') this._needPump = true;
     }
     const k = s.modelKick;
-    this.kickPos(rand(-k[0], k[0]) * followUp, rand(0.4 * k[1], k[1]) * followUp, k[2] * followUp);
-    this.kickRot(k[3] * followUp, rand(-k[4], k[4]) * followUp, rand(-k[5], k[5]) * followUp);
+    this.kickPos(rand(-k[0], k[0]) * followUp, rand(0.4 * k[1], k[1]) * followUp, k[2] * followUp * heavy);
+    this.kickRot(k[3] * followUp * heavy, rand(-k[4], k[4]) * followUp, rand(-k[5], k[5]) * followUp);
     // Yaw walks a fixed pattern the player can learn; only 30 % of the kick is noise.
     this._player.recoil((s.camKick[0] * (st.aim ? 0.7 : 1) + rand(0, s.camKick[0] * 0.3)) * followUp, (Math.sin(shot * 0.9) * 0.7 + rand(-0.3, 0.3)) * s.camKick[1] * followUp);
     this._player.kickFov(s.fovKick);
@@ -635,16 +651,16 @@ export class Gun extends ViewModel<GunModel> implements Weapon {
     let point: Vector3, hit = true;
     if (remote && remote.dist < enemyDist && remote.dist < wallDist) {
       point = remote.point;
-      game.hitPlayer(remote.player, this._damage(s.pvp[0], s.pvp[1], s.pvp[2], remote),
+      game.hitPlayer(remote.player, this._damage(s.pvp[0], s.pvp[1], s.pvp[2], remote) * this._shotBonus,
         { point, dir, part: remote.part, source: this.kind, crit: remote.part === 'head', dist: remote.dist });
     } else if (wall && wall.box.data.breakable && wallDist < enemyDist) {
       point = wall.point;
-      game.breakHit(wall.box.data.breakable, s.damage, point, dir);
+      game.breakHit(wall.box.data.breakable, s.damage * this._shotBonus, point, dir);
     } else if (enemy && enemyDist < wallDist) {
       point = enemy.point;
       // Bosses have huge heads; cap the multiplier so a boss is a fight, not a two-second headshot mag.
       const headMult = enemy.enemy.stats.boss ? Math.min(s.headMult, 1.5) : s.headMult;
-      enemies?.damage(enemy.enemy, this._damage(s.damage, headMult, s.falloff, enemy),
+      enemies?.damage(enemy.enemy, this._damage(s.damage, headMult, s.falloff, enemy) * this._shotBonus,
         { point, dir, part: enemy.part, source: this.kind, crit: enemy.part === 'head' });
     } else if (wall) {
       point = wall.point;

@@ -6,16 +6,19 @@ import { NavGrid, BOSS_CLEARANCE, BOSS_HEADROOM } from './nav';
 import { Audio } from './audio';
 import { Net } from './net';
 import { Input } from './input';
-import { Effects } from './effects';
+import { Effects, GORE_SCALE } from './effects';
+import type { Gore } from './effects';
 import { buildLevel, disposeLevel, validKey } from './level/index';
 import { figureTemplate } from './render/figure';
 import { EnemyManager } from './enemies/index';
 import { Player } from './player/index';
 import { makeGameState } from './game/state';
 import { createSolo } from './game/solo';
+import { CHARGE_FULL, EXEC_SLOW } from './game/execution';
 import { createTraining } from './game/training';
 import { Gun } from './weapons/gun';
-import type { RifleOptic } from './weapons/stats';
+import { DEFAULT_LOADOUT, validLoadout } from './weapons/stats';
+import type { RifleOptic, WeaponKind } from './weapons/stats';
 import { createFFA } from './game/ffa';
 import { createCoop } from './game/coop';
 import { createUI } from './game/ui';
@@ -48,6 +51,10 @@ export interface Settings {
   sniperSens: number;
   optic: RifleOptic;
   r4cOptic: RifleOptic;
+  /** How much blood (Settings → Blood). */
+  gore: Gore;
+  /** The picked loadout. The player carries it from the next point `loadoutOpen` allows (`applyLoadout`). */
+  loadout: WeaponKind[];
   invert: boolean;
 }
 
@@ -71,6 +78,12 @@ export interface App {
   loadLevel(arena: boolean, key?: unknown, force?: boolean): void;
   applyLook(): void;
   applyOptic(): void;
+  /** Set and save the blood level. */
+  setGore(level: Gore): void;
+  /** Save `kinds` as the loadout; true if it was a valid one. The player takes it up when `loadoutOpen` allows. */
+  pickLoadout(kinds: readonly WeaponKind[]): boolean;
+  /** The player may change weapons now: in training, between co-op or solo waves, or before a run or match. */
+  loadoutOpen(): boolean;
   pickups: PickupsApi;
   breakables: BreakablesApi;
   addScore(points: number, label?: string | null): void;
@@ -168,6 +181,8 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     sniperSens: clamp(store.getNum(SKEY.SNIPER_SENS, 150), 25, 250),
     optic: store.getStr(SKEY.OPTIC, 'acog') === 'holo' ? 'holo' : 'acog',
     r4cOptic: store.getStr(SKEY.R4C_OPTIC, 'acog') === 'holo' ? 'holo' : 'acog',
+    loadout: validLoadout(store.getStr(SKEY.LOADOUT, '').split(',')) ?? [...DEFAULT_LOADOUT],
+    gore: (['off', 'reduced', 'full'] as const).find(level => level === store.getStr(SKEY.GORE, 'full')) ?? 'full',
     invert: store.getBool(SKEY.INVERT, false),
   };
 
@@ -250,6 +265,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
   // ---- hooks 9
   const game: GameHooks = {
     hitstop(d, s) { gs.hitstopT = Math.max(gs.hitstopT, d); gs.hitstopScale = s; },
+    charge: amount => app.solo.addCharge(amount),
     addScore(points, label = null) {
       const awarded = Math.round(points * (1 + 0.25 * Math.min(gs.combo, 9)));
       gs.score += awarded; app.coop.points(awarded);
@@ -318,10 +334,32 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     store.set(SKEY.OPTIC, settings.optic);
     store.set(SKEY.R4C_OPTIC, settings.r4cOptic);
   }
+  /** A pick was saved that the player does not carry yet (`pickLoadout`). */
+  let loadoutPending = false;
+  /** Carry the picked loadout, if the player does not already; true if it changed. */
+  function applyLoadout(): boolean {
+    loadoutPending = false;
+    if (player.loadout.join() === settings.loadout.join()) return false;
+    player.setLoadout(settings.loadout);
+    applyOptic();
+    return true;
+  }
+  applyLoadout();
   applyOptic();
 
   // ---- run control
   const app = { ctx, gs, lobby, scores, settings, quality, busy: false, screen: null, loadLevel, applyLook, applyOptic } as unknown as App;
+  // Solo and co-op change weapons between waves; online PvP only when a match starts (`resetRun`); training any time.
+  app.loadoutOpen = () => gs.mode === 'training' || !['play', 'dying', 'pause'].includes(gs.state)
+    || ((gs.mode === 'solo' || app.coop.active()) && gs.intermission > 0);
+  app.pickLoadout = kinds => {
+    const valid = validLoadout(kinds);
+    if (!valid) return false;
+    settings.loadout = valid;
+    store.set(SKEY.LOADOUT, valid.join(','));
+    loadoutPending = true;
+    return true;
+  };
   app.pickups = createPickups(ctx);
   app.breakables = createBreakables(ctx, app.pickups);
   app.addScore = game.addScore;
@@ -346,6 +384,8 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     applyQuality();
     if (app.screen) app.ui.redraw();
   }));
+  effects.gore = GORE_SCALE[settings.gore];
+  app.setGore = level => { settings.gore = level; store.set(SKEY.GORE, level); effects.gore = GORE_SCALE[level]; };
   app.setMusic = on => {
     settings.music = on; store.set(SKEY.MUSIC, on); audio.music(on);
   };
@@ -355,6 +395,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     // Co-op is PvE: it keeps the solo health values.
     const online = gs.mode === 'ffa' && !app.coop.active();
     player.maxHp = online ? 110 : 120; player.regenDelay = online ? 4 : 4.5; player.regenRate = online ? 14 : 11;
+    applyLoadout();
     player.reset(ctx.level.playerStart); player.name = settings.name; player.lastHitBy = player.lastHit = null;
     player.team = 0; player.shieldT = 0;
     enemies.mods.speed = enemies.mods.damage = 1; hud.setModifier(''); hud.setBoss(null); gs.boss = null;
@@ -514,10 +555,11 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
 
     let scale = 1;
     if (gs.hitstopT > 0) { gs.hitstopT -= dt; scale = gs.hitstopScale; }
-    else if (gs.focus.active) scale = 0.26;
+    else if (gs.focus.active) scale = EXEC_SLOW;
     const sdt = dt * scale;
 
-    if (gs.state === 'play' && gs.mode !== 'ffa') app.solo.updateFocus(dt);
+    // The samurai execution: solo, training and co-op (where it slows this player's view only; the host's enemies run on).
+    if (gs.state === 'play' && (gs.mode !== 'ffa' || app.coop.active())) app.solo.updateFocus(dt);
     else app.solo.endFocus();
 
     if (game.playing()) {
@@ -560,6 +602,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
       if (gs.state === 'over') app.ffa.updateOver(dt);
     }
     input.anyInput = false;
+    if (loadoutPending && app.loadoutOpen() && applyLoadout() && gs.state === 'play') hud.tip('loadout updated', 1.6);
 
     for (const a of ctx.level.animated) a.update(gs.time);
     audio.setListener(player.eye, player.right);
@@ -573,10 +616,12 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     hud.setSpread(w.spreadPx);
     syncTouch();
     hud.update(dt);
-    if (game.isOnline()) hud.setFocusMeter(game.playing(), player.breath, false, 'GRAPPLE');
+    // PvP shows the grapple's breath; solo, training and co-op the sword's execution gauge.
+    if (game.isOnline() && !app.coop.active()) hud.setFocusMeter(game.playing(), player.breath, false, 'GRAPPLE');
     else {
-      const show = game.playing() && (player.melee.active || gs.katanaStreak > 0 || gs.focus.active);
-      hud.setFocusMeter(show, gs.focus.active ? 1 : clamp(gs.katanaStreak / 3, 0, 1), gs.focus.active, 'MELEE');
+      const ready = gs.focus.active || gs.katanaStreak >= CHARGE_FULL;
+      const show = game.playing() && !!player.sword && ((player.holdingSword && !!player.sword.active) || gs.katanaStreak > 0 || gs.focus.active);
+      hud.setFocusMeter(show, gs.focus.active ? 1 : clamp(gs.katanaStreak / CHARGE_FULL, 0, 1), ready, 'SWORD');
     }
     if (gs.boss) {
       if (gs.boss.alive) hud.setBoss(gs.boss.stats.name, gs.boss.hp / gs.boss.maxHp);
@@ -654,8 +699,7 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     ctx.remotes.clear();
     net.leave();
     input.dispose();
-    player.melee.dispose();
-    for (const weapon of player.weapons) weapon.dispose();
+    player.disposeWeapons();
     audio.dispose();
     enemies.clear();
     effects.clear();

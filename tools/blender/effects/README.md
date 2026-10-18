@@ -35,7 +35,7 @@ and open `/tmp/fx/fire/preview.png`.
 |---|---|---|---|
 | `fire` (RGB, additive) | 8 x 4 | fireball flipbook (16), muzzle flash down the barrel (4) and from the side (4), sparks (4), the one-frame glow of a blast | Cycles renders of emission volumes: 4D noise shaping the density, blackbody colour. Each flash is one 3D field rendered from both ends, so its front and side views agree. |
 | `smoke` (RGBA, lit) | 8 x 6 | smoke puff flipbook (16), dust burst flipbook (16), stone chips (8), wood splinters (4), glass shards (4) | Cycles renders of scattering volumes lit by a sun and a grey sky (denoised), and of meshes displaced by Blender's procedural textures |
-| `decals` (RGBA) and `decals-normal` (RGB) | 4 x 4 | bullet holes for metal (2), masonry (3), wood (3), glass (2) and soft ground (2), a scorch mark | EMIT bakes of node graphs over a plane: albedo, alpha and height; the normal map from the height in numpy, faded out with the alpha |
+| `decals` (RGBA) and `decals-normal` (RGB) | 4 x 4 | bullet holes for metal (2), masonry (3), wood (3), glass (2) and soft ground (2), a scorch mark, blood (3: a directional spatter, a round splat, a drip run) | EMIT bakes of node graphs over a plane: albedo, alpha and height; the normal map from the height in numpy, faded out with the alpha. Blood is a soft union of signed-distance drops and streaks (placed by a seeded generator) over noise-warped coordinates |
 
 - **Conventions.** Rows are stored bottom first (row 0 is v = 0), as WebGL uploads with flipY off;
   cell `i` sits at column `i % cols`, row `i / cols` from the bottom. Colour is sRGB, alpha linear
@@ -47,6 +47,13 @@ and open `/tmp/fx/fire/preview.png`.
   the game's tint is the surface's colour over that grey, so a rim is its wall's own colour and only
   the darker crater and hole read (a wood hole's torn rim a little lighter). Their outer crater fades
   into the wall, since the wall's baked light and the decal's probe light differ in shade.
+- **Blood** (`blood`, cells 13-15) is near white (linear 0.75 where it is thick, 1 at its thin edges) and
+  has no red: the game multiplies it by a dark crimson per decal. Its height (a raised, rounded edge) gives
+  the wet gloss in the normal map. Each cell keeps a 6% clear margin. Cell 13, the spatter, is thrown along
+  +u from a splash centred at (0.3, 0.5): streaks and exclamation-mark drops whose tails point back at it,
+  smaller further out. Cell 14, the splat, is a pool centred at (0.5, 0.5), for floors and under bodies.
+  Cell 15, the drip run, is a smear along the top (v about 0.8) with runs dripping down (-v) into beads, for
+  walls: place it with +v up.
 - **Scripts.** `lib.py` has the scene set-up, the expression wrapper for node graphs
   (`VolumeGraph`: `g.smooth(r, 0.4, 0.9) * g.noise(g.p, 3, w)`), the renderer, the plane baker and
   the atlas writer; each script only builds its fields and meshes.

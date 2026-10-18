@@ -118,7 +118,7 @@ test('UI validates mode actions, forwards online models and compares team winner
     lobby, screen: 'online', busy: false,
     quality: new Quality(null, { mobile: false, memory: null, cores: 8, gpu: '', maxTextureSize: 16384 }),
     gs: { state: 'lobby', mode: 'ffa', over: { id: 'team:0', name: 'RED' } },
-    settings: { name: 'Red', sens: 100, acogSens: 120, sniperSens: 150, invert: false, music: false, optic: 'holo', r4cOptic: 'holo' },
+    settings: { name: 'Red', sens: 100, acogSens: 120, sniperSens: 150, invert: false, music: false, optic: 'holo', r4cOptic: 'holo', loadout: ['r4c', 'pistol', 'sword'] },
     ctx: { input: { usingTouch: false, clearTouch: vi.fn(), touch: { enabled: false } }, net: { id: 'red', code: 'ABCDE', isHost: true }, hud: { showScreen, key: () => 'Enter' } },
     ffa: { selectMode, boardRows: () => rows, onlineInfo: () => ({ mode: lobby.mode, teamScores: [4, 12], selfTeam: 0, status: 'Round 1' }) },
   };

@@ -46,8 +46,10 @@ function setup(isHost = false, mode: OnlineMode = 'ffa') {
     center: new Vector3(0, 1, 0), eye: new Vector3(0, 1.6, 0),
     forward: new Vector3(0, 0, -1), right: new Vector3(1, 0, 0),
     yaw: 0, pitch: 0, wi: 0, weapon: { kind: 'rifle', aimAmt: 0, adsFov: 38 }, weapons: [],
-    watched: null as { slot: number; aim: boolean } | null,
-    grapple: { mode: 'idle', hook: new Vector3() }, melee: { active: false, cooldown: 0 },
+    get view() { return this.weapon; },
+    watched: null as { kind: string; aim: boolean } | null,
+    grapple: { mode: 'idle', hook: new Vector3() }, sword: { active: false, cooldown: 0 }, holdingSword: false,
+    slashCutting: () => false,
     headshots: 0, onHeadshot() { this.headshots++; },
     lastHitBy: null as string | null, lastHit: null as { from: Vector3 | null; amount: number; crit: boolean; src: string } | null,
     reset(pos: Vector3) { resets.push(pos.clone()); this.body.pos.copy(pos); this.alive = true; this.hp = 100; },
@@ -397,7 +399,7 @@ test('a waiting player cycles teammates and swaps first and third person', () =>
   try {
     t.ffa.hostStart();
     const mate = { ...t.remote, id: 'mate', name: 'mate', center: new Vector3(-20, 1, 0), eye: new Vector3(-20, 1.6, 0), root: new Group(),
-      slot: 3, aiming: true, melee: false };
+      kind: 'sniper', aiming: true, melee: false };
     ctx.remotes.set('mate', mate);
     t.lobby.teams = { host: 0, client: 0, mate: 0 };
     ctx.player.alive = false; t.ffa.localDeath();
@@ -414,8 +416,8 @@ test('a waiting player cycles teammates and swaps first and third person', () =>
     step('jump');
     expect(ctx.camera.position.toArray()).toEqual([-20, 1.6, 0]); // their eyes
     expect(t.ffa.watchedFigure()).toBe(mate.root);
-    // Their figure is left out, so our own gun stands in for theirs: their slot, their aim.
-    expect(ctx.player.watched).toEqual({ slot: 3, aim: true });
+    // Their figure is left out, so our own weapon of their kind stands in for theirs, with their aim.
+    expect(ctx.player.watched).toEqual({ kind: 'sniper', aim: true });
     expect(ctx.renderer.rig.visible).toBe(true);
     step('aim');
     expect(ctx.camera.position.toArray()).toEqual([20, 1.6, 0]); // back to the client

@@ -10,6 +10,8 @@ const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=sw
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 const errors = [];
 page.on('pageerror', error => errors.push(error.message));
+// Slots 1-3: R4-C, MP5, sniper.
+await page.addInitScript(() => localStorage.setItem('cs6_loadout', 'r4c,rifle,sniper'));
 const slider = async (name, value) => page.locator(`input[data-act="${name}"]`).evaluate((el, value) => {
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, String(value));
   el.dispatchEvent(new Event('input', { bubbles: true }));
@@ -101,7 +103,7 @@ try {
   assert.equal(await page.evaluate(() => window.__game.player.weapons[0].scopeKind), 'acog');
   const measure = () => page.evaluate(() => {
     const g = window.__game, p = g.player, values = [];
-    for (const slot of [0, 1, 3]) for (const sensitivity of [g.input.mouseSens, g.input.padSensX, g.input.padSensY]) {
+    for (const slot of [0, 1, 2]) for (const sensitivity of [g.input.mouseSens, g.input.padSensX, g.input.padSensY]) {
       p.switchTo(slot); p.aiming = true; p.dashLock = true;
       g.input.look.x = sensitivity * .01; g.input.look.y = 0;
       const before = p.yaw; p.update(0); values.push(p.yaw - before);
@@ -123,7 +125,7 @@ try {
   await page.waitForFunction(() => window.__game.hud.scope.shown && window.__game.hud.scope.kind === 'acog');
   await page.waitForFunction(() => Math.abs(window.__game.ctx.camera.fov - 38) < .1);
   await page.screenshot({ path: `${out}/acog.png` });
-  await page.keyboard.press('Digit4', { delay: 100 });
+  await page.keyboard.press('Digit3', { delay: 100 });
   await page.waitForFunction(() => window.__game.hud.scope.shown && window.__game.hud.scope.kind === 'sniper');
   await page.waitForFunction(() => Math.abs(window.__game.ctx.camera.fov - 20) < .1);
   await page.screenshot({ path: `${out}/sniper.png` });
