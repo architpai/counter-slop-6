@@ -330,18 +330,20 @@ load drew), and the machine slowed run by run: HEAD's suite frame mean in the A/
 | s3 HEAD/HEAD (headB, mean / med / p95) | -0.5 / -0.5 / +0.2 % | -1.8 / -0.3 / -1.3 % | +0.2 / +0.5 / +0.8 % | -0.4 / -0.7 / 0.0 % | -0.6 / -0.3 / -0.1 % |
 | **s4: independent repeat** (Round 1 code vs final, shown NEW/OLD; mean) | -0.5 % | -8.8 % * | -2.2 % | -1.8 % | -3.4 % |
 | s4 HEAD/HEAD (headB, mean) | -1.1 % | +8.3 % * | +0.4 % | +0.9 % | +2.1 % |
-| fight frames only, mean (s3 / s4) | -3.5 / -0.7 % | -5.0 / -10.2 % * | -4.6 / -4.3 % | -3.8 / -4.9 % | -4.2 / -5.0 % |
-| fight callback cpu, mean (s3 / s4) | -4.7 / -1.9 % | -7.1 / -11.7 % * | -6.0 / -5.8 % | -4.6 / -7.0 % | -5.6 / -6.6 % |
-| **training fight cpu** (s3 / s4) | | | | | **-14.4 / -13.3 %** |
+| fight frames only, mean (s3 / s4) | -3.5 / -0.7 % | -5.0 / -10.1 % * | -4.6 / -4.3 % | -3.8 / -4.9 % | -4.2 / -5.1 % |
+| fight callback cpu, mean (s3 / s4) | -4.7 / -1.9 % | -7.1 / -11.7 % * | -6.0 / -5.8 % | -4.6 / -7.0 % | -5.6 / -6.7 % |
+| **training fight cpu** (s3 / s4) | | | | | **-14.4 / -13.4 %** |
 | js, paired traced run t2 (fight cells, traced) | -1.5 % (-0.02 ms) | -6.8 % (-0.31) | -14.3 % (-0.76) | +17.1 % † | -2.0 % |
 | js, training fight (t2) | 2.01 → 1.97 ms (-2.3 %) | 5.55 → 5.07 (-8.6 %) | 6.25 → 5.25 (-16.0 %) | 6.02 → 5.50 (-8.6 %) | |
 
 \* s4's medium arm caught a power-state switch (headB/head +8.3 %): not usable alone. † t2 is one traced round in
 the throttled state; ultra/house's HEAD arm ran in a fast spell (path 2.93 ms vs 5.2-5.7 ms in every other ultra
-path), so its ultra row is not usable; the other three ultra cells' fights read js -0.2 to -8.6 %.
+path), so its ultra row is not usable; the other three ultra cells' fights read js -1.7 % (downtown), +0.2 % (mexico), -8.6 % (training).
 
 **Verdict.** The change targets fight CPU (figure submission and figure ray tests), and there it repeats in two
-independent balanced runs: fight frames -4 to -5 %, fight callback cpu -5.6 / -6.6 %, training fights -14 / -13 %.
+independent balanced runs: fight frames -4.2 / -5.1 %, fight callback cpu -5.6 / -6.7 %, training fights -14.4 / -13.4 %
+(vs head; against headB the s4 fight numbers are smaller, frames -2.2 % and callback cpu -4.1 %: same direction, size
+not pinned down).
 On the whole suite (path + fight, frame mean) both runs read about -2 % (s3 -2.4 % vs head, -1.8 % vs headB; s4
 -3.4 % vs head, -1.4 % vs headB; control-filtered -1.6 / -2.0 %). That is near the protocol's ~2 % paired noise, so
 **the per-preset suite gain is measured but not proven past noise on every preset**; Low in particular is small
@@ -385,7 +387,10 @@ hashes and trails match; draw-order changes between figures produced no pixel ch
 use material ids. One P2 finding (measurement): the per-preset gains sat near the ~2 % paired noise, against headB
 only -1.2 to -2.5 %, and one run does not show repeatability → s4, an independent balanced repeat (above), and the
 verdict worded as "measured, not proven past noise on every preset"; the fight-targeted gains repeat.
-Round 2: see below.
+Round 2 (`perf-loop-r2-review-2`, on `82ee6e1..a5995f3` with the finding and the s4 response): no P1/P2; the round-1
+finding is addressed as a stated limitation (stable-power validation still open); saved results, NOISE.md, the
+rejected-idea numbers and the kept patches' hashes match the evidence; no new code issue. Two P3 number fixes (a
+sign in the t2 ultra range; s4 values rounded from rounded ratios) applied, and the s4 fight gains vs headB added.
 
 ### Hot spot leads for later rounds (refreshed)
 
