@@ -1,0 +1,1341 @@
+{
+ "version": 1,
+ "created": "2026-10-18T10:25:43.433Z",
+ "from": [
+  "baseline-1.json",
+  "baseline-2.json",
+  "baseline-3.json"
+ ],
+ "minPct": 3,
+ "minAbs": 0.1,
+ "aggMinPct": 2,
+ "aggregate": {
+  "all": {
+   "frameMs.mean": {
+    "rel": 0.0309,
+    "spread": 0.0154,
+    "values": [
+     3.1597,
+     3.1698,
+     3.2087
+    ]
+   },
+   "frameMs.med": {
+    "rel": 0.0277,
+    "spread": 0.0139,
+    "values": [
+     3.1811,
+     3.2217,
+     3.2258
+    ]
+   },
+   "frameMs.p95": {
+    "rel": 0.0836,
+    "spread": 0.0418,
+    "values": [
+     4.8732,
+     4.7507,
+     4.9545
+    ]
+   },
+   "cpuMs.mean": {
+    "rel": 0.0569,
+    "spread": 0.0285,
+    "values": [
+     2.6301,
+     2.6795,
+     2.7063
+    ]
+   },
+   "jsMs.mean": {
+    "rel": 0.0933,
+    "spread": 0.0466,
+    "values": [
+     1.3838,
+     1.3204,
+     1.3597
+    ]
+   }
+  },
+  "low": {
+   "frameMs.mean": {
+    "rel": 0.0662,
+    "spread": 0.0331,
+    "values": [
+     1.6149,
+     1.6016,
+     1.6551
+    ]
+   },
+   "frameMs.med": {
+    "rel": 0.023,
+    "spread": 0.0115,
+    "values": [
+     1.7773,
+     1.7808,
+     1.7978
+    ]
+   },
+   "frameMs.p95": {
+    "rel": 0.1367,
+    "spread": 0.0683,
+    "values": [
+     2.847,
+     2.7748,
+     2.9693
+    ]
+   },
+   "cpuMs.mean": {
+    "rel": 0.0766,
+    "spread": 0.0383,
+    "values": [
+     1.2697,
+     1.2701,
+     1.3183
+    ]
+   },
+   "jsMs.mean": {
+    "rel": 0.1974,
+    "spread": 0.0987,
+    "values": [
+     0.6102,
+     0.673,
+     0.6363
+    ]
+   }
+  },
+  "medium": {
+   "frameMs.mean": {
+    "rel": 0.02,
+    "spread": 0.0059,
+    "values": [
+     3.2701,
+     3.2894,
+     3.2888
+    ]
+   },
+   "frameMs.med": {
+    "rel": 0.02,
+    "spread": 0.0035,
+    "values": [
+     3.2165,
+     3.2166,
+     3.2277
+    ]
+   },
+   "frameMs.p95": {
+    "rel": 0.0355,
+    "spread": 0.0177,
+    "values": [
+     4.9565,
+     4.8687,
+     4.9567
+    ]
+   },
+   "cpuMs.mean": {
+    "rel": 0.0593,
+    "spread": 0.0297,
+    "values": [
+     2.7188,
+     2.8019,
+     2.8016
+    ]
+   },
+   "jsMs.mean": {
+    "rel": 0.0323,
+    "spread": 0.0161,
+    "values": [
+     1.3606,
+     1.3804,
+     1.3829
+    ]
+   }
+  },
+  "high": {
+   "frameMs.mean": {
+    "rel": 0.0448,
+    "spread": 0.0224,
+    "values": [
+     3.8613,
+     3.9109,
+     3.949
+    ]
+   },
+   "frameMs.med": {
+    "rel": 0.0726,
+    "spread": 0.0363,
+    "values": [
+     3.7562,
+     3.8969,
+     3.8749
+    ]
+   },
+   "frameMs.p95": {
+    "rel": 0.0484,
+    "spread": 0.0242,
+    "values": [
+     5.8046,
+     5.6831,
+     5.8235
+    ]
+   },
+   "cpuMs.mean": {
+    "rel": 0.0761,
+    "spread": 0.0381,
+    "values": [
+     3.2593,
+     3.3618,
+     3.3873
+    ]
+   },
+   "jsMs.mean": {
+    "rel": 0.4158,
+    "spread": 0.2079,
+    "values": [
+     1.9945,
+     1.6297,
+     1.7547
+    ]
+   }
+  },
+  "ultra": {
+   "frameMs.mean": {
+    "rel": 0.02,
+    "spread": 0.0088,
+    "values": [
+     4.8884,
+     4.9,
+     4.9314
+    ]
+   },
+   "frameMs.med": {
+    "rel": 0.0239,
+    "spread": 0.0119,
+    "values": [
+     4.7686,
+     4.8261,
+     4.8153
+    ]
+   },
+   "frameMs.p95": {
+    "rel": 0.115,
+    "spread": 0.0575,
+    "values": [
+     6.8852,
+     6.6344,
+     7.0302
+    ]
+   },
+   "cpuMs.mean": {
+    "rel": 0.0261,
+    "spread": 0.013,
+    "values": [
+     4.2528,
+     4.3087,
+     4.2879
+    ]
+   },
+   "jsMs.mean": {
+    "rel": 0.1869,
+    "spread": 0.0934,
+    "values": [
+     2.2141,
+     2.0073,
+     2.2136
+    ]
+   }
+  }
+ },
+ "metrics": {
+  "frameMs.med": {
+   "rel": 0.5333,
+   "abs": 1.6
+  },
+  "frameMs.p95": {
+   "rel": 0.9231,
+   "abs": 5.2
+  },
+  "frameMs.mean": {
+   "rel": 0.5268,
+   "abs": 1.868
+  },
+  "cpuMs.med": {
+   "rel": 0.5833,
+   "abs": 1.8
+  },
+  "jsMs.med": {
+   "rel": 1.4949,
+   "abs": 1.878
+  },
+  "calls.med": {
+   "rel": 0.0068,
+   "abs": 2
+  },
+  "triangles.med": {
+   "rel": 0.0306,
+   "abs": 26222
+  },
+  "readyMs": {
+   "rel": 0.5064,
+   "abs": 1258.2
+  }
+ },
+ "cells": {
+  "downtown/low/path": {
+   "frameMs.med": {
+    "rel": 0.1,
+    "abs": 0.2
+   },
+   "frameMs.p95": {
+    "rel": 0.03,
+    "abs": 0.1
+   },
+   "frameMs.mean": {
+    "rel": 0.0799,
+    "abs": 0.108
+   },
+   "cpuMs.med": {
+    "rel": 0.2222,
+    "abs": 0.4
+   },
+   "jsMs.med": {
+    "rel": 0.0435,
+    "abs": 0.1
+   },
+   "calls.med": {
+    "rel": 0,
+    "abs": 0.5
+   },
+   "triangles.med": {
+    "rel": 0,
+    "abs": 0.5
+   }
+  },
+  "downtown/low/fight": {
+   "frameMs.med": {
+    "rel": 0.03,
+    "abs": 0.1
+   },
+   "frameMs.p95": {
+    "rel": 0.0714,
+    "abs": 0.2
+   },
+   "frameMs.mean": {
+    "rel": 0.0745,
+    "abs": 0.116
+   },
+   "cpuMs.med": {
+    "rel": 0.25,
+    "abs": 0.2
+   },
+   "jsMs.med": {
+    "rel": 0.03,
+    "abs": 0.1
+   },
+   "calls.med": {
+    "rel": 0,
+    "abs": 0.5
+   },
+   "triangles.med": {
+    "rel": 0,
+    "abs": 0.5
+   }
+  },
+  "downtown/low/load": {
+   "readyMs": {
+    "rel": 0.4658,
+    "abs": 292.2
+   }
+  },
+  "downtown/medium/path": {
+   "frameMs.med": {
+    "rel": 0.03,
+    "abs": 0.1
+   },
+   "frameMs.p95": {
+    "rel": 0.4889,
+    "abs": 2.2
+   },
+   "frameMs.mean": {
+    "rel": 0.3646,
+    "abs": 1.014
+   },
+   "cpuMs.med": {
+    "rel": 0.0741,
+    "abs": 0.2
+   },
+   "jsMs.med": {
+    "rel": 0.4405,
+    "abs": 0.174
+   },
+   "calls.med": {
+    "rel": 0,
+    "abs": 0.5
+   },
+   "triangles.med": {
+    "rel": 0,
+    "abs": 0.5
+   }
+  },
+  "downtown/medium/fight": {
+   "frameMs.med": {
+    "rel": 0.4242,
+    "abs": 1.4
+   },
+   "frameMs.p95": {
+    "rel": 0.4211,
+    "abs": 2.4
+   },
+   "frameMs.mean": {
+    "rel": 0.4733,
+    "abs": 1.658
+   },
+   "cpuMs.med": {
+    "rel": 0.5833,
+    "abs": 1.4
+   },
+   "jsMs.med": {
+    "rel": 0.1383,
+    "abs": 0.244
+   },
+   "calls.med": {
+    "rel": 0,
+    "abs": 0.5
+   },
+   "triangles.med": {
+    "rel": 0.03,
+    "abs": 13211
+   }
+  },
+  "downtown/medium/load": {
+   "readyMs": {
+    "rel": 0.095,
+    "abs": 783.8
+   }
+  },
+  "downtown/high/path": {
+   "frameMs.med": {
+    "rel": 0.25,
+    "abs": 0.8
+   },
+   "frameMs.p95": {
+    "rel": 0.0851,
+    "abs": 0.4
+   },
+   "frameMs.mean": {
+    "rel": 0.1907,
+    "abs": 0.618
+   },
+   "cpuMs.med": {
+    "rel": 0.1935,
+    "abs": 0.6
+   },
+   "jsMs.med": {
+    "rel": 0.1953,
+    "abs": 0.1
+   },
+   "calls.med": {
+    "rel": 0,
+    "abs": 0.5
+   },
+   "triangles.med": {
+    "rel": 0,
+    "abs": 0.5
+   }
+  },
+  "downtown/high/fight": {
+   "frameMs.med": {
+    "rel": 0.3077,
+    "abs": 1.2
+   },
+   "frameMs.p95": {
+    "rel": 0.375,
+    "abs": 2.4
+   },
+   "frameMs.mean": {
+    "rel": 0.3113,
+    "abs": 1.28
+   },
+   "cpuMs.med": {
+    "rel": 0.4516,
+    "abs": 1.4
+   },
+   "jsMs.med": {
+    "rel": 0.38,
+    "abs": 1.032
+   },
+   "calls.med": {
+    "rel": 0.0065,
+    "abs": 2
+   },
+   "triangles.med": {
+    "rel": 0,
+    "abs": 0.5
+   }
+  },
+  "downtown/high/load": {
+   "readyMs": {
+    "rel": 0.0664,
+    "abs": 552.4
+   }
+  },
+  "downtown/ultra/path": {
+   "frameMs.med": {
+    "rel": 0.2273,
+    "abs": 1
+   },
+   "frameMs.p95": {
+    "rel": 0.2807,
+    "abs": 1.6
+   },
+   "frameMs.mean": {
+    "rel": 0.2488,
+    "abs": 1.096
+   },
+   "cpuMs.med": {
+    "rel": 0.2326,
+    "abs": 1
+   },
+   "jsMs.med": {
+    "rel": 0.7715,
+    "abs": 0.466
+   },
+   "calls.med": {
+    "rel": 0,
+    "abs": 0.5
+   },
+   "triangles.med": {
+    "rel": 0,
+    "abs": 0.5
+   }
+  },
+  "downtown/ultra/fight": {
+   "frameMs.med": {
+    "rel": 0.0385,
+    "abs": 0.2
+   },
+   "frameMs.p95": {
+    "rel": 0.5185,
+    "abs": 4.2
+   },
+   "frameMs.mean": {
+    "rel": 0.1403,
+    "abs": 0.764
+   },
+   "cpuMs.med": {
+    "rel": 0.03,
+    "abs": 0.1
+   },
+   "jsMs.med": {
+    "rel": 0.4484,
+    "abs": 1.334
+   },
+   "calls.med": {
+    "rel": 0,
+    "abs": 0.5
+   },
+   "triangles.med": {
+    "rel": 0,
+    "abs": 0.5
+   }
+  },
+  "downtown/ultra/load": {
+   "readyMs": {
+    "rel": 0.1173,
+    "abs": 1258.2
+   }
+  },
+  "house/low/path": {
+   "frameMs.med": {
+    "rel": 0.03,
+    "abs": 0.1
+   },
+   "frameMs.p95": {
+    "rel": 0.03,
+    "abs": 0.1
+   },
+   "frameMs.mean": {
+    "rel": 0.0461,
+    "abs": 0.1
+   },
+   "cpuMs.med": {
+    "rel": 0.03,
+    "abs": 0.1
+   },
+   "jsMs.med": {
+    "rel": 0.9263,
+    "abs": 0.176
+   },
+   "calls.med": {
+    "rel": 0,
+    "abs": 0.5
+   },
+   "triangles.med": {
+    "rel": 0,
+    "abs": 0.5
+   }
+  },
+  "house/low/fight": {
+   "frameMs.med": {
+    "rel": 0.03,
+    "abs": 0.1
+   },
+   "frameMs.p95": {
+    "rel": 0.0741,
+    "abs": 0.2
+   },
+   "frameMs.mean": {
+    "rel": 0.0814,
+    "abs": 0.132
+   },
+   "cpuMs.med": {
+    "rel": 0.2,
+    "abs": 0.2
+   },
+   "jsMs.med": {
+    "rel": 0.0781,
+    "abs": 0.1
+   },
+   "calls.med": {
+    "rel": 0,
+    "abs": 0.5
+   },
+   "triangles.med": {
+    "rel": 0.0023,
+    "abs": 252
+   }
+  },
+  "house/low/load": {
+   "readyMs": {
+    "rel": 0.5064,
+    "abs": 458.4
+   }
+  },
+  "house/medium/path": {
+   "frameMs.med": {
+    "rel": 0.069,
+    "abs": 0.2
+   },
+   "frameMs.p95": {
+    "rel": 0.1026,
+    "abs": 0.4
+   },
+   "frameMs.mean": {
+    "rel": 0.1247,
+    "abs": 0.342
+   },
+   "cpuMs.med": {
+    "rel": 0.0714,
+    "abs": 0.2
+   },
+   "jsMs.med": {
+    "rel": 1.0377,
+    "abs": 0.55
+   },
+   "calls.med": {
+    "rel": 0,
+    "abs": 0.5
+   },
+   "triangles.med": {
+    "rel": 0,
+    "abs": 0.5
+   }
+  },
+  "house/medium/fight": {
+   "frameMs.med": {
+    "rel": 0.03,
+    "abs": 0.1
+   },
+   "frameMs.p95": {
+    "rel": 0.25,
+    "abs": 1.6
+   },
+   "frameMs.mean": {
+    "rel": 0.1497,
+    "abs": 0.594
+   },
+   "cpuMs.med": {
+    "rel": 0.1333,
+    "abs": 0.4
+   },
+   "jsMs.med": {
+    "rel": 0.2845,
+    "abs": 0.65
+   },
+   "calls.med": {
+    "rel": 0,
+    "abs": 0.5
+   },
+   "triangles.med": {
+    "rel": 0.0034,
+    "abs": 1457
+   }
+  },
+  "house/medium/load": {
+   "readyMs": {
+    "rel": 0.124,
+    "abs": 1046.4
+   }
+  },
+  "house/high/path": {
+   "frameMs.med": {
+    "rel": 0.1818,
+    "abs": 0.6
+   },
+   "frameMs.p95": {
+    "rel": 0.7059,
+    "abs": 3.6
+   },
+   "frameMs.mean": {
+    "rel": 0.4296,
+    "abs": 1.392
+   },
+   "cpuMs.med": {
+    "rel": 0.0625,
+    "abs": 0.2
+   },
+   "jsMs.med": {
+    "rel": 1.4949,
+    "abs": 1.03
+   },
+   "calls.med": {
+    "rel": 0,
+    "abs": 0.5
+   },
+   "triangles.med": {
+    "rel": 0,
+    "abs": 0.5
+   }
+  },
+  "house/high/fight": {
+   "frameMs.med": {
+    "rel": 0.2553,
+    "abs": 1.2
+   },
+   "frameMs.p95": {
+    "rel": 0.65,
+    "abs": 5.2
+   },
+   "frameMs.mean": {
+    "rel": 0.2863,
+    "abs": 1.43
+   },
+   "cpuMs.med": {
+    "rel": 0.2222,
+    "abs": 0.8
+   },
+   "jsMs.med": {
+    "rel": 0.5655,
+    "abs": 1.784
+   },
+   "calls.med": {
+    "rel": 0,
+    "abs": 0.5
+   },
+   "triangles.med": {
+    "rel": 0.0001,
+    "abs": 108
+   }
+  },
+  "house/high/load": {
+   "readyMs": {
+    "rel": 0.141,
+    "abs": 1212.4
+   }
+  },
+  "house/ultra/path": {
+   "frameMs.med": {
+    "rel": 0.1905,
+    "abs": 0.8
+   },
+   "frameMs.p95": {
+    "rel": 0.5098,
+    "abs": 2.6
+   },
+   "frameMs.mean": {
+    "rel": 0.2992,
+    "abs": 1.218
+   },
+   "cpuMs.med": {
+    "rel": 0.1463,
+    "abs": 0.6
+   },
+   "jsMs.med": {
+    "rel": 1.1752,
+    "abs": 1.362
+   },
+   "calls.med": {
+    "rel": 0,
+    "abs": 0.5
+   },
+   "triangles.med": {
+    "rel": 0,
+    "abs": 0.5
+   }
+  },
+  "house/ultra/fight": {
+   "frameMs.med": {
+    "rel": 0.0769,
+    "abs": 0.4
+   },
+   "frameMs.p95": {
+    "rel": 0.2619,
+    "abs": 2.2
+   },
+   "frameMs.mean": {
+    "rel": 0.1501,
+    "abs": 0.808
+   },
+   "cpuMs.med": {
+    "rel": 0.0976,
+    "abs": 0.4
+   },
+   "jsMs.med": {
+    "rel": 0.5078,
+    "abs": 1.716
+   },
+   "calls.med": {
+    "rel": 0,
+    "abs": 0.5
+   },
+   "triangles.med": {
+    "rel": 0,
+    "abs": 0.5
+   }
+  },
+  "house/ultra/load": {
+   "readyMs": {
+    "rel": 0.0642,
+    "abs": 713.2
+   }
+  },
+  "mexico/low/path": {
+   "frameMs.med": {
+    "rel": 0.1905,
+    "abs": 0.4
+   },
+   "frameMs.p95": {
+    "rel": 0.9231,
+    "abs": 2.4
+   },
+   "frameMs.mean": {
+    "rel": 0.4837,
+    "abs": 0.684
+   },
+   "cpuMs.med": {
+    "rel": 0.2,
+    "abs": 0.4
+   },
+   "jsMs.med": {
+    "rel": 0.1154,
+    "abs": 0.1
+   },
+   "calls.med": {
+    "rel": 0,
+    "abs": 0.5
+   },
+   "triangles.med": {
+    "rel": 0,
+    "abs": 0.5
+   }
+  },
+  "mexico/low/fight": {
+   "frameMs.med": {
+    "rel": 0.1333,
+    "abs": 0.2
+   },
+   "frameMs.p95": {
+    "rel": 0.069,
+    "abs": 0.2
+   },
+   "frameMs.mean": {
+    "rel": 0.1264,
+    "abs": 0.206
+   },
+   "cpuMs.med": {
+    "rel": 0.2222,
+    "abs": 0.2
+   },
+   "jsMs.med": {
+    "rel": 0.0906,
+    "abs": 0.1
+   },
+   "calls.med": {
+    "rel": 0.0048,
+    "abs": 1
+   },
+   "triangles.med": {
+    "rel": 0.0015,
+    "abs": 160
+   }
+  },
+  "mexico/low/load": {
+   "readyMs": {
+    "rel": 0.2875,
+    "abs": 278.4
+   }
+  },
+  "mexico/medium/path": {
+   "frameMs.med": {
+    "rel": 0.1379,
+    "abs": 0.4
+   },
+   "frameMs.p95": {
+    "rel": 0.381,
+    "abs": 1.6
+   },
+   "frameMs.mean": {
+    "rel": 0.1592,
+    "abs": 0.448
+   },
+   "cpuMs.med": {
+    "rel": 0.0714,
+    "abs": 0.2
+   },
+   "jsMs.med": {
+    "rel": 0.2019,
+    "abs": 0.108
+   },
+   "calls.med": {
+    "rel": 0,
+    "abs": 0.5
+   },
+   "triangles.med": {
+    "rel": 0,
+    "abs": 0.5
+   }
+  },
+  "mexico/medium/fight": {
+   "frameMs.med": {
+    "rel": 0.2162,
+    "abs": 0.8
+   },
+   "frameMs.p95": {
+    "rel": 0.3793,
+    "abs": 2.2
+   },
+   "frameMs.mean": {
+    "rel": 0.2997,
+    "abs": 1.138
+   },
+   "cpuMs.med": {
+    "rel": 0.2857,
+    "abs": 0.8
+   },
+   "jsMs.med": {
+    "rel": 0.7988,
+    "abs": 1.878
+   },
+   "calls.med": {
+    "rel": 0,
+    "abs": 0.5
+   },
+   "triangles.med": {
+    "rel": 0,
+    "abs": 0.5
+   }
+  },
+  "mexico/medium/load": {
+   "readyMs": {
+    "rel": 0.03,
+    "abs": 207.6
+   }
+  },
+  "mexico/high/path": {
+   "frameMs.med": {
+    "rel": 0.0606,
+    "abs": 0.2
+   },
+   "frameMs.p95": {
+    "rel": 0.186,
+    "abs": 0.8
+   },
+   "frameMs.mean": {
+    "rel": 0.0973,
+    "abs": 0.308
+   },
+   "cpuMs.med": {
+    "rel": 0.03,
+    "abs": 0.1
+   },
+   "jsMs.med": {
+    "rel": 0.9675,
+    "abs": 0.566
+   },
+   "calls.med": {
+    "rel": 0,
+    "abs": 0.5
+   },
+   "triangles.med": {
+    "rel": 0,
+    "abs": 0.5
+   }
+  },
+  "mexico/high/fight": {
+   "frameMs.med": {
+    "rel": 0.0444,
+    "abs": 0.2
+   },
+   "frameMs.p95": {
+    "rel": 0.1111,
+    "abs": 0.8
+   },
+   "frameMs.mean": {
+    "rel": 0.0569,
+    "abs": 0.26
+   },
+   "cpuMs.med": {
+    "rel": 0.1176,
+    "abs": 0.4
+   },
+   "jsMs.med": {
+    "rel": 0.3778,
+    "abs": 1.206
+   },
+   "calls.med": {
+    "rel": 0.0068,
+    "abs": 2
+   },
+   "triangles.med": {
+    "rel": 0.0021,
+    "abs": 1382
+   }
+  },
+  "mexico/high/load": {
+   "readyMs": {
+    "rel": 0.0627,
+    "abs": 467
+   }
+  },
+  "mexico/ultra/path": {
+   "frameMs.med": {
+    "rel": 0.0455,
+    "abs": 0.2
+   },
+   "frameMs.p95": {
+    "rel": 0.3929,
+    "abs": 2.2
+   },
+   "frameMs.mean": {
+    "rel": 0.1369,
+    "abs": 0.6
+   },
+   "cpuMs.med": {
+    "rel": 0.0465,
+    "abs": 0.2
+   },
+   "jsMs.med": {
+    "rel": 0.7292,
+    "abs": 0.606
+   },
+   "calls.med": {
+    "rel": 0,
+    "abs": 0.5
+   },
+   "triangles.med": {
+    "rel": 0,
+    "abs": 0.5
+   }
+  },
+  "mexico/ultra/fight": {
+   "frameMs.med": {
+    "rel": 0.1154,
+    "abs": 0.6
+   },
+   "frameMs.p95": {
+    "rel": 0.0964,
+    "abs": 0.8
+   },
+   "frameMs.mean": {
+    "rel": 0.137,
+    "abs": 0.738
+   },
+   "cpuMs.med": {
+    "rel": 0.15,
+    "abs": 0.6
+   },
+   "jsMs.med": {
+    "rel": 0.3521,
+    "abs": 1.41
+   },
+   "calls.med": {
+    "rel": 0,
+    "abs": 0.5
+   },
+   "triangles.med": {
+    "rel": 0.0306,
+    "abs": 26222
+   }
+  },
+  "mexico/ultra/load": {
+   "readyMs": {
+    "rel": 0.1084,
+    "abs": 1008
+   }
+  },
+  "training/low/path": {
+   "frameMs.med": {
+    "rel": 0.1429,
+    "abs": 0.2
+   },
+   "frameMs.p95": {
+    "rel": 0.3571,
+    "abs": 1
+   },
+   "frameMs.mean": {
+    "rel": 0.215,
+    "abs": 0.336
+   },
+   "cpuMs.med": {
+    "rel": 0.03,
+    "abs": 0.1
+   },
+   "jsMs.med": {
+    "rel": 0.3316,
+    "abs": 0.314
+   },
+   "calls.med": {
+    "rel": 0,
+    "abs": 0.5
+   },
+   "triangles.med": {
+    "rel": 0,
+    "abs": 0.5
+   }
+  },
+  "training/low/fight": {
+   "frameMs.med": {
+    "rel": 0.16,
+    "abs": 0.4
+   },
+   "frameMs.p95": {
+    "rel": 0.1081,
+    "abs": 0.4
+   },
+   "frameMs.mean": {
+    "rel": 0.1149,
+    "abs": 0.294
+   },
+   "cpuMs.med": {
+    "rel": 0.2105,
+    "abs": 0.4
+   },
+   "jsMs.med": {
+    "rel": 0.3715,
+    "abs": 0.782
+   },
+   "calls.med": {
+    "rel": 0,
+    "abs": 0.5
+   },
+   "triangles.med": {
+    "rel": 0,
+    "abs": 0.5
+   }
+  },
+  "training/low/load": {
+   "readyMs": {
+    "rel": 0.304,
+    "abs": 312.4
+   }
+  },
+  "training/medium/path": {
+   "frameMs.med": {
+    "rel": 0.0769,
+    "abs": 0.2
+   },
+   "frameMs.p95": {
+    "rel": 0.2051,
+    "abs": 0.8
+   },
+   "frameMs.mean": {
+    "rel": 0.0539,
+    "abs": 0.142
+   },
+   "cpuMs.med": {
+    "rel": 0.03,
+    "abs": 0.1
+   },
+   "jsMs.med": {
+    "rel": 0.9239,
+    "abs": 1.482
+   },
+   "calls.med": {
+    "rel": 0,
+    "abs": 0.5
+   },
+   "triangles.med": {
+    "rel": 0,
+    "abs": 0.5
+   }
+  },
+  "training/medium/fight": {
+   "frameMs.med": {
+    "rel": 0.0465,
+    "abs": 0.2
+   },
+   "frameMs.p95": {
+    "rel": 0.0328,
+    "abs": 0.2
+   },
+   "frameMs.mean": {
+    "rel": 0.0345,
+    "abs": 0.154
+   },
+   "cpuMs.med": {
+    "rel": 0.0556,
+    "abs": 0.2
+   },
+   "jsMs.med": {
+    "rel": 0.1279,
+    "abs": 0.454
+   },
+   "calls.med": {
+    "rel": 0,
+    "abs": 0.5
+   },
+   "triangles.med": {
+    "rel": 0,
+    "abs": 0.5
+   }
+  },
+  "training/medium/load": {
+   "readyMs": {
+    "rel": 0.1003,
+    "abs": 553.4
+   }
+  },
+  "training/high/path": {
+   "frameMs.med": {
+    "rel": 0.5333,
+    "abs": 1.6
+   },
+   "frameMs.p95": {
+    "rel": 0.8182,
+    "abs": 3.6
+   },
+   "frameMs.mean": {
+    "rel": 0.5268,
+    "abs": 1.672
+   },
+   "cpuMs.med": {
+    "rel": 0.4138,
+    "abs": 1.2
+   },
+   "jsMs.med": {
+    "rel": 0.6506,
+    "abs": 1.678
+   },
+   "calls.med": {
+    "rel": 0,
+    "abs": 0.5
+   },
+   "triangles.med": {
+    "rel": 0,
+    "abs": 0.5
+   }
+  },
+  "training/high/fight": {
+   "frameMs.med": {
+    "rel": 0.1132,
+    "abs": 0.6
+   },
+   "frameMs.p95": {
+    "rel": 0.2368,
+    "abs": 1.8
+   },
+   "frameMs.mean": {
+    "rel": 0.1349,
+    "abs": 0.734
+   },
+   "cpuMs.med": {
+    "rel": 0.1778,
+    "abs": 0.8
+   },
+   "jsMs.med": {
+    "rel": 0.119,
+    "abs": 0.496
+   },
+   "calls.med": {
+    "rel": 0,
+    "abs": 0.5
+   },
+   "triangles.med": {
+    "rel": 0,
+    "abs": 0.5
+   }
+  },
+  "training/high/load": {
+   "readyMs": {
+    "rel": 0.1449,
+    "abs": 804.4
+   }
+  },
+  "training/ultra/path": {
+   "frameMs.med": {
+    "rel": 0.0513,
+    "abs": 0.2
+   },
+   "frameMs.p95": {
+    "rel": 0.1053,
+    "abs": 0.6
+   },
+   "frameMs.mean": {
+    "rel": 0.0365,
+    "abs": 0.15
+   },
+   "cpuMs.med": {
+    "rel": 0.0526,
+    "abs": 0.2
+   },
+   "jsMs.med": {
+    "rel": 0.3371,
+    "abs": 0.8
+   },
+   "calls.med": {
+    "rel": 0,
+    "abs": 0.5
+   },
+   "triangles.med": {
+    "rel": 0,
+    "abs": 0.5
+   }
+  },
+  "training/ultra/fight": {
+   "frameMs.med": {
+    "rel": 0.2667,
+    "abs": 1.6
+   },
+   "frameMs.p95": {
+    "rel": 0.3457,
+    "abs": 2.8
+   },
+   "frameMs.mean": {
+    "rel": 0.3007,
+    "abs": 1.868
+   },
+   "cpuMs.med": {
+    "rel": 0.3529,
+    "abs": 1.8
+   },
+   "jsMs.med": {
+    "rel": 0.2696,
+    "abs": 1.358
+   },
+   "calls.med": {
+    "rel": 0,
+    "abs": 0.5
+   },
+   "triangles.med": {
+    "rel": 0,
+    "abs": 0.5
+   }
+  },
+  "training/ultra/load": {
+   "readyMs": {
+    "rel": 0.0441,
+    "abs": 298
+   }
+  }
+ }
+}
