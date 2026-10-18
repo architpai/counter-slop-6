@@ -81,3 +81,12 @@ drift. `perf/ab.sh` runs variants back to back per cell instead; with two HEAD b
 mean, median and p95; Low -0.5 / -0.6 / +0.4 %). That is one observation, not a noise floor: treat a paired change under about
 2 % as unproven, and repeat the run (or add rounds) near that line; measure HEAD/HEAD over several runs when a
 round's verdict hangs on it.
+
+## Paired A/B noise (Round 2)
+
+Four more paired runs (`perf/results/r2-ab.md`). HEAD/HEAD on the suite frame mean: s1 +0.1 %, s2 +0.1 %, s3 -0.6 %
+(presets within ±1.8 %), s4 +2.1 % with **+8.3 % on medium**: the battery was at 7-8 % (on AC) and the machine
+switched power states mid-run, sometimes between two variants of one cell. A slow drift cancels in the pairing; a
+switch does not. Check `pmset -g batt` (and close desktop GPU apps) before a run; when headB/head moves past ~2 % on a
+preset, that preset's verdict needs another run. `r2-ab.md` also shows a control-filtered view (only cell triplets
+where headB/head is within 3 %).

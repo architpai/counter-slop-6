@@ -1,0 +1,710 @@
+diff --git a/src/engine/effects-real.ts b/src/engine/effects-real.ts
+index f49f1c8..27a7503 100644
+--- a/src/engine/effects-real.ts
++++ b/src/engine/effects-real.ts
+@@ -79,6 +79,26 @@ export function flushInstances(attribute: THREE.InstancedBufferAttribute, n: num
+   attribute.needsUpdate = true;
+ }
+ 
++/** Ranges a ring-buffer attribute keeps before it uploads whole (a pool written for long while it is not drawn). */
++const MAX_RANGES = 32;
++
++/**
++ * Upload `count` floats from `start` with the next draw: the slot a
++ * ring-buffer pool just wrote. Every write to such an attribute must be
++ * marked (three uploads only the ranges listed), so the GPU's copy matches
++ * the array at every draw, as a whole upload would. Touching or overlapping
++ * the last range extends it.
++ */
++export function markSlots(attribute: THREE.BufferAttribute, start: number, count: number): void {
++  const ranges = attribute.updateRanges, last = ranges[ranges.length - 1];
++  if (last && start >= last.start && start <= last.start + last.count) last.count = Math.max(last.count, start + count - last.start);
++  else if (ranges.length >= MAX_RANGES) {
++    attribute.clearUpdateRanges();
++    attribute.addUpdateRange(0, attribute.array.length);
++  } else attribute.addUpdateRange(start, count);
++  attribute.needsUpdate = true;
++}
++
+ /** Pool sizes at full detail. */
+ export const REAL_CAPACITY = { fire: 192, lit: 320, decals: 288, shells: 48, lights: 2 } as const;
+ 
+@@ -107,6 +127,9 @@ interface Sprite {
+   axis: THREE.Vector3 | null;
+   /** Flat in the plane with this normal (a ground ring). */
+   flat: THREE.Vector3 | null;
++  /** The record's own vectors that `axis` and `flat` are, when set. */
++  ownAxis: THREE.Vector3;
++  ownFlat: THREE.Vector3;
+   gravity: number;
+   drag: number;
+   /** Bounces off the world (chips, splinters, shards). */
+@@ -129,6 +152,14 @@ interface Shell {
+   rest: boolean;
+ }
+ 
++/** One casing pool: the live casings oldest first, and dead ones' records for reuse. */
++interface ShellPool {
++  mesh: THREE.InstancedMesh;
++  items: Shell[];
++  free: Shell[];
++  limit: number;
++}
++
+ interface Light {
+   light: THREE.PointLight;
+   time: number;
+@@ -158,6 +189,8 @@ const previous = new THREE.Vector3();
+ const motion = new THREE.Vector3();
+ const axis = new THREE.Vector3();
+ const scratch = new THREE.Vector3();
++/** A sprite's velocity while its recipe builds it (`_sprite` copies it). */
++const spriteVel = new THREE.Vector3();
+ const eye = new THREE.Vector3();
+ const transform = new THREE.Object3D();
+ const spin = new THREE.Quaternion();
+@@ -217,7 +250,7 @@ class SpritePool {
+     this.items = Array.from({ length: capacity }, () => ({
+       pos: new THREE.Vector3(), vel: new THREE.Vector3(), life: 0, maxLife: 1, size: 1, grow: 1, color: new THREE.Color(), alpha: 1,
+       fadeIn: 0, fadeOut: 1, first: 0, count: 1, span: 1, rotation: 0, spin: 0, stretch: 0, axis: null, flat: null,
+-      gravity: 0, drag: 0, bounce: false, ring: false, tag: 0, fresh: false,
++      ownAxis: new THREE.Vector3(), ownFlat: new THREE.Vector3(), gravity: 0, drag: 0, bounce: false, ring: false, tag: 0, fresh: false,
+     }));
+   }
+ 
+@@ -234,7 +267,10 @@ class SpritePool {
+ 
+   remove(i: number): void {
+     const last = --this.count;
+-    if (i !== last) [this.items[i], this.items[last]] = [this.items[last]!, this.items[i]!];
++    if (i === last) return;
++    const s = this.items[i]!;
++    this.items[i] = this.items[last]!;
++    this.items[last] = s;
+   }
+ }
+ 
+@@ -253,10 +289,11 @@ export class RealEffects {
+   _decalStamps: number[] = new Array<number>(REAL_CAPACITY.decals).fill(0);
+   /** Blood marks still drying: their slot, its stamp, and seconds since they landed. */
+   _drying: { index: number; stamp: number; age: number; hex: number }[] = [];
++  _freeDrying: { index: number; stamp: number; age: number; hex: number }[] = [];
+   _dryT = 0;
+-  readonly _shells: Record<'brass' | 'shotshell', { mesh: THREE.InstancedMesh; items: Shell[]; limit: number }>;
++  readonly _shells: Record<'brass' | 'shotshell', ShellPool>;
+   /** `_shells`' pools in its key order, for the frame step. */
+-  readonly _shellList: readonly { mesh: THREE.InstancedMesh; items: Shell[]; limit: number }[];
++  readonly _shellList: readonly ShellPool[];
+   readonly _lights: Light[];
+   /** The stamp new sprites take: a cloud's while it emits (`_emitClouds`), else 0, which no handle stops. */
+   _tag = 0;
+@@ -315,7 +352,7 @@ export class RealEffects {
+       mesh.castShadow = false;
+       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+       ctx.scene.add(mesh);
+-      return { mesh, items: [] as Shell[], limit: REAL_CAPACITY.shells };
++      return { mesh, items: [], free: [], limit: REAL_CAPACITY.shells } as ShellPool;
+     };
+     this._shells = { brass: shellPool(brass, 'brass'), shotshell: shellPool(hull, 'shotshell') };
+     this._shellList = [this._shells.brass, this._shells.shotshell];
+@@ -337,6 +374,7 @@ export class RealEffects {
+     this._decalNext %= this._decalLimit;
+     for (const pool of Object.values(this._shells)) {
+       pool.limit = Math.max(4, Math.floor(REAL_CAPACITY.shells * this.detail));
++      for (let i = pool.limit; i < pool.items.length; i++) pool.free.push(pool.items[i]!);
+       pool.items.length = Math.min(pool.items.length, pool.limit);
+     }
+   }
+@@ -365,8 +403,8 @@ export class RealEffects {
+     s.rotation = o.rotation ?? rand(0, TAU);
+     s.spin = o.spin ?? 0;
+     s.stretch = o.stretch ?? 0;
+-    s.axis = o.axis ? (s.axis ?? new THREE.Vector3()).copy(o.axis).normalize() : null;
+-    s.flat = o.flat ? (s.flat ?? new THREE.Vector3()).copy(o.flat).normalize() : null;
++    s.axis = o.axis ? s.ownAxis.copy(o.axis).normalize() : null;
++    s.flat = o.flat ? s.ownFlat.copy(o.flat).normalize() : null;
+     s.gravity = o.gravity ?? 0;
+     s.drag = o.drag ?? 0;
+     s.bounce = o.bounce ?? false;
+@@ -384,7 +422,7 @@ export class RealEffects {
+   impact(point: THREE.Vector3, normal: THREE.Vector3, hit: Impact, from: THREE.Vector3 | null): void {
+     const n = normal;
+     for (let i = 0; i < this._n(hit.sparks); i++) {
+-      const vel = spray(n, 0.75, new THREE.Vector3()).multiplyScalar(rand(3, 9));
++      const vel = spray(n, 0.75, spriteVel).multiplyScalar(rand(3, 9));
+       if (from) vel.addScaledVector(scratch.copy(from).reflect(n), rand(0, 2));
+       this._sprite(this._fire, point, { life: rand(0.12, 0.3), size: 0.07, hex: 0xffc070, intensity: rand(4, 7), vel,
+         cells: cells('fire', 'spark'), frames: false, stretch: 1, gravity: 9, drag: 1.5, fadeOut: 0.5 });
+@@ -392,7 +430,7 @@ export class RealEffects {
+     if (hit.sparks > 0) this._sprite(this._fire, scratch.copy(point).addScaledVector(n, 0.03), { life: 0.05, size: 0.18, hex: 0xffd9a0,
+       intensity: 3, cells: cells('fire', 'glow'), fadeOut: 0.2 });
+     for (let i = 0; i < this._n(hit.dust); i++) {
+-      const vel = spray(n, 0.3, new THREE.Vector3()).multiplyScalar(rand(0.5, 1.4));
++      const vel = spray(n, 0.3, spriteVel).multiplyScalar(rand(0.5, 1.4));
+       // About a metre across at its full size: a hit 20 m away still shows where it landed.
+       this._sprite(this._lit, scratch.copy(point).addScaledVector(n, 0.08), { life: rand(0.7, 1.2), size: rand(0.3, 0.4),
+         grow: rand(2, 2.6), hex: hit.dustColor, alpha: 0.9, vel, cells: cells('smoke', 'dust'),
+@@ -400,7 +438,7 @@ export class RealEffects {
+     }
+     const debris = (count: number, run: readonly [number, number], hex: number, size: number, speed: number) => {
+       for (let i = 0; i < this._n(count); i++) {
+-        const vel = spray(n, 0.8, new THREE.Vector3()).multiplyScalar(rand(0.5, 1) * speed);
++        const vel = spray(n, 0.8, spriteVel).multiplyScalar(rand(0.5, 1) * speed);
+         vel.y += rand(0.5, 2);
+         this._sprite(this._lit, point, { life: rand(0.6, 1.1), size: size * rand(0.6, 1.2), hex, vel, cells: run, frames: false,
+           spin: rand(-14, 14), gravity: 14, drag: 0.4, bounce: true, fadeOut: 0.8 });
+@@ -455,21 +493,33 @@ export class RealEffects {
+     color.setHex(hex).multiplyScalar(BLOOD_GAIN);
+     const index = this._decal(point, normal, [cell, 1], size * (shape === 'drip' ? 0.8 : 1), color.r, color.g, color.b, dir,
+       shape === 'spatter' ? rand(1.1, 1.5) : 1);
+-    if (this._drying.length >= 96) this._drying.shift();
+-    this._drying.push({ index, stamp: this._decalStamps[index] ?? 0, age: 0, hex });
++    if (this._drying.length >= 96) this._freeDrying.push(this._drying.shift()!);
++    const d = this._freeDrying.pop() ?? { index: 0, stamp: 0, age: 0, hex: 0 };
++    d.index = index;
++    d.stamp = this._decalStamps[index] ?? 0;
++    d.age = 0;
++    d.hex = hex;
++    this._drying.push(d);
+     return true;
+   }
+ 
+   /** Pools growing in place: their slot, its stamp, where, how big, and how far grown. */
+   _pools: { index: number; stamp: number; pos: THREE.Vector3; quat: THREE.Quaternion; size: number; time: number; duration: number }[] = [];
++  _freePools: { index: number; stamp: number; pos: THREE.Vector3; quat: THREE.Quaternion; size: number; time: number; duration: number }[] = [];
+ 
+   /** A blood pool: the atlas's round splat, `size` across, growing to it over `duration` s and drying. False without blood cells. */
+   bloodPool(point: THREE.Vector3, normal: THREE.Vector3, size: number, duration: number, hex: number): boolean {
+     if (!this.bloodDecal(point, normal, 'splat', size, null, hex)) return false;
+-    const index = (this._decalNext + this._decalLimit - 1) % this._decalLimit, pos = new THREE.Vector3(), quat = new THREE.Quaternion();
++    const index = (this._decalNext + this._decalLimit - 1) % this._decalLimit;
++    const g = this._freePools.pop() ?? { index: 0, stamp: 0, pos: new THREE.Vector3(), quat: new THREE.Quaternion(), size: 0, time: 0, duration: 0 };
+     this._decals.getMatrixAt(index, matrix);
+-    matrix.decompose(pos, quat, scaleOut);
+-    this._pools.push({ index, stamp: this._decalStamps[index] ?? 0, pos, quat, size, time: 0, duration });
++    matrix.decompose(g.pos, g.quat, scaleOut);
++    g.index = index;
++    g.stamp = this._decalStamps[index] ?? 0;
++    g.size = size;
++    g.time = 0;
++    g.duration = duration;
++    this._pools.push(g);
+     this._growPools(0);
+     return true;
+   }
+@@ -478,14 +528,14 @@ export class RealEffects {
+     if (this._pools.length === 0) return;
+     for (let i = this._pools.length - 1; i >= 0; i--) {
+       const g = this._pools[i]!;
+-      if (this._decalStamps[g.index] !== g.stamp) { this._pools.splice(i, 1); continue; }
++      if (this._decalStamps[g.index] !== g.stamp) { this._freePools.push(g); this._pools.splice(i, 1); continue; }
+       g.time += dt;
+       const f = Math.min(1, g.time / g.duration), e = 1 - (1 - f) ** 2;
+       matrix.compose(g.pos, g.quat, scaleOut.set(Math.max(1e-3, g.size * e), Math.max(1e-3, g.size * e), 1));
+       this._decals.setMatrixAt(g.index, matrix);
+-      if (f >= 1) this._pools.splice(i, 1);
++      markSlots(this._decals.instanceMatrix, g.index * 16, 16);
++      if (f >= 1) { this._freePools.push(g); this._pools.splice(i, 1); }
+     }
+-    this._decals.instanceMatrix.needsUpdate = true;
+   }
+ 
+   /** Every quarter second, the blood still drying darkens towards dried blood, over 6 s. */
+@@ -497,12 +547,12 @@ export class RealEffects {
+     for (let i = this._drying.length - 1; i >= 0; i--) {
+       const d = this._drying[i]!;
+       d.age += step;
+-      if (this._decalStamps[d.index] !== d.stamp) { this._drying.splice(i, 1); continue; }
++      if (this._decalStamps[d.index] !== d.stamp) { this._freeDrying.push(d); this._drying.splice(i, 1); continue; }
+       const f = Math.min(1, d.age / 6);
+       this._decals.setColorAt(d.index, color.setHex(d.hex).lerp(dried, f * f * (3 - 2 * f)).multiplyScalar(BLOOD_GAIN));
+-      if (f >= 1) this._drying.splice(i, 1);
++      if (this._decals.instanceColor) markSlots(this._decals.instanceColor, d.index * 3, 3);
++      if (f >= 1) { this._freeDrying.push(d); this._drying.splice(i, 1); }
+     }
+-    if (this._decals.instanceColor) this._decals.instanceColor.needsUpdate = true;
+   }
+ 
+   _decal(point: THREE.Vector3, normal: THREE.Vector3, run: readonly [number, number], size: number, r: number, g: number, b: number,
+@@ -530,9 +580,9 @@ export class RealEffects {
+     this._decals.setColorAt(index, color.setRGB(r, g, b));
+     const info = FX_MANIFEST.decals, cell = run[0] + Math.floor(rand(0, run[1]));
+     this._decalCells.setXYZW(index, (cell % info.cols) / info.cols, Math.floor(cell / info.cols) / info.rows, 1 / info.cols, 1 / info.rows);
+-    this._decals.instanceMatrix.needsUpdate = true;
+-    if (this._decals.instanceColor) this._decals.instanceColor.needsUpdate = true;
+-    this._decalCells.needsUpdate = true;
++    markSlots(this._decals.instanceMatrix, index * 16, 16);
++    if (this._decals.instanceColor) markSlots(this._decals.instanceColor, index * 3, 3);
++    markSlots(this._decalCells, index * 4, 4);
+     return index;
+   }
+ 
+@@ -585,7 +635,7 @@ export class RealEffects {
+     const k = clamp(radius / 5, 0.35, 1.6);
+     this._sprite(this._fire, pos, { life: 0.05, size: 4.2 * k, hex: 0xfff2dc, intensity: 6, cells: cells('fire', 'glow'), fadeOut: 0.2 });
+     for (let i = 0; i < this._n(5); i++) {
+-      const vel = randomUnit(new THREE.Vector3()).multiplyScalar(rand(0.4, 1.6) * k);
++      const vel = randomUnit(spriteVel).multiplyScalar(rand(0.4, 1.6) * k);
+       vel.y = Math.abs(vel.y) + 0.8 * k;
+       this._sprite(this._fire, scratch.copy(pos).addScaledVector(vel, 0.12), { life: rand(0.55, 0.85), size: rand(1.3, 2) * k,
+         // Played to its last glowing frames and faded out from 40 % of its life: the atlas's dark cooling
+@@ -594,20 +644,20 @@ export class RealEffects {
+         spin: rand(-1, 1), fadeOut: 0.4 });
+     }
+     for (let i = 0; i < this._n(14); i++) {
+-      const vel = randomUnit(new THREE.Vector3()).multiplyScalar(rand(8, 20) * k);
++      const vel = randomUnit(spriteVel).multiplyScalar(rand(8, 20) * k);
+       vel.y = Math.abs(vel.y) * 0.8 + 2;
+       this._sprite(this._fire, pos, { life: rand(0.3, 0.7), size: 0.12, hex: 0xffb060, intensity: 6, vel, cells: cells('fire', 'spark'),
+         frames: false, stretch: 1, gravity: 12, drag: 1.2, fadeOut: 0.5 });
+     }
+     const ground = this.world.raycast(scratch.copy(pos).addScaledVector(UP, 0.3), DOWN, 3.5, seeThrough);
+     if (ground) {
+-      const at = ground.point.clone().addScaledVector(ground.normal, 0.05);
++      const at = scratch.copy(ground.point).addScaledVector(ground.normal, 0.05);
+       this._sprite(this._lit, at, { life: 0.45, size: 0.6, grow: 5.5 * k, hex: 0xb8b0a4, alpha: 0.55, cells: [-1, 1], frames: false,
+         flat: ground.normal, ring: true, fadeOut: 0.3 });
+       if (dark) this._decal(ground.point, ground.normal, cells('decals', 'scorch'), 2.6 * k * rand(0.9, 1.1), 1, 1, 1);
+     }
+     for (let i = 0; i < this._n(12); i++) {
+-      const vel = randomUnit(new THREE.Vector3()).multiplyScalar(rand(4, 11) * k);
++      const vel = randomUnit(spriteVel).multiplyScalar(rand(4, 11) * k);
+       vel.y = Math.abs(vel.y) + 2;
+       this._sprite(this._lit, pos, { life: rand(0.8, 1.4), size: rand(0.05, 0.1), hex: 0x6a655e, vel, cells: cells('smoke', 'chips'),
+         frames: false, spin: rand(-14, 14), gravity: 16, drag: 0.3, bounce: true, fadeOut: 0.8 });
+@@ -644,7 +694,8 @@ export class RealEffects {
+     const pool = this._shells[kind === 'shotgun' ? 'shotshell' : 'brass'];
+     let s: Shell;
+     if (pool.items.length < pool.limit) {
+-      s = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), quat: new THREE.Quaternion(), spin: new THREE.Vector3(), life: 0, length: 0, width: 0, rest: false };
++      // A dead casing's record, or a new one: every field is set below.
++      s = pool.free.pop() ?? { pos: new THREE.Vector3(), vel: new THREE.Vector3(), quat: new THREE.Quaternion(), spin: new THREE.Vector3(), life: 0, length: 0, width: 0, rest: false };
+       pool.items.push(s);
+     } else {
+       s = pool.items.shift()!;
+@@ -802,7 +853,7 @@ export class RealEffects {
+       for (let i = pool.items.length - 1; i >= 0; i--) {
+         const s = pool.items[i]!;
+         s.life -= dt;
+-        if (s.life <= 0) { pool.items.splice(i, 1); continue; }
++        if (s.life <= 0) { pool.items.splice(i, 1); pool.free.push(s); continue; }
+         if (!s.rest && dt > 0) {
+           previous.copy(s.pos);
+           s.vel.y -= 9.8 * dt;
+@@ -836,7 +887,7 @@ export class RealEffects {
+       }
+       pool.mesh.count = drawn;
+       pool.mesh.visible = drawn > 0;
+-      if (drawn > 0) pool.mesh.instanceMatrix.needsUpdate = true;
++      if (drawn > 0) flushInstances(pool.mesh.instanceMatrix, drawn * 16);
+     }
+   }
+ 
+@@ -847,7 +898,7 @@ export class RealEffects {
+     this._draw(this._lit);
+     this._decals.count = this._decalCount = this._decalNext = 0;
+     showFilled(this._decals);
+-    for (const pool of Object.values(this._shells)) { pool.items.length = 0; pool.mesh.count = 0; }
++    for (const pool of this._shellList) { pool.free.push(...pool.items); pool.items.length = 0; pool.mesh.count = 0; }
+     this._clouds.length = 0;
+     this._cleared++;
+     for (const l of this._lights) { l.time = l.duration = 0; l.priority = -1; l.light.intensity = 0; }
+diff --git a/src/engine/effects.ts b/src/engine/effects.ts
+index 0cfbeb7..eca1673 100644
+--- a/src/engine/effects.ts
++++ b/src/engine/effects.ts
+@@ -3,7 +3,7 @@ import { choose, clamp, lerp, rand, TAU } from './util';
+ import { BLOOD, TONE, TONE_HEX, WHITE_HEX, SMOKE_HEX, unlitMat } from './render/index';
+ import { flatDecalMaterial, lowGlowMaterial, splatMaterial, tracerGeometry, tracerMaterial } from './render/fx';
+ import { impactFor, surfaceAt } from './render/impacts';
+-import { flushInstances, RealEffects, showFilled, trackDrawn } from './effects-real';
++import { flushInstances, markSlots, RealEffects, showFilled, trackDrawn } from './effects-real';
+ import type { RealContext, ShellKind, SmokeHandle } from './effects-real';
+ import type { SurfaceData } from './render/impacts';
+ import type { World } from './physics';
+@@ -46,6 +46,16 @@ interface Particle {
+   stretch: number; fixedLen: number; axis: THREE.Vector3 | null;
+   decalSize: number; shrink: boolean; grow: number;
+   rate: number; acc: number; emitDir: THREE.Vector3; hex: number; glow: boolean; blood: boolean;
++  /** Out this step: compacted away after it, then back to the free records (`Effects._freeParticles`). */
++  dead: boolean;
++  /** The record's own vectors, kept with it in the free list: `vel` and `axis` are these or null. */
++  ownVel: THREE.Vector3; ownAxis: THREE.Vector3;
++}
++
++function newParticle(): Particle {
++  return { kind: 'drop', pos: new THREE.Vector3(), vel: null, life: 0, maxLife: 0, size: 0, tone: 0, gravity: 0, drag: 0,
++    collide: 'none', stretch: 0, fixedLen: 0, axis: null, decalSize: 0, shrink: true, grow: 0, rate: 0, acc: 0,
++    emitDir: new THREE.Vector3(), hex: 0, glow: false, blood: false, dead: false, ownVel: new THREE.Vector3(), ownAxis: new THREE.Vector3() };
+ }
+ 
+ /** One instanced-mesh ring buffer. `generations` stamps every reuse of a slot. */
+@@ -56,6 +66,8 @@ interface Pool {
+   limit: number;
+   next: number;
+   generations: Uint32Array;
++  /** Rebuilt from slot 0 every frame (drops, strokes, glows): uploads its drawn slots then (`flushPool`), not per write. */
++  perFrame: boolean;
+ }
+ 
+ /** A tracer or beam: a glowing ribbon from `from` to `to` (render/fx.ts `tracerMaterial`). */
+@@ -92,6 +104,10 @@ interface Growing {
+   pos: THREE.Vector3; quat: THREE.Quaternion; hex: number;
+ }
+ 
++function newGrowing(pool: Pool): Growing {
++  return { pool, index: 0, generation: 0, time: 0, duration: 0, size: 0, pos: new THREE.Vector3(), quat: new THREE.Quaternion(), hex: 0 };
++}
++
+ /** One rigid body owned by this module from `debris()` until it expires. */
+ interface Debris {
+   mesh: THREE.Object3D;
+@@ -112,6 +128,8 @@ const drawAxis = new THREE.Vector3();
+ const surfaceNormal = new THREE.Vector3();
+ const tangent = new THREE.Vector3();
+ const bitangent = new THREE.Vector3();
++const rimT = new THREE.Vector3();
++const rimB = new THREE.Vector3();
+ const offset = new THREE.Vector3();
+ const probe = new THREE.Vector3();
+ /** A hit moved out to the overlay it shows (`bulletImpact`). */
+@@ -139,18 +157,14 @@ function unit(v: THREE.Vector3): THREE.Vector3 {
+   return v.lengthSq() > 1e-20 ? v.normalize() : v.copy(UP);
+ }
+ 
++/** A random spec velocity in a shared scratch: every caller hands it to `particle`, which copies it, before the next one. */
++const specVel = new THREE.Vector3();
+ function randomVector(yMin = -1, yMax = 1, xz = 1): THREE.Vector3 {
+-  return new THREE.Vector3(rand(-xz, xz), rand(yMin, yMax), rand(-xz, xz));
+-}
+-
+-/** `randomVector`'s draws, in its order, into the frame step's scratch: for a spec `particle` copies straight away. */
+-const stepVel = new THREE.Vector3();
+-function randomStepVector(): THREE.Vector3 {
+-  return stepVel.set(rand(-1, 1), rand(-1, 1), rand(-1, 1));
++  return specVel.set(rand(-xz, xz), rand(yMin, yMax), rand(-xz, xz));
+ }
+ 
+ function makePool(scene: THREE.Scene, name: string, geometry: THREE.BufferGeometry, capacity: number,
+-  material: THREE.Material = unlitMat(WHITE_HEX)): Pool {
++  material: THREE.Material = unlitMat(WHITE_HEX), perFrame = false): Pool {
+   const mesh = new THREE.InstancedMesh(geometry, material, capacity);
+   mesh.name = `effects:${name}`;
+   mesh.count = 0;
+@@ -160,7 +174,7 @@ function makePool(scene: THREE.Scene, name: string, geometry: THREE.BufferGeomet
+   mesh.instanceColor?.setUsage(THREE.DynamicDrawUsage);
+   trackDrawn(mesh);
+   scene.add(mesh);
+-  return { mesh, capacity, limit: capacity, next: 0, generations: new Uint32Array(capacity) };
++  return { mesh, capacity, limit: capacity, next: 0, generations: new Uint32Array(capacity), perFrame };
+ }
+ 
+ function blobGeometry(seed: number): THREE.ShapeGeometry {
+@@ -183,11 +197,21 @@ function blobGeometry(seed: number): THREE.ShapeGeometry {
+   return new THREE.ShapeGeometry(shapes, 4);
+ }
+ 
++/** Write one instance: a ring-buffer pool marks the slot for upload; a per-frame pool uploads its drawn ones at the end (`flushPool`). */
+ function put(pool: Pool, index: number, matrix: THREE.Matrix4, hex: number, strength = 1): void {
+   pool.mesh.setMatrixAt(index, matrix);
+   pool.mesh.setColorAt(index, color.setHex(hex).multiplyScalar(strength));
+-  pool.mesh.instanceMatrix.needsUpdate = true;
+-  if (pool.mesh.instanceColor) pool.mesh.instanceColor.needsUpdate = true;
++  if (pool.perFrame) return;
++  markSlots(pool.mesh.instanceMatrix, index * 16, 16);
++  if (pool.mesh.instanceColor) markSlots(pool.mesh.instanceColor, index * 3, 3);
++}
++
++/** Upload the slots a per-frame pool drew this frame: every one below `count` was written this frame, none above is drawn. */
++function flushPool(pool: Pool): void {
++  const n = pool.mesh.count;
++  if (n === 0) return;
++  flushInstances(pool.mesh.instanceMatrix, n * 16);
++  if (pool.mesh.instanceColor) flushInstances(pool.mesh.instanceColor, n * 3);
+ }
+ 
+ function slot(pool: Pool): number {
+@@ -243,7 +267,10 @@ export class Effects {
+   gore = 1;
+   _thin: number;
+   _particles: Particle[];
++  /** Dead particles' records, for reuse. */
++  _freeParticles: Particle[] = [];
+   _growing: Growing[];
++  _freeGrowing: Growing[] = [];
+   _debris: Debris[];
+   _bloodyGibs: number;
+   _drops: Pool;
+@@ -256,6 +283,7 @@ export class Effects {
+   /** Every tier's tracers and beams (V5): one instanced ribbon draw. */
+   readonly _tracerMesh: THREE.Mesh<THREE.InstancedBufferGeometry, THREE.ShaderMaterial>;
+   _tracers: Tracer[];
++  _freeTracers: Tracer[] = [];
+   /**
+    * The realistic tiers' effects (effects-real.ts), while a realistic look is
+    * in force and its atlases are in (`setRealistic`); null on Low, where every
+@@ -276,10 +304,10 @@ export class Effects {
+     this._growing = [];
+     this._debris = [];
+     this._bloodyGibs = 0;
+-    this._drops = makePool(scene, 'drops', new THREE.IcosahedronGeometry(0.5, 1), 700);
+-    this._strokes = makePool(scene, 'strokes', new THREE.BoxGeometry(1, 1, 1), 600);
++    this._drops = makePool(scene, 'drops', new THREE.IcosahedronGeometry(0.5, 1), 700, undefined, true);
++    this._strokes = makePool(scene, 'strokes', new THREE.BoxGeometry(1, 1, 1), 600, undefined, true);
+     // Rounder than the drops: the glow's falloff to its rim shows the facets of a coarser ball.
+-    this._glows = makePool(scene, 'glows', new THREE.IcosahedronGeometry(0.5, 2), 64, lowGlowMaterial());
++    this._glows = makePool(scene, 'glows', new THREE.IcosahedronGeometry(0.5, 2), 64, lowGlowMaterial(), true);
+     this._splats = Array.from({ length: 5 }, (_, i) => makePool(scene, `splats-${i}`, blobGeometry(i), 300, flatDecalMaterial()));
+     this._holes = makePool(scene, 'holes', new THREE.CircleGeometry(0.5, 8), 260, flatDecalMaterial());
+     this._pools = [this._drops, this._strokes, this._glows, ...this._splats, this._holes];
+@@ -339,7 +367,7 @@ export class Effects {
+   }
+ 
+   particle(p: ParticleSpec): void {
+-    if (!p || !['drop', 'stroke', 'emitter'].includes(p.kind) || !finiteVector(p.pos)) return;
++    if (!p || (p.kind !== 'drop' && p.kind !== 'stroke' && p.kind !== 'emitter') || !finiteVector(p.pos)) return;
+     const life = finite(p.life, 1), size = Math.max(0, finite(p.size, 0.05));
+     if (life <= 0 || size === 0) return;
+     // Reduced detail keeps an even share of every burst. Tracers carry gameplay
+@@ -349,35 +377,50 @@ export class Effects {
+       if (this._thin < 1) return;
+       this._thin -= 1;
+     }
+-    this._particles.push({
+-      kind: p.kind, pos: p.pos.clone(), vel: finiteVector(p.vel) ? p.vel.clone()
+-        : p.kind === 'emitter' || finite(p.fixedLen, 0) > 0 ? null : new THREE.Vector3(),
+-      life, maxLife: life, size, tone: toneId(p.tone), gravity: finite(p.gravity, 20),
+-      drag: Math.max(0, finite(p.drag, 0)), collide: p.collide === 'decal' ? 'decal' : 'none',
+-      stretch: Math.max(0, finite(p.stretch, 0.03)), fixedLen: Math.max(0, finite(p.fixedLen, 0)),
+-      axis: finiteVector(p.axis) ? unit(p.axis.clone()) : null,
+-      decalSize: Math.max(0, finite(p.decalSize, 3)), shrink: p.shrink !== false,
+-      grow: Math.max(0, finite(p.grow, 0)), rate: Math.max(0, finite(p.rate, 0)), acc: 0,
+-      emitDir: finiteVector(p.emitDir) ? p.emitDir.clone() : UP.clone(), hex: p.hex !== undefined && Number.isFinite(p.hex) ? p.hex : toneHex(p.tone),
+-      glow: p.glow === true && p.kind === 'drop', blood: p.blood === true,
+-    });
++    // A free record, every field set again.
++    const q = this._freeParticles.pop() ?? newParticle();
++    q.kind = p.kind;
++    q.pos.copy(p.pos);
++    q.vel = finiteVector(p.vel) ? q.ownVel.copy(p.vel)
++      : p.kind === 'emitter' || finite(p.fixedLen, 0) > 0 ? null : q.ownVel.set(0, 0, 0);
++    q.life = q.maxLife = life;
++    q.size = size;
++    q.tone = toneId(p.tone);
++    q.gravity = finite(p.gravity, 20);
++    q.drag = Math.max(0, finite(p.drag, 0));
++    q.collide = p.collide === 'decal' ? 'decal' : 'none';
++    q.stretch = Math.max(0, finite(p.stretch, 0.03));
++    q.fixedLen = Math.max(0, finite(p.fixedLen, 0));
++    q.axis = finiteVector(p.axis) ? unit(q.ownAxis.copy(p.axis)) : null;
++    q.decalSize = Math.max(0, finite(p.decalSize, 3));
++    q.shrink = p.shrink !== false;
++    q.grow = Math.max(0, finite(p.grow, 0));
++    q.rate = Math.max(0, finite(p.rate, 0));
++    q.acc = 0;
++    q.emitDir.copy(finiteVector(p.emitDir) ? p.emitDir : UP);
++    q.hex = p.hex !== undefined && Number.isFinite(p.hex) ? p.hex : toneHex(p.tone);
++    q.glow = p.glow === true && p.kind === 'drop';
++    q.blood = p.blood === true;
++    q.dead = false;
++    this._particles.push(q);
+   }
+ 
+   update(dt: number): void {
+     if (!Number.isFinite(dt) || dt < 0) return;
+     this._drops.mesh.count = this._strokes.mesh.count = this._glows.mesh.count = 0;
+     // New particles draw at birth but start their simulation on the following frame.
+-    for (let i = this._particles.length - 1; i >= 0; i--) {
+-      const p = this._particles[i];
++    const particles = this._particles;
++    for (let i = particles.length - 1; i >= 0; i--) {
++      const p = particles[i];
+       if (!p) continue;
+       p.life -= dt;
+-      if (p.life <= 0) { this._particles.splice(i, 1); continue; }
++      if (p.life <= 0) { p.dead = true; continue; }
+       if (p.kind === 'emitter') {
+         p.acc += dt * p.rate;
+         while (p.acc >= 1) {
+           p.acc--;
+           this.particle({ kind: 'drop', pos: p.pos,
+-            vel: randomStepVector().multiplyScalar(1.2).addScaledVector(p.emitDir, rand(2, 5)),
++            vel: randomVector().multiplyScalar(1.2).addScaledVector(p.emitDir, rand(2, 5)),
+             size: rand(0.02, 0.05), life: rand(1, 2), tone: p.tone, hex: p.hex, blood: p.blood,
+             collide: 'decal', gravity: 22, decalSize: 6 });
+         }
+@@ -396,17 +439,25 @@ export class Effects {
+           if (hit) {
+             if (p.blood) this._bloodLand(hit, p, motion);
+             else this.splat(hit.point, hit.normal, p.tone, p.size * p.decalSize * 0.75, motion, p.size > 0.035 ? 2 : 1);
+-            this._particles.splice(i, 1);
++            p.dead = true;
+             continue;
+           }
+         }
+-        if (p.pos.y < -10) { this._particles.splice(i, 1); continue; }
++        if (p.pos.y < -10) { p.dead = true; continue; }
+       }
+     }
++    // The dead out in one pass, the rest in order (this step's spawns stay at the end); their records go free.
++    let live = 0;
++    for (let i = 0; i < particles.length; i++) {
++      const p = particles[i]!;
++      if (!p.dead) particles[live++] = p;
++      else this._freeParticles.push(p);
++    }
++    particles.length = live;
+     for (let i = this._growing.length - 1; i >= 0; i--) {
+       const g = this._growing[i];
+       if (!g) continue;
+-      if (g.pool.generations[g.index] !== g.generation) { this._growing.splice(i, 1); continue; }
++      if (g.pool.generations[g.index] !== g.generation) { this._freeGrowing.push(g); this._growing.splice(i, 1); continue; }
+       g.time += dt;
+       const f = Math.min(1, g.time / g.duration), e = 1 - (1 - f) ** 2;
+       transform.position.copy(g.pos);
+@@ -414,10 +465,13 @@ export class Effects {
+       transform.scale.set(g.size * e, g.size * e, 1);
+       transform.updateMatrix();
+       put(g.pool, g.index, transform.matrix, g.hex);
+-      if (f >= 1) this._growing.splice(i, 1);
++      if (f >= 1) { this._freeGrowing.push(g); this._growing.splice(i, 1); }
+     }
+     for (let i = this._debris.length - 1; i >= 0; i--) this._stepDebris(i, dt);
+     for (const p of this._particles) if (p.kind !== 'emitter') this._draw(p);
++    flushPool(this._drops);
++    flushPool(this._strokes);
++    flushPool(this._glows);
+     for (const pool of this._pools) showFilled(pool.mesh);
+     this._drawTracers(dt);
+     this._real?.update(dt);
+@@ -429,19 +483,21 @@ export class Effects {
+     const start = geometry.getAttribute('iStart') as THREE.InstancedBufferAttribute;
+     const end = geometry.getAttribute('iEnd') as THREE.InstancedBufferAttribute;
+     const tint = geometry.getAttribute('iColor') as THREE.InstancedBufferAttribute;
++    // One pass: age, drop the dead (their records go free) and write the rest, in order.
++    const tracers = this._tracers;
+     let n = 0;
+-    for (let i = this._tracers.length - 1; i >= 0; i--) {
+-      const t = this._tracers[i]!;
++    for (let i = 0; i < tracers.length; i++) {
++      const t = tracers[i]!;
+       if (t.fresh) t.fresh = false;
+       else t.life -= dt;
+-      if (t.life <= 0) { this._tracers.splice(i, 1); continue; }
+-    }
+-    for (const t of this._tracers) {
++      if (t.life <= 0) { this._freeTracers.push(t); continue; }
++      tracers[n] = t;
+       start.setXYZW(n, t.from.x, t.from.y, t.from.z, t.width);
+       end.setXYZW(n, t.to.x, t.to.y, t.to.z, clamp(t.life / t.maxLife, 0, 1));
+       tint.setXYZW(n, t.color.r, t.color.g, t.color.b, t.solid);
+       n++;
+     }
++    tracers.length = n;
+     geometry.instanceCount = n;
+     this._tracerMesh.visible = n > 0;
+     flushInstances(start, n * 4);
+@@ -584,8 +640,16 @@ export class Effects {
+       const pool = choose(this._splats), index = slot(pool);
+       face(hit.normal, null);
+       transform.position.copy(hit.point).addScaledVector(surfaceNormal, rand(0.02, 0.04));
+-      const g = { pool, index, generation: pool.generations[index] ?? 0, time: 0, duration: rand(0.5, 1.1), size: fits * 2,
+-        pos: transform.position.clone(), quat: transform.quaternion.clone(), hex };
++      const g = this._freeGrowing.pop() ?? newGrowing(pool);
++      g.pool = pool;
++      g.index = index;
++      g.generation = pool.generations[index] ?? 0;
++      g.time = 0;
++      g.duration = rand(0.5, 1.1);
++      g.size = fits * 2;
++      g.pos.copy(transform.position);
++      g.quat.copy(transform.quaternion);
++      g.hex = hex;
+       this._growing.push(g);
+       transform.scale.set(0, 0, 1);
+       transform.updateMatrix();
+@@ -601,7 +665,7 @@ export class Effects {
+   _flatRadius(hit: RayHit, radius: number): number {
+     if (hit.normal.y < 0.9) return radius;
+     surfaceBasis(hit.normal);
+-    const t = tangent.clone(), b = bitangent.clone();
++    const t = rimT.copy(tangent), b = rimB.copy(bitangent);
+     for (let r = radius, tries = 0; tries < 5; tries++, r *= 0.65) {
+       let flat = true;
+       for (let k = 0; k < 8 && flat; k++) {
+@@ -685,7 +749,7 @@ export class Effects {
+         d.trailT += dt;
+         while (d.trailT >= 0.05 / this.gore) {
+           d.trailT -= 0.05 / this.gore;
+-          this.particle({ kind: 'drop', pos: d.pos, vel: randomStepVector().addScaledVector(d.vel, 0.3),
++          this.particle({ kind: 'drop', pos: d.pos, vel: randomVector().addScaledVector(d.vel, 0.3),
+             size: rand(0.02, 0.045), life: 1.5, hex: this.bloodHex(), blood: true, collide: 'decal', gravity: 22, decalSize: 6 });
+         }
+       }
+@@ -698,6 +762,8 @@ export class Effects {
+   }
+ 
+   clear(): void {
++    for (const p of this._particles) this._freeParticles.push(p);
++    for (const g of this._growing) this._freeGrowing.push(g);
+     this._particles.length = this._growing.length = 0;
+     this.shakePush = 0;
+     while (this._debris.length) this._removeDebris(this._debris.length - 1);
+@@ -706,6 +772,7 @@ export class Effects {
+       showFilled(pool.mesh);
+       pool.generations.fill(0);
+     }
++    for (const t of this._tracers) this._freeTracers.push(t);
+     this._tracers.length = 0;
+     this._drawTracers(0);
+     this._real?.clear();
+@@ -753,8 +820,16 @@ export class Effects {
+     if (!finiteVector(from) || !finiteVector(to) || !Number.isFinite(width) || width <= 0 || !Number.isFinite(life) || life <= 0) return;
+     if (from.distanceToSquared(to) < 0.05 * 0.05) return;
+     // Oldest out: a tracer carries gameplay information, a stale one less than a new one.
+-    if (this._tracers.length >= TRACERS) this._tracers.shift();
+-    this._tracers.push({ from: from.clone(), to: to.clone(), width, color: tint.clone(), solid, life, maxLife: life, fresh: true });
++    if (this._tracers.length >= TRACERS) this._freeTracers.push(this._tracers.shift()!);
++    const t = this._freeTracers.pop() ?? { from: new THREE.Vector3(), to: new THREE.Vector3(), width: 0, color: new THREE.Color(), solid: 0, life: 0, maxLife: 0, fresh: true };
++    t.from.copy(from);
++    t.to.copy(to);
++    t.width = width;
++    t.color.copy(tint);
++    t.solid = solid;
++    t.life = t.maxLife = life;
++    t.fresh = true;
++    this._tracers.push(t);
+   }
+ 
+   /**
+diff --git a/src/engine/enemies/specials.ts b/src/engine/enemies/specials.ts
+index 486e4ec..81a8d4e 100644
+--- a/src/engine/enemies/specials.ts
++++ b/src/engine/enemies/specials.ts
+@@ -8,6 +8,8 @@ import { ENEMY_GRAVITY } from './types';
+ import type { EnemyManager, EnemyRecord } from './index';
+ 
+ const goal = new Vector3(), direction = new Vector3();
++/** A tracer end lifted off a point (`effects.tracer` copies its ends), and the lifts. */
++const tracerEnd = new Vector3(), BREACH_LIFT = new Vector3(0, 0.15, 0), LASSO_LIFT = new Vector3(0, 0.2, 0);
+ const visible = (m: EnemyManager, a: Vector3, b: Vector3) => m.ctx.world.lineOfSight(a, b, seeThrough) && !m.hazards.obscures(a, b);
+ 
+ function medic(m: EnemyManager, e: EnemyRecord, dt: number): void {
+@@ -50,7 +52,7 @@ function breacher(m: EnemyManager, e: EnemyRecord, dt: number): void {
+     const previous = e.specialT; e.specialT += dt;
+     if (e.specialT < 0.65) {
+       stop(e, 12, dt);
+-      m.ctx.effects.tracer(e.body.pos.clone().add(new Vector3(0, 0.15, 0)), e.actionPoint!, 3, 0.04, 0.06);
++      m.ctx.effects.tracer(tracerEnd.copy(e.body.pos).add(BREACH_LIFT), e.actionPoint!, 3, 0.04, 0.06);
+     } else if (e.specialT < 1.2) {
+       direction.copy(e.actionPoint!).sub(e.body.pos).setY(0).normalize();
+       // The destination is locked at wind-up; never steer toward the player's new position.
+@@ -168,7 +170,7 @@ export function specialThink(m: EnemyManager, e: EnemyRecord, dt: number): boole
+   if (e.type === 'rubberbander') {
+     if (e.specialT > 0 && e.actionPoint) {
+       e.specialT -= dt; stop(e, 12, dt);
+-      m.ctx.effects.tracer(e.center, e.actionPoint.clone().add(new Vector3(0, 0.2, 0)), 5, 0.035, 0.07);
++      m.ctx.effects.tracer(e.center, tracerEnd.copy(e.actionPoint).add(LASSO_LIFT), 5, 0.035, 0.07);
+       m.ctx.effects.strokeBurst(e.actionPoint, 5, 1, 1, { life: 0.15, size: 0.07 });
+       if (e.specialT <= 0) {
+         // A fast physical dash, not a teleport through walls or over a hole.

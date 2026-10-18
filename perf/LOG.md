@@ -307,6 +307,115 @@ as recorded in `r1-ab.md`. The new rotation offsets by map + preset + round; use
 - `perf/ab.sh` resets `src/` and `tests/` between builds: it refuses to start on a dirty tree; save the round's
   diff as a patch first.
 
+## Round 2 — CPU cost of figures in fights: shared materials, ray pre-reject
+
+Commit `82ee6e1` (on `601916a`), 2026-10-18/19. Survey: four read-only Opus agents (per-figure materials, hit tests
+and game logic, allocations/GC, render submission CPU); implementation: five Opus agents, each in its own git
+worktree, one patch each (A, B, C1, C2, D); review: GPT-6.1-Sol (below).
+
+**Round baseline.** `r2-pre` (HEAD `601916a`, traced full matrix, same `src/` as `r1-post`) read -3.5 % frame mean vs
+`r1-post`: drift again. Then the laptop's battery drained to 7-8 % during the round (on AC, charging slower than the
+load drew), and the machine slowed run by run: HEAD's suite frame mean in the A/B runs went 3.26 (s1) → 3.33 (s2)
+→ 4.17 ms (s3), and switched power states within runs (s4). Verdicts therefore come only from the paired A/B runs
+(`perf/ab.sh`, two HEAD builds as control); all runs, the per-scenario cpu tables and a control-filtered view:
+`perf/results/r2-ab.md`.
+
+### Result
+
+| | low | medium | high | ultra | all |
+|---|---|---|---|---|---|
+| **s3: final vs HEAD, 3 balanced rounds** (frame mean) | 1.804 → 1.762 ms (-2.3 %) | 4.502 → 4.370 (-2.9 %) | 5.409 → 5.284 (-2.3 %) | 6.863 → 6.728 (-2.0 %) | 4.167 → 4.068 (-2.4 %) |
+| s3 frame median | -2.2 % (-0.04 ms) | -1.4 % (-0.06) | -0.4 % (-0.02) | -1.6 % (-0.10) | -1.4 % (-0.06) |
+| s3 frame p95 | -1.3 % (-0.04 ms) | -2.8 % (-0.23) | -4.2 % (-0.38) | -3.5 % (-0.36) | -3.0 % (-0.21) |
+| s3 HEAD/HEAD (headB, mean / med / p95) | -0.5 / -0.5 / +0.2 % | -1.8 / -0.3 / -1.3 % | +0.2 / +0.5 / +0.8 % | -0.4 / -0.7 / 0.0 % | -0.6 / -0.3 / -0.1 % |
+| **s4: independent repeat** (Round 1 code vs final, shown NEW/OLD; mean) | -0.5 % | -8.8 % * | -2.2 % | -1.8 % | -3.4 % |
+| s4 HEAD/HEAD (headB, mean) | -1.1 % | +8.3 % * | +0.4 % | +0.9 % | +2.1 % |
+| fight frames only, mean (s3 / s4) | -3.5 / -0.7 % | -5.0 / -10.2 % * | -4.6 / -4.3 % | -3.8 / -4.9 % | -4.2 / -5.0 % |
+| fight callback cpu, mean (s3 / s4) | -4.7 / -1.9 % | -7.1 / -11.7 % * | -6.0 / -5.8 % | -4.6 / -7.0 % | -5.6 / -6.6 % |
+| **training fight cpu** (s3 / s4) | | | | | **-14.4 / -13.3 %** |
+| js, paired traced run t2 (fight cells, traced) | -1.5 % (-0.02 ms) | -6.8 % (-0.31) | -14.3 % (-0.76) | +17.1 % † | -2.0 % |
+| js, training fight (t2) | 2.01 → 1.97 ms (-2.3 %) | 5.55 → 5.07 (-8.6 %) | 6.25 → 5.25 (-16.0 %) | 6.02 → 5.50 (-8.6 %) | |
+
+\* s4's medium arm caught a power-state switch (headB/head +8.3 %): not usable alone. † t2 is one traced round in
+the throttled state; ultra/house's HEAD arm ran in a fast spell (path 2.93 ms vs 5.2-5.7 ms in every other ultra
+path), so its ultra row is not usable; the other three ultra cells' fights read js -0.2 to -8.6 %.
+
+**Verdict.** The change targets fight CPU (figure submission and figure ray tests), and there it repeats in two
+independent balanced runs: fight frames -4 to -5 %, fight callback cpu -5.6 / -6.6 %, training fights -14 / -13 %.
+On the whole suite (path + fight, frame mean) both runs read about -2 % (s3 -2.4 % vs head, -1.8 % vs headB; s4
+-3.4 % vs head, -1.4 % vs headB; control-filtered -1.6 / -2.0 %). That is near the protocol's ~2 % paired noise, so
+**the per-preset suite gain is measured but not proven past noise on every preset**; Low in particular is small
+(-0.5 to -2.9 % depending on run and control). The unpaired traced benches `r2-post` (+43 % vs `r2-pre`) and
+`r2-post-b` (+65 %) ran in the throttled state and say nothing about the patch (same-build drift of that size is
+shown by HEAD's own A/B arm); they are committed only as the record. The next round should re-run `r2-post` on a
+charged machine and use it as its reference. Calls, programs and fight state hashes match HEAD in every cell
+(triangles differ by ≤ 1.1 % on 4 fight cells, the known figure-in-or-out noise; one call on downtown/high fight).
+
+### Changes kept
+
+Per-change paired frame mean / median / p95 (alone on HEAD, 2 rounds, near-balanced).
+
+| change | where | low | medium | high | ultra | pixels |
+|---|---|---|---|---|---|---|
+| **A: shared figure materials** (s2, `a-mats2`). Enemy figures wear one shared twin per material while the hit tint is black, and swap to their own copies only while they flash; players keep their copies (own mark colour). Twins read maps and `aoMapIntensity` from the original through getters; twin ids rise in each kind's mesh order. Gibs get rigid (non-skinned) twins/copies: no `getProgram` at each body/gib switch. Main-pass material switches in fights: ~105 → ~7 + flashing figures. | `render/materials.ts` (`twinMaterial`, `sharedMaterial`, `quietly`), `render/figure.ts` (`rig.wear`, `setTint`), `render/operators.ts` | -0.7 / -1.8 / +0.5 % (-0.01 / -0.03 / +0.01 ms) | -3.5 / -4.1 / -4.9 % (-0.11 / -0.14 / -0.25) | -2.2 / -1.9 / -1.1 % (-0.09 / -0.08 / -0.07) | -1.5 / -1.4 / -1.5 % (-0.08 / -0.07 / -0.11) | exact |
+| **B: figure ray pre-reject** (s1, `b-ray`). `syncModel` stores a world bound (union of the hit meshes' world spheres, +1e-6 margin) and a copy of the root matrix; `raycastFigure` returns the miss without the subtree matrix update when the root matrix is bit-equal and the ray misses the bound within `max`, and otherwise tests only the hit meshes (same layers/under-root checks, same stable sort). `syncModel` skips the operator armature (the render rewrites the bones before anything reads them). | `render/figure.ts` (`boundFigure`, `raycastFigure`), `enemies/model.ts`, `enemies/index.ts` | -0.8 / -0.4 / -0.8 % (-0.01 / -0.01 / -0.03) | -3.3 / -3.3 / -5.2 % (-0.11 / -0.11 / -0.26) | -1.2 / -0.4 / -1.4 % (-0.05 / -0.01 / -0.09) | -1.6 / -1.7 / -1.5 % (-0.08 / -0.09 / -0.11) | exact |
+
+s1/s2 HEAD/HEAD (mean): s1 +1.0 / -0.5 / +0.6 / -0.9 %, s2 -0.1 / -0.6 / -1.2 / +2.1 % (low / medium / high / ultra).
+B alone: training fight cpu -8.2 %; A alone: training fight cpu -8.5 %, fight frames -3.3 % overall.
+
+### Quality gate
+
+`node perf/quality.mjs compare baseline r2`: **PASS, 56/56.** The 42 realistic images with changed pixels are exactly
+Round 1's (B1/B3 LSBs): `node perf/quality.mjs compare r1 r2` gives **56/56 byte-identical, 0 changed pixels**. Every
+kept change is exact. Two of the first patches were not, for one shared reason (below): A's first version made
+its twins inside the game step, and D's first version made a `ShaderMaterial` at boot; three's `Material`
+constructor draws 4 `Math.random()` values for its uuid, so both moved the harness's seeded streams (A: the fight
+sim diverged on realistic presets, score 1560 → 1440, and indoor spawn-in dashes moved ~200 px; D: Low's boot-time
+random state, fight scorch shapes, 130-173 px). Fixed by `quietly()` (A: twins are made with a local mulberry32 so the
+game stream is untouched; per-figure copies are still made at HEAD's points) and by dropping the extra material
+(D). After the fix both were 56/56 byte-identical. Bisect per patch: B, C1, C2 byte-identical as first written.
+
+### Review (GPT-6.1-Sol, high effort)
+
+Round 1 (`perf-loop-r2-review-1`, on `601916a..82ee6e1`): no code correctness bug found — tint transitions, player
+mark colours, AO updates, weapon swaps, LOD changes, detached flashing gibs and disposal checked for A; root/parent
+moves, scale jumps, shields, layers, visibility, hit order, `max`, non-unit directions and corpses for B; no
+stale-matrix reader of the skipped armature; `quietly()` restores `Math.random` in `finally` and nests; all s3 state
+hashes and trails match; draw-order changes between figures produced no pixel change and transparent sorting does not
+use material ids. One P2 finding (measurement): the per-preset gains sat near the ~2 % paired noise, against headB
+only -1.2 to -2.5 %, and one run does not show repeatability → s4, an independent balanced repeat (above), and the
+verdict worded as "measured, not proven past noise on every preset"; the fight-targeted gains repeat.
+Round 2: see below.
+
+### Hot spot leads for later rounds (refreshed)
+
+1. **Re-measure on a stable machine first** (battery charged, desktop Chrome closed): `r2-post` as the next reference.
+2. **Shadow casters per cascade** (leads 2/3, still open; render.shadows CPU 0.8-1.2 ms on ultra fights). New, exact
+   candidate from the B7 render survey: one shadow draw per operator per cascade by swapping each worn figure's first
+   skinned mesh to a merged shadow geometry (same program, bones and triangle order) on shadow frames, and hiding the
+   others' `castShadow` (`operators.ts:601-613`, wrapper `render/index.ts:452-474`); check GLB attribute layouts
+   (meshopt interleaving) first. Expected 0.15-0.35 ms js on ultra training fights.
+3. **Post chain in one `render()`** (D): exact (byte-identical, same programs/calls) but -0.9 % suite / -0.2 % ultra,
+   inside noise; patch `perf/patches/r2-d-post2.patch` (on `601916a`). Retry only together with other ultra CPU work.
+4. **Allocation churn** (C1/C2): exact patches in `perf/patches/r2-c1-nav.patch`, `r2-c2-fx.patch` (on `601916a`), no frame-time or sampled heap-peak effect (heap peaks are
+   GC-timing noise ±5-18 % per run). Not a frame-time lead any more; maybe for long-session GC pauses (p99).
+5. Training fights are now ~13 % cheaper in CPU; the remaining training cost is submission of 22-35 figures × ~13
+   flat meshes on Low (300+ calls) and LOD0 operators in 3 cascades on ultra (lead 11).
+6. Small exact leftovers: view-model `depthRange` per mesh (`render/index.ts:440-447`, set once per run), hemisphere
+   light at 0 with the sky in, AO alpha write on low/medium, `vMacroPos`/`vGridPos`.
+
+### Gotchas (new)
+
+- **Every new three object draws `Math.random`**: `Material`, `Texture`, `BufferGeometry`, `Object3D` and
+  `RenderTarget` constructors call `MathUtils.generateUUID()` (4 draws). Creating one more or one fewer of them at boot
+  or in a step moves the harness's seeded streams (fight hash, boot-time randomness), even in render-only code. Create
+  them where HEAD did, or under `quietly()` (`render/materials.ts`).
+- **Battery / power state**: on battery, or with the battery near empty even on AC, the M4 Pro slows run by run and
+  switches state mid-run (HEAD 3.3 → 4.2 ms; HEAD/HEAD up to +8 % on one preset). Check `pmset -g batt` before a
+  round; the paired A/B survives a slow drift but not a switch inside a cell's variant set.
+- **Agent worktrees** (Agent `isolation: worktree`) may start on `main`'s commit, not HEAD: check `git rev-parse HEAD`
+  and reset to the round's HEAD before editing.
+
 ## Tried / rejected ideas
 
 Format: round, idea, where, result numbers vs the noise floor, why rejected.
@@ -331,3 +440,22 @@ Format: round, idea, where, result numbers vs the noise floor, why rejected.
   level is a few merged meshes: < 0.03 ms by analysis. Not tried.
 - **r1, skip Low's shadow redraw when the snapped box did not move.** Never triggers in the bench (the path moves
   ~20 texels between redraws; figures move in fights). Not tried.
+- **r2, C1: allocation-free A\*, boolean world rays, hoisted separation set** (`nav.ts` typed-array open heap with the
+  same sift and tie rules, `physics.ts` `rayBlocked` for the probes that only test truthiness, `enemies/index.ts`
+  `RANGED`/`REFLECTABLE` sets). Byte-identical, same paths (a reference test compared 1,000+ searches bit for bit).
+  Paired s1 (2 rounds): frame mean low -0.1 %, medium -3.2 %, high +0.7 %, ultra -0.7 % (all -0.8 %, headB +0.1 %);
+  fight cpu all -1.7 %; sampled fight heap peak +0.5 %. Inside noise (medium moved for every variant in s1). Rejected.
+- **r2, C2: effects record pooling and ranged instance uploads** (`effects.ts`/`effects-real.ts`: particle,
+  shell, tracer, blood-record free lists, stable compaction instead of `splice`, scratch spawn vectors with the same
+  `rand` draws, uploads limited to drawn/written slots). Byte-identical (a frame-by-frame equivalence test of all
+  particle/instance state and GPU contents). Paired s1: low +0.6 %, medium -3.0 %, high +1.3 %, ultra -0.7 % (all
+  -0.4 %); fight cpu all -1.0 %; heap peak -1.5 %. Inside noise. Rejected; the patch's equivalence test approach is
+  reusable.
+- **r2, D: the post chain in one `render()`** (`postfx.ts`: one render of the post scene with the chain run from
+  `onAfterRender` via `renderBufferDirect`; Low and the harness's out-of-chain `_pass` keep the old path) **plus shadow
+  wrapper array reuse** (`render/index.ts`). Byte-identical, same calls/programs (after removing an extra
+  `ShaderMaterial` that drew 4 `Math.random` values at boot). Paired s2: low -0.2 %, medium -2.1 %, high -1.2 %,
+  ultra -0.2 % (all -0.9 %; headB ultra +2.1 %); path cpu all -1.1 %. Inside noise. Rejected.
+- **r2, not tried**: hiding non-caster figure subtrees during the shadow pass (could not prove no layer-0 caster sits
+  under them); swap-remove in effect pools (changes instance order); `forceSinglePass` on the sword trail, slash wave
+  and hazard ring (changes blending order); disabling `sortObjects` (depth-tie order).

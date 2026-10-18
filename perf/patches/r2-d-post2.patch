@@ -1,0 +1,261 @@
+diff --git a/src/engine/render/index.ts b/src/engine/render/index.ts
+index 1dbedaf..5cf9b98 100644
+--- a/src/engine/render/index.ts
++++ b/src/engine/render/index.ts
+@@ -266,6 +266,9 @@ export class Renderer {
+    * cascade, though the level's all cast alike.
+    */
+   _casters: { mesh: THREE.Mesh; material: THREE.Material[]; groups: THREE.GeometryGroup[] }[] = [];
++  /** The casters' own materials and groups while the shadow pass swaps them out, reused from frame to frame. */
++  readonly _ownMaterials: (THREE.Material | THREE.Material[])[] = [];
++  readonly _ownGroups: THREE.GeometryGroup[][] = [];
+   /** The texture sets the current level's tags need, and its detail kit's (R6) once `_dress` has asked. */
+   _surfaceSets: readonly TextureSet[] = [];
+   /** What the current level asks of the detail kit (its dressing and drones), null for none (Training). Made by `_dress`. */
+@@ -447,29 +450,35 @@ export class Renderer {
+       object.onAfterRender = this._afterRig;
+     };
+     // Between the scene's draw list and its draws: the level's casters and the detail kit's (R6) swap to their shadow
+-    // groups for this pass only. Frames that keep the shadow maps allocate nothing here.
++    // groups for this pass only. No frame allocates here: the casters' own ones wait in two reused arrays.
+     const shadowMap = this.three.shadowMap, drawShadows = shadowMap.render.bind(shadowMap);
+-    shadowMap.render = (lights, scene, camera) => {
+-      const props = this.props.casters;
+-      if (!shadowMap.needsUpdate || this._casters.length + props.length === 0) return drawShadows(lights, scene, camera);
+-      const lists = [this._casters, props], own: { material: THREE.Material | THREE.Material[]; groups: THREE.GeometryGroup[] }[] = [];
+-      for (const list of lists) {
+-        for (const { mesh, material, groups } of list) {
+-          own.push({ material: mesh.material, groups: mesh.geometry.groups });
+-          mesh.material = material;
+-          mesh.geometry.groups = groups;
+-        }
++    const swap = (list: readonly { mesh: THREE.Mesh; material: THREE.Material[]; groups: THREE.GeometryGroup[] }[], i: number): number => {
++      for (const { mesh, material, groups } of list) {
++        this._ownMaterials[i] = mesh.material;
++        this._ownGroups[i++] = mesh.geometry.groups;
++        mesh.material = material;
++        mesh.geometry.groups = groups;
++      }
++      return i;
++    };
++    const restore = (list: readonly { mesh: THREE.Mesh }[], i: number): number => {
++      for (const { mesh } of list) {
++        mesh.material = this._ownMaterials[i]!;
++        mesh.geometry.groups = this._ownGroups[i++]!;
+       }
++      return i;
++    };
++    shadowMap.render = (lights, scene, camera) => {
++      const props = this.props.casters, count = this._casters.length + props.length;
++      if (!shadowMap.needsUpdate || count === 0) return drawShadows(lights, scene, camera);
++      const casters = this._casters;
++      swap(props, swap(casters, 0));
+       try {
+         drawShadows(lights, scene, camera);
+       } finally {
+-        let i = 0;
+-        for (const list of lists) {
+-          for (const { mesh } of list) {
+-            mesh.material = own[i]!.material;
+-            mesh.geometry.groups = own[i++]!.groups;
+-          }
+-        }
++        restore(props, restore(casters, 0));
++        // Hold no reference past this map's casters (a smaller map's list after a bigger one).
++        if (this._ownMaterials.length > count) this._ownMaterials.length = this._ownGroups.length = count;
+       }
+     };
+     this.weapons = new WeaponAssets({
+diff --git a/src/engine/render/postfx.ts b/src/engine/render/postfx.ts
+index 2141847..748f24f 100644
+--- a/src/engine/render/postfx.ts
++++ b/src/engine/render/postfx.ts
+@@ -391,6 +391,17 @@ export class Composite {
+   /** The drawn share of the scene target, for the passes that read it. */
+   readonly _sceneRegion = regionUniforms();
+   readonly _clear = new THREE.Color();
++  /**
++   * The chain runs inside one `render` of `scene` (its `onAfterRender`), each pass a `renderBufferDirect` there:
++   * the draw a render of the lone triangle made, without that render's list, sort, light and shadow steps. Set by
++   * `draw` for that render (`_chainCamera`) and while its passes run (`_inChain`); `_pass` outside it (the perf
++   * harness's calibration pass) renders as before. For the outer render the triangle wears `_final` switched off
++   * (`visible`): not drawn, but its geometry is still uploaded. Not a material of its own: three's constructor draws
++   * a uuid from Math.random, which would shift every random draw after it (the perf harness seeds it at boot).
++   */
++  _chainCamera: THREE.PerspectiveCamera | null = null;
++  _chainStrength = 0;
++  _inChain = false;
+ 
+   constructor() {
+     this.target = new THREE.WebGLRenderTarget(2, 2, {
+@@ -839,6 +850,18 @@ export class Composite {
+     // matrices, so no pass recomputes them.
+     this.scene.matrixWorldAutoUpdate = this.camera.matrixWorldAutoUpdate = false;
+     this.triangle.matrixAutoUpdate = false;
++    this.scene.onAfterRender = renderer => {
++      const camera = this._chainCamera;
++      if (camera === null) return;
++      this._chainCamera = null;
++      this._final.visible = true;
++      this._inChain = true;
++      try {
++        this._chain(renderer, camera, this._chainStrength);
++      } finally {
++        this._inChain = false;
++      }
++    };
+     this.setGrade(GRADE.neutral);
+   }
+ 
+@@ -1089,13 +1112,55 @@ export class Composite {
+     renderer.setRenderTarget(target);
+     // The canvas (null) is cleared in `draw`.
+     if (target !== null && this._fills.has(material)) renderer.clear(true, false, false);
+-    renderer.render(this.scene, this.camera);
++    if (!this._inChain) {
++      renderer.render(this.scene, this.camera);
++      return;
++    }
++    // What that render did around its one draw (the chain's materials are visible, opaque and single-sided; the
++    // triangle's and the camera's matrices stay identity; no pass target has MSAA or mipmaps to resolve): its
++    // background step set the clear colour in the target's colour space (the same on every linear target, so only
++    // the canvas sets it), and its scene step left depth and colour writes on (the next frame's shadow clears
++    // need the depth mask).
++    if (target === null) renderer.setClearColor(renderer.getClearColor(this._clear), renderer.getClearAlpha());
++    const triangle = this.triangle, state = renderer.state;
++    renderer.renderBufferDirect(this.camera, this.scene, triangle.geometry, material, triangle, null);
++    state.buffers.depth.setTest(true);
++    state.buffers.depth.setMask(true);
++    state.buffers.color.setMask(true);
++    state.setPolygonOffset(false);
+   }
+ 
+   draw(renderer: THREE.WebGLRenderer, time: number, fx: PostFX, camera: THREE.PerspectiveCamera): void {
+-    const config = this.config;
++    const config = this.config, smaa = config.smaa ? this._smaa : null;
+     this.uniforms.time.value = time;
+     for (const key of ['hurt', 'lowHp', 'flash', 'slow'] as const) this.uniforms[key === 'hurt' ? 'hurtIn' : key].value = fx[key] ?? 0;
++    const strength = config.shafts && config.look === 'realistic' && this._shaftStrength > 0 ? this._shaftStrength * this._aimShafts(camera) : 0;
++    this._toneUniforms.shaftColor.value.copy(this._sunColor).multiplyScalar(strength * SHAFT_GAIN);
++    // The first pass's target, bound before the outer render: that render then resolves nothing (the MSAA scene
++    // target is still bound after the scene pass) and sets the clear colour as the pass's own render did. Low's
++    // lone pass to the canvas, and a renderer that clears in every render (autoClear), render each pass as before.
++    const first = config.ao > 0 ? this._aoRaw : config.bloom ? this._bloom[0]! : strength > 0 ? this._shafts[0]
++      : config.look === 'realistic' || smaa ? this._ldr : null;
++    if (first === null || renderer.autoClear) this._chain(renderer, camera, strength);
++    else {
++      renderer.setRenderTarget(first);
++      this.triangle.material = this._final;
++      this._final.visible = false;
++      this._chainCamera = camera;
++      this._chainStrength = strength;
++      try {
++        renderer.render(this.scene, this.camera);
++      } finally {
++        this._chainCamera = null;
++        this._final.visible = true;
++      }
++    }
++    this._softUniforms.softOn.value = 0;
++  }
++
++  /** The passes `draw` runs: inside its one render (`_inChain`), or each in a render of its own. */
++  _chain(renderer: THREE.WebGLRenderer, camera: THREE.PerspectiveCamera, strength: number): void {
++    const config = this.config;
+     if (config.ao > 0) {
+       const g = this._gtaoUniforms, projection = camera.projectionMatrix.elements;
+       g.cameraNear.value = this.uniforms.cameraNear.value = camera.near;
+@@ -1125,8 +1190,6 @@ export class Composite {
+         this._pass(renderer, this._up, this._bloom[i - 1]!);
+       }
+     }
+-    const strength = config.shafts && config.look === 'realistic' && this._shaftStrength > 0 ? this._shaftStrength * this._aimShafts(camera) : 0;
+-    this._toneUniforms.shaftColor.value.copy(this._sunColor).multiplyScalar(strength * SHAFT_GAIN);
+     if (strength > 0) {
+       const [rays, spare] = this._shafts, source = this.target;
+       this._shaftMaskUniforms.texel.value.set(1 / source.width, 1 / source.height);
+@@ -1161,7 +1224,6 @@ export class Composite {
+       renderer.clear();
+       this._pass(renderer, this._low, null);
+     }
+-    this._softUniforms.softOn.value = 0;
+   }
+ 
+   /** SMAA from `_ldr` into `target` (null: the canvas). Its passes clear to transparent black. */
+diff --git a/tests/render-chain.test.ts b/tests/render-chain.test.ts
+index f80d9c2..d25a578 100644
+--- a/tests/render-chain.test.ts
++++ b/tests/render-chain.test.ts
+@@ -228,6 +228,72 @@ test('a reduced dynamic scale shows only this frame: nothing beyond the drawn co
+   // Under 1 s alone; beside the other GPU test files it waits its turn for the GPU (9 s at 23af3f9), so it gets the time they do.
+ }, 60_000);
+ 
++test('the chain inside one render draws exactly what a render per pass did', () => {
++  const three = new THREE.WebGLRenderer({ canvas: document.createElement('canvas'), depth: false, stencil: false });
++  cleanup.push(() => { three.dispose(); three.forceContextLoss(); });
++  three.setSize(320, 200, false);
++  three.autoClear = false;
++  three.info.autoReset = false;
++  three.shadowMap.enabled = true;
++  const gl = three.getContext(), scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(80, 1.6, 0.08, 420);
++  const bright = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 3, 2) }));
++  bright.position.set(0.4, 0, -2);
++  const wall = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), new THREE.MeshBasicMaterial({ color: 0x406080 }));
++  wall.position.set(-1.5, 0, -3);
++  scene.add(bright, wall);
++  const post = new Composite();
++  cleanup.push(() => post.dispose());
++  post.resize(320, 200, 1.6);
++  post.setShafts(1, new THREE.Vector3(0.2, 0.3, -1), new THREE.Color(1, 0.9, 0.8));
++  const frame = (perPass: boolean): { pixels: Uint8Array; calls: number; triangles: number } => {
++    three.setClearColor(0x335577);
++    three.setRenderTarget(post.target);
++    three.clear();
++    three.render(scene, camera);
++    three.info.reset();
++    if (perPass) {
++      // `draw` with every pass rendering itself (its uniforms are the last frame's: the same view and time).
++      const strength = post.config.shafts && post.config.look === 'realistic' ? post._shaftStrength * post._aimShafts(camera) : 0;
++      post._chain(three, camera, strength);
++      post._softUniforms.softOn.value = 0;
++    } else post.draw(three, 0.5, fx, camera);
++    const { calls, triangles } = three.info.render;
++    const pixels = new Uint8Array(320 * 200 * 4);
++    gl.readPixels(0, 0, 320, 200, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
++    return { pixels, calls, triangles };
++  };
++  const configs: PostConfig[] = [
++    { look: 'realistic', samples: 4, fxaa: false, smaa: true, ao: 1, depth: true, bloom: true, shafts: true },
++    { look: 'realistic', samples: 2, fxaa: false, smaa: true, ao: 0, depth: false, bloom: true, shafts: false },
++    { look: 'realistic', samples: 0, fxaa: true, smaa: false, ao: 0, depth: false, bloom: false, shafts: false },
++    { look: 'lowpoly', samples: 0, fxaa: false, smaa: true, ao: 0.5, depth: false, bloom: true, shafts: false },
++  ];
++  for (const config of configs) {
++    post.configure(config);
++    for (const scale of [1, 0.7]) {
++      post.setScale(scale);
++      frame(false);
++      const programs = three.info.programs!.length;
++      const render = vi.spyOn(three, 'render');
++      const chained = frame(false);
++      // The scene pass, then the chain's one render (SMAA's passes render their own quad).
++      expect(render.mock.calls.filter(([s]) => s === post.scene)).toHaveLength(1);
++      render.mockRestore();
++      // The next frame's shadow maps clear their depth: the chain leaves depth writes on, as each render did.
++      expect(gl.getParameter(gl.DEPTH_WRITEMASK)).toBe(true);
++      const perPass = frame(true);
++      const label = `${config.look}, smaa ${config.smaa}, ao ${config.ao}, scale ${scale}`;
++      expect(chained.calls, label).toBeGreaterThan(1);
++      expect([chained.calls, chained.triangles], label).toEqual([perPass.calls, perPass.triangles]);
++      let differ = 0;
++      for (let i = 0; i < chained.pixels.length; i++) if (chained.pixels[i] !== perPass.pixels[i]) differ++;
++      expect(differ, label).toBe(0);
++      expect(three.info.programs!.length, label).toBe(programs);
++    }
++  }
++  expect(gl.getError()).toBe(gl.NO_ERROR);
++}, 60_000);
++
+ test('the rig draws into its own depth slice on every tier, so a transparent effect behind a wall stays hidden', async () => {
+   const renderer = makeRenderer();
+   const gl = renderer.three.getContext(), range = vi.spyOn(gl, 'depthRange');

@@ -1,0 +1,436 @@
+diff --git a/src/engine/enemies/ai.ts b/src/engine/enemies/ai.ts
+index 26cfbd1..b5d9387 100644
+--- a/src/engine/enemies/ai.ts
++++ b/src/engine/enemies/ai.ts
+@@ -304,7 +304,7 @@ function dodgeNades(m: EnemyManager, e: EnemyRecord, dt: number): boolean {
+     if (d > 4.5 || Math.abs(n.pos.y - pos.y) > 2.5) continue;
+     const nx = d > 1e-4 ? dx / d : Math.sin(e.yaw), nz = d > 1e-4 ? dz / d : Math.cos(e.yaw);
+     probe.set(pos.x + nx * 0.9, pos.y + 0.5, pos.z + nz * 0.9);
+-    if (!m.ctx.world.raycast(probe, down, 3.5)) return false; // not off a ledge
++    if (!m.ctx.world.rayBlocked(probe, down, 3.5)) return false; // not off a ledge
+     const a = 40 * dt, speed = e.stats.speed * 1.1 * m.mods.speed;
+     e.body.vel.x += clamp(nx * speed - e.body.vel.x, -a, a);
+     e.body.vel.z += clamp(nz * speed - e.body.vel.z, -a, a);
+@@ -321,7 +321,7 @@ export function onHit(m: EnemyManager, e: EnemyRecord): void {
+   else if (e.stats.weapon === 'blade' && e.attackT <= 0 && e.body.onGround && rand() < 0.6) {
+     side.set(Math.cos(e.yaw), 0, -Math.sin(e.yaw)).multiplyScalar(6 * (rand() < 0.5 ? -1 : 1));
+     probe.copy(e.body.pos).addScaledVector(side, 0.2); probe.y += 0.5;
+-    if (m.ctx.world.raycast(probe, down, 3.5)) { e.body.vel.x += side.x; e.body.vel.z += side.z; }
++    if (m.ctx.world.rayBlocked(probe, down, 3.5)) { e.body.vel.x += side.x; e.body.vel.z += side.z; }
+   }
+ }
+ 
+@@ -411,10 +411,10 @@ export function groundThink(m: EnemyManager, e: EnemyRecord, dt: number): void {
+         if (e.strafeT <= 0) { e.strafeT = rand(0.8, 2); e.strafeDir *= -1; }
+         mx = -nz * e.strafeDir; mz = nx * e.strafeDir;
+         // Turn around before walking into a wall instead of grinding along it.
+-        if (m.ctx.world.raycast(e.center, side.set(mx, 0, mz), 1.3)) { e.strafeDir *= -1; e.strafeT = rand(0.8, 2); mx = -mx; mz = -mz; }
++        if (m.ctx.world.rayBlocked(e.center, side.set(mx, 0, mz), 1.3)) { e.strafeDir *= -1; e.strafeT = rand(0.8, 2); mx = -mx; mz = -mz; }
+       }
+       probe.set(pos.x + mx * 0.9, pos.y + 0.5, pos.z + mz * 0.9);
+-      if (m.ctx.world.raycast(probe, down, 3.5)) {
++      if (m.ctx.world.rayBlocked(probe, down, 3.5)) {
+         const speed = s.speed * (s.weapon === 'shotgun' ? 1 : 0.5), a = 30 * dt;
+         e.body.vel.x += clamp(mx * speed - e.body.vel.x, -a, a);
+         e.body.vel.z += clamp(mz * speed - e.body.vel.z, -a, a);
+diff --git a/src/engine/enemies/expansion-boss.ts b/src/engine/enemies/expansion-boss.ts
+index 30f6e37..6776fea 100644
+--- a/src/engine/enemies/expansion-boss.ts
++++ b/src/engine/enemies/expansion-boss.ts
+@@ -173,7 +173,7 @@ function moderator(m: EnemyManager, e: EnemyRecord, dt: number): void {
+       e.body.vel.y += wall.normal.y === 0 ? 10 * dt : 0;
+     }
+   }
+-  if (m.ctx.world.raycast(pos, down, 2)) e.body.vel.y += 12 * dt;
++  if (m.ctx.world.rayBlocked(pos, down, 2)) e.body.vel.y += 12 * dt;
+   if (dt > 0) {
+     e.body.vel.x = clamp(e.body.vel.x, (b.minX + margin - pos.x) / dt, (b.maxX - margin - pos.x) / dt);
+     e.body.vel.z = clamp(e.body.vel.z, (b.minZ + margin - pos.z) / dt, (b.maxZ - margin - pos.z) / dt);
+diff --git a/src/engine/enemies/flyer.ts b/src/engine/enemies/flyer.ts
+index 0d4f63a..b068702 100644
+--- a/src/engine/enemies/flyer.ts
++++ b/src/engine/enemies/flyer.ts
+@@ -65,6 +65,6 @@ export function flyerThink(m: EnemyManager, e: EnemyRecord, dt: number): void {
+     const wall = m.ctx.world.raycast(e.center, heading, 3.5);
+     if (wall) { e.body.vel.addScaledVector(wall.normal, 14 * dt); e.body.vel.y += 12 * dt; }
+   }
+-  if (m.ctx.world.raycast(e.center, down, 2.5)) e.body.vel.y += 12 * dt;
++  if (m.ctx.world.rayBlocked(e.center, down, 2.5)) e.body.vel.y += 12 * dt;
+   if (e.body.vel.lengthSq() > 0.1) e.yawTo = Math.atan2(e.body.vel.x, e.body.vel.z);
+ }
+diff --git a/src/engine/enemies/index.ts b/src/engine/enemies/index.ts
+index 20112dd..e578621 100644
+--- a/src/engine/enemies/index.ts
++++ b/src/engine/enemies/index.ts
+@@ -144,6 +144,10 @@ const STATE_NAME: readonly EnemyState[] = ['spawn', 'hunt', 'stunned', 'dead'];
+ const up = new Vector3(0, 1, 0);
+ const scratch = new Vector3(), scratch2 = new Vector3(), vel = new Vector3(), spin = new Vector3(), pos = new Vector3();
+ const isKind = (type: string): type is EnemyKind => Object.hasOwn(TYPES, type);
++/** Weapons that keep a wider gap in `_separate`: a firing line should spread, a charge can bunch. */
++const RANGED: ReadonlySet<string> = new Set(['rifle', 'pistol', 'shotgun', 'sniper']);
++/** Shots a parry guard sends back (`damage`). */
++const REFLECTABLE: ReadonlySet<string> = new Set(['r4c', 'rifle', 'shotgun', 'sniper', 'revolver', 'pistol', 'lmg']);
+ 
+ export class EnemyManager {
+   ctx: Ctx;
+@@ -337,11 +341,11 @@ export class EnemyManager {
+     const l = this.list;
+     for (let i = 0; i < l.length; i++) {
+       const a = l[i]; if (!a || !a.alive || a.stats.flying || a.type === 'aimbot' || a.type === 'turret') continue;
++      const ra = RANGED.has(a.stats.weapon);
+       for (let j = i + 1; j < l.length; j++) {
+         const b = l[j]; if (!b || !b.alive || b.stats.flying || b.type === 'aimbot' || b.type === 'turret') continue;
+         // Two rifles keep more room than a rusher pair: a firing line should spread, a charge can bunch.
+-        const ranged = (x: EnemyRecord) => ['rifle', 'pistol', 'shotgun', 'sniper'].includes(x.stats.weapon);
+-        const rr = a.body.halfW + b.body.halfW + (ranged(a) && ranged(b) ? 1.6 : 0.75);
++        const rr = a.body.halfW + b.body.halfW + (ra && RANGED.has(b.stats.weapon) ? 1.6 : 0.75);
+         const dx = a.body.pos.x - b.body.pos.x, dz = a.body.pos.z - b.body.pos.z, d = Math.hypot(dx, dz);
+         if (d >= rr || d <= 0.001 || Math.abs(a.body.pos.y - b.body.pos.y) > 1.5) continue;
+         const push = (rr - d) * 9, nx = dx / d, nz = dz / d;
+@@ -404,7 +408,7 @@ export class EnemyManager {
+     // Co-op host: another player's hit. It moves health here, and its feedback plays on that player's machine.
+     const remote = info.by != null;
+     if (e.type === 'parry' && e.guardT > 0 && e.state === 'hunt' && info.dir
+-      && ['r4c', 'rifle', 'shotgun', 'sniper', 'revolver', 'pistol', 'lmg'].includes(info.source ?? '')
++      && REFLECTABLE.has(info.source ?? '')
+       && info.dir.dot(scratch.set(Math.sin(e.yaw), 0, Math.cos(e.yaw))) < -0.5) {
+       effects.sparks(point, scratch.copy(dir).negate(), TONE.ACCENT, 6, 6); if (!remote) hud.hitmarker(false, false, true);
+       // One reflected projectile per 0.2 s, not one per shotgun pellet.
+diff --git a/src/engine/game/training.ts b/src/engine/game/training.ts
+index f3ef317..242b33e 100644
+--- a/src/engine/game/training.ts
++++ b/src/engine/game/training.ts
+@@ -45,7 +45,7 @@ export function createTraining(app: App) {
+     ctx.hud.setWave(0, enemies.alive);
+     ctx.camera.getWorldDirection(direction);
+     const hit = enemies.raycast(ctx.camera.position, direction, 150);
+-    const clear = hit && !ctx.world.raycast(ctx.camera.position, direction, hit.dist, seeThrough);
++    const clear = hit && !ctx.world.rayBlocked(ctx.camera.position, direction, hit.dist, seeThrough);
+     ctx.hud.setBoss(clear ? `${hit.enemy.stats.name} · ${Math.ceil(hit.enemy.hp)} / ${hit.enemy.maxHp} HP` : null,
+       clear ? hit.enemy.hp / hit.enemy.maxHp : 0);
+     ctx.hud.setTimer(clear ? `${Math.round(hit.dist)} m · ${hit.part === 'head' ? 'HEAD' : hit.part === 'shield' ? 'SHIELD' : 'BODY'}` : 'Pause → reset range');
+diff --git a/src/engine/nav.ts b/src/engine/nav.ts
+index 6198834..0aa2b31 100644
+--- a/src/engine/nav.ts
++++ b/src/engine/nav.ts
+@@ -21,11 +21,6 @@ export interface NavLink {
+ 
+ export type NavPath = Vector3[] & { complete: boolean };
+ 
+-interface HeapItem {
+-  id: number;
+-  f: number;
+-}
+-
+ /** Default half-width of the node and link clearance tests. Covers the widest common walker (heavy: halfW 0.41). */
+ export const NAV_CLEARANCE = 0.42;
+ /** Boss grid: bosses are 0.86-0.89 wide and 4.8-5 m tall; the walker grid routed them through 3 m doorways. */
+@@ -36,36 +31,6 @@ export const NAV_HEADROOM = 1.85;
+ const directions: readonly (readonly [number, number])[] = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+ const finiteVector = (v: Vector3 | null | undefined) => v && Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z);
+ 
+-function pushHeap(heap: HeapItem[], item: HeapItem) {
+-  let i = heap.length;
+-  heap.push(item);
+-  while (i > 0) {
+-    const parent = (i - 1) >> 1;
+-    const above = heap[parent];
+-    if (above === undefined || above.f <= item.f) break;
+-    heap[i] = above;
+-    i = parent;
+-  }
+-  heap[i] = item;
+-}
+-
+-function popHeap(heap: HeapItem[]): HeapItem | undefined {
+-  const first = heap[0], last = heap.pop();
+-  if (!heap.length || last === undefined) return first;
+-  let i = 0;
+-  while (i * 2 + 1 < heap.length) {
+-    let child = i * 2 + 1;
+-    let best = heap[child];
+-    const right = heap[child + 1];
+-    if (right !== undefined && best !== undefined && right.f < best.f) { child++; best = right; }
+-    if (best === undefined || last.f <= best.f) break;
+-    heap[i] = best;
+-    i = child;
+-  }
+-  heap[i] = last;
+-  return first;
+-}
+-
+ export class NavGrid {
+   #world: World;
+   #bounds: Bounds;
+@@ -83,6 +48,13 @@ export class NavGrid {
+   #reached = new Uint32Array(0);
+   #closed = new Uint32Array(0);
+   #generation = 0;
++  // The open list: a binary min-heap on f in parallel typed arrays, reused by every search (no per-push objects).
++  #heapId = new Int32Array(16);
++  #heapF = new Float64Array(16);
++  #heapN = 0;
++  #tx = 0;
++  #ty = 0;
++  #tz = 0;
+ 
+   readonly nodes: NavNode[];
+ 
+@@ -103,6 +75,45 @@ export class NavGrid {
+   #blocked(minX: number, minY: number, minZ: number, maxX: number, maxY: number, maxZ: number) {
+     return this.#world.overlapsAABB(this.#min.set(minX, minY, minZ), this.#max.set(maxX, maxY, maxZ));
+   }
++  #heuristic(id: number) {
++    const node = this.nodes[id];
++    if (node === undefined) return Infinity;
++    return 1.15 * Math.hypot(node.x - this.#tx, node.y - this.#ty, node.z - this.#tz);
++  }
++  #push(id: number, f: number) {
++    if (this.#heapN === this.#heapId.length) {
++      const ids = new Int32Array(this.#heapN * 2), fs = new Float64Array(this.#heapN * 2);
++      ids.set(this.#heapId); fs.set(this.#heapF);
++      this.#heapId = ids; this.#heapF = fs;
++    }
++    const ids = this.#heapId, fs = this.#heapF;
++    let i = this.#heapN++;
++    while (i > 0) {
++      const parent = (i - 1) >> 1;
++      const above = fs[parent]!;
++      if (above <= f) break;
++      ids[i] = ids[parent]!; fs[i] = above;
++      i = parent;
++    }
++    ids[i] = id; fs[i] = f;
++  }
++  /** Pops the lowest f; the last item sifts down from the root, ties keep the left child (same order as before). */
++  #pop(): number {
++    const ids = this.#heapId, fs = this.#heapF, first = ids[0]!, n = --this.#heapN;
++    if (!n) return first;
++    const lastId = ids[n]!, lastF = fs[n]!;
++    let i = 0;
++    while (i * 2 + 1 < n) {
++      let child = i * 2 + 1;
++      if (child + 1 < n && fs[child + 1]! < fs[child]!) child++;
++      const best = fs[child]!;
++      if (lastF <= best) break;
++      ids[i] = ids[child]!; fs[i] = best;
++      i = child;
++    }
++    ids[i] = lastId; fs[i] = lastF;
++    return first;
++  }
+   #cornerOpen(ix: number, iz: number, a: NavNode, b: NavNode) {
+     const cell = this.#cellNodes(ix, iz);
+     if (!cell) return false;
+@@ -194,26 +205,20 @@ export class NavGrid {
+     }
+     const generation = this.#generation, target = this.nodes[goal];
+     if (target === undefined) return null;
+-    const heuristic = (id: number) => {
+-      const node = this.nodes[id];
+-      if (node === undefined) return Infinity;
+-      return 1.15 * Math.hypot(node.x - target.x, node.y - target.y, node.z - target.z);
+-    };
+-    let best = start, bestH = heuristic(start), complete = false, expanded = 0;
++    this.#tx = target.x; this.#ty = target.y; this.#tz = target.z;
++    let best = start, bestH = this.#heuristic(start), complete = false, expanded = 0;
+     this.#reached[start] = generation;
+     this.#g[start] = 0;
+     this.#parents[start] = -1;
+-    const open: HeapItem[] = [];
+-    pushHeap(open, { id: start, f: bestH });
+-    while (open.length) {
+-      const top = popHeap(open);
+-      if (top === undefined) break;
+-      const cur = top.id;
++    this.#heapN = 0;
++    this.#push(start, bestH);
++    while (this.#heapN) {
++      const cur = this.#pop();
+       if (this.#closed[cur] === generation) continue;
+       this.#closed[cur] = generation;
+       if (cur === goal) { best = cur; complete = true; break; }
+       if (++expanded > maxExpand) break;
+-      const h = heuristic(cur);
++      const h = this.#heuristic(cur);
+       if (h < bestH) { best = cur; bestH = h; }
+       const node = this.nodes[cur];
+       if (node === undefined) continue;
+@@ -223,7 +228,7 @@ export class NavGrid {
+           this.#reached[next] = generation;
+           this.#g[next] = g;
+           this.#parents[next] = cur;
+-          pushHeap(open, { id: next, f: g + heuristic(next) });
++          this.#push(next, g + this.#heuristic(next));
+         }
+       }
+     }
+diff --git a/src/engine/physics.ts b/src/engine/physics.ts
+index 2f51a10..ac49a26 100644
+--- a/src/engine/physics.ts
++++ b/src/engine/physics.ts
+@@ -293,6 +293,10 @@ export class World {
+     normal[axis] = this.#hitSign;
+     return { dist: this.#hitDist, point: new Vector3().copy(origin).addScaledVector(dir, this.#hitDist), normal, box };
+   }
++  /** `raycast(...) !== null` without the hit objects, for callers that only ask whether something is there. */
++  rayBlocked(origin: Vector3, dir: Vector3, maxDist = 1000, ignore?: BoxFilter): boolean {
++    return this.#trace(origin, dir, maxDist, ignore) && this.#hitBox !== null && this.#hitAxis !== '';
++  }
+   groundBelow(x: number, y: number, z: number, maxDrop = 100): number {
+     return this.raycast(this.#rayOrigin.set(x, y, z), down, maxDrop)?.point.y ?? y - maxDrop;
+   }
+diff --git a/tests/nav-heap.test.ts b/tests/nav-heap.test.ts
+new file mode 100644
+index 0000000..2b9663a
+--- /dev/null
++++ b/tests/nav-heap.test.ts
+@@ -0,0 +1,148 @@
++import { expect, test } from 'vitest';
++import { Scene, Vector3 } from 'three';
++import { buildLevel, disposeLevel } from '@/engine/level';
++import { World } from '@/engine/physics';
++import { BOSS_CLEARANCE, BOSS_HEADROOM, NavGrid } from '@/engine/nav';
++
++// The A* that `NavGrid.findPath` replaced (object heap items, heuristic closure), kept as the reference: the
++// typed-array heap must pop in the same order, so every path must come out bit-identical.
++interface HeapItem { id: number; f: number }
++function pushHeap(heap: HeapItem[], item: HeapItem) {
++  let i = heap.length;
++  heap.push(item);
++  while (i > 0) {
++    const parent = (i - 1) >> 1;
++    const above = heap[parent];
++    if (above === undefined || above.f <= item.f) break;
++    heap[i] = above;
++    i = parent;
++  }
++  heap[i] = item;
++}
++function popHeap(heap: HeapItem[]): HeapItem | undefined {
++  const first = heap[0], last = heap.pop();
++  if (!heap.length || last === undefined) return first;
++  let i = 0;
++  while (i * 2 + 1 < heap.length) {
++    let child = i * 2 + 1;
++    let best = heap[child];
++    const right = heap[child + 1];
++    if (right !== undefined && best !== undefined && right.f < best.f) { child++; best = right; }
++    if (best === undefined || last.f <= best.f) break;
++    heap[i] = best;
++    i = child;
++  }
++  heap[i] = last;
++  return first;
++}
++function referencePath(grid: NavGrid, from: Vector3, to: Vector3, maxExpand = 40000) {
++  const nodes = grid.nodes, start = grid.nearest(from, 3, 3), goal = grid.nearest(to, 4, 8);
++  if (start < 0 || goal < 0) return null;
++  const target = nodes[goal];
++  if (target === undefined) return null;
++  const g = new Float64Array(nodes.length), parents = new Int32Array(nodes.length);
++  const reached = new Uint8Array(nodes.length), closed = new Uint8Array(nodes.length);
++  const heuristic = (id: number) => {
++    const node = nodes[id];
++    if (node === undefined) return Infinity;
++    return 1.15 * Math.hypot(node.x - target.x, node.y - target.y, node.z - target.z);
++  };
++  let best = start, bestH = heuristic(start), complete = false, expanded = 0;
++  reached[start] = 1; g[start] = 0; parents[start] = -1;
++  const open: HeapItem[] = [];
++  pushHeap(open, { id: start, f: bestH });
++  while (open.length) {
++    const top = popHeap(open);
++    if (top === undefined) break;
++    const cur = top.id;
++    if (closed[cur]) continue;
++    closed[cur] = 1;
++    if (cur === goal) { best = cur; complete = true; break; }
++    if (++expanded > maxExpand) break;
++    const h = heuristic(cur);
++    if (h < bestH) { best = cur; bestH = h; }
++    const node = nodes[cur];
++    if (node === undefined) continue;
++    for (const link of node.links) {
++      const next = link.to, cost = (g[cur] ?? 0) + link.cost;
++      if (!reached[next] || cost < (g[next] ?? 0)) {
++        reached[next] = 1; g[next] = cost; parents[next] = cur;
++        pushHeap(open, { id: next, f: cost + heuristic(next) });
++      }
++    }
++  }
++  const path: Vector3[] = [];
++  for (let id = best; id >= 0; id = parents[id] ?? -1) {
++    const node = nodes[id];
++    if (node === undefined) break;
++    path.push(new Vector3(node.x, node.y, node.z));
++  }
++  return { path: path.reverse(), complete };
++}
++
++function mulberry32(seed: number) {
++  return () => {
++    seed = (seed + 0x6d2b79f5) | 0;
++    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
++    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
++    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
++  };
++}
++
++function compare(grid: NavGrid, rand: () => number, bounds: { minX: number; maxX: number; minZ: number; maxZ: number }, count: number) {
++  const pick = () => {
++    const node = grid.nodes[Math.floor(rand() * grid.nodes.length)];
++    if (node && rand() < 0.7) return new Vector3(node.x + rand() - 0.5, node.y + rand() * 0.5, node.z + rand() - 0.5);
++    return new Vector3(bounds.minX + rand() * (bounds.maxX - bounds.minX), rand() * 8, bounds.minZ + rand() * (bounds.maxZ - bounds.minZ));
++  };
++  const caps = [40000, 4000, 1000, 50, 0];
++  let found = 0, partial = 0;
++  for (let k = 0; k < count; k++) {
++    const from = pick(), to = pick(), cap = caps[k % caps.length]!;
++    const want = referencePath(grid, from, to, cap), got = grid.findPath(from, to, cap);
++    expect(got === null).toBe(want === null);
++    if (!got || !want) continue;
++    expect(got.complete).toBe(want.complete);
++    expect(got.length).toBe(want.path.length);
++    for (let i = 0; i < got.length; i++) {
++      const a = got[i]!, b = want.path[i]!;
++      expect(Object.is(a.x, b.x) && Object.is(a.y, b.y) && Object.is(a.z, b.z)).toBe(true);
++    }
++    if (got.complete) found++; else partial++;
++  }
++  return { found, partial };
++}
++
++test('typed-array A* returns the same paths as the object-heap reference (synthetic tiers)', () => {
++  const rand = mulberry32(1234), world = new World(), v = (x: number, y: number, z: number) => new Vector3(x, y, z);
++  const bounds = { minX: -30, maxX: 30, minZ: -30, maxZ: 30 };
++  world.addBox(v(-30, -1, -30), v(30, 0, 30));
++  for (let i = 0; i < 70; i++) {
++    const x = -28 + rand() * 54, z = -28 + rand() * 54, w = 0.3 + rand() * 6, d = 0.3 + rand() * 6;
++    const h = rand() < 0.4 ? 0.3 + rand() * 1.2 : 2 + rand() * 4;
++    world.addBox(v(x, 0, z), v(x + w, h, z + d));
++  }
++  for (let i = 0; i < 8; i++) world.addBox(v(-20 + i * 2, 0, 10), v(-18 + i * 2, 0.4 * (i + 1), 14)); // stairs
++  world.finalize();
++  const grid = new NavGrid(world, bounds); grid.build();
++  expect(grid.nodes.length).toBeGreaterThan(1000);
++  const { found, partial } = compare(grid, rand, bounds, 400);
++  expect(found).toBeGreaterThan(50);
++  expect(partial).toBeGreaterThan(20);
++  world.clear();
++});
++
++test('typed-array A* returns the same paths as the object-heap reference (fight maps)', () => {
++  for (const key of ['mexico', 'house', 'downtown'] as const) {
++    const scene = new Scene(), world = new World();
++    const level = buildLevel(scene, world, key, { arena: false });
++    try {
++      const rand = mulberry32(key.length * 977);
++      const nav = new NavGrid(world, level.bounds), bossNav = new NavGrid(world, level.bounds, 1, BOSS_CLEARANCE, BOSS_HEADROOM);
++      nav.build(); bossNav.build();
++      const walker = compare(nav, rand, level.bounds, 150);
++      expect(walker.found).toBeGreaterThan(20);
++      compare(bossNav, rand, level.bounds, 40);
++    } finally { disposeLevel(scene, level); world.clear(); }
++  }
++});
