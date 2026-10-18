@@ -1,10 +1,10 @@
 import { Matrix4, Quaternion, Vector3 } from 'three';
 import { clamp, damp, easeInOut, rand } from '../util';
-import { TONE } from '../render/index';
 import { ViewModel } from './gun';
 import { makeSwordModel, makeRealSwordModel, smearThreshold } from './models';
 import { SWORD_HANDLING } from './stats';
 import { launchWave } from './wave';
+import { SlashTrail } from './slash-trail';
 import type { WeaponModel } from './models';
 import type { WeaponAssets } from '../render/weapons';
 import type { Ctx, Player, WeaponState } from '../types';
@@ -111,8 +111,8 @@ export class Sword extends ViewModel implements Weapon {
   reserve: number;
   magSize: number;
   reloading: boolean;
-  _arcA: Vector3;
-  _arcB: Vector3;
+  /** The smear along the blade tip's arc (weapons/slash-trail.ts). */
+  _trail: SlashTrail;
   _hitDir: Vector3;
   _slashPos: Vector3;
 
@@ -129,8 +129,7 @@ export class Sword extends ViewModel implements Weapon {
     this.mobility = SWORD_HANDLING.mobility;
     this.mag = this.reserve = this.magSize = Infinity;
     this.reloading = false;
-    this._arcA = new Vector3();
-    this._arcB = new Vector3();
+    this._trail = new SlashTrail(ctx);
     this._hitDir = new Vector3();
     this._slashPos = new Vector3();
     this.resetAmmo();
@@ -156,6 +155,8 @@ export class Sword extends ViewModel implements Weapon {
     return age >= CUT_WINDOW[0] && age <= CUT_WINDOW[1] + (pvp ? PVP_CUT_GRACE : 0);
   }
   get spreadPx() { return 4; }
+  unequip() { super.unequip(); this._trail.hide(); }
+  dispose() { this._trail.dispose(); super.dispose(); }
   addAmmo() {}
 
   resetAmmo() {
@@ -165,6 +166,7 @@ export class Sword extends ViewModel implements Weapon {
     this._parryDir = 1;
     this._hitDone = false;
     this._resetPose();
+    this._trail.hide();
     for (const smear of this._model.bloodSmears) smear.visible = false;
   }
 
@@ -201,12 +203,6 @@ export class Sword extends ViewModel implements Weapon {
     if (st.sprinting || !st.grounded) this._player.lunge(3.5);
     else this._player.step(1.6);
     const side = this.combo % 2 ? 1 : -1;
-    for (let i = 0; i < 9; i++) {
-      const a = (-1.1 + 2.2 * i / 8) * side, b = a + 0.12 * side;
-      this._arcPoint(a, side, this._arcA);
-      this._arcPoint(b, side, this._arcB);
-      this._ctx.effects.tracer(this._arcA, this._arcB, TONE.PRIMARY, 0.03 - 0.002 * i, 0.12 + 0.01 * i);
-    }
     if (!st.grounded && this.waveCooldown <= 0) {
       this.waveCooldown = WAVE_COOLDOWN;
       launchWave(this._ctx, this._player, side);
@@ -223,16 +219,13 @@ export class Sword extends ViewModel implements Weapon {
     if (this.startSlash({ ...st, grounded: true, sprinting: false, blockFire: false })) this._hitDone = true;
   }
 
-  _arcPoint(angle: number, side: number, out: Vector3) {
-    out.copy(this._player.eye).addScaledVector(this._player.forward, 1.5)
-      .addScaledVector(this._player.right, Math.cos(angle) * 1.1 * side);
-    out.y += Math.sin(angle) * 0.45 - 0.1;
-  }
-
   animate(st: WeaponState, dt: number) {
     if (this._disposed || !this._equipped) return;
     this._update(st, dt);
     this._applyClip();
+    // The smear samples the blade where the pose and clip have just put it, through the sweep only (not the wind-up).
+    const t = this._slashT > 0 ? 1 - this._slashT / SLASH_TIME : -1;
+    this._trail.update(dt, t >= 0.12 && t <= 0.75, this.root, this._model.muzzle);
   }
 
   _update(st: WeaponState, dt: number) {

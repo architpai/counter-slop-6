@@ -154,12 +154,12 @@ test('streams in, swaps every view model, and frees everything on Low with nothi
       expect(gun.root.parent).toBe(rig);
     }
     expect(melee._model.real).toBeDefined();
-    // One model per weapon in the rig, whichever look.
-    expect(rig.children.length).toBe(guns.length + 1);
+    // One model per weapon in the rig, whichever look, and the sword's slash trail.
+    expect(rig.children.length).toBe(guns.length + 2);
     assets.want(null);
     expect(assets.ready).toBe(false);
     expect(guns.every(gun => !gun._model.real && gun.root.parent === rig) && !melee._model.real).toBe(true);
-    expect(rig.children.length).toBe(guns.length + 1);
+    expect(rig.children.length).toBe(guns.length + 2);
     expect(live, 'Low frees every map and the model').toEqual({ textures: 0, geometries: 0 });
     expect(assets.stats).toEqual({ textures: 0, residentBytes: 0, materials: 0, model: false });
   }

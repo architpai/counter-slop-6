@@ -65,6 +65,7 @@ A slash that starts off the ground also throws a wave (`wave.ts`), at most once 
 - **Low tier:** a code-built sword (`makeSwordModel`): a 0.67 m blade with a dark spine, a square guard and a wrapped two-hand grip in both fists.
 - **Realistic tiers:** the Blender sword set (`tools/blender/weapons/sword.py`): a 0.66 m curved single-edged blade with a blackened flat and a bright honed edge, a dark tsuba-like guard, a paracord-wrapped two-hand grip with the blue spacer, and the clips `slash`, `slash-back`, `guard` and `equip`. It replaces the knife set, and the enemies' `blade` prop is made from it. Blood smears are laid along both blades.
 - **The slash pose:** the blade tip sweeps over the top of a cone ahead of the eye, from the starting side to the far side, with the edge leading. The hands cross low in front, so the arms, which run back along the grip, stay low and behind. Slashes alternate sides.
+- **The slash smear** (`slash-trail.ts`, replacing the old knife's dashed arc) is a ribbon in the view-model rig. During the sweep (12 % to 75 % of the slash) it samples the blade every frame, from its tip to 45 % of the way down. Each sample lives 0.13 s. The ribbon is additive, bright at the newest edge and the tip, and it thins towards the blade as it fades, so it reads as a tapering crescent like the air slash's. It looks the same on every tier.
 
 ## Checks
 
