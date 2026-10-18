@@ -62,16 +62,7 @@ def reset(samples=64, world=(0.0, 0.0, 0.0), world_strength=0.0, denoise=False):
         for item in list(block):
             block.remove(item)
     scene.render.engine = 'CYCLES'
-    prefs = bpy.context.preferences.addons['cycles'].preferences
-    try:
-        prefs.compute_device_type = 'METAL'
-        prefs.get_devices()
-        gpus = [d for d in prefs.devices if d.type == 'METAL']
-        for d in prefs.devices:
-            d.use = d.type == 'METAL'
-        scene.cycles.device = 'GPU' if gpus else 'CPU'
-    except (TypeError, ValueError):
-        scene.cycles.device = 'CPU'
+    gpu(scene)
     scene.cycles.samples = samples
     # OIDN on the scattering volumes: at a few hundred samples their thin edges are still grainy.
     scene.cycles.use_denoising = denoise
@@ -416,3 +407,28 @@ def write_atlas(out, name, cols, rows, cells, layout, alpha=True, srgb=True):
     with open(os.path.join(folder, 'meta.json'), 'w') as file:
         json.dump(meta, file, indent=1)
     print(f'{name}: {cols} x {rows} cells into {folder}')
+
+
+def gpu(scene):
+    """
+    Render on a GPU: Apple's first, then an NVIDIA card (the MSI build machine,
+    tools/blender/msi.sh), else the CPU. CYCLES_DEVICE=CPU (or OPTIX, CUDA, METAL)
+    picks one, as tools/blender/weapons/lib.py does.
+    """
+    prefs = bpy.context.preferences.addons['cycles'].preferences
+    scene.cycles.device = 'CPU'
+    wanted = os.environ.get('CYCLES_DEVICE', '').upper()
+    for kind in ([wanted] if wanted else ['METAL', 'OPTIX', 'CUDA']):
+        if kind == 'CPU':
+            return
+        try:
+            prefs.compute_device_type = kind
+        except (TypeError, ValueError):
+            continue
+        prefs.get_devices()
+        if not any(d.type == kind for d in prefs.devices):
+            continue
+        for d in prefs.devices:
+            d.use = d.type == kind
+        scene.cycles.device = 'GPU'
+        return
