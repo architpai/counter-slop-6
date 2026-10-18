@@ -59,8 +59,23 @@ const TIMER_NOTE = 'EXT_disjoint_timer_query_webgl2 on ANGLE Metal returns non-z
   + 'they are spans of 2-2.5x the GPU-bound frame interval (e.g. Ultra downtown idle: query 8.4 ms at a 3.5 ms frame; one injected '
   + 'fullscreen pass: query 20.7 ms at an 8.1 ms frame), so not GPU busy time. gpuMs is null where the per-cell check fails '
   + '(query median > 1.1x frame median); frameMs is the GPU-bound measure (trace.waitMsPerFrame shows the main thread waiting on the GPU side).';
+const PARITY_NOTE = 'P.reset zeroes the renderer\'s _frame at each run\'s start, so recorded callback k renders with _frame = k + 1, and a '
+  + 'preset that redraws its shadow map every 2nd frame (Low, facts.shadowEvery 2) draws it in callbacks k = 1, 3, 5, ... cpuParity indexes '
+  + 'callbacks (cpu[k] is callback k): the shadow callbacks are the ODD ones. frameParity indexes intervals (frame[i] runs from callback i-1\'s '
+  + 'rAF to callback i\'s, so it holds callback i-1\'s work): the shadow callbacks fall in the EVEN intervals; interval 0 holds a callback from '
+  + 'before the reset and is left out. The GPU may finish a frame after its interval ends (frames in flight), so GPU cost can show an '
+  + 'interval later: read the gap between the sides. Means over finite values; N is the count per side.';
 const r1 = x => (x === null || x === undefined ? null : +x.toFixed(1));
 const r2 = x => (x === null || x === undefined ? null : +x.toFixed(2));
+
+/** Mean of a per-frame array by the parity of the index, from index `from` on (PARITY_NOTE); null for an empty side. */
+function parity(values, from = 0) {
+  const sum = [0, 0], n = [0, 0];
+  for (let i = from; i < values.length; i++) if (Number.isFinite(values[i])) { sum[i % 2] += values[i]; n[i % 2]++; }
+  const mean = k => (n[k] ? +(sum[k] / n[k]).toFixed(3) : null);
+  return { evenMs: mean(0), oddMs: mean(1), evenN: n[0], oddN: n[1] };
+}
+const frameParity = raw => ({ frameParity: parity(raw.frame, 1), cpuParity: parity(raw.cpu) });
 
 /** Per-scenario numbers from the page's per-frame arrays. */
 function digest(raw, timerOk) {
@@ -76,6 +91,7 @@ function digest(raw, timerOk) {
     programs: raw.programs, geometries: raw.geometries, textures: raw.textures,
     longFrames: { over33: raw.frame.filter(x => x > 33.3).length, over50: raw.frame.filter(x => x > 50).length,
       over2xMedian: raw.frame.filter(x => x > 2 * med).length },
+    ...frameParity(raw),
     heapPeakMB: raw.heapPeakMB, dynamicScale: raw.dynamicScale, summary: raw.summary, trail: raw.trail,
     ...Object.fromEntries(Object.entries(raw).filter(([k]) => ['pathLength', 'speedMps', 'worstYDrift', 'spawned'].includes(k))),
     ...(cfg.raw ? { raw: { frame: raw.frame, cpu: raw.cpu, gpu: raw.gpu, calls: raw.calls, triangles: raw.triangles } } : {}),
@@ -98,18 +114,28 @@ async function runCell(map, preset) {
    * Per-pass GPU cost by ablation (the timer queries read spans, not busy time, on ANGLE Metal): the scenario's first
    * `ablateFrames` frames with one pass skipped, against the same frames with nothing skipped (before and after). The
    * frame is GPU-bound on the realistic tiers (the main thread waits on the command buffer), so the drop in the
-   * frame interval is that pass's GPU time; `noiseMs` is the two baselines' difference.
+   * frame interval is that pass's GPU time; `noiseMs` is the two baselines' difference. `ms` reads the frame median,
+   * which jumps between the modes of a bimodal run (Low: a shadow redraw every 2nd frame), `meanMs` the frame mean;
+   * `parity` splits the mean by interval parity (PARITY_NOTE: on Low the even intervals hold the shadow redraws).
    */
   async function ablate(name, passes) {
-    const frameMed = async pass => {
+    const measure = async pass => {
       await page.evaluate(p => { window.__perf.ablate = p; }, pass);
-      try { return stats((await run(name, cfg.ablateFrames)).frame).med; } finally { await page.evaluate(() => { window.__perf.ablate = null; }); }
+      try {
+        const { frame } = await run(name, cfg.ablateFrames), s = stats(frame), p = parity(frame, 1);
+        return { med: s.med, mean: s.mean, even: p.evenMs, odd: p.oddMs };
+      } finally { await page.evaluate(() => { window.__perf.ablate = null; }); }
     };
-    const b0 = await frameMed(null), costs = {};
-    for (const pass of Object.keys(passes ?? {}).filter(p => !p.startsWith('perf:'))) costs[pass] = await frameMed(pass);
-    const b1 = await frameMed(null), base = (b0 + b1) / 2;
-    return { frames: cfg.ablateFrames, baseMs: r2(base), noiseMs: r2(Math.abs(b0 - b1)),
-      ms: Object.fromEntries(Object.entries(costs).map(([k, v]) => [k, r2(base - v)]).sort((a, b) => b[1] - a[1])) };
+    const b0 = await measure(null), costs = {};
+    for (const pass of Object.keys(passes ?? {}).filter(p => !p.startsWith('perf:'))) costs[pass] = await measure(pass);
+    const b1 = await measure(null);
+    const base = k => (b0[k] + b1[k]) / 2, noise = k => r2(Math.abs(b0[k] - b1[k]));
+    const drops = k => Object.entries(costs).map(([pass, v]) => [pass, r2(base(k) - v[k])]).sort((a, b) => b[1] - a[1]);
+    const byMean = drops('mean');
+    return { frames: cfg.ablateFrames, baseMs: r2(base('med')), noiseMs: noise('med'), ms: Object.fromEntries(drops('med')),
+      baseMeanMs: r2(base('mean')), noiseMeanMs: noise('mean'), meanMs: Object.fromEntries(byMean),
+      parity: { baseMs: { even: r2(base('even')), odd: r2(base('odd')) }, noiseMs: { even: noise('even'), odd: noise('odd') },
+        ms: Object.fromEntries(byMean.map(([pass]) => [pass, { even: r2(base('even') - costs[pass].even), odd: r2(base('odd') - costs[pass].odd) }])) } };
   }
   try {
     const load = await loadAndWait(page);
@@ -171,7 +197,7 @@ async function runCell(map, preset) {
       const raw = await run(name, cfg.frames);
       await setTimer(false);
       out[name] = cfg.profile ? { profile: { ...raw.profile, gpuAblation: await ablate(name, raw.profile.passesPerFrame) },
-        summary: raw.summary, frameMs: stats(raw.frame), cpuMs: stats(raw.cpu) } : digest(raw, timer.working);
+        summary: raw.summary, frameMs: stats(raw.frame), cpuMs: stats(raw.cpu), ...frameParity(raw) } : digest(raw, timer.working);
       if (trace) out[name].trace = trace;
       out[name].heapEndMB = await heapMB(cdp);
     }
@@ -231,10 +257,18 @@ function profileTable(cells) {
       const p = run[name]?.profile;
       if (!p) continue;
       const fmt = o => (o ? Object.entries(o).map(([k, v]) => `${k} ${r2(v)}`).join(', ') : 'n/a');
-      const a = p.gpuAblation, t = run[name].trace;
-      rows.push(`- **${c.map} ${c.preset} ${name}**: frame med ${r2(run[name].frameMs.med)} ms, callback ${r2(run[name].cpuMs.med)} ms`
+      const a = p.gpuAblation, t = run[name].trace, s = run[name];
+      // Every 2nd frame redraws the shadow map (Low): the frame splits into its two modes (PARITY_NOTE).
+      const split = run.facts?.shadowEvery === 2;
+      const sides = o => `even ${r2(o.even)} / odd ${r2(o.odd)}`;
+      rows.push(`- **${c.map} ${c.preset} ${name}**: frame med ${r2(s.frameMs.med)} ms (mean ${r2(s.frameMs.mean)}), callback ${r2(s.cpuMs.med)} ms`
+        + (split && s.frameParity ? ` (frame mean even/odd intervals ${r2(s.frameParity.evenMs)} / ${r2(s.frameParity.oddMs)}, callback mean even/odd`
+          + ` ${r2(s.cpuParity.evenMs)} / ${r2(s.cpuParity.oddMs)}; the shadow redraw is in the odd callbacks, the even intervals)` : '')
         + (t ? `, js (thread CPU) ${r2(t.jsMs?.med)} ms, waiting on the GPU command buffer ${r2(t.waitMsPerFrame)} ms/frame, GPU process main ${r2(t.gpuMainCpuPerFrame)} ms/frame` : '')
-        + `\n  - GPU ms by ablation (${a.frames} frames, base ${a.baseMs}, noise ${a.noiseMs}): ${fmt(a.ms)}`
+        + `\n  - GPU ms by ablation of the frame median (${a.frames} frames, base ${a.baseMs}, noise ${a.noiseMs}): ${fmt(a.ms)}`
+        + (a.meanMs ? `\n  - GPU ms by ablation of the frame mean (base ${a.baseMeanMs}, noise ${a.noiseMeanMs}): ${fmt(a.meanMs)}` : '')
+        + (split && a.parity ? `\n  - frame mean by interval parity (base ${sides(a.parity.baseMs)}, noise ${sides(a.parity.noiseMs)}): `
+          + Object.entries(a.parity.ms).map(([k, v]) => `${k} ${sides(v)}`).join(', ') : '')
         + `\n  - CPU ms (wall, waits included): ${fmt(p.cpu)}\n  - passes per frame: ${fmt(p.passesPerFrame)}`
         + (p.gpuQuerySpans ? `\n  - timer query spans (not busy time on ANGLE Metal): ${fmt(p.gpuQuerySpans)}` : ''));
     }
@@ -271,7 +305,7 @@ const result = {
     label: cfg.label, mode: cfg.profile ? 'profile' : 'bench', date: new Date().toISOString(), git: git(), chrome: first?.chrome ?? null,
     gpu: first?.facts?.gpu ?? null, viewport: { ...VIEWPORT, deviceScaleFactor: 1 }, chromeArgs: CHROME_ARGS, node: process.version,
     args: argv, config: cfg, timer: Object.fromEntries(cells.flatMap(c => c.runs.map(r => [`${c.map}/${c.preset}#${r.repeat}`, r.timer ?? null]))),
-    timerNote: TIMER_NOTE, durationMs: Date.now() - t0, errors: cells.flatMap(c => c.runs.flatMap(r => (r.errors ?? []).map(e => ({ cell: `${c.map}/${c.preset}`, ...e })))),
+    timerNote: TIMER_NOTE, parityNote: PARITY_NOTE, durationMs: Date.now() - t0, errors: cells.flatMap(c => c.runs.flatMap(r => (r.errors ?? []).map(e => ({ cell: `${c.map}/${c.preset}`, ...e })))),
   },
   cells,
 };

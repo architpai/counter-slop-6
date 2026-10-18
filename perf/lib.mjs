@@ -441,7 +441,7 @@ export function pageInit(cfg) {
     return { preset: g.quality.preset, look: g.quality.values.look, fpsTarget: g.quality.values.fpsTarget, dynamicRes: g.quality.values.dynamicRes,
       renderScale: g.quality.values.renderScale, pixelRatio: r.three.getPixelRatio(), devicePixelRatio: window.devicePixelRatio,
       drawingBuffer: [gl.drawingBufferWidth, gl.drawingBufferHeight], sceneTarget: [r.post.target.width, r.post.target.height],
-      msaa: r.post.target.samples, deferredWarmups: r._warmups.length, level: g.ctx.level.key, mode: g.gs.mode, state: g.gs.state,
+      msaa: r.post.target.samples, shadowEvery: r.sun.castShadow ? r._shadowEvery : null, deferredWarmups: r._warmups.length, level: g.ctx.level.key, mode: g.gs.mode, state: g.gs.state,
       gpu: dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : null, timer: P.timerStatus, crossOriginIsolated: window.crossOriginIsolated };
   };
   P.dynamicScale = () => window.__game.ctx.renderer._dynamicScale;
