@@ -52,16 +52,30 @@ node perf/image.mjs --selftest
 
 If HEAD itself moves against the baseline (desktop apps on the GPU, clock states), compare variants **paired, per
 cell**: every variant is built once into `$AB_WORK` (`/tmp/perf-ab`), then for each map x preset cell all variants
-run back to back (fresh browser each, `--no-trace`), in a rotation that gives each variant each position equally
-often. Two HEAD builds give the protocol's own noise (Round 1: HEAD/HEAD within 1.2 % on every preset aggregate).
+run back to back (fresh browser each, `--no-trace`). Two HEAD builds give the protocol's own noise (Round 1: HEAD/HEAD
+within 1.2 % on every preset aggregate).
+
+The run order rotates cyclically, shifted by map, preset and round. Each variant takes each position equally often in
+every map x preset cell only when `rounds` is a multiple of the number of variants, and per preset when `rounds` or
+the number of maps is. Otherwise the positions are only near-balanced: for exact balance, set `rounds` to the number
+of variants (or a multiple of it).
 
 ```sh
-git diff > /tmp/round.patch && git stash   # ab.sh resets src/ and tests/: it refuses a dirty tree
-perf/ab.sh x1 low,medium,high,ultra downtown,house,mexico,training 1 head headB /tmp/round.patch   # ≈30 min
-node perf/ab-agg.mjs x1   # paired geomean ratio vs head per preset (mean, median, p95); fails on missing cells
+# A patch may touch only src/ and tests/. ab.sh resets both to HEAD between builds, so it refuses to start with any
+# change there (staged, unstaged or untracked). Take the change out as a patch (new files included), then stash it.
+git add -A src tests && git diff --cached --binary -- src tests > /tmp/round.patch && git stash
+perf/ab.sh x1 low,medium,high,ultra downtown,house,mexico,training 3 head headB /tmp/round.patch   # ≈1.5 h
+node perf/ab-agg.mjs x1   # paired geomean ratio vs head per preset (mean, median, p95)
+git stash pop
 ```
 
-Results land in `perf/results/scratch-<tag>-*.json` (gitignored); put the `ab-agg` output in the round's notes
+ab.sh first checks every patch (`git apply --check`, paths only in src/ and tests/) and refuses a tag whose
+`perf/results/scratch-<tag>-*` files already exist. It writes `scratch-<tag>-manifest.json` (HEAD, variants, the
+patch paths and SHA-256, maps, presets, rounds, date), then one `scratch-<tag>-<variant>-<map>-<preset>-<round>.json`
+per run (all gitignored). On any exit (done, error, ^C) it resets src/ and tests/ to HEAD and moves the original
+`out/` back from `$AB_WORK/out-orig`. A failed run's JSON is removed; the script lists the failed cells and exits 1.
+`ab-agg` reads the manifest and fails unless every result exists and holds its own map and preset. One variant must
+be named `head`: the ratios pair each variant with it. Put the `ab-agg` output in the round's notes
 (`perf/results/rN-ab.md`). `--no-trace` fights end in other fixed states than traced ones: compare within a mode.
 
 A round's change counts only if `compare` flags it **IMP** beyond the noise floor (see `NOISE.md`) on the cells it

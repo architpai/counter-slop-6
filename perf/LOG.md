@@ -197,7 +197,8 @@ the same drift). Verdicts in this round come from **per-cell interleaved A/B run
 `perf/ab-agg.mjs`, new): every variant is built once, and for each map x preset cell all variants run back to back
 (fresh browser each, `--no-trace`), so drift hits them alike. The metric is the geomean of the paired
 variant/HEAD ratio over the 32 cell-scenarios. Run x5 used a balanced rotation and a second HEAD build as noise
-control: **HEAD/HEAD differs by 1.2 % or less on every preset aggregate** (frame mean, median and p95). All runs:
+control: **HEAD/HEAD differed by 1.2 % or less on every preset aggregate** (frame mean, median and p95; one
+observation, not a measured noise floor). All runs:
 `perf/results/r1-ab.md`. Fight state hashes are identical across all variants in every cell (`--no-trace` fights
 end in other, equally fixed, states than traced ones: compare within a mode only).
 
@@ -214,10 +215,11 @@ end in other, equally fixed, states than traced ones: compare within a mode only
 | frame p95 | 2.847 → 2.992 (+5.1 %) | 4.957 → 4.178 (-15.7 % IMP) | 5.805 → 4.800 (-17.3 % IMP) | 6.885 → 5.572 (-19.1 % IMP) | 4.873 → 4.276 (-12.3 % IMP) |
 | js mean (traced) | 0.636 → 0.571 (-10.3 %) | 1.380 → 1.073 (-22.2 % IMP) | 1.755 → 1.361 (-22.4 %) | 2.214 → 1.564 (-29.3 % IMP) | 1.360 → 1.069 (-21.4 % IMP) |
 
-\* Low vs the baseline is drift, not the change: HEAD alone read +2.4 % (median) / +5.3 % (mean) on Low vs the
-baseline in this session, and paired with HEAD the round is faster on Low in all 8 Low cells (7 of 8 vs headB):
--0.02 to -0.08 ms per cell. Low's gain is real but small (about 5x the paired noise, below the 6.6 % full-matrix
-threshold). `r1-post` (traced, full matrix) is the next round's reference: `perf/results/r1-post.json`
+\* Low's REG vs the baseline is consistent with drift: HEAD alone read +2.4 % (median) / +5.3 % (mean) on Low vs
+the baseline in this session. The paired measurements indicate a small Low gain: faster than HEAD in all 8 Low
+cells (7 of 8 vs headB), -0.02 to -0.08 ms per cell, -2.6 % mean against a single HEAD/HEAD observation of
+-0.5 %. That is not statistical proof, and it is below the 6.6 % full-matrix threshold: treat Low as "small gain,
+not proven past noise". `r1-post` (traced, full matrix) is the next round's reference: `perf/results/r1-post.json`
 (`node perf/table.mjs perf/results/r1-post.json`).
 
 ### Changes kept
@@ -263,6 +265,18 @@ protocol (≤ 1.2 %); (4) the aggregator could drop cells silently → `perf/ab-
 (x1-x5 all complete). Before the review, the B3 define was in the shader text only; it is now in the program key
 (`ormKey`) so a material with separate AO/roughness maps can never share a packed program (no such material exists
 today; no program count changed).
+
+Round 2 (`perf-loop-r1-review-2`, on `c7a65d8..a821d82` with the findings and responses above): no new game-code,
+quality or `Math.random` issue; the x5 numbers in this log match `r1-ab.md`; findings 1 and 3 now have supporting
+evidence. New findings, all on the A/B harness and the wording, all fixed: the dirty guard missed staged/untracked
+files and the reset restored the index, not HEAD (a later build could mix variants) → `perf/ab.sh` checks
+`git status`, refuses patches outside `src/` and `tests/`, resets with `checkout HEAD` + `clean`; no cleanup on
+failure or interrupt → a trap restores the tree and the original `out/`; a retry could reuse stale results → it
+refuses an existing tag and exits non-zero on a failed cell; completeness was judged from the files found → a run
+manifest, and `ab-agg.mjs` requires every expected file and checks each file's cells; the rotation is exactly
+balanced only for some cell/round counts → documented; the Low conclusion was worded too certainly → reworded
+above ("small gain, not proven past noise"). Runs x1-x5 used the earlier script (no manifest); their numbers stay
+as recorded in `r1-ab.md`. The new rotation offsets by map + preset + round; use rounds = number of variants.
 
 ### Hot spot leads for later rounds (refreshed)
 
