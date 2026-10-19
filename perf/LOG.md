@@ -652,9 +652,8 @@ reading 19:28) → Machine state reworded.
 
 ### Hot spot leads (refreshed)
 
-0. **Round 5 (r5R): confirmed on High/Ultra in one round (base 4-6 % slower); Medium still provisional.** **First next step: repeat the kept set vs the pre-round tree** (balanced, ≥ 4 rounds, with a HEAD/HEAD control,
-   on a charged machine on AC, under `perf/powered.sh`). The verdict above stays provisional (Ultra most) until it
-   passes.
+0. **Round 5 (r5R): confirmed on High/Ultra in one round (base 4-6 % slower); Medium still provisional.** Open for Medium only: a balanced set-vs-pre-round-tree repeat (≥ 4 rounds, HEAD/HEAD
+   control, charged machine on AC, under `perf/powered.sh`).
 1. **Shadow-map bind/clear/store on Ultra** (pE vs pK ~0.23 ms; the probes suggest it, they do not isolate it) and
    High (~0.14 ms): the colour store is sampled,
    so the exact lever left is the depth store (Round 1's A8 was inside noise: retry alone on Ultra with `ab.sh`,
@@ -698,7 +697,7 @@ within a machine state.
 | headB / head, fitted mean (raw) | +1.0 % fight, +0.2 % all (r5L) | +2.3 % (+1.0) * | +0.7 % (+0.7) | -0.3 % (-0.8) |
 | `dsd` shadow depth discard (fitted mean) | — | -6.9 % * | +1.0 % | -0.1 % |
 | `walk` shadow-walk pruning (fitted mean / fight cpu) | — | -1.6 / -6.4 % * | -0.4 / -1.3 % | -1.8 / -3.0 % |
-| `low1` one shadow draw per flat figure (r5L: mean / fight js, training fight js) | -0.7 / -1.5 %, -3.1 % (headB -1.4 %) | | | |
+| `low1` one shadow draw per flat figure (r5L: mean / fight js, training fight js) | -0.7 / -1.5 %, -3.1 % vs head, -1.4 % vs headB | | | |
 | `dr` depthRange once per rig run (r5L: mean / fight js) | -0.6 / -0.6 % | | | |
 
 \* r5R's medium arm caught power-state switches inside cells (medium mexico: head +3 / +23 % and base +34 / +42 %
@@ -713,16 +712,17 @@ asked for, so the size is approximate; as the round brief asked, the High/Ultra 
 **Medium is not confirmed by r5R** (its arm is void; the four clean cells read base +1.7 % vs headB, below the
 gate): Medium's keep rests on Round 4's f1 (-3.3 %) and f2 (-2.8 % raw) and stays provisional. **No new change
 is kept**: none of the four candidates was clearly past the paired noise after its one A/B (round rule). HEAD's `src/`
-is unchanged; all four patches are exact (each 56/56 byte-identical against the `r4` capture) and saved.
+is unchanged; all four patches are exact (56/56 byte-identical against the `r4` capture: `walk` and `low1` each alone, `dsd` and
+`dr` together) and saved.
 
 ### Candidates (all rejected; patches in `perf/patches/`, on `7c00ea2`)
 
 | patch | what | pixels | result |
 |---|---|---|---|
-| `r5-dsd` | `gl.invalidateFramebuffer(FRAMEBUFFER, [DEPTH_ATTACHMENT])` on each shadow map as three leaves it (instance override of `setRenderTarget` during the redraw only; Round 1's A8 shadow part alone) | 56/56 identical | r5R high +1.0 %, ultra -0.1 % fitted mean: no gain (ANGLE Metal probably ends the pass without a costly depth store already) |
+| `r5-dsd` | `gl.invalidateFramebuffer(FRAMEBUFFER, [DEPTH_ATTACHMENT])` on each shadow map as three leaves it (instance override of `setRenderTarget` during the redraw only; Round 1's A8 shadow part alone) | 56/56 identical (dsd + dr captured together) | r5R high +1.0 %, ultra -0.1 % fitted mean: no gain (ANGLE Metal probably ends the pass without a costly depth store already) |
 | `r5-walk` | during the shadow redraw, hide the caster-free subtrees of worn operators (hips/torso pivot, armature root bones; guards: disposed, lent pieces, gibs, a caster in the socket) and the view-model rig; ~53-72 node visits per figure per cascade; test proves the same casters in the same order for every kind/LOD/prop/debris state | 56/56 identical | r5R high -0.4 %, ultra -1.8 % mean (fight -2.5 %, fight cpu -3.0 %); headB per cell -3.7 to +3.0 % → not clearly past noise |
 | `r5-low1` | Low: each flat figure's shadow casters drawn as one merged geometry (same Float32 positions, walk-order indices, `part` attribute, `mat4 partMV[12]` = float32(shadowCam⁻¹ × part.matrixWorld), out-of-view matrix for culled parts), pooled per-figure `MeshDepthMaterial` under `quietly()`, warm-up probe | 56/56 identical | training calls path 223 → 190, fight 470 → 431; r5L Low mean -0.7 %, fight js -1.5 % (headB -1.3 %), training fight js -3.1 % vs head, -1.4 % vs headB (headB/head -1.7 %) → not clearly past noise |
-| `r5-dr` | view-model `gl.depthRange` set once per contiguous run of rig draws (rig `renderOrder` ≥ 1000 sorts them last in each list), reset at the run's end and in `scene.onAfterRender` | 56/56 identical | r5L Low mean -0.6 %, js -0.7 %, fight js -0.6 % → no gain |
+| `r5-dr` | view-model `gl.depthRange` set once per contiguous run of rig draws (rig `renderOrder` ≥ 1000 sorts them last in each list), reset at the run's end and in `scene.onAfterRender` | 56/56 identical (dsd + dr captured together) | r5L Low mean -0.6 %, js -0.7 %, fight js -0.6 % → no gain |
 
 ### Quality gate
 
@@ -758,7 +758,10 @@ cells are reported instead (base +2.3 %, headB +0.6 %, not past noise); (P3) dsd
 alone → said so; (P3) "machine state, not code" and the shadow-store reading were stated as facts → marked as
 hypotheses; (P3) the medium switch sizes used head as the denominator, and low1's -1.4 % is vs headB → corrected.
 
-REVIEW2_PLACEHOLDER
+Round 2 (`perf-loop-r5-review-2`, on `dad979d..d5a246f` with the findings and responses above): the review-1 fixes
+and new numbers check out against the raw files; three P3 consistency fixes applied: the Round 4 lead 0 line still
+called the whole verdict provisional (now Medium only), the summary and candidate table still said each patch passed
+alone (dsd and dr were captured together), and the Result table's low1 "-1.4 %" is vs headB.
 
 ### Hot spot leads (refreshed)
 
