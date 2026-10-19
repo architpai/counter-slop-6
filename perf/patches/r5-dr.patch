@@ -1,0 +1,107 @@
+diff --git a/src/engine/render/index.ts b/src/engine/render/index.ts
+index fc36da4..d17db7b 100644
+--- a/src/engine/render/index.ts
++++ b/src/engine/render/index.ts
+@@ -227,8 +227,8 @@ export class Renderer {
+   /** Dark shadow-only lights for cascades 1+ (cascade 0 is `sun`); empty on Low and Medium. */
+   readonly cascades: THREE.DirectionalLight[] = [];
+   readonly _sky: SkyUniforms;
+-  readonly _beforeRig: () => void;
+-  readonly _afterRig: () => void;
++  readonly _beforeRig: THREE.Object3D['onBeforeRender'];
++  readonly _afterRig: THREE.Object3D['onAfterRender'];
+   readonly _prepareRigMesh: (object: THREE.Object3D) => void;
+   readonly _onResize: () => void;
+   /** A restored context lost every texture; streamed maps keep no CPU copy, so stream them again. */
+@@ -437,8 +437,41 @@ export class Renderer {
+     // The rig draws into [0, RIG_DEPTH] of the depth range, so it always wins the depth test and the
+     // world's depth survives it: AO and the soft particles read that depth, and the transparent world
+     // effects (tracers, decals, smoke), which three draws after every opaque mesh, test against it.
+-    this._beforeRig = () => gl.depthRange(0, RIG_DEPTH);
+-    this._afterRig = () => gl.depthRange(0, 1);
++    // Its draws come last in their list (renderOrder 1000+, nothing else above 5), so the slice is set at the first
++    // draw of each run of rig draws (in the outermost render's list) and put back after the run's last. A draw found in
++    // neither list keeps its own pair; the scene's render always ends on the full range.
++    let endObject: THREE.Object3D | null = null, endGroup: unknown = null;
++    const beforeRig = function (this: THREE.Object3D, renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera,
++      _geometry: unknown, material: THREE.Material, group: unknown): void {
++      if (endObject !== null) return;
++      const list = renderer.renderLists.get(scene, 0), items = material.transparent ? list.transparent : list.opaque;
++      endObject = this;
++      endGroup = group;
++      for (let i = items.length - 1; i >= 0; i--) {
++        if (items[i]!.object !== this || items[i]!.group !== group) continue;
++        for (let j = i + 1; j < items.length; j++) {
++          const next = items[j]!;
++          if (!next.object.layers.test(camera.layers)) continue;
++          if (next.object.onBeforeRender !== beforeRig) break;
++          endObject = next.object;
++          endGroup = next.group;
++        }
++        break;
++      }
++      gl.depthRange(0, RIG_DEPTH);
++    };
++    this._beforeRig = beforeRig;
++    this._afterRig = function (this: THREE.Object3D, _renderer: unknown, _scene: unknown, _camera: unknown, _geometry: unknown,
++      _material: unknown, group: unknown): void {
++      if (this !== endObject || group !== endGroup) return;
++      endObject = null;
++      gl.depthRange(0, 1);
++    };
++    this.scene.onAfterRender = () => {
++      if (endObject === null) return;
++      endObject = null;
++      gl.depthRange(0, 1);
++    };
+     this._prepareRigMesh = object => {
+       if (!isMesh(object)) return;
+       object.castShadow = object.receiveShadow = false;
+diff --git a/tests/render-chain.test.ts b/tests/render-chain.test.ts
+index f80d9c2..9a1ab4e 100644
+--- a/tests/render-chain.test.ts
++++ b/tests/render-chain.test.ts
+@@ -269,6 +269,43 @@ test('the rig draws into its own depth slice on every tier, so a transparent eff
+   }
+ }, 60_000);
+ 
++test('the rig sets its depth slice once per run of rig draws, and every draw still gets the range it had', async () => {
++  const renderer = makeRenderer();
++  const gl = renderer.three.getContext(), range = vi.spyOn(gl, 'depthRange');
++  const seen: [string, number][] = [];
++  const material = (name: string, transparent = false): THREE.Material => {
++    const made = new THREE.MeshBasicMaterial({ transparent });
++    made.name = name;
++    made.onBeforeRender = () => { seen.push([name, range.mock.calls.at(-1)?.[1] ?? 1]); };
++    return made;
++  };
++  // Two opaque rig meshes (one drawn per group), a transparent one, and the world's draws around them.
++  const gun = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.4), material('rig'));
++  const sights = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.05), Array.from({ length: 6 }, () => material('rig')));
++  const glint = new THREE.Mesh(new THREE.PlaneGeometry(0.1, 0.1), material('rig', true));
++  for (const [i, mesh] of [gun, sights, glint].entries()) {
++    mesh.position.set(0.1 * i, -0.2, -0.5);
++    renderer.rig.add(mesh);
++    renderer.prepareRig(mesh);
++  }
++  const wall = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), material('world'));
++  wall.position.z = -3;
++  const smoke = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material('world', true));
++  smoke.position.z = -2;
++  renderer.scene.add(wall, smoke);
++  renderer.camera.position.set(0, 0, 0);
++  for (let i = 0; i < 100 && (i < 2 || renderer._compiles.length + renderer._warmups.length > 0); i++) {
++    renderer.render(0, fx);
++    await new Promise(resolve => setTimeout(resolve, 10));
++  }
++  range.mockClear();
++  seen.length = 0;
++  renderer.render(0, fx);
++  expect(seen.filter(([name]) => name === 'rig')).toHaveLength(8);
++  for (const [name, far] of seen) expect(far, name).toBe(name === 'rig' ? RIG_DEPTH : 1);
++  expect(range.mock.calls).toEqual([[0, RIG_DEPTH], [0, 1], [0, RIG_DEPTH], [0, 1]]);
++}, 60_000);
++
+ test('shadow boxes stay on their texel grid, so moving the viewer never swims the shadows', () => {
+   const light = new THREE.DirectionalLight();
+   light.shadow.mapSize.set(2048, 2048);

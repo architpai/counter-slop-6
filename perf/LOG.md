@@ -652,7 +652,7 @@ reading 19:28) → Machine state reworded.
 
 ### Hot spot leads (refreshed)
 
-0. **First next step: repeat the kept set vs the pre-round tree** (balanced, ≥ 4 rounds, with a HEAD/HEAD control,
+0. **Done in Round 5 (r5R): confirmed, base 4-6 % slower on High/Ultra.** **First next step: repeat the kept set vs the pre-round tree** (balanced, ≥ 4 rounds, with a HEAD/HEAD control,
    on a charged machine on AC, under `perf/powered.sh`). The verdict above stays provisional (Ultra most) until it
    passes.
 1. **Shadow-map bind/clear/store on Ultra** (pE vs pK ~0.23 ms; the probes suggest it, they do not isolate it) and
@@ -667,6 +667,97 @@ reading 19:28) → Machine state reworded.
 4. **Ultra main pass with MSAA4** (~2-2.5 ms): ablate the MSAA resolve (measurement only) to see if it is bandwidth.
 5. Small exact leftovers: hemisphere light at 0 (needs the pre-sky state through the probe and two test lines),
    view-model `depthRange` per mesh.
+
+## Round 5 — shadow-pass trims, Low shadow merge; Round 4 confirmed (no game change kept)
+
+2026-10-19/20, on `7c00ea2`. Survey: four read-only Opus agents (shadow-map bind/clear/store, shadow-caster CPU, Ultra
+MSAA main pass, small leftovers + Low); implementation: three Opus agents in their own worktrees, one patch per
+candidate (`dsd`, `dr`, `walk`, `low1`); review: GPT-6.1-Sol (below). Time budget this round: ~4-5 h, at most 3 A/Bs,
+no post-round bench (Round 6's pre-bench is the next reference). Wall time used: about 3.5 h.
+
+**Machine state** (`perf/results/r5-power.log`). The charger on the laptop is a **20 W USB-C adapter** (`pmset -g ac`:
+"20W USB-C Power Adapter", Wattage 20), not the 94 W one assumed. On AC it charged only ~0.25 points per minute at
+idle and lost ~0.5-0.9 points per minute under bench load (r5-pre 53 → 49 % in 4.5 min). Gate this round: start at
+AC and ≥ 50 % (Job 1: ≥ 55 %), void under 35 % (`PERF_MIN_BATT=35`). So each A/B was cut to fit ~15-20 min of
+load, with idle charging (40 → 50 % took 48 min) between them. No run was voided; no thermal or performance
+warning. Desktop Chrome open (idle), as in earlier rounds.
+
+**Round baseline.** `r5-pre` (`7c00ea2`, traced, all 4 presets on downtown + training only, default frames, 267 s:
+the smallest set that covers all presets and the heaviest fight): `perf/results/r5-pre.json`. Calls, programs and
+fight hashes match Round 4. Unpaired against `r4-pre` (same cells) it reads low -5.3 %, medium -1.7 %, high +4.1 %,
+ultra +2.6 % frame mean: machine state (battery ~50 % on a 20 W charger vs `r4-pre`'s charged machine), not code —
+the paired run below shows the Round 4 code 4-6 % *faster* than the code before it on the same machine. Compare
+within a machine state.
+
+### Result
+
+| | low | medium | high | ultra |
+|---|---|---|---|---|
+| **Round 4 confirmation** (r5R, pre-Round-4 code `base` vs HEAD, fitted mean) | — | +4.1 % * | +5.8 % (8/8 cells slower) | +4.1 % (7/8 cells slower) |
+| base vs HEAD, raw mean / median / p95 | — | +4.5 / +1.6 / +4.5 % * | +5.5 / +4.9 / +6.8 % | +4.1 / +6.7 / +3.1 % |
+| headB / head, fitted mean (raw) | +1.0 % fight, +0.2 % all (r5L) | +2.3 % (+1.0) * | +0.7 % (+0.7) | -0.3 % (-0.8) |
+| `dsd` shadow depth discard (fitted mean) | — | -6.9 % * | +1.0 % | -0.1 % |
+| `walk` shadow-walk pruning (fitted mean / fight cpu) | — | -1.6 / -6.4 % * | -0.4 / -1.3 % | -1.8 / -3.0 % |
+| `low1` one shadow draw per flat figure (r5L: mean / fight js, training fight js) | -0.7 / -1.5 %, -3.1 % (headB -1.4 %) | | | |
+| `dr` depthRange once per rig run (r5L: mean / fight js) | -0.6 / -0.6 % | | | |
+
+\* r5R's medium arm caught power-state switches inside cells (medium mexico: head and base 12-23 % slower than the
+other three; medium training: headB +24-30 %, walk +9-15 %): not usable for candidates. In the four medium cells
+outside mexico/training, base was slower in all four (+0.7 to +3.4 %).
+
+**Verdict.** **Round 4's kept set is confirmed** on High and Ultra (and consistent on Medium's clean cells): the
+pre-Round-4 code is 4-6 % slower than HEAD, against a HEAD/HEAD control within ±1 % on those presets; the provisional
+verdict of Round 4 (lead 0) is now final. One round only (5 variants on 4 maps, near-balanced; the battery allowed
+~20 min), so the size is approximate; the direction repeats in 15 of 16 high/ultra cell-scenarios. **No new change
+is kept**: none of the four candidates was clearly past the paired noise after its one A/B (round rule). HEAD's `src/`
+is unchanged; all four patches are exact (each 56/56 byte-identical against the `r4` capture) and saved.
+
+### Candidates (all rejected; patches in `perf/patches/`, on `7c00ea2`)
+
+| patch | what | pixels | result |
+|---|---|---|---|
+| `r5-dsd` | `gl.invalidateFramebuffer(FRAMEBUFFER, [DEPTH_ATTACHMENT])` on each shadow map as three leaves it (instance override of `setRenderTarget` during the redraw only; Round 1's A8 shadow part alone) | 56/56 identical | r5R high +1.0 %, ultra -0.1 % fitted mean: no gain (ANGLE Metal probably ends the pass without a costly depth store already) |
+| `r5-walk` | during the shadow redraw, hide the caster-free subtrees of worn operators (hips/torso pivot, armature root bones; guards: disposed, lent pieces, gibs, a caster in the socket) and the view-model rig; ~53-72 node visits per figure per cascade; test proves the same casters in the same order for every kind/LOD/prop/debris state | 56/56 identical | r5R high -0.4 %, ultra -1.8 % mean (fight -2.5 %, fight cpu -3.0 %); headB per cell -3.7 to +3.0 % → not clearly past noise |
+| `r5-low1` | Low: each flat figure's shadow casters drawn as one merged geometry (same Float32 positions, walk-order indices, `part` attribute, `mat4 partMV[12]` = float32(shadowCam⁻¹ × part.matrixWorld), out-of-view matrix for culled parts), pooled per-figure `MeshDepthMaterial` under `quietly()`, warm-up probe | 56/56 identical | training calls path 223 → 190, fight 470 → 431; r5L Low mean -0.7 %, fight js -1.5 % (headB -1.3 %), training fight js -3.1 % (vs headB -1.4 %) → not clearly past noise |
+| `r5-dr` | view-model `gl.depthRange` set once per contiguous run of rig draws (rig `renderOrder` ≥ 1000 sorts them last in each list), reset at the run's end and in `scene.onAfterRender` | 56/56 identical | r5L Low mean -0.6 %, js -0.7 %, fight js -0.6 % → no gain |
+
+### Quality gate
+
+`node perf/quality.mjs compare baseline r5`: **PASS, 56/56, every SSIM 1.0000** (as `r4`). `compare r4 r5`: **56/56
+byte-identical** (HEAD's `src/` is the r4 tree). Each candidate alone: 56/56 byte-identical vs `r4` (`scratch-r5-dd` =
+dsd + dr together, `scratch-r5-walk`, `scratch-r5-low1`). `npm run typecheck` passes; each agent ran the full
+`npm test` with its patch (386-389 tests pass). No game code is committed this round.
+
+### Survey findings worth keeping (no patch)
+
+- **Ultra MSAA main pass**: one MSAA render pass and one blit resolve per frame, no second render into the MSAA
+  target; `WEBGL_multisampled_render_to_texture` is not exposed here (and `msaaDepthReadable` would turn soft
+  particles/shafts off with it); every High/Ultra depth reader is needed. Medium-only MSAA-depth invalidate before
+  the blit is the one exact lever left (≤ 0.06 ms by estimate). Measurement-only ablation sketch (blit skipped /
+  stale / depth-only) in the survey: worth running once to learn whether the resolve costs anything.
+- **Shadow maps**: High 2 / Ultra 3 Metal passes per frame, each a load-clear and a colour+depth store; the colour is
+  sampled, depth is a DEPTH24 renderbuffer; no double binds. With `dsd` at ~0, the remaining pE-vs-pK cost is the
+  colour store and fixed per-pass cost; only non-exact levers (fewer bytes per texel, atlas) remain.
+- **Hemisphere light at 0**: removing it changes the lights hash → every lit program recompiles when the sky lands
+  (the 40-70 ms hitch `index.ts` warns about), breaks two `render-chain` assertions, and saves ~6 ALU per fragment
+  (≤ 0.03 ms). Not worth building.
+
+### Review (GPT-6.1-Sol, high effort)
+
+REVIEW_PLACEHOLDER
+
+### Hot spot leads (refreshed)
+
+0. **Get a stronger charger before Round 6**, or keep A/Bs to ~20 min: with the 20 W adapter, longer balanced runs
+   (≥ 4 rounds) are not possible without voids, and single-round A/Bs leave ~2-3 % effects unproven.
+1. **Shadow-pass CPU in fights**: `walk` (-3.0 % ultra fight cpu, -1.8 % mean) and `low1` (-3 % training fight js)
+   point the same way but are small; together with Round 2's D (post chain in one `render()`) they could be one
+   bundled CPU variant measured with traces (`AB_TRACE=1`) on training/mexico fights. Patches apply on `7c00ea2`.
+2. **Ultra main pass**: run the resolve ablation once (measurement only) before any more MSAA work.
+3. **Low**: still no exact lever past noise. Merging draws cut 40 calls per training fight frame for ~1.5 % js.
+4. **Matrix walk**: skipping three's second world-matrix walk for figures `syncModel` already updated (training,
+   ~1900 matrix products per frame; exact only with a flag cleared on every other writer: `setWeapon`, `dropShield`,
+   `lend`, death). Est. 0.05-0.15 ms js on Low training; needs a bit-equal matrix test.
 
 ## Tried / rejected ideas
 
@@ -745,3 +836,19 @@ Format: round, idea, where, result numbers vs the noise floor, why rejected.
   depth-only or R32F shadow maps and hardware compare (different sampled values); one-tap AO lookup in the tone pass
   at full res (2e-4 weight dropped: LSBs); skipping the AO blur on sky texels (run-time branch); SMAA area/search
   as RG8/R8, weights pass discard, bloom formats (≈ 0 or not exact).
+- **r5, dsd: shadow-map depth discard alone** (`render/index.ts`: `invalidateFramebuffer` of `DEPTH_ATTACHMENT` as
+  three leaves each map). Exact (56/56). r5R fitted mean: high +1.0 %, ultra -0.1 % (medium arm void). Second time
+  inside noise (Round 1 A8). Rejected; patch `perf/patches/r5-dsd.patch`.
+- **r5, walk: prune caster-free subtrees from the shadow walk** (`operators.ts` `bare()`, `render/index.ts`; worn
+  operators' pivots and bones, the view-model rig). Exact (56/56; walk-order test over every kind/state). r5R fitted
+  mean: high -0.4 %, ultra -1.8 %; fight cpu ultra -3.0 % (headB -0.7 %). Not clearly past noise after one A/B.
+  Rejected; patch `perf/patches/r5-walk.patch`.
+- **r5, low1: one shadow draw per flat Low figure** (`render/flat-shadows.ts`, merged geometry + `partMV[]` depth
+  material). Exact (56/56; a Metal shadow-map test was byte-identical too). r5L: Low mean -0.7 %, fight js -1.5 %
+  (headB -1.3 %), training fight js -3.1 % (vs headB -1.4 %); calls -33/-39 per frame in training. Rejected; patch
+  `perf/patches/r5-low1.patch`.
+- **r5, dr: view-model depthRange once per run of rig draws** (`render/index.ts`). Exact (56/56). r5L: Low mean
+  -0.6 %, js -0.7 %. Rejected; patch `perf/patches/r5-dr.patch`.
+- **r5, not tried (by analysis)**: hemisphere light removal (recompile on sky landing; ≤ 0.03 ms); Medium MSAA depth
+  invalidate before the blit (≤ 0.06 ms, likely a no-op like dsd); render-to-texture MSAA (extension not exposed);
+  shadow atlas (not exact: uv remap and edge taps); scissored clears (draw-based clear with a load: worse).

@@ -1,0 +1,64 @@
+diff --git a/src/engine/render/index.ts b/src/engine/render/index.ts
+index fc36da4..a371bd3 100644
+--- a/src/engine/render/index.ts
++++ b/src/engine/render/index.ts
+@@ -432,8 +432,8 @@ export class Renderer {
+     // first, then scene order) keeps the sun as cascade 0.
+     this.scene.add(this.sun, this.sun.target, this.hemi, this.probe);
+     this.post = new Composite();
+-    const gl = this.three.getContext();
+-    this._fences = new GpuFences(gl as WebGL2RenderingContext);
++    const gl = this.three.getContext() as WebGL2RenderingContext;
++    this._fences = new GpuFences(gl);
+     // The rig draws into [0, RIG_DEPTH] of the depth range, so it always wins the depth test and the
+     // world's depth survives it: AO and the soft particles read that depth, and the transparent world
+     // effects (tracers, decals, smoke), which three draws after every opaque mesh, test against it.
+@@ -473,12 +473,31 @@ export class Renderer {
+         }
+       }
+     };
++    // A map's depth serves its own casters only (every redraw clears it first, nothing samples it): three leaves each
++    // map through `setRenderTarget`, for the next map or back to the scene target, and its depth is dropped first.
++    const three = this.three, depthOnly = [gl.DEPTH_ATTACHMENT];
++    let shadowLights: THREE.Light[] = [], setTarget = three.setRenderTarget;
++    const leaveShadowMap: typeof setTarget = (target, face, level) => {
++      const bound = three.getRenderTarget();
++      if (bound !== null && bound !== target) {
++        for (const light of shadowLights) {
++          if (light.shadow?.map !== bound) continue;
++          gl.invalidateFramebuffer(gl.FRAMEBUFFER, depthOnly);
++          break;
++        }
++      }
++      setTarget.call(three, target, face, level);
++    };
+     shadowMap.render = (lights, scene, camera) => {
+       if (!shadowMap.needsUpdate) return drawShadows(lights, scene, camera);
+       this.operators.shadowSwap(true);
++      shadowLights = lights;
++      setTarget = three.setRenderTarget;
++      three.setRenderTarget = leaveShadowMap;
+       try {
+         drawCasters(lights, scene, camera);
+       } finally {
++        three.setRenderTarget = setTarget;
+         this.operators.shadowSwap(false);
+       }
+     };
+diff --git a/tests/render-chain.test.ts b/tests/render-chain.test.ts
+index f80d9c2..830cffa 100644
+--- a/tests/render-chain.test.ts
++++ b/tests/render-chain.test.ts
+@@ -79,6 +79,12 @@ test('each preset reaches the renderer: passes, tone mapping, MSAA, AO depth, ca
+     for (const light of renderer.cascades) expect(light.intensity).toBe(0);
+     expect(lights.every(light => light.castShadow)).toBe(true);
+     expect(renderer.three.shadowMap.type).toBe(want.soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap);
++    // A frame that redraws the maps drops each one's depth once its casters are drawn.
++    const gl = renderer.three.getContext() as WebGL2RenderingContext, drop = vi.spyOn(gl, 'invalidateFramebuffer');
++    renderer._shadowEvery = 1;
++    renderer.render(0, fx);
++    expect(drop.mock.calls.filter(([target]) => target === gl.FRAMEBUFFER), name).toEqual(lights.map(() => [gl.FRAMEBUFFER, [gl.DEPTH_ATTACHMENT]]));
++    drop.mockRestore();
+     expect(renderer.three.getContext().getError()).toBe(renderer.three.getContext().NO_ERROR);
+     // Every program linked (three keeps a failed one's log in `diagnostics`).
+     const programs = (renderer.three.info.programs ?? []) as (THREE.WebGLProgram & { diagnostics?: { runnable: boolean } })[];
