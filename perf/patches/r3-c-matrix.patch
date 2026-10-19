@@ -1,0 +1,90 @@
+diff --git a/src/engine/enemies/model.ts b/src/engine/enemies/model.ts
+index 2aaa79e..e6ccd09 100644
+--- a/src/engine/enemies/model.ts
++++ b/src/engine/enemies/model.ts
+@@ -146,7 +146,7 @@ export function makeModel(stats: EnemyType): { figure: Figure; root: Group; hits
+  * would recompute, so the centres are the same to the bit. A worn
+  * operator's armature is left out: the renderer poses it and brings it up to
+  * date before it draws (render/operators.ts `frame`, three's scene update),
+- * its own reach does as well, and a ray that tests the whole tree updates it
++ * its own reach the chains it reads, and a ray that tests the whole tree updates it
+  * first (`raycastFigure`); nothing else reads it. Then the hit surfaces are
+  * bounded for `raycastFigure`.
+  */
+diff --git a/src/engine/render/index.ts b/src/engine/render/index.ts
+index 1dbedaf..aed7e3f 100644
+--- a/src/engine/render/index.ts
++++ b/src/engine/render/index.ts
+@@ -1606,8 +1606,9 @@ export class Renderer {
+     this.sky.position.copy(this.camera.position);
+     this._drawWarmups();
+     this._updateFx();
+-    // The operators follow their figures' pivots and clips, and figures out of view put theirs on.
+-    this.camera.updateMatrixWorld();
++    // The operators follow their figures' pivots and clips, and figures out of view put theirs on. They read the
++    // camera's own matrices only: the view-model rig under it is brought up to date by three's scene update.
++    this.camera.updateWorldMatrix(true, false);
+     this.operators.frame(this.camera);
+     this.props.update(this.camera);
+     this.three.setRenderTarget(this.post.target);
+diff --git a/src/engine/render/operators.ts b/src/engine/render/operators.ts
+index aaa037e..12f3613 100644
+--- a/src/engine/render/operators.ts
++++ b/src/engine/render/operators.ts
+@@ -611,6 +611,11 @@ export class OperatorBody {
+   readonly armature = new THREE.Group();
+   /** Where the prop sits in the hand: its grip in the gun glove's fist (`FIST`), laid as the weapon group lays it, under the forearm's bone. */
+   readonly socket = new THREE.Group();
++  /** Per bone, which way a rotor turns with the motion's spin (1 or -1), or 0 for a bone that is not a rotor. */
++  readonly #spin: Int8Array;
++  /** The left arm's bones, for the support hand's reach. */
++  readonly #upperL: THREE.Bone | undefined;
++  readonly #foreL: THREE.Bone | undefined;
+   /** Where the grip hand and the support hand hold the prop in hand, in the prop's frame (`PROP_HOLDS`). */
+   readonly #grip = new THREE.Vector3();
+   readonly #support = new THREE.Vector3();
+@@ -652,6 +657,9 @@ export class OperatorBody {
+     rig.root.add(this.armature);
+     rig.worn = true; rig.armature = this.armature;
+     for (const mesh of rig.low) mesh.layers.set(HIT_LAYER);
++    this.#spin = Int8Array.from(template.bones, ({ name }) => !name.includes('-rotor') ? 0 : name.endsWith('F') === name.includes('wingL') ? 1 : -1);
++    this.#upperL = this.bones[template.bones.findIndex(b => b.name === 'upperL')];
++    this.#foreL = this.bones[template.bones.findIndex(b => b.name === 'foreL')];
+     const fore = this.bones[template.bones.findIndex(b => b.name === 'foreR')];
+     if (fore && rig.parts.gunMount) fore.add(this.socket);
+     rig.onWeapon = () => this.#holdProp();
+@@ -739,8 +747,9 @@ export class OperatorBody {
+         bone.quaternion.identity();
+         bone.scale.setScalar(1);
+       }
+-      if (name.includes('-rotor')) {
+-        bone.quaternion.multiply(_q.setFromAxisAngle(_up, name.endsWith('F') === name.includes('wingL') ? motion.spin : -motion.spin));
++      const spin = this.#spin[i]!;
++      if (spin !== 0) {
++        bone.quaternion.multiply(_q.setFromAxisAngle(_up, spin > 0 ? motion.spin : -motion.spin));
+       } else if (clips && motion.group !== 'drone') {
+         bone.quaternion.multiply(motion.delta(clips, name, _q));
+       }
+@@ -754,11 +763,11 @@ export class OperatorBody {
+    * a long gun, or round the grip hand on a pistol, the elbow down and out.
+    */
+   #reach(motion: OperatorMotion): void {
+-    const at = (name: string) => this.bones[this.template.bones.findIndex(b => b.name === name)];
+-    const upper = at('upperL'), fore = at('foreL');
++    const upper = this.#upperL, fore = this.#foreL;
+     if (!upper || !fore || upper.scale.x < 0.5) return;
++    // The root's matrix is read as it is; every other point asks its own chain (`getWorldPosition`, `localToWorld`,
++    // `getWorldQuaternion`), so the rest of the armature waits for three's scene update.
+     this.rig.root.updateWorldMatrix(true, false);
+-    this.armature.updateMatrixWorld(true);
+     const shoulder = upper.getWorldPosition(_s), scale = this.rig.root.matrixWorld.getMaxScaleOnAxis();
+     const a = 0.3 * scale, b = 0.29 * scale;
+     // The handguard where the arm reaches it; with the gun arm straight out (the game's aim pose) it often
+@@ -782,7 +791,6 @@ export class OperatorBody {
+     const hand = _h.copy(shoulder).addScaledVector(toTarget, d);
+     const weight = Math.min(1, motion.aim);
+     aimBone(upper, _w.subVectors(elbow, shoulder).normalize(), weight);
+-    upper.updateMatrixWorld(true);
+     aimBone(fore, _w.subVectors(hand, fore.getWorldPosition(_f)).normalize(), weight);
+   }
+ 

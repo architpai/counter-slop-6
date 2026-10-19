@@ -421,6 +421,73 @@ sign in the t2 ultra range; s4 values rounded from rounded ratios) applied, and 
 - **Agent worktrees** (Agent `isolation: worktree`) may start on `main`'s commit, not HEAD: check `git rev-parse HEAD`
   and reset to the round's HEAD before editing.
 
+## Round 3 — shadows (incomplete: measurement stopped by the power state)
+
+2026-10-19, on `7a3ceef`. Survey: five read-only Opus agents (merged operator shadows, static level casters, shadow
+sampling, Low end to end, non-shadow wins); implementation: four Opus agents, each in its own worktree, one patch per
+change. **No game change is kept this round**: no patch beat the paired noise in a valid run, and the round's last
+A/B run is void because the laptop left AC and drained to 1 % during it. HEAD's `src/` is unchanged.
+
+**Machine state.** All `pmset -g batt` / `-g therm` readings: `perf/results/r3-ab.md`. Start: AC, battery 10-11 %,
+desktop Chrome open (idle), no thermal or performance warning recorded at any point. The battery fell to 7 % during
+`r3-pre` while on AC and stayed there through s1 and s2; during s3 the machine went to **battery power, 1 %, "Battery
+Warning: Final"**. `r3-pre` (traced full matrix of HEAD `7a3ceef`, same `src/` as `r2-post`) reads **+19.4 % frame
+mean vs `r2-pre`** (low +1.4 %, medium +23.9 %, high +20.3 %, ultra +34.4 %): throttled; it is in the log only.
+`perf/results/r3-pre.json`.
+
+### Harness (kept, commit `2b45537`)
+
+`--profile` ablations now record the **mean** next to the median, and every scenario records `frameParity` /
+`cpuParity` (mean of even vs odd intervals/callbacks; `facts.shadowEvery`). Reason (Low survey): the old ablation took
+the median of a bimodal distribution, so Low's "shadow 0.8-1.4 ms averaged, 1.6-2.8 ms per redraw" (Round 0) was a
+median jump; Medium and High show the same bimodal frame times while redrawing every frame. **Measured with the new
+fields (s1, 16 Low runs per variant): Low's shadow callbacks cost ~0.3 ms more than the others** (path cpu odd/even
+1.70 / 1.38 ms, fight 1.40 / 1.17 ms). Lead 7 is therefore about 0.15 ms averaged, not 0.8-1.4 ms.
+
+### A/B protocol finding: run position
+
+`perf/ab-posfit.mjs <tag> [mean|med|p95|cpu] [path|fight|both]` (new) fits log(frame) = cell-scenario-round + variant
++ run position by least squares. In s2 the frame time rose with the run's position inside a cell's set of 7 runs:
+on medium, position 0 read -3.6 % and position 6 +2.3 % against the set's geomean. With cyclic rotation `headB`
+always runs next to `head`, so the control is blind to that ramp, and with rounds < variants the variants are
+confounded with positions (s2 medium: every patch +3-10 %, including `d`, which does not change Medium's shader at
+all). Use rounds = number of variants (exact balance), list `headB` away from `head` in the variant list, and read
+`ab-posfit` next to `ab-agg`.
+
+### Patches (all in `perf/patches/`, on `7a3ceef`)
+
+| patch | what | pixels (vs r2 capture) | paired result |
+|---|---|---|---|
+| `r3-a-opshadow` | one shadow draw per worn two-mesh operator per cascade: per kind a merged geometry (raw int16/uint8 arrays of both parts, u16 index, made under `quietly()`), swapped onto mesh 0 around the shadow pass while mesh 1 stops casting (`operators.ts` `shadowSwap`, `render/index.ts` wrapper) | 56/56 byte-identical | calls -16 % in training fights (ultra 367 → 308, high 313 → 271); frame mean s2 (order-corrected) high -0.5 %, ultra -0.2 %, medium void; training fight cpu high -9.2 %, ultra -1.5 % (headB up to ±7 % on training) — **not proven** |
+| `r3-d-vm` | view-model (`GRID_VIEW_MODEL`) and backdrop (`BACKDROP`, new define on the kit's `\|far` materials) programs skip the cascade loop at compile time (receiveShadow is false on them, so the result was always 1.0) | 56/56 byte-identical | s2 high -1.4 % mean / -2.2 % median, ultra -0.1 / -0.7 % — **not proven** |
+| `r3-g-ndotl` | skip shadow taps where N·L ≤ 0 (run-time branch; TOON/clearcoat excluded); High/Ultra cascade loop and three's Low/Medium ternary | 10 of 56 images, 1-3/255 on a few px, high/fight-mid one spot 23/255 (same class as R1 B1) | s1 low -0.4 %; s2 high -2.1 % mean / -2.2 % median, ultra -1.5 / -2.1 % — borderline, **not proven** |
+| `r3-dg-both` | d + g together (they conflict textually) | — | not run |
+| `r3-b-bones` | bone textures uploaded before the first shadow pass (`OperatorSkeleton` holds its update until released; three r170 updates skeletons again in the first cascade because the frame counter steps between listing and the shadow pass) | 56/56 byte-identical | s2 all +3.0 %, high -0.1 %, ultra +0.3 % → **rejected** |
+| `r3-c-matrix` | rig `updateWorldMatrix(true,false)` instead of a full rig walk; `#reach` without the armature subtree update; precomputed rotor signs and arm bone indices | 56/56 byte-identical (bit-equal node transforms in a 1326-reach vitest) | s2 high +0.3 %, ultra -0.2 % → **rejected** |
+| `r3-e-low2` | Low's shadow map double-buffered (spare target under `quietly()`) | 56/56 byte-identical | s1 low +1.0 % mean (headB +0.3 %); parity gap unchanged → **rejected** |
+
+### Next steps for this round (or Round 4)
+
+Re-run on AC with a charged battery: `perf/ab.sh <tag> medium,high,ultra downtown,house,mexico,training 4 head
+perf/patches/r3-a-opshadow.patch headB perf/patches/r3-dg-both.patch` (4 variants, 4 rounds, ≈1.7 h: over the tool's
+2 h limit with more variants), plus a traced paired run of the training/mexico fights for `a`'s js. Keep `a` and `d`
+if they show any gain past headB (both exact); `g` only if it beats ~2 % on high/ultra (it moves LSBs). Review by
+GPT-6.1-Sol has not run on this round's patches (nothing kept).
+
+### Hot spot leads (refreshed)
+
+1. **Shadow-map memory traffic, not triangles**: each cascade clears and stores a 2048² RGBA8 colour + depth target
+   (≈50-100 MB per ultra frame); level triangles are 1-31k per map and props are already in 32 m cells. A depth-only
+   map with hardware compare (`sampler2DShadow`, 9 bilinear taps = the PCFSoft weights) removes the colour store and
+   7 of 16 taps, but filter weights quantise to 8 bits on the GPU (≤1/512 per penumbra pixel, thousands of pixels)
+   and rasteriser vs packed depth flips contact-line taps: not exact. Measure its ceiling first (a throwaway
+   `getShadow` → 1.0 variant, and a "clear+store only, no casters" ablation).
+2. **Static caster culling per cascade** by index ranges inside the merged level/prop geometries (exact, no new
+   objects): survey estimate only 0.02-0.06 ms GPU on ultra: bundle only with other shadow work.
+3. **Low**: its shadow redraw is ~0.3 ms per draw frame (measured above); the bimodal frame time is presentation, not
+   the shadow map. Low's remaining structural lever is fewer figure draws (merging same-joint parts: not exact).
+4. Fight CPU: training fights are draw-bound in submission; `a` cuts 40-60 calls per frame there (needs a clean run).
+
 ## Tried / rejected ideas
 
 Format: round, idea, where, result numbers vs the noise floor, why rejected.
@@ -464,3 +531,18 @@ Format: round, idea, where, result numbers vs the noise floor, why rejected.
 - **r2, not tried**: hiding non-caster figure subtrees during the shadow pass (could not prove no layer-0 caster sits
   under them); swap-remove in effect pools (changes instance order); `forceSinglePass` on the sword trail, slash wave
   and hazard ring (changes blending order); disabling `sortObjects` (depth-tie order).
+- **r3, b-bones: bone textures uploaded before the first shadow pass** (`operators.ts` `OperatorSkeleton`,
+  `render/index.ts` wrapper). Byte-identical. Paired s2 (order-corrected, 2 rounds): frame mean all +3.0 %, high
+  -0.1 %, ultra +0.3 % (medium void). No gain; it also updates/uploads skeletons culled from every pass. Rejected;
+  patch `perf/patches/r3-b-bones.patch`.
+- **r3, c-matrix: duplicate rig/armature matrix walks and per-bone string tests** (`render/index.ts`,
+  `operators.ts`, `enemies/model.ts`). Byte-identical. Paired s2: high +0.3 %, ultra -0.2 % frame mean; training fight
+  cpu within the control's spread. Rejected (not measured with traces: js could still show it); patch
+  `perf/patches/r3-c-matrix.patch`.
+- **r3, e-low2: Low's shadow map double-buffered** (no write-after-read between frames). Byte-identical. Paired s1
+  (4 rounds, balanced): low +1.0 % mean / +1.7 % median (headB +0.3 / +0.7 %); the odd/even frame gap is unchanged.
+  Rejected; patch `perf/patches/r3-e-low2.patch` (+32 MB GPU memory).
+- **r3, not tried (by analysis)**: caching static shadow casters per cascade (the boxes move every frame in the bench;
+  a colour+depth copy costs more than redrawing); a lower-LOD operator in the wide cascades (silhouette error ≈ a
+  texel, flips penumbra texels: visible in blend zones); splitting Low's redraw over two frames (half the casters a
+  frame stale: visible); front-to-back caster sorting (Apple's hidden-surface removal makes order irrelevant).

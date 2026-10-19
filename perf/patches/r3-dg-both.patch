@@ -1,0 +1,94 @@
+diff --git a/src/engine/render/materials.ts b/src/engine/render/materials.ts
+index 498bfb3..474cd3a 100644
+--- a/src/engine/render/materials.ts
++++ b/src/engine/render/materials.ts
+@@ -785,6 +785,8 @@ export function kitMat(set: TextureSet, info: SetInfo, far = false): THREE.MeshS
+     material.userData.macro = { value: MACRO[set] ?? MACRO_DEFAULT };
+     material.userData.baked = false;
+     material.userData.far = far;
++    // Only the backdrops wear it, and they receive no shadow (render/props.ts): their lighting skips the cascades.
++    if (far) material.defines = { ...material.defines, BACKDROP: '' };
+     material.onBeforeCompile = macroVariation;
+     material.customProgramCacheKey = macroKey;
+     wearMaps(material, standInMaps(set, info));
+diff --git a/src/engine/render/shadows.ts b/src/engine/render/shadows.ts
+index 52af0b7..419092f 100644
+--- a/src/engine/render/shadows.ts
++++ b/src/engine/render/shadows.ts
+@@ -12,7 +12,7 @@ import * as THREE from 'three';
+  * over the outer 1/24 of the last (about 2 m: a wider fade reads as smudged,
+  * half-faded shadows from a rooftop). The sun's light is then applied once,
+  * shadowed by that. With a single shadow light (Low, Medium) three's own
+- * directional loop runs, unchanged.
++ * directional loop runs, its map read on the cascades' terms (below).
+  *
+  * No per-material setup: the lambert, toon and standard shaders all build
+  * from this chunk, including the GLB and effects materials made later.
+@@ -51,20 +51,36 @@ const CASCADED = /* glsl */`
+ 	vec3 cascadeCoord;
+ 	float cascadeEdge, cascadeWeight, cascadeLit = 0.0, cascadeLeft = 1.0;
+ 
+-	#pragma unroll_loop_start
+-	for ( int i = 0; i < NUM_DIR_LIGHT_SHADOWS; i ++ ) {
+-
+-		cascadeCoord = vDirectionalShadowCoord[ i ].xyz / vDirectionalShadowCoord[ i ].w;
+-		cascadeEdge = max( abs( cascadeCoord.x * 2.0 - 1.0 ), abs( cascadeCoord.y * 2.0 - 1.0 ) );
+-		if ( cascadeLeft > 0.0 && cascadeEdge < 1.0 && cascadeCoord.z <= 1.0 ) {
+-			directionalLightShadow = directionalLightShadows[ i ];
+-			cascadeWeight = cascadeLeft * clamp( ( 1.0 - cascadeEdge ) * ( UNROLLED_LOOP_INDEX == NUM_DIR_LIGHT_SHADOWS - 1 ? 24.0 : 8.0 ), 0.0, 1.0 );
+-			cascadeLit += cascadeWeight * getShadow( directionalShadowMap[ i ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] );
+-			cascadeLeft -= cascadeWeight;
++	// The maps are read only where the sun's shadow can show: the mesh receives one (below, the sun takes 1.0
++	// otherwise) and the surface faces the sun (RE_Direct multiplies its light by the same saturated N.L, 0 when it
++	// faces away). A skipped fragment's sun takes 1.0, times 0 or unused. Toon's gradient lights faces turned from
++	// the sun, and the clear coat its own normal, so they read the maps wherever the mesh receives. The view
++	// model's materials and the kit's backdrops (render/materials.ts gridLit, kitMat) only ever go on meshes that
++	// receive none, so their programs leave the maps out.
++	#if ! defined( GRID_VIEW_MODEL ) && ! defined( BACKDROP )
++	#if ! defined( TOON ) && ! defined( USE_CLEARCOAT )
++	if ( receiveShadow && dot( geometryNormal, directionalLights[ 0 ].direction ) > 0.0 ) {
++	#else
++	if ( receiveShadow ) {
++	#endif
++
++		#pragma unroll_loop_start
++		for ( int i = 0; i < NUM_DIR_LIGHT_SHADOWS; i ++ ) {
++
++			cascadeCoord = vDirectionalShadowCoord[ i ].xyz / vDirectionalShadowCoord[ i ].w;
++			cascadeEdge = max( abs( cascadeCoord.x * 2.0 - 1.0 ), abs( cascadeCoord.y * 2.0 - 1.0 ) );
++			if ( cascadeLeft > 0.0 && cascadeEdge < 1.0 && cascadeCoord.z <= 1.0 ) {
++				directionalLightShadow = directionalLightShadows[ i ];
++				cascadeWeight = cascadeLeft * clamp( ( 1.0 - cascadeEdge ) * ( UNROLLED_LOOP_INDEX == NUM_DIR_LIGHT_SHADOWS - 1 ? 24.0 : 8.0 ), 0.0, 1.0 );
++				cascadeLit += cascadeWeight * getShadow( directionalShadowMap[ i ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] );
++				cascadeLeft -= cascadeWeight;
++			}
++
+ 		}
++		#pragma unroll_loop_end
+ 
+ 	}
+-	#pragma unroll_loop_end
++	#endif
+ 
+ 	cascadeLit += cascadeLeft;
+ 
+@@ -89,7 +105,18 @@ const CASCADED = /* glsl */`
+ #else
+ `;
+ 
+-THREE.ShaderChunk.lights_fragment_begin = CHUNK.slice(0, DIRECTIONAL) + CASCADED + CHUNK.slice(DIRECTIONAL, AFTER) + '#endif\n\n' + CHUNK.slice(AFTER);
++/**
++ * Low's and Medium's single shadow light runs three's own loop; its map is
++ * read on the same terms as the cascades' above (the mesh receives, the
++ * surface faces the light), with Toon and the clear coat left as three has them.
++ */
++const DIRECTIONAL_SHADOW = /(\t*)(directLight\.color \*= )\( directLight\.visible && receiveShadow \)( \? getShadow\( directionalShadowMap\[ i \][^;]*;)/;
++const THREE_DIRECTIONAL = CHUNK.slice(DIRECTIONAL, AFTER);
++if (!DIRECTIONAL_SHADOW.test(THREE_DIRECTIONAL)) throw new Error('three changed lights_fragment_begin: update render/shadows.ts');
++const DIRECTIONAL_FACING = THREE_DIRECTIONAL.replace(DIRECTIONAL_SHADOW, '#if ! defined( TOON ) && ! defined( USE_CLEARCOAT )\n'
++  + '$1$2( directLight.visible && receiveShadow && dot( geometryNormal, directLight.direction ) > 0.0 )$3\n#else\n$&\n#endif');
++
++THREE.ShaderChunk.lights_fragment_begin = CHUNK.slice(0, DIRECTIONAL) + CASCADED + DIRECTIONAL_FACING + '#endif\n\n' + CHUNK.slice(AFTER);
+ 
+ /** One cascade: the half-width of its box in metres and how far ahead of the eye its centre sits. */
+ export interface Cascade {

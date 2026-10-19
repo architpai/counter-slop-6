@@ -1,0 +1,35 @@
+diff --git a/src/engine/render/materials.ts b/src/engine/render/materials.ts
+index 498bfb3..474cd3a 100644
+--- a/src/engine/render/materials.ts
++++ b/src/engine/render/materials.ts
+@@ -785,6 +785,8 @@ export function kitMat(set: TextureSet, info: SetInfo, far = false): THREE.MeshS
+     material.userData.macro = { value: MACRO[set] ?? MACRO_DEFAULT };
+     material.userData.baked = false;
+     material.userData.far = far;
++    // Only the backdrops wear it, and they receive no shadow (render/props.ts): their lighting skips the cascades.
++    if (far) material.defines = { ...material.defines, BACKDROP: '' };
+     material.onBeforeCompile = macroVariation;
+     material.customProgramCacheKey = macroKey;
+     wearMaps(material, standInMaps(set, info));
+diff --git a/src/engine/render/shadows.ts b/src/engine/render/shadows.ts
+index 52af0b7..ef8101c 100644
+--- a/src/engine/render/shadows.ts
++++ b/src/engine/render/shadows.ts
+@@ -51,6 +51,9 @@ const CASCADED = /* glsl */`
+ 	vec3 cascadeCoord;
+ 	float cascadeEdge, cascadeWeight, cascadeLit = 0.0, cascadeLeft = 1.0;
+ 
++	// The view model's materials and the kit's backdrops (render/materials.ts gridLit, kitMat) only ever go on meshes
++	// that receive no shadow, whose sun takes 1.0 below whatever the maps say: they read none, and stay lit.
++	#if ! defined( GRID_VIEW_MODEL ) && ! defined( BACKDROP )
+ 	#pragma unroll_loop_start
+ 	for ( int i = 0; i < NUM_DIR_LIGHT_SHADOWS; i ++ ) {
+ 
+@@ -65,6 +68,7 @@ const CASCADED = /* glsl */`
+ 
+ 	}
+ 	#pragma unroll_loop_end
++	#endif
+ 
+ 	cascadeLit += cascadeLeft;
+ 

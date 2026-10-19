@@ -1,0 +1,88 @@
+diff --git a/src/engine/render/index.ts b/src/engine/render/index.ts
+index 1dbedaf..beb8ac7 100644
+--- a/src/engine/render/index.ts
++++ b/src/engine/render/index.ts
+@@ -6,8 +6,8 @@ import { FOG_UNIFORMS, fogAt, setAtmosphere } from './atmosphere';
+ import { GRADE, LIGHT, SURF } from './palette';
+ import { Composite, RIG_DEPTH } from './postfx';
+ import {
+-  BAKE_UNIFORMS, GRID_UNIFORMS, OPERATOR_AO, casterGroups, hiddenMat, levelDepthMat, realMat, realMaterials, skyMat, standInGrid, standInLightmap,
+-  standInMaps, surfMat, wearMaps,
++  BAKE_UNIFORMS, GRID_UNIFORMS, OPERATOR_AO, casterGroups, hiddenMat, levelDepthMat, quietly, realMat, realMaterials, skyMat, standInGrid,
++  standInLightmap, standInMaps, surfMat, wearMaps,
+ } from './materials';
+ import { BAKE_FILE, LIGHTMAP_SIZE, bakeFor, bakedTriangles, layoutSteps, lightmapChartSteps, wearLightmapUVs } from './lightmap';
+ import { ANTIALIAS_SPEC, AO_SCALE, PRESET_VALUES, SHADOW_SPEC, VIEW_SCALE } from './quality';
+@@ -236,6 +236,8 @@ export class Renderer {
+   _shadowRadius = 1;
+   /** Redraw the shadow map every Nth frame. */
+   _shadowEvery = 1;
++  /** Low's second shadow map: each redraw swaps it with the sun's (`_swapShadowMap`). */
++  _spareShadow: THREE.WebGLRenderTarget | null = null;
+   _frame = 0;
+   _fogNear = FOG_NEAR;
+   _fogFar = FOG_FAR;
+@@ -450,6 +452,7 @@ export class Renderer {
+     // groups for this pass only. Frames that keep the shadow maps allocate nothing here.
+     const shadowMap = this.three.shadowMap, drawShadows = shadowMap.render.bind(shadowMap);
+     shadowMap.render = (lights, scene, camera) => {
++      if (shadowMap.needsUpdate && this._shadowEvery > 1) this._swapShadowMap(lights);
+       const props = this.props.casters;
+       if (!shadowMap.needsUpdate || this._casters.length + props.length === 0) return drawShadows(lights, scene, camera);
+       const lists = [this._casters, props], own: { material: THREE.Material | THREE.Material[]; groups: THREE.GeometryGroup[] }[] = [];
+@@ -585,6 +588,8 @@ export class Renderer {
+       }
+       this._shadowEvery = shadow.every;
+     }
++    // Low's second map goes with the sun's (off, a new size), and once every frame redraws.
++    if (!shadow || shadow.every === 1 || this.sun.shadow.map === null) this._dropSpareShadow();
+     const view = VIEW_SCALE[q.viewDistance];
+     this.camera.far = FAR * view;
+     this.camera.updateProjectionMatrix();
+@@ -677,6 +682,38 @@ export class Renderer {
+     }
+   }
+ 
++  /**
++   * Low redraws its map every other frame: draw each redraw into the other of
++   * two maps, so the shadow pass never writes the texture the frame before
++   * sampled (a write-after-read wait on a tiled GPU), and the frame between
++   * samples the one drawn last. The spare is made as three makes the map
++   * (WebGLShadowMap: RGBA8, nearest filters, a depth renderbuffer, the same
++   * size and name), and each redraw clears every texel of it: the same pixels
++   * with the same matrix. Three reads `shadow.map.texture` again every render.
++   */
++  _swapShadowMap(lights: readonly THREE.Light[]): void {
++    const map = this.sun.shadow.map;
++    // Three makes the first map itself; a render with no sun in its lights (a post pass) draws no shadows.
++    if (map === null || !lights.includes(this.sun)) return;
++    let spare = this._spareShadow;
++    if (spare && (spare.width !== map.width || spare.height !== map.height)) {
++      spare.dispose();
++      spare = null;
++    }
++    spare ??= quietly(() => {
++      const target = new THREE.WebGLRenderTarget(map.width, map.height, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
++      target.texture.name = map.texture.name;
++      return target;
++    });
++    this._spareShadow = map;
++    this.sun.shadow.map = spare;
++  }
++
++  _dropSpareShadow(): void {
++    this._spareShadow?.dispose();
++    this._spareShadow = null;
++  }
++
+   /**
+    * Dynamic resolution: the scene, AO and bloom draw into this share of their
+    * targets (viewports), and the tone pass scales the frame back up. Nothing
+@@ -1560,6 +1597,7 @@ export class Renderer {
+     this.post.dispose();
+     this._setBoxes(null, this.sun.shadow.mapSize.x);
+     this.sun.shadow.map?.dispose();
++    this._dropSpareShadow();
+     this._roomEnv.dispose();
+     disposeSky(this._skyAssets);
+     this._skyAssets = null;
