@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import * as THREE from 'three';
-import { Renderer } from '@/engine/render/index';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { CHECK_SHADER_ERRORS, Renderer, roomEnvironment } from '@/engine/render/index';
 import { MATCH_QUIET_MS } from '@/engine/render/pacing';
 import { Composite, RIG_DEPTH } from '@/engine/render/postfx';
 import { PRESETS, PRESET_VALUES } from '@/engine/render/quality';
@@ -55,6 +56,9 @@ const expected: Record<PresetName, { config: Omit<PostConfig, 'samples'>; sample
 
 test('each preset reaches the renderer: passes, tone mapping, MSAA, AO depth, cascades', () => {
   const renderer = makeRenderer();
+  // three checks every program's link here (off only in a production build), so the check below has logs to read.
+  expect(CHECK_SHADER_ERRORS).toBe(true);
+  expect(renderer.three.debug.checkShaderErrors).toBe(true);
   const maxSamples = renderer.three.capabilities.maxSamples;
   // A lit, shadowed floor and box in view, so every preset compiles the (cascaded) lighting chunk.
   const floor = new THREE.Mesh(new THREE.BoxGeometry(40, 0.2, 40), new THREE.MeshLambertMaterial());
@@ -226,6 +230,72 @@ test('a reduced dynamic scale shows only this frame: nothing beyond the drawn co
   }
   expect(gl.getError()).toBe(gl.NO_ERROR);
   // Under 1 s alone; beside the other GPU test files it waits its turn for the GPU (9 s at 23af3f9), so it gets the time they do.
+}, 60_000);
+
+test('the chain inside one render draws exactly what a render per pass did', () => {
+  const three = new THREE.WebGLRenderer({ canvas: document.createElement('canvas'), depth: false, stencil: false });
+  cleanup.push(() => { three.dispose(); three.forceContextLoss(); });
+  three.setSize(320, 200, false);
+  three.autoClear = false;
+  three.info.autoReset = false;
+  three.shadowMap.enabled = true;
+  const gl = three.getContext(), scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(80, 1.6, 0.08, 420);
+  const bright = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 3, 2) }));
+  bright.position.set(0.4, 0, -2);
+  const wall = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), new THREE.MeshBasicMaterial({ color: 0x406080 }));
+  wall.position.set(-1.5, 0, -3);
+  scene.add(bright, wall);
+  const post = new Composite();
+  cleanup.push(() => post.dispose());
+  post.resize(320, 200, 1.6);
+  post.setShafts(1, new THREE.Vector3(0.2, 0.3, -1), new THREE.Color(1, 0.9, 0.8));
+  const frame = (perPass: boolean): { pixels: Uint8Array; calls: number; triangles: number } => {
+    three.setClearColor(0x335577);
+    three.setRenderTarget(post.target);
+    three.clear();
+    three.render(scene, camera);
+    three.info.reset();
+    if (perPass) {
+      // `draw` with every pass rendering itself (its uniforms are the last frame's: the same view and time).
+      const strength = post.config.shafts && post.config.look === 'realistic' ? post._shaftStrength * post._aimShafts(camera) : 0;
+      post._chain(three, camera, strength);
+      post._softUniforms.softOn.value = 0;
+    } else post.draw(three, 0.5, fx, camera);
+    const { calls, triangles } = three.info.render;
+    const pixels = new Uint8Array(320 * 200 * 4);
+    gl.readPixels(0, 0, 320, 200, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    return { pixels, calls, triangles };
+  };
+  const configs: PostConfig[] = [
+    { look: 'realistic', samples: 4, fxaa: false, smaa: true, ao: 1, depth: true, bloom: true, shafts: true },
+    { look: 'realistic', samples: 2, fxaa: false, smaa: true, ao: 0, depth: false, bloom: true, shafts: false },
+    { look: 'realistic', samples: 0, fxaa: true, smaa: false, ao: 0, depth: false, bloom: false, shafts: false },
+    { look: 'lowpoly', samples: 0, fxaa: false, smaa: true, ao: 0.5, depth: false, bloom: true, shafts: false },
+  ];
+  for (const config of configs) {
+    post.configure(config);
+    for (const scale of [1, 0.7]) {
+      post.setScale(scale);
+      frame(false);
+      const programs = three.info.programs!.length;
+      const render = vi.spyOn(three, 'render');
+      const chained = frame(false);
+      // The scene pass, then the chain's one render (SMAA's passes render their own quad).
+      expect(render.mock.calls.filter(([s]) => s === post.scene)).toHaveLength(1);
+      render.mockRestore();
+      // The next frame's shadow maps clear their depth: the chain leaves depth writes on, as each render did.
+      expect(gl.getParameter(gl.DEPTH_WRITEMASK)).toBe(true);
+      const perPass = frame(true);
+      const label = `${config.look}, smaa ${config.smaa}, ao ${config.ao}, scale ${scale}`;
+      expect(chained.calls, label).toBeGreaterThan(1);
+      expect([chained.calls, chained.triangles], label).toEqual([perPass.calls, perPass.triangles]);
+      let differ = 0;
+      for (let i = 0; i < chained.pixels.length; i++) if (chained.pixels[i] !== perPass.pixels[i]) differ++;
+      expect(differ, label).toBe(0);
+      expect(three.info.programs!.length, label).toBe(programs);
+    }
+  }
+  expect(gl.getError()).toBe(gl.NO_ERROR);
 }, 60_000);
 
 test('the rig draws into its own depth slice on every tier, so a transparent effect behind a wall stays hidden', async () => {
@@ -522,4 +592,39 @@ test('opaque lit materials write the share of their light that AO may darken int
   // A transparent material keeps its own alpha for blending.
   plane.material = new THREE.MeshLambertMaterial({ transparent: true, opacity: 0.5, blending: THREE.NoBlending });
   expect(alpha()).toBeCloseTo(0.5, 5);
+});
+
+test('the room environment compiles its scene at fromScene\'s first draw: the same programs and texels as fromScene alone', () => {
+  const run = (early: boolean) => {
+    const canvas = document.createElement('canvas');
+    const three = new THREE.WebGLRenderer({ canvas, antialias: false, depth: false, stencil: false });
+    three.outputColorSpace = THREE.SRGBColorSpace;
+    three.toneMapping = THREE.NoToneMapping;
+    three.autoClear = false;
+    three.shadowMap.enabled = true;
+    three.setClearColor(0x8fa3b8);
+    const pmrem = new THREE.PMREMGenerator(three), render = three.render;
+    const target = early ? roomEnvironment(three, pmrem, new RoomEnvironment()) : pmrem.fromScene(new RoomEnvironment(), 0.04);
+    expect(three.render).toBe(render);
+    const texels = new Uint16Array(target.width * target.height * 4);
+    three.readRenderTargetPixels(target, 0, 0, target.width, target.height, texels);
+    // A shader material's key starts with its two shader stages' ids, which count across renderers: left out.
+    const programs = three.info.programs!.map(program => `${program.name}|${program.name ? program.cacheKey.split(',').slice(2).join() : program.cacheKey}`);
+    expect(three.getContext().getError()).toBe(three.getContext().NO_ERROR);
+    target.dispose();
+    pmrem.dispose();
+    three.dispose();
+    three.forceContextLoss();
+    return { texels, programs };
+  };
+  const alone = run(false), early = run(true);
+  // The room's programs are made first (the background box's draw first made the basic one), and none is added or changed.
+  expect(alone.programs[0]!.startsWith('|basic,')).toBe(true);
+  expect(early.programs[0]!.startsWith('|physical,')).toBe(true);
+  expect(early.programs).toHaveLength(alone.programs.length);
+  expect([...early.programs].sort()).toEqual([...alone.programs].sort());
+  let differ = 0;
+  for (let i = 0; i < alone.texels.length; i++) if (alone.texels[i] !== early.texels[i]) differ++;
+  expect(differ).toBe(0);
+  expect(alone.texels.some(v => v !== 0)).toBe(true);
 });

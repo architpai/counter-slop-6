@@ -396,6 +396,17 @@ export class Composite {
   /** The drawn share of the scene target, for the passes that read it. */
   readonly _sceneRegion = regionUniforms();
   readonly _clear = new THREE.Color();
+  /**
+   * The chain runs inside one `render` of `scene` (its `onAfterRender`), each pass a `renderBufferDirect` there:
+   * the draw a render of the lone triangle made, without that render's list, sort, light and shadow steps. Set by
+   * `draw` for that render (`_chainCamera`) and while its passes run (`_inChain`); `_pass` outside it (the perf
+   * harness's calibration pass) renders as before. For the outer render the triangle wears `_final` switched off
+   * (`visible`): not drawn, but its geometry is still uploaded. Not a material of its own: three's constructor draws
+   * a uuid from Math.random, which would shift every random draw after it (the perf harness seeds it at boot).
+   */
+  _chainCamera: THREE.PerspectiveCamera | null = null;
+  _chainStrength = 0;
+  _inChain = false;
 
   constructor() {
     this.target = new THREE.WebGLRenderTarget(2, 2, {
@@ -844,6 +855,18 @@ export class Composite {
     // matrices, so no pass recomputes them.
     this.scene.matrixWorldAutoUpdate = this.camera.matrixWorldAutoUpdate = false;
     this.triangle.matrixAutoUpdate = false;
+    this.scene.onAfterRender = renderer => {
+      const camera = this._chainCamera;
+      if (camera === null) return;
+      this._chainCamera = null;
+      this._final.visible = true;
+      this._inChain = true;
+      try {
+        this._chain(renderer, camera, this._chainStrength);
+      } finally {
+        this._inChain = false;
+      }
+    };
     this.setGrade(GRADE.neutral);
   }
 
@@ -1102,13 +1125,55 @@ export class Composite {
     renderer.setRenderTarget(target);
     // The canvas (null) is cleared in `draw`.
     if (target !== null && this._fills.has(material)) renderer.clear(true, false, false);
-    renderer.render(this.scene, this.camera);
+    if (!this._inChain) {
+      renderer.render(this.scene, this.camera);
+      return;
+    }
+    // What that render did around its one draw (the chain's materials are visible, opaque and single-sided; the
+    // triangle's and the camera's matrices stay identity; no pass target has MSAA or mipmaps to resolve): its
+    // background step set the clear colour in the target's colour space (the same on every linear target, so only
+    // the canvas sets it), and its scene step left depth and colour writes on (the next frame's shadow clears
+    // need the depth mask).
+    if (target === null) renderer.setClearColor(renderer.getClearColor(this._clear), renderer.getClearAlpha());
+    const triangle = this.triangle, state = renderer.state;
+    renderer.renderBufferDirect(this.camera, this.scene, triangle.geometry, material, triangle, null);
+    state.buffers.depth.setTest(true);
+    state.buffers.depth.setMask(true);
+    state.buffers.color.setMask(true);
+    state.setPolygonOffset(false);
   }
 
   draw(renderer: THREE.WebGLRenderer, time: number, fx: PostFX, camera: THREE.PerspectiveCamera): void {
-    const config = this.config;
+    const config = this.config, smaa = config.smaa ? this._smaa : null;
     this.uniforms.time.value = time;
     for (const key of FX_KEYS) this.uniforms[key === 'hurt' ? 'hurtIn' : key].value = fx[key] ?? 0;
+    const strength = config.shafts && config.look === 'realistic' && this._shaftStrength > 0 ? this._shaftStrength * this._aimShafts(camera) : 0;
+    this._toneUniforms.shaftColor.value.copy(this._sunColor).multiplyScalar(strength * SHAFT_GAIN);
+    // The first pass's target, bound before the outer render: that render then resolves nothing (the MSAA scene
+    // target is still bound after the scene pass) and sets the clear colour as the pass's own render did. Low's
+    // lone pass to the canvas, and a renderer that clears in every render (autoClear), render each pass as before.
+    const first = config.ao > 0 ? this._aoRaw : config.bloom ? this._bloom[0]! : strength > 0 ? this._shafts[0]
+      : config.look === 'realistic' || smaa ? this._ldr : null;
+    if (first === null || renderer.autoClear) this._chain(renderer, camera, strength);
+    else {
+      renderer.setRenderTarget(first);
+      this.triangle.material = this._final;
+      this._final.visible = false;
+      this._chainCamera = camera;
+      this._chainStrength = strength;
+      try {
+        renderer.render(this.scene, this.camera);
+      } finally {
+        this._chainCamera = null;
+        this._final.visible = true;
+      }
+    }
+    this._softUniforms.softOn.value = 0;
+  }
+
+  /** The passes `draw` runs: inside its one render (`_inChain`), or each in a render of its own. */
+  _chain(renderer: THREE.WebGLRenderer, camera: THREE.PerspectiveCamera, strength: number): void {
+    const config = this.config;
     if (config.ao > 0) {
       const g = this._gtaoUniforms, projection = camera.projectionMatrix.elements;
       g.cameraNear.value = this.uniforms.cameraNear.value = camera.near;
@@ -1138,8 +1203,6 @@ export class Composite {
         this._pass(renderer, this._up, this._bloom[i - 1]!);
       }
     }
-    const strength = config.shafts && config.look === 'realistic' && this._shaftStrength > 0 ? this._shaftStrength * this._aimShafts(camera) : 0;
-    this._toneUniforms.shaftColor.value.copy(this._sunColor).multiplyScalar(strength * SHAFT_GAIN);
     if (strength > 0) {
       const [rays, spare] = this._shafts, source = this.target;
       this._shaftMaskUniforms.texel.value.set(1 / source.width, 1 / source.height);
@@ -1174,7 +1237,6 @@ export class Composite {
       renderer.clear();
       this._pass(renderer, this._low, null);
     }
-    this._softUniforms.softOn.value = 0;
   }
 
   /** SMAA from `_ldr` into `target` (null: the canvas). Its passes clear to transparent black. */

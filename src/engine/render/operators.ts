@@ -162,6 +162,10 @@ export class OperatorAssets implements OperatorSource {
    * kinds' template meshes (the warm-up draws them into the shadow maps, so the merged buffers upload there).
    */
   readonly #casters: { readonly meshes: readonly THREE.SkinnedMesh[]; readonly template: KindTemplate }[] = [];
+  /** The subtrees `shadowSwap` hid for the pass (`OperatorBody.bare`), the first `#hiddenCount`, shown again after it. */
+  readonly #hidden: (THREE.Object3D | null)[] = [];
+  #hiddenCount = 0;
+  readonly #bare = (body: OperatorBody): void => { this.#hiddenCount = body.bare(this.#hidden, this.#hiddenCount); };
   /**
    * Figures that go straight to their operator once it is in, in view or not: those in play at a settings
    * change (another LOD or size, or Low to a realistic tier), which is not a fight's surprise. Only a
@@ -439,13 +443,23 @@ export class OperatorAssets implements OperatorSource {
    * Around the shadow pass (render/index.ts): `on`, each worn operator of more than one mesh draws once per cascade,
    * its first mesh on its kind's merged geometry (`KindTemplate.shadow`), the others out of the pass; off, back. The
    * meshes are siblings with one skeleton, bind matrix, sphere and depth material, drawn one after another, so the
-   * one draw runs the same program on the same vertices and triangles in the same order. No allocation.
+   * one draw runs the same program on the same vertices and triangles in the same order. Also, `on`, every worn
+   * figure's subtrees that hold no caster are hidden (`OperatorBody.bare`): three walks every shown node once per
+   * cascade, and a hidden one ends the walk there. Its casters are drawn as before, in the same order. No allocation.
    */
   shadowSwap(on: boolean): void {
     for (let i = 0; i < this.#casters.length; i++) {
       const { meshes, template } = this.#casters[i]!;
       meshes[0]!.geometry = on ? template.shadow! : template.meshes[0]!.geometry;
       for (let k = 1; k < meshes.length; k++) meshes[k]!.castShadow = !on;
+    }
+    if (on) this.#bodies.forEach(this.#bare);
+    else {
+      for (let i = 0; i < this.#hiddenCount; i++) {
+        this.#hidden[i]!.visible = true;
+        this.#hidden[i] = null;
+      }
+      this.#hiddenCount = 0;
     }
   }
 
@@ -894,6 +908,32 @@ export class OperatorBody {
     aimBone(fore, _w.subVectors(hand, fore.getWorldPosition(_f)).normalize(), weight);
   }
 
+  /**
+   * For one shadow pass (`OperatorAssets.shadowSwap`), hide what casts nothing, into `hidden` from slot `at` (returns
+   * the next free one): the flat model's pivots (its surfaces on `HIT_LAYER`, stubs, anchors, the weapon group) and
+   * the bones (the socket, the prop: render/figure.ts `propMesh`); the skinned meshes stay. Not while a piece is lent
+   * (the debris casts all its meshes, a prop's too) or a gib rides a pivot (a lend the debris refused leaves it on the
+   * figure); the bones not while the socket holds a caster (a prop back from the debris, put in the hand of the next
+   * LOD's body).
+   */
+  bare(hidden: (THREE.Object3D | null)[], at: number): number {
+    const { rig } = this, pivots = rig.parts.hips ?? rig.parts.torso;
+    if (rig.disposed || rig.lent.size > 0 || this.#gibs.length > 0 || !pivots || pivots.parent !== rig.root) return at;
+    if (pivots.visible) {
+      pivots.visible = false;
+      hidden[at++] = pivots;
+    }
+    if (casts(this.socket)) return at;
+    const nodes = this.armature.children;
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i]!;
+      if (!(node as THREE.Bone).isBone || !node.visible) continue;
+      node.visible = false;
+      hidden[at++] = node;
+    }
+    return at;
+  }
+
   /** Back to the flat model: its surfaces drawn again, the prop in its weapon group, the operator's pieces gone. */
   dispose(): void {
     this.#returnProp();
@@ -949,6 +989,14 @@ function aimBone(bone: THREE.Bone, dir: THREE.Vector3, weight: number): void {
   _was.copy(bone.quaternion);
   bone.quaternion.copy(_parent.invert().multiply(_world));
   if (weight < 1) bone.quaternion.copy(_was.slerp(bone.quaternion, weight));
+}
+
+/** `node` or a node under it is a mesh, line or points that casts: three's shadow pass may draw it. */
+function casts(node: THREE.Object3D): boolean {
+  if (node.castShadow && ((node as THREE.Mesh).isMesh || (node as THREE.Line).isLine || (node as THREE.Points).isPoints)) return true;
+  const children = node.children;
+  for (let i = 0; i < children.length; i++) if (casts(children[i]!)) return true;
+  return false;
 }
 
 function attached(part: THREE.Object3D, root: THREE.Object3D): boolean {

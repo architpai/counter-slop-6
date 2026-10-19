@@ -128,6 +128,33 @@ function* bakeLayoutSteps(surfaces: readonly LevelSurface[], bounds: Level['boun
  */
 export const BAKE_FADE_MS = 1500;
 /**
+ * three's shader checks (`renderer.debug.checkShaderErrors`): on in development and the tests, off in a production
+ * build (Next inlines `NODE_ENV`). With them on, three reads each program's link status and its three logs at its
+ * first use: blocking queries that wait for the link. The programs and what they draw are the same either way; off,
+ * a shader that fails to link only goes unreported (no `diagnostics`, no console error).
+ */
+export const CHECK_SHADER_ERRORS = process.env.NODE_ENV !== 'production';
+
+/**
+ * The room environment's PMREM (`fromScene`), its scene's programs linking side by side: at fromScene's first draw
+ * (its cube target and tone mapping set, as for the room's draws) the room is compiled (three's `compile`, no
+ * query), so the room's programs link while the background box's links and draws. The same programs (their keys
+ * are made as at the room's own draws), objects and pixels as `pmrem.fromScene(room, 0.04)`.
+ */
+export function roomEnvironment(three: THREE.WebGLRenderer, pmrem: THREE.PMREMGenerator, room: THREE.Scene): THREE.WebGLRenderTarget {
+  const render = three.render;
+  three.render = function (scene, camera) {
+    three.render = render;
+    three.compile(room, camera);
+    render.call(three, scene, camera);
+  };
+  try {
+    return pmrem.fromScene(room, 0.04);
+  } finally {
+    three.render = render;
+  }
+}
+/**
  * Point lights the realistic tiers' shots and blasts share (R5): always in
  * the scene there, at zero until an effect takes one, since a light count is
  * part of every lit program and a change would recompile them all mid-match.
@@ -266,6 +293,9 @@ export class Renderer {
    * cascade, though the level's all cast alike.
    */
   _casters: { mesh: THREE.Mesh; material: THREE.Material[]; groups: THREE.GeometryGroup[] }[] = [];
+  /** The casters' own materials and groups while the shadow pass swaps them out, reused from frame to frame. */
+  readonly _ownMaterials: (THREE.Material | THREE.Material[])[] = [];
+  readonly _ownGroups: THREE.GeometryGroup[][] = [];
   /** The texture sets the current level's tags need, and its detail kit's (R6) once `_dress` has asked. */
   _surfaceSets: readonly TextureSet[] = [];
   /** What the current level asks of the detail kit (its dressing and drones), null for none (Training). Made by `_dress`. */
@@ -386,6 +416,7 @@ export class Renderer {
     // No depth buffer on the canvas: every draw into it is a post pass over the whole frame, with no depth test
     // (SMAA's blend pass tests, but alone on a cleared canvas it always passes, as with no depth buffer).
     this.three = new THREE.WebGLRenderer({ canvas, antialias: false, depth: false, stencil: false, powerPreference: 'high-performance' });
+    this.three.debug.checkShaderErrors = CHECK_SHADER_ERRORS;
     this.three.outputColorSpace = THREE.SRGBColorSpace;
     this.three.toneMapping = THREE.NoToneMapping;
     this.three.autoClear = false;
@@ -399,7 +430,7 @@ export class Renderer {
     this.scene = new THREE.Scene();
     this.scene.fog = new THREE.Fog(SURF.fog, FOG_NEAR, FOG_FAR);
     this._pmrem = new THREE.PMREMGenerator(this.three);
-    this.scene.environment = this._roomEnv = this._pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    this.scene.environment = this._roomEnv = roomEnvironment(this.three, this._pmrem, new RoomEnvironment()).texture;
     this.scene.environmentIntensity = ENV_INTENSITY;
     this._sky = {
       horizon: { value: new THREE.Color(SURF.fog) }, zenith: { value: new THREE.Color(LIGHT.zenith) },
@@ -447,39 +478,49 @@ export class Renderer {
       object.onAfterRender = this._afterRig;
     };
     // Between the scene's draw list and its draws: the level's casters and the detail kit's (R6) swap to their shadow
-    // groups for this pass only, and the worn operators to one draw each (`OperatorAssets.shadowSwap`). Frames that
-    // keep the shadow maps allocate nothing here.
+    // groups for this pass only, and the worn operators to one draw each (`OperatorAssets.shadowSwap`). No frame
+    // allocates here: the casters' own materials and groups wait in two reused arrays.
     const shadowMap = this.three.shadowMap, drawShadows = shadowMap.render.bind(shadowMap);
-    const drawCasters: typeof drawShadows = (lights, scene, camera) => {
-      const props = this.props.casters;
-      if (this._casters.length + props.length === 0) return drawShadows(lights, scene, camera);
-      const lists = [this._casters, props], own: { material: THREE.Material | THREE.Material[]; groups: THREE.GeometryGroup[] }[] = [];
-      for (const list of lists) {
-        for (const { mesh, material, groups } of list) {
-          own.push({ material: mesh.material, groups: mesh.geometry.groups });
-          mesh.material = material;
-          mesh.geometry.groups = groups;
-        }
+    const swap = (list: readonly { mesh: THREE.Mesh; material: THREE.Material[]; groups: THREE.GeometryGroup[] }[], i: number): number => {
+      for (const { mesh, material, groups } of list) {
+        this._ownMaterials[i] = mesh.material;
+        this._ownGroups[i++] = mesh.geometry.groups;
+        mesh.material = material;
+        mesh.geometry.groups = groups;
       }
+      return i;
+    };
+    const restore = (list: readonly { mesh: THREE.Mesh }[], i: number): number => {
+      for (const { mesh } of list) {
+        mesh.material = this._ownMaterials[i]!;
+        mesh.geometry.groups = this._ownGroups[i++]!;
+      }
+      return i;
+    };
+    const drawCasters: typeof drawShadows = (lights, scene, camera) => {
+      const props = this.props.casters, casters = this._casters, count = casters.length + props.length;
+      if (count === 0) return drawShadows(lights, scene, camera);
+      swap(props, swap(casters, 0));
       try {
         drawShadows(lights, scene, camera);
       } finally {
-        let i = 0;
-        for (const list of lists) {
-          for (const { mesh } of list) {
-            mesh.material = own[i]!.material;
-            mesh.geometry.groups = own[i++]!.groups;
-          }
-        }
+        restore(props, restore(casters, 0));
+        // Hold no reference past this map's casters (a smaller map's list after a bigger one).
+        if (this._ownMaterials.length > count) this._ownMaterials.length = this._ownGroups.length = count;
       }
     };
+    // The rig casts nothing (`_prepareRigMesh`): hidden for the pass, the cascades' walks skip it. Three has listed
+    // the main pass's draws before its shadow pass, so that pass sees it as it was.
     shadowMap.render = (lights, scene, camera) => {
       if (!shadowMap.needsUpdate) return drawShadows(lights, scene, camera);
+      const rig = this.rig.visible;
+      this.rig.visible = false;
       this.operators.shadowSwap(true);
       try {
         drawCasters(lights, scene, camera);
       } finally {
         this.operators.shadowSwap(false);
+        this.rig.visible = rig;
       }
     };
     this.weapons = new WeaponAssets({
@@ -1255,7 +1296,8 @@ export class Renderer {
    * start (it parses on the main thread); the atlases upload in the
    * level's upload slots once its bake and sets are on (the props wear those
    * sets), and the dressing merges a few milliseconds a frame in between,
-   * never in a match's quiet start.
+   * never in a match's quiet start. Its placements are written every frame
+   * once the kit is in (no slot needed); its meshes are made in the slots.
    */
   _streamProps(): void {
     const size = propTextureSize(this._quality);
@@ -1264,12 +1306,15 @@ export class Renderer {
     const now = performance.now();
     if (this._match.quiet(now)) return;
     this.props.fetch();
-    if (!this.props.pending || this.bakePending || this.texturesPending || now < this._uploadAt) return;
-    const bytes = this.props.pump();
-    if (bytes > 0) {
-      if (performance.now() - now > UPLOAD_SLOW_MS) this._uploadPace = Math.min(4, this._uploadPace * 2);
-      this._uploadAt = now + Math.max(UPLOAD_GAP_MS, bytes / UPLOAD_BYTES_PER_MS) * this._uploadPace;
+    if (this.props.pending && !this.bakePending && !this.texturesPending && now >= this._uploadAt) {
+      const bytes = this.props.pump();
+      if (bytes > 0) {
+        if (performance.now() - now > UPLOAD_SLOW_MS) this._uploadPace = Math.min(4, this._uploadPace * 2);
+        this._uploadAt = now + Math.max(UPLOAD_GAP_MS, bytes / UPLOAD_BYTES_PER_MS) * this._uploadPace;
+      }
     }
+    // After the slot's pump and its timing: the dressing's placements need no slot (`PropAssets.premerge`).
+    this.props.premerge();
   }
 
   /** A realistic tier's detail kit (or the current map's merge of it) is still streaming. */
