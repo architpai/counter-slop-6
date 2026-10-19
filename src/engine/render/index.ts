@@ -6,8 +6,8 @@ import { FOG_UNIFORMS, fogAt, setAtmosphere } from './atmosphere';
 import { GRADE, LIGHT, SURF } from './palette';
 import { Composite, RIG_DEPTH } from './postfx';
 import {
-  BAKE_UNIFORMS, GRID_UNIFORMS, OPERATOR_AO, casterGroups, hiddenMat, levelDepthMat, realMat, realMaterials, skyMat, standInGrid, standInLightmap,
-  standInMaps, surfMat, wearMaps,
+  BAKE_UNIFORMS, GRID_UNIFORMS, OPERATOR_AO, casterGroups, fixUv, hiddenMat, levelDepthMat, realMat, realMaterials, setAoAlpha, skyMat, standInGrid,
+  standInLightmap, standInMaps, surfMat, wearMaps,
 } from './materials';
 import { BAKE_FILE, LIGHTMAP_SIZE, bakeFor, bakedTriangles, layoutSteps, lightmapChartSteps, wearLightmapUVs } from './lightmap';
 import { ANTIALIAS_SPEC, AO_SCALE, PRESET_VALUES, SHADOW_SPEC, VIEW_SCALE } from './quality';
@@ -447,11 +447,12 @@ export class Renderer {
       object.onAfterRender = this._afterRig;
     };
     // Between the scene's draw list and its draws: the level's casters and the detail kit's (R6) swap to their shadow
-    // groups for this pass only. Frames that keep the shadow maps allocate nothing here.
+    // groups for this pass only, and the worn operators to one draw each (`OperatorAssets.shadowSwap`). Frames that
+    // keep the shadow maps allocate nothing here.
     const shadowMap = this.three.shadowMap, drawShadows = shadowMap.render.bind(shadowMap);
-    shadowMap.render = (lights, scene, camera) => {
+    const drawCasters: typeof drawShadows = (lights, scene, camera) => {
       const props = this.props.casters;
-      if (!shadowMap.needsUpdate || this._casters.length + props.length === 0) return drawShadows(lights, scene, camera);
+      if (this._casters.length + props.length === 0) return drawShadows(lights, scene, camera);
       const lists = [this._casters, props], own: { material: THREE.Material | THREE.Material[]; groups: THREE.GeometryGroup[] }[] = [];
       for (const list of lists) {
         for (const { mesh, material, groups } of list) {
@@ -470,6 +471,15 @@ export class Renderer {
             mesh.geometry.groups = own[i++]!.groups;
           }
         }
+      }
+    };
+    shadowMap.render = (lights, scene, camera) => {
+      if (!shadowMap.needsUpdate) return drawShadows(lights, scene, camera);
+      this.operators.shadowSwap(true);
+      try {
+        drawCasters(lights, scene, camera);
+      } finally {
+        this.operators.shadowSwap(false);
       }
     };
     this.weapons = new WeaponAssets({
@@ -556,6 +566,8 @@ export class Renderer {
     const shafts = q.look === 'realistic' && q.shafts && (samples === 0 || this.msaaDepthReadable);
     this.post.configure({ look: q.look, samples, fxaa: aa.fxaa, smaa: aa.smaa, ao, depth: this._softFx, bloom: q.bloom, shafts });
     this.operators.occlusion(ao > 0 ? OPERATOR_AO.withGtao : OPERATOR_AO.alone);
+    // The patched lit materials write the scene alpha GTAO reads only while AO is on (materials.ts `setAoAlpha`).
+    let relink = setAoAlpha(ao > 0);
     this._setFxLights(q.look === 'realistic' ? FX_LIGHTS : 0);
     const shadow = SHADOW_SPEC[q.shadows];
     this.sun.castShadow = shadow !== null;
@@ -573,17 +585,21 @@ export class Renderer {
       const type = shadow.soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
       if (this.three.shadowMap.type !== type) {
         this.three.shadowMap.type = type;
-        // three keys programs on the filter but never checks it again once a material has
-        // compiled. It does check the fog object, on every fogged material's next draw, so a
-        // new one reaches the cached enemy and weapon materials that are not in the scene now.
-        // The unfogged ones (clouds) receive no shadows; the traversal still marks those in view.
-        if (this.scene.fog instanceof THREE.Fog) this.scene.fog = this.scene.fog.clone();
-        this.scene.traverse(node => {
-          if (!isMesh(node)) return;
-          for (const material of Array.isArray(node.material) ? node.material : [node.material]) material.needsUpdate = true;
-        });
+        relink = true;
       }
       this._shadowEvery = shadow.every;
+    }
+    if (relink) {
+      // three keys programs on the shadow filter (and the hooks' keys on the AO alpha) but never checks
+      // either again once a material has compiled. It does check the fog object, on every fogged
+      // material's next draw, so a new one reaches the cached enemy and weapon materials that are not in
+      // the scene now. The unfogged ones (clouds) receive no shadows and have no hook; the traversal still
+      // marks those in view.
+      if (this.scene.fog instanceof THREE.Fog) this.scene.fog = this.scene.fog.clone();
+      this.scene.traverse(node => {
+        if (!isMesh(node)) return;
+        for (const material of Array.isArray(node.material) ? node.material : [node.material]) material.needsUpdate = true;
+      });
     }
     const view = VIEW_SCALE[q.viewDistance];
     this.camera.far = FAR * view;
@@ -1040,6 +1056,7 @@ export class Renderer {
    */
   _wearBake(light: BakedLight | null): void {
     const lightmap = light?.lightmap ?? standInLightmap();
+    fixUv(lightmap);
     for (const material of realMaterials()) if (material.userData.baked) material.lightMap = lightmap;
     GRID_UNIFORMS.probeGrid.value = light?.grid ?? standInGrid();
     if (light?.name !== this._bakeWorn) {

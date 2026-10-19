@@ -1,10 +1,10 @@
 import { expect, test } from 'vitest';
-import { BufferAttribute, BufferGeometry, DataTexture, Frustum, Group, Material, Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial, PerspectiveCamera, Quaternion, Raycaster, Scene, SkinnedMesh, Vector3 } from 'three';
+import { BufferAttribute, BufferGeometry, DataTexture, DirectionalLight, Frustum, Group, InterleavedBufferAttribute, Material, Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial, PerspectiveCamera, Quaternion, Raycaster, Scene, SkinnedMesh, Vector3, WebGLRenderTarget, WebGLRenderer } from 'three';
 import type { Intersection, Object3D, Texture } from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import {
-  BOUNDS_MARGIN, FIST, GIB_BONES, HIT_LAYER, OPERATOR_GLB, OPERATOR_PROP_SCALE, PROP_HOLDS, OPERATOR_MANIFEST, OPERATOR_SETS, OperatorAssets, operatorDownloadBytes, operatorMapUrl, operatorWant,
+  BOUNDS_MARGIN, FIST, GIB_BONES, HIT_LAYER, OPERATOR_GLB, OPERATOR_PROP_SCALE, PROP_HOLDS, OPERATOR_MANIFEST, OPERATOR_SETS, OperatorAssets, SHADOW_ATTRIBUTES, operatorDownloadBytes, operatorMapUrl, operatorWant,
 } from '@/engine/render/operators';
 import { LOOPS, OperatorMotion, RUN_FULL, loopWeights } from '@/engine/render/operator-motion';
 import type { MotionInput } from '@/engine/render/operator-motion';
@@ -501,6 +501,164 @@ test('worn operators cull by their kind\'s bounds, cast through a map-free depth
     assets.clear();
     useOperatorSource(null, assets);
     usePropSource(null);
+  }
+});
+
+test('a worn operator casts one draw per shadow cascade: its meshes merged as stored, in order, swapped in for the pass', async () => {
+  const assets = new OperatorAssets(loaders);
+  useOperatorSource(assets);
+  const camera = new PerspectiveCamera();
+  const stored = (attribute: BufferAttribute | InterleavedBufferAttribute) => (attribute instanceof InterleavedBufferAttribute ? attribute.data.array : attribute.array);
+  const same = (a: ArrayLike<number>, b: ArrayLike<number>) => {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+    return true;
+  };
+  try {
+    let shadows = 0, freed = 0;
+    for (const lod of [0, 1] as const) {
+      assets.want({ lod, size: lod === 1 ? 512 : 1024 });
+      await stream(assets);
+      for (const kind of KINDS) {
+        const template = assets.kind(kind)!, parts = template.meshes.map(({ geometry }) => geometry), shadow = template.shadow;
+        if (parts.length === 1) {
+          expect(shadow, kind).toBeNull();
+          continue;
+        }
+        expect(shadow, kind).not.toBeNull();
+        shadows++;
+        shadow!.addEventListener('dispose', () => { freed++; });
+        expect(Object.keys(shadow!.attributes).sort(), kind).toEqual([...SHADOW_ATTRIBUTES].sort());
+        for (const name of SHADOW_ATTRIBUTES) {
+          // Element for element as the glb stores them (quantised, the positions interleaved), one mesh after another.
+          const merged = shadow!.getAttribute(name), first = parts[0]!.getAttribute(name);
+          const expected = new (stored(first).constructor as new (n: number) => Int16Array)(stored(merged).length);
+          let at = 0;
+          for (const part of parts) {
+            expected.set(stored(part.getAttribute(name)), at);
+            at += stored(part.getAttribute(name)).length;
+          }
+          expect(at, `${kind} ${name}`).toBe(stored(merged).length);
+          expect(stored(merged).constructor, `${kind} ${name}`).toBe(stored(first).constructor);
+          expect(same(stored(merged), expected), `${kind} ${name}`).toBe(true);
+          expect([merged.itemSize, merged.normalized, merged instanceof InterleavedBufferAttribute], `${kind} ${name}`)
+            .toEqual([first.itemSize, first.normalized, first instanceof InterleavedBufferAttribute]);
+          if (merged instanceof InterleavedBufferAttribute && first instanceof InterleavedBufferAttribute) {
+            expect([merged.data.stride, merged.offset], `${kind} ${name}`).toEqual([first.data.stride, first.offset]);
+          }
+        }
+        // The triangles in mesh order, each mesh's corners past the vertices before it.
+        const corners: number[] = [];
+        let start = 0;
+        for (const part of parts) {
+          for (const corner of part.index!.array) corners.push(corner + start);
+          start += part.getAttribute('position').count;
+        }
+        expect(same(shadow!.index!.array, corners), kind).toBe(true);
+      }
+      // A worn figure of two meshes draws its first on the merged geometry for the pass, the other not, then as before;
+      // one of one mesh, and one taken off, are left alone.
+      const heavy = figureOf('heavy'), grunt = figureOf('grunt'), gone = figureOf('medic');
+      try {
+        assets.frame(camera);
+        const skinned = (figure: Figure) => {
+          const meshes: SkinnedMesh[] = [];
+          figure.root.traverse(node => { if (node instanceof SkinnedMesh) meshes.push(node); });
+          return meshes;
+        };
+        const [body, kit] = skinned(heavy), [solo] = skinned(grunt), left = skinned(gone);
+        gone.dispose();
+        const holder: SkinnedMesh[] = [];
+        assets.template!.getObjectByName('heavy__body')!.traverse(node => { if (node instanceof SkinnedMesh) holder.push(node); });
+        const template = assets.kind('heavy')!;
+        expect(kit, 'two meshes').toBeDefined();
+        assets.shadowSwap(true);
+        expect([body!.geometry, kit!.castShadow, body!.castShadow]).toEqual([template.shadow, false, true]);
+        expect([holder[0]!.geometry, holder[1]!.castShadow], 'the warm-up draws it too').toEqual([template.shadow, false]);
+        expect([solo!.geometry, solo!.castShadow]).toEqual([assets.kind('grunt')!.meshes[0]!.geometry, true]);
+        expect([left[0]!.geometry, left[1]!.castShadow]).toEqual([assets.kind('medic')!.meshes[0]!.geometry, true]);
+        assets.shadowSwap(false);
+        expect([body!.geometry, kit!.castShadow]).toEqual([template.meshes[0]!.geometry, true]);
+        expect([holder[0]!.geometry, holder[1]!.castShadow]).toEqual([template.meshes[0]!.geometry, true]);
+      } finally {
+        heavy.dispose();
+        grunt.dispose();
+      }
+    }
+    // The LOD change and Low free them.
+    assets.want(null);
+    expect(freed).toBe(shadows);
+    expect(shadows).toBeGreaterThan(0);
+  } finally {
+    assets.clear();
+    useOperatorSource(null, assets);
+  }
+});
+
+test('the merged shadow draws give the same shadow map, one draw per worn operator', async () => {
+  const assets = new OperatorAssets(loaders);
+  useOperatorSource(assets);
+  const renderer = new WebGLRenderer({ canvas: document.createElement('canvas') });
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.autoUpdate = false;
+  const scene = new Scene(), camera = new PerspectiveCamera(60, 1, 0.1, 100), target = new WebGLRenderTarget(16, 16);
+  camera.position.set(0, 10, 15);
+  camera.lookAt(0, 0, 0);
+  const sun = new DirectionalLight(0xffffff, 2);
+  sun.castShadow = true;
+  sun.position.set(5, 12, 4);
+  sun.shadow.mapSize.set(1024, 1024);
+  Object.assign(sun.shadow.camera, { left: -9, right: 9, top: 9, bottom: -9, near: 0.5, far: 40 });
+  scene.add(sun, sun.target);
+  // The shadow maps are what is compared; the camera's pass needs no lit programs (slow to link on software GL).
+  scene.overrideMaterial = new MeshBasicMaterial();
+  const kinds = KINDS.filter(kind => kind !== 'player'), figures: Figure[] = [];
+  const drawShadows = renderer.shadowMap.render.bind(renderer.shadowMap);
+  let merge = false, calls = 0;
+  renderer.shadowMap.render = (lights, at, from) => {
+    const before = renderer.info.render.calls;
+    if (merge) assets.shadowSwap(true);
+    try { drawShadows(lights, at, from); } finally { if (merge) assets.shadowSwap(false); }
+    calls = renderer.info.render.calls - before;
+  };
+  const shot = (merged: boolean) => {
+    merge = merged;
+    renderer.shadowMap.needsUpdate = true;
+    renderer.setRenderTarget(target);
+    renderer.render(scene, camera);
+    const map = sun.shadow.map!, texels = new Uint8Array(map.width * map.height * 4);
+    renderer.readRenderTargetPixels(map, 0, 0, map.width, map.height, texels);
+    return { texels, calls };
+  };
+  try {
+    assets.want({ lod: 0, size: 1024 });
+    await stream(assets);
+    // Made once the operators are in: each wears its own at once.
+    for (const [i, kind] of kinds.entries()) {
+      const figure = figureOf(kind);
+      figures.push(figure);
+      figure.root.position.set((i % 6) * 2.2 - 6, 0, Math.floor(i / 6) * 2.2 - 4);
+      figure.root.rotation.y = i * 0.7;
+      figure.parts.upperR?.rotation.set(-1.5, 0, 0.4);
+      figure.parts.thighL?.rotation.set(-0.8, 0, 0);
+      scene.add(figure.root);
+    }
+    scene.updateMatrixWorld(true);
+    assets.frame(camera);
+    expect(assets.worn).toBe(kinds.length);
+    const apart = shot(false), merged = shot(true);
+    let cast = 0;
+    for (let i = 0; i < apart.texels.length; i += 4) if (apart.texels[i] !== 255 || apart.texels[i + 3] !== 255) cast++;
+    expect(cast, 'the figures cast').toBeGreaterThan(10000);
+    expect(merged.texels.every((v, i) => v === apart.texels[i]), 'the same shadow map').toBe(true);
+    expect(apart.calls - merged.calls).toBe(kinds.filter(kind => assets.kind(kind)!.shadow).length);
+  } finally {
+    for (const figure of figures) figure.dispose();
+    assets.clear();
+    useOperatorSource(null, assets);
+    (scene.overrideMaterial as Material).dispose();
+    target.dispose();
+    renderer.dispose();
   }
 });
 

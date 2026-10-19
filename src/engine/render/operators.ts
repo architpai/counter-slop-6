@@ -87,6 +87,12 @@ export interface KindTemplate {
    * the pose (`restBounds`); three never skins vertices on the CPU for it.
    */
   bounds: THREE.Sphere;
+  /**
+   * A worn figure's one draw per shadow cascade (`OperatorAssets.shadowSwap`): every mesh's attributes that the
+   * skinned depth program reads, laid out as the meshes lay them, and their triangles, in mesh order; null for a
+   * kind of one mesh.
+   */
+  shadow: THREE.BufferGeometry | null;
 }
 
 /** How far the trunk may move inside the figure (the hips sinking and sliding back in a death fall, a lean), metres of figure space. */
@@ -151,6 +157,11 @@ export class OperatorAssets implements OperatorSource {
   /** Every figure that can wear an operator, and the ones that do. */
   readonly #figures = new Set<FigureRig>();
   readonly #bodies = new Map<FigureRig, OperatorBody>();
+  /**
+   * What `shadowSwap` draws once per cascade: the worn bodies of the kinds with a merged shadow geometry, and those
+   * kinds' template meshes (the warm-up draws them into the shadow maps, so the merged buffers upload there).
+   */
+  readonly #casters: { readonly meshes: readonly THREE.SkinnedMesh[]; readonly template: KindTemplate }[] = [];
   /**
    * Figures that go straight to their operator once it is in, in view or not: those in play at a settings
    * change (another LOD or size, or Low to a realistic tier), which is not a fight's surprise. Only a
@@ -283,10 +294,14 @@ export class OperatorAssets implements OperatorSource {
       });
       const template: KindTemplate = {
         kind, group: clipGroup(kind, scene), bones, boneInverses: skeleton.boneInverses, meshes, gibs: new Map(), bounds: new THREE.Sphere(),
+        shadow: null,
       };
       template.gibs = gibGeometries(template);
       template.bounds = restBounds(template);
+      // Made off the random draws (three's uuids take four each), as the glb's callback made no such geometry before.
+      template.shadow = quietly(() => shadowGeometry(template));
       this.#kinds.set(kind, template);
+      if (template.shadow) this.#casters.push({ meshes: skinned, template });
       // A rigid gib's program (a figure's torn-off limb) is warmed with the template: one per material.
       const gib = template.gibs.get('head');
       gib?.forEach((geometry, i) => {
@@ -415,7 +430,23 @@ export class OperatorAssets implements OperatorSource {
   #put(rig: FigureRig): void {
     const template = this.#kinds.get(rig.kind);
     if (!template || this.#bodies.has(rig)) return;
-    this.#bodies.set(rig, new OperatorBody(rig, template, rigid => this.#twins(template, rigid)));
+    const body = new OperatorBody(rig, template, rigid => this.#twins(template, rigid));
+    this.#bodies.set(rig, body);
+    if (template.shadow) this.#casters.push(body);
+  }
+
+  /**
+   * Around the shadow pass (render/index.ts): `on`, each worn operator of more than one mesh draws once per cascade,
+   * its first mesh on its kind's merged geometry (`KindTemplate.shadow`), the others out of the pass; off, back. The
+   * meshes are siblings with one skeleton, bind matrix, sphere and depth material, drawn one after another, so the
+   * one draw runs the same program on the same vertices and triangles in the same order. No allocation.
+   */
+  shadowSwap(on: boolean): void {
+    for (let i = 0; i < this.#casters.length; i++) {
+      const { meshes, template } = this.#casters[i]!;
+      meshes[0]!.geometry = on ? template.shadow! : template.meshes[0]!.geometry;
+      for (let k = 1; k < meshes.length; k++) meshes[k]!.castShadow = !on;
+    }
   }
 
   /**
@@ -443,8 +474,12 @@ export class OperatorAssets implements OperatorSource {
   }
 
   #take(rig: FigureRig): void {
-    this.#bodies.get(rig)?.dispose();
+    const body = this.#bodies.get(rig);
+    if (!body) return;
+    body.dispose();
     this.#bodies.delete(rig);
+    const at = this.#casters.indexOf(body);
+    if (at >= 0) this.#casters.splice(at, 1);
   }
 
   /** Every figure back to its stand-in (the glb is going, or another LOD replaces it). */
@@ -454,6 +489,9 @@ export class OperatorAssets implements OperatorSource {
     if (this.#template) disposeTree(this.#template);
     // The gibs share the meshes' attributes (freed with them above); only their index buffers are their own.
     for (const kind of this.#kinds.values()) for (const gibs of kind.gibs.values()) for (const gib of gibs) gib.dispose();
+    // The merged shadow geometries own their attributes.
+    for (const kind of this.#kinds.values()) kind.shadow?.dispose();
+    this.#casters.length = 0;
     this.#template = null;
     this.#kinds.clear();
     this.#kindTwins.clear();
@@ -590,6 +628,76 @@ function gibGeometries(template: KindTemplate): Map<string, THREE.BufferGeometry
     }));
   }
   return out;
+}
+
+/**
+ * The attributes the shadow pass's skinned depth program reads (`levelDepthSkinnedMat`, three's depth shader):
+ * the positions and skin, and the uv its map's varying is made from (the map is never sampled).
+ */
+export const SHADOW_ATTRIBUTES = ['position', 'uv', 'skinIndex', 'skinWeight'] as const;
+
+type Attribute = THREE.BufferAttribute | THREE.InterleavedBufferAttribute;
+/** An attribute's elements as stored: the typed array, the elements per vertex in it and the attribute's first. */
+function rawLayout(attribute: Attribute): { array: THREE.TypedArray; stride: number; offset: number } {
+  return attribute instanceof THREE.InterleavedBufferAttribute
+    ? { array: attribute.data.array, stride: attribute.data.stride, offset: attribute.offset }
+    : { array: attribute.array, stride: attribute.itemSize, offset: 0 };
+}
+
+/**
+ * A kind's meshes as one geometry for the shadow pass (`KindTemplate.shadow`): each attribute of
+ * `SHADOW_ATTRIBUTES` as the meshes store it (the glb's quantised, interleaved layout, copied element for element,
+ * never through `getX`, which would denormalise), one after another, and their triangles in order, each mesh's
+ * indices moved past the vertices before it. Null for one mesh, or meshes that do not share a layout.
+ */
+export function shadowGeometry(template: KindTemplate): THREE.BufferGeometry | null {
+  const parts = template.meshes.map(({ geometry }) => geometry);
+  if (parts.length < 2) return null;
+  const counts = parts.map(geometry => geometry.getAttribute('position').count);
+  const fits = parts.every((geometry, i) => geometry.index !== null && geometry.index.count === geometry.index.array.length
+    && Object.keys(geometry.morphAttributes).length === 0 && geometry.drawRange.start === 0 && geometry.drawRange.count === Infinity
+    && SHADOW_ATTRIBUTES.every(name => {
+      const attribute = geometry.getAttribute(name) as Attribute | undefined, first = parts[0]!.getAttribute(name) as Attribute | undefined;
+      if (!attribute || !first || attribute.count !== counts[i]) return false;
+      const own = rawLayout(attribute), base = rawLayout(first);
+      return own.array.length === counts[i]! * own.stride && own.array.constructor === base.array.constructor && own.stride === base.stride
+        && own.offset === base.offset && attribute.itemSize === first.itemSize && attribute.normalized === first.normalized
+        && (attribute instanceof THREE.InterleavedBufferAttribute) === (first instanceof THREE.InterleavedBufferAttribute)
+        && (attribute as THREE.BufferAttribute).gpuType === (first as THREE.BufferAttribute).gpuType;
+    }));
+  if (!fits) return null;
+  const total = counts.reduce((sum, count) => sum + count, 0);
+  const merged = new THREE.BufferGeometry();
+  for (const name of SHADOW_ATTRIBUTES) {
+    const first = parts[0]!.getAttribute(name) as Attribute, { array: base, stride, offset } = rawLayout(first);
+    const array = new (base.constructor as new (length: number) => THREE.TypedArray)(total * stride);
+    let at = 0;
+    for (const geometry of parts) {
+      const own = rawLayout(geometry.getAttribute(name) as Attribute).array;
+      array.set(own, at);
+      at += own.length;
+    }
+    if (first instanceof THREE.InterleavedBufferAttribute) {
+      merged.setAttribute(name, new THREE.InterleavedBufferAttribute(new THREE.InterleavedBuffer(array, stride), first.itemSize, offset, first.normalized));
+    } else {
+      const attribute = new THREE.BufferAttribute(array, first.itemSize, first.normalized);
+      attribute.gpuType = first.gpuType;
+      merged.setAttribute(name, attribute);
+    }
+  }
+  // 32-bit when an index reaches 65535: in 16 bits that is WebGL2's primitive-restart index.
+  const index = new (total > 65535 ? Uint32Array : Uint16Array)(parts.reduce((sum, geometry) => sum + geometry.index!.count, 0));
+  let at = 0, start = 0;
+  parts.forEach((geometry, i) => {
+    const own = geometry.index!.array;
+    for (let k = 0; k < own.length; k++) index[at++] = own[k]! + start;
+    start += counts[i]!;
+  });
+  merged.setIndex(new THREE.BufferAttribute(index, 1));
+  merged.userData.shared = true;
+  // As the meshes' (never read: a worn mesh culls by its kind's sphere, the template by none).
+  merged.boundingSphere = parts[0]!.boundingSphere!.clone();
+  return merged;
 }
 
 const _q = new THREE.Quaternion();

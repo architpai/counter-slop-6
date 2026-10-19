@@ -173,6 +173,7 @@ export function standInLightmap(): THREE.DataTexture {
   if (standInLight === undefined) {
     standInLight = pixel(1, 1, 1, THREE.NoColorSpace);
     standInLight.channel = 1;
+    fixUv(standInLight);
   }
   return standInLight;
 }
@@ -256,12 +257,13 @@ vGridPos = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;
 
 const gridded = new WeakSet<THREE.Material>();
 function gridKey(this: THREE.Material): string {
-  return `probe-grid${ormKey(this)}`;
+  return `probe-grid${ormKey(this)}${aoKey()}`;
 }
 /** `gridLit`'s hook: the probe grid, and the Blender weapons' packed ORM map read once (`packedOrm`). */
 function gridShader(this: THREE.Material, shader: THREE.WebGLProgramParametersWithUniforms): void {
   withGrid(shader);
   packedOrm(this, shader);
+  noAoAlpha(shader);
 }
 /**
  * Light a moving thing's material from the probe grid (R3): the view model
@@ -331,8 +333,9 @@ function characterShader(this: THREE.Material, shader: THREE.WebGLProgramParamet
     .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = vPbr.x;')
     .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = vPbr.y;')
     .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * vPbr.z * ${CHARACTER_GLOW.toFixed(1)};`);
+  noAoAlpha(shader);
 }
-const characterKey = (): string => 'character';
+const characterKey = (): string => `character${aoKey()}`;
 
 let character: THREE.MeshStandardMaterial | undefined;
 /** The characters' shared material (see `characterShader`); figures that flash wear their own copy (`ownMaterial`). */
@@ -352,9 +355,10 @@ function propShader(this: THREE.Material, shader: THREE.WebGLProgramParametersWi
   withGrid(shader);
   tintShader(shader, owned.get(this) ?? baseOwned());
   packedOrm(this, shader);
+  noAoAlpha(shader);
 }
 function propKey(this: THREE.Material): string {
-  return `prop${ormKey(this)}`;
+  return `prop${ormKey(this)}${aoKey()}`;
 }
 
 let prop: THREE.MeshToonMaterial | undefined;
@@ -485,9 +489,10 @@ iblIrradiance *= fill;
 reflectedLight.directDiffuse *= ${OPERATOR_LIGHT.key.toFixed(2)};
 #include <lights_fragment_end>`);
   packedOrm(this, shader);
+  noAoAlpha(shader);
 }
 function operatorKey(this: THREE.Material): string {
-  return `operator${ormKey(this)}`;
+  return `operator${ormKey(this)}${aoKey()}`;
 }
 /**
  * How far the remote player's team carrier is lightened from its team's tone (`operatorShader`): a saturated
@@ -572,12 +577,19 @@ export function standInMaps(set: TextureSet, info: SetInfo): SetMaps {
 
 /**
  * Put a set's maps on a realistic material: albedo, normal, and ORM as occlusion, roughness and metalness. The
- * only writer of those three slots on the patched materials below, so they always hold one texture (`packedOrm`).
+ * only writer of those three slots on the patched materials below, so they always hold one texture (`packedOrm`),
+ * and it fixes their uv transforms (`fixUv`). Should new maps ever change the material's program key part
+ * (`ormKey`), the material is marked for a new program; with today's maps it never is.
  */
 export function wearMaps(material: THREE.MeshStandardMaterial, maps: SetMaps): void {
+  const worn = material.map !== null, key = ormKey(material);
+  fixUv(maps.albedo);
+  fixUv(maps.normal);
+  fixUv(maps.orm);
   material.map = maps.albedo;
   material.normalMap = maps.normal;
   material.aoMap = material.roughnessMap = material.metalnessMap = maps.orm;
+  if (worn && ormKey(material) !== key) material.needsUpdate = true;
 }
 
 /**
@@ -598,24 +610,113 @@ if (ORM_METALNESS === THREE.ShaderChunk.metalnessmap_fragment || ORM_AO === THRE
 THREE.ShaderChunk.metalnessmap_fragment = ORM_METALNESS;
 THREE.ShaderChunk.aomap_fragment = ORM_AO;
 
+/**
+ * Fewer uv varyings on the packed programs (`packedOrm`). With `ORM_PACKED` (defined in both stages) the fragment
+ * never reads `vAoMapUv` or `vMetalnessMapUv`, so neither is declared or written. With `UV_SHARED` too (`uvShared`:
+ * the albedo, normal and ORM maps on one uv channel with bit-equal transforms) the vertex shader would compute
+ * `vNormalMapUv` and `vRoughnessMapUv` by `vMapUv`'s expression on the same values, so the fragment reads `vMapUv`
+ * in their place (names mapped by the preprocessor: normal map, tangent frame, roughness texel). Every value read is
+ * as before. Without the defines the preprocessed chunks are three's, word for word.
+ */
+function guardLine(chunk: string, line: string, define: string): string {
+  const out = chunk.replace(line, `#ifndef ${define}\n\t${line}\n\t#endif`);
+  if (out === chunk) throw new Error('three changed its uv chunks: update render/materials.ts');
+  return out;
+}
+const UV_GUARDS = [['vAoMapUv', 'ORM_PACKED'], ['vMetalnessMapUv', 'ORM_PACKED'], ['vNormalMapUv', 'UV_SHARED'], ['vRoughnessMapUv', 'UV_SHARED']] as const;
+const UV_WRITES = { vAoMapUv: 'aoMap', vMetalnessMapUv: 'metalnessMap', vNormalMapUv: 'normalMap', vRoughnessMapUv: 'roughnessMap' } as const;
+let uvParsVertex = THREE.ShaderChunk.uv_pars_vertex, uvVertex = THREE.ShaderChunk.uv_vertex, uvParsFragment = THREE.ShaderChunk.uv_pars_fragment;
+for (const [varying, define] of UV_GUARDS) {
+  const map = UV_WRITES[varying];
+  uvParsVertex = guardLine(uvParsVertex, `varying vec2 ${varying};`, define);
+  uvVertex = guardLine(uvVertex, `${varying} = ( ${map}Transform * vec3( ${map.toUpperCase()}_UV, 1 ) ).xy;`, define);
+  uvParsFragment = guardLine(uvParsFragment, `varying vec2 ${varying};`, define);
+}
+THREE.ShaderChunk.uv_pars_vertex = uvParsVertex;
+THREE.ShaderChunk.uv_vertex = uvVertex;
+THREE.ShaderChunk.uv_pars_fragment = `${uvParsFragment}
+#ifdef UV_SHARED
+	#define vNormalMapUv vMapUv
+	#define vRoughnessMapUv vMapUv
+#endif
+`;
+
+/**
+ * Textures whose uv transform is fixed (`fixUv`): built from three's defaults (no offset, rotation or centre,
+ * repeat 1) by three's own `updateMatrix`, then left as it is, so three stops recomputing it (a cosine and a sine
+ * per map, per material switch) and uploads the same bits it computed before.
+ */
+const fixedUv = new WeakSet<THREE.Texture>();
+/**
+ * Fix a texture's uv transform (`fixedUv`) if it is three's default and nothing set it otherwise. Nothing in the
+ * game writes a texture's offset, repeat, rotation or centre: the maps that pass here (sets, stand-ins, bakes)
+ * keep the defaults for good.
+ */
+export function fixUv(texture: THREE.Texture): void {
+  if (fixedUv.has(texture) || !texture.matrixAutoUpdate) return;
+  const { offset, repeat, center } = texture;
+  if (!Object.is(offset.x, 0) || !Object.is(offset.y, 0) || repeat.x !== 1 || repeat.y !== 1
+    || !Object.is(texture.rotation, 0) || !Object.is(center.x, 0) || !Object.is(center.y, 0)) return;
+  texture.updateMatrix();
+  texture.matrixAutoUpdate = false;
+  fixedUv.add(texture);
+}
+
 /** One texture fills a material's occlusion, roughness and metalness slots (`wearMaps`): its ORM map can be read once. */
 function ormPacked(material: THREE.Material): boolean {
   const { aoMap, roughnessMap, metalnessMap } = material as THREE.MeshStandardMaterial;
   return !!aoMap && aoMap === roughnessMap && aoMap === metalnessMap;
 }
 /**
+ * A packed material's albedo, normal and ORM maps share one uv (`UV_SHARED` above): one channel and fixed,
+ * bit-equal transforms (`fixUv`), so the three transform uniforms hold the same bits for as long as the maps do.
+ */
+function uvShared(material: THREE.Material): boolean {
+  const { map, normalMap, roughnessMap } = material as THREE.MeshStandardMaterial;
+  if (!map || !normalMap || !roughnessMap || !ormPacked(material)) return false;
+  const maps = [map, normalMap, roughnessMap];
+  if (!maps.every(texture => fixedUv.has(texture) && texture.channel === map.channel)) return false;
+  return maps.every(texture => texture.matrix.elements.every((value, i) => Object.is(value, map.matrix.elements[i])));
+}
+/**
  * Read a material's ORM texture once (above), from its own hook: only when one texture fills all three slots
- * (`ormPacked`). three's program key holds which slots are filled but not with what, so the hooks' keys add
- * `ormKey`: a material with three different textures never takes a packed program, which would read the
- * roughness map for all three. Both read `ormPacked`, so the define and the key always agree. `wearMaps` is the
- * only writer of the slots on these materials and keeps them packed, so a key never changes under a program.
+ * (`ormPacked`), and drop the uv varyings the program then never reads (`UV_SHARED` when `uvShared`). three's
+ * program key holds which slots are filled but not with what, so the hooks' keys add `ormKey`: a material with
+ * three different textures never takes a packed program, which would read the roughness map for all three, nor
+ * one with different transforms a shared-uv one. Both read the same tests, so the defines and the key always agree.
+ * `wearMaps` is the only writer of the slots on these materials and keeps them packed and fixed, so a key never
+ * changes under a program (and if one did, `wearMaps` marks the material for a new one).
  */
 function packedOrm(material: THREE.Material, shader: THREE.WebGLProgramParametersWithUniforms): void {
-  if (ormPacked(material)) shader.fragmentShader = `#define ORM_PACKED\n${shader.fragmentShader}`;
+  if (!ormPacked(material)) return;
+  const defines = uvShared(material) ? '#define ORM_PACKED\n#define UV_SHARED\n' : '#define ORM_PACKED\n';
+  shader.vertexShader = `${defines}${shader.vertexShader}`;
+  shader.fragmentShader = `${defines}${shader.fragmentShader}`;
 }
-/** The program key's part for `packedOrm`: `|orm` on a packed material, else nothing. */
+/** The program key's part for `packedOrm`: `|orm` on a packed material (`|orm|uv` with a shared uv), else nothing. */
 function ormKey(material: THREE.Material): string {
-  return ormPacked(material) ? '|orm' : '';
+  return ormPacked(material) ? uvShared(material) ? '|orm|uv' : '|orm' : '';
+}
+
+/**
+ * The scene alpha GTAO reads (render/postfx.ts `OPAQUE_CHUNK`): written while the AO setting is on, which
+ * `Renderer.applyQuality` sets (`setAoAlpha`). With AO off nothing reads the scene's alpha, so the patched lit
+ * materials' programs leave its computation out (`NO_AO_ALPHA`, in their keys through `aoKey`); every other lit
+ * material keeps it.
+ */
+let aoAlpha = true;
+/** Turn the scene-alpha write on or off for the next compiles; true when it changed (the materials need new programs). */
+export function setAoAlpha(on: boolean): boolean {
+  if (on === aoAlpha) return false;
+  aoAlpha = on;
+  return true;
+}
+function noAoAlpha(shader: THREE.WebGLProgramParametersWithUniforms): void {
+  if (!aoAlpha) shader.fragmentShader = `#define NO_AO_ALPHA\n${shader.fragmentShader}`;
+}
+/** The program key's part for `noAoAlpha`. */
+function aoKey(): string {
+  return aoAlpha ? '' : '|no-ao-alpha';
 }
 
 /** Every realistic level material made so far (they are cached like the flat ones). */
@@ -665,12 +766,19 @@ const SHADE_LIFT: Partial<Record<TextureSet, readonly [number, number, number]>>
  */
 function macroVariation(this: THREE.MeshStandardMaterial, shader: THREE.WebGLProgramParametersWithUniforms): void {
   shader.uniforms.macro = this.userData.macro as THREE.IUniform<number>;
-  shader.vertexShader = shader.vertexShader
-    .replace('#include <common>', '#include <common>\nvarying vec3 vMacroPos;')
-    .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMacroPos = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
+  // The probe grid's `vGridPos` (`withGrid`, after `project_vertex`) is this one's expression on the same
+  // `transformed` when nothing moves the vertex between `begin_vertex` and there, and no instance matrix joins it:
+  // then the noise reads it, one varying fewer, the same values.
+  const gridPos = !this.userData.baked && !this.userData.far && !shader.instancing && !shader.batching && !shader.skinning
+    && !shader.morphTargets && !shader.displacementMap;
+  if (!gridPos) {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vMacroPos;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMacroPos = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
+  }
   shader.fragmentShader = shader.fragmentShader
     .replace('#include <common>', `#include <common>
-varying vec3 vMacroPos;
+${gridPos ? '#define vMacroPos vGridPos' : 'varying vec3 vMacroPos;'}
 uniform float macro;
 float macroHash( vec3 p ) {
 	p = fract( p * 0.3183099 + 0.1 ) * 17.0;
@@ -717,12 +825,20 @@ iblIrradiance = vec3( 0.0 );`);
   } else {
     // Backdrops beyond the play space keep the sky probe: the grid would lend them its edge cells' light.
     if (!this.userData.far) withGrid(shader);
-    shader.fragmentShader = shader.fragmentShader.replace('#include <lights_fragment_maps>', '#include <lights_fragment_maps>\niblIrradiance = vec3( 0.0 );');
+    // three's chunk without the PMREM's diffuse, which the next line threw away.
+    shader.fragmentShader = shader.fragmentShader.replace('#include <lights_fragment_maps>', `${lightsMapsNoIbl()}\niblIrradiance = vec3( 0.0 );`);
   }
   packedOrm(this, shader);
+  noAoAlpha(shader);
 }
 function macroKey(this: THREE.Material): string {
-  return `${this.userData.baked ? 'level-pbr-baked' : this.userData.far ? 'level-pbr-far' : 'level-pbr'}${ormKey(this)}`;
+  return `${this.userData.baked ? 'level-pbr-baked' : this.userData.far ? 'level-pbr-far' : 'level-pbr'}${ormKey(this)}${aoKey()}`;
+}
+/** three's `lights_fragment_maps` without the environment's irradiance (`iblIrradiance`), for `macroVariation`'s unbaked kinds. */
+function lightsMapsNoIbl(): string {
+  const chunk = THREE.ShaderChunk.lights_fragment_maps, out = chunk.replace('iblIrradiance += getIBLIrradiance( geometryNormal );', '');
+  if (out === chunk) throw new Error('three changed lights_fragment_maps: update render/materials.ts');
+  return out;
 }
 
 /**
@@ -785,6 +901,8 @@ export function kitMat(set: TextureSet, info: SetInfo, far = false): THREE.MeshS
     material.userData.macro = { value: MACRO[set] ?? MACRO_DEFAULT };
     material.userData.baked = false;
     material.userData.far = far;
+    // Only the backdrops wear it, and they receive no shadow (render/props.ts): their lighting skips the cascades.
+    if (far) material.defines = { ...material.defines, BACKDROP: '' };
     material.onBeforeCompile = macroVariation;
     material.customProgramCacheKey = macroKey;
     wearMaps(material, standInMaps(set, info));

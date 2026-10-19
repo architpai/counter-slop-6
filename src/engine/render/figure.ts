@@ -364,6 +364,19 @@ function oval(parent: THREE.Object3D, color: number, x: number, y: number, z: nu
   return object;
 }
 
+/**
+ * `node` never moves against its parent again: three stops composing its
+ * local matrix at every update and keeps the one composed now from the same
+ * position, rotation and scale (`updateMatrix`), so every world matrix under
+ * it comes out as before, to the bit. Nothing may write its transform after
+ * this, except `lend` (the debris moves a lent piece: it turns the composing
+ * back on first).
+ */
+function freeze(node: THREE.Object3D): void {
+  node.updateMatrix();
+  node.matrixAutoUpdate = false;
+}
+
 /** Shared and never drawn: tactical figures keep the pivots, not the surfaces. */
 const EMPTY_GEO = new THREE.BufferGeometry();
 EMPTY_GEO.userData.shared = true;
@@ -682,6 +695,9 @@ export function makeFigure(o: FigureOpts): Figure {
   root.scale.setScalar(o.scale ?? 1);
   const parts: FigureParts = {}, anchors: FigureAnchors = {};
   const color = o.color ?? TONE_HEX[TONE.HOSTILE];
+  // An enemy's static nodes stop recomposing (`freeze`): its anchors, eyes, mount, prop and tip. A player's
+  // figure keeps them moving (players.ts sets its anchors after this), all but its surfaces.
+  const still = o.tactical !== undefined && o.tactical !== 'player';
   let eyeSets: FaceSets, weapon: THREE.Group | null = null;
   const low: THREE.Mesh[] = [];
   // Tactical actors release every primitive surface below and replace it with authored
@@ -822,10 +838,13 @@ export function makeFigure(o: FigureOpts): Figure {
       const pivot = built(parts[name], name);
       for (const child of [...pivot.children]) if (isMesh(child)) release(child);
       const surface = tacticalPart(o.tactical, name);
+      // The surface and its meshes sit where the part was merged, for good; its nodes (tactical.ts `TACTICAL_NODES`) move.
+      freeze(surface);
       surface.traverse(object => {
         if (!isMesh(object)) return;
         object.userData.hitPart = o.kind === 'humanoid' || name === 'head' ? HIT_REGIONS[name] ?? 'torso' : 'torso';
         low.push(object);
+        freeze(object);
       });
       // The authored cleaver follows the forearm, but remains a weapon, not armour.
       surface.getObjectByName('heavy-melee')?.traverse(object => { delete object.userData.hitPart; });
@@ -839,6 +858,10 @@ export function makeFigure(o: FigureOpts): Figure {
     eyeSets = { root: eyes, eyes, dead };
     if (o.kind === 'humanoid' && anchors.head) anchors.head.position.y = 0.13;
     root.userData.tactical = o.tactical;
+    // The anchors' last move was the line above; the joints keep moving.
+    if (still) {
+      for (const node of [...Object.values(anchors), eyes, dead, parts.gunMount, parts.tip]) if (node) freeze(node);
+    }
   }
 
   parts.eyes = eyeSets.eyes;
@@ -906,6 +929,8 @@ export function makeFigure(o: FigureOpts): Figure {
       mount.add(weapon);
       parts.weapon = weapon;
       parts.tip = group(weapon, 'tip', 0, 0.05, kind === 'blade' ? 0.92 : kind === 'knife' || kind === 'pistol' ? 0.31 : kind === 'rifle' ? 0.59 : kind === 'hammer' ? 0.6 : 0.78);
+      // The gun only moves as the debris's (`lend`); a worn operator holds the prop as it is, in its own socket.
+      if (still) for (const node of [weapon, heldProp, parts.tip]) if (node) freeze(node);
       rig?.onWeapon?.();
     },
     setTint(amount, tone) {
@@ -929,6 +954,8 @@ export function makeFigure(o: FigureOpts): Figure {
     },
     lend(part) {
       if (part === root) rootLent = true;
+      // The debris moves it from now on (effects.ts `debris`, called with this lend's return): it composes again.
+      part.matrixAutoUpdate = true;
       rig?.onLend?.(part);
       lent.add(part);
       holds++;

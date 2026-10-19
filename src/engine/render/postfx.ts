@@ -106,12 +106,14 @@ const DIRT_STRENGTH = 0.7;
  * in the scene target (opaque materials draw without blending), and the AO
  * lookup scales its darkening by it: a sunlit wall or grunt keeps its
  * brightness, a corner in shade darkens fully. Unlit and transparent materials
- * keep their own alpha, so AO applies to them as before.
+ * keep their own alpha, so AO applies to them as before. With AO off nothing
+ * reads it: the patched lit materials then define `NO_AO_ALPHA` (in their
+ * program keys; render/materials.ts `setAoAlpha`) and skip the write.
  */
 const OPAQUE_CHUNK = THREE.ShaderChunk.opaque_fragment;
 if (!OPAQUE_CHUNK.includes('gl_FragColor = vec4( outgoingLight, diffuseColor.a );')) throw new Error('three changed opaque_fragment: update render/postfx.ts');
 THREE.ShaderChunk.opaque_fragment = OPAQUE_CHUNK + /* glsl */`
-#if defined( OPAQUE ) && ! defined( PREMULTIPLIED_ALPHA ) && ( defined( LAMBERT ) || defined( PHONG ) || defined( STANDARD ) || defined( TOON ) )
+#if defined( OPAQUE ) && ! defined( PREMULTIPLIED_ALPHA ) && ! defined( NO_AO_ALPHA ) && ( defined( LAMBERT ) || defined( PHONG ) || defined( STANDARD ) || defined( TOON ) )
 	gl_FragColor.a = 1.0 - clamp( dot( reflectedLight.directDiffuse + reflectedLight.directSpecular, vec3( 0.2126, 0.7152, 0.0722 ) )
 		/ max( dot( outgoingLight, vec3( 0.2126, 0.7152, 0.0722 ) ), 1e-6 ), 0.0, 1.0 );
 #endif
@@ -237,6 +239,9 @@ const AO_LOOKUP_GLSL = `
     return mix(1.0, sum / max(weight, 1e-6), ${AO_STRENGTH.toFixed(2)} * clamp(ambient, 0.0, 1.0));
   }
 `;
+
+/** The feedback intensities `draw` copies into the uniforms each frame (`hurt` into `hurtIn`). */
+const FX_KEYS = ['hurt', 'lowHp', 'flash', 'slow'] as const;
 
 type U<T> = THREE.IUniform<T>;
 /** Feedback uniforms, one set shared by the Low composite and the realistic final pass. */
@@ -983,6 +988,14 @@ export class Composite {
       const edges = this._smaa.edgesRT.texture;
       edges.format = THREE.RGFormat;
       edges.type = THREE.UnsignedByteType;
+      // Before the first compile: every fetch at level 0 (`levelZero`), and no depth state. None of SMAA's targets
+      // has a depth buffer (edges, weights, `_ldr2`, the canvas: `depth: false`), so the test always passed; off,
+      // three no longer toggles the depth state against the other post passes (all off) every frame.
+      const smaa = this._smaa;
+      for (const [material, fetches] of [[smaa.materialEdges, 7], [smaa.materialWeights, 10], [smaa.materialBlend, 6]] as const) {
+        material.fragmentShader = levelZero(material.fragmentShader, fetches);
+        material.depthTest = material.depthWrite = false;
+      }
     }
     if (!config.smaa && this._smaa) {
       this._smaa.dispose();
@@ -1095,7 +1108,7 @@ export class Composite {
   draw(renderer: THREE.WebGLRenderer, time: number, fx: PostFX, camera: THREE.PerspectiveCamera): void {
     const config = this.config;
     this.uniforms.time.value = time;
-    for (const key of ['hurt', 'lowHp', 'flash', 'slow'] as const) this.uniforms[key === 'hurt' ? 'hurtIn' : key].value = fx[key] ?? 0;
+    for (const key of FX_KEYS) this.uniforms[key === 'hurt' ? 'hurtIn' : key].value = fx[key] ?? 0;
     if (config.ao > 0) {
       const g = this._gtaoUniforms, projection = camera.projectionMatrix.elements;
       g.cameraNear.value = this.uniforms.cameraNear.value = camera.near;
@@ -1179,6 +1192,47 @@ export class Composite {
 function setRegion(region: RegionUniforms, width: number, height: number, source: THREE.WebGLRenderTarget): void {
   region.uvScale.value.set(width / source.width, height / source.height);
   region.uvMax.value.set((width - 0.5) / source.width, (height - 0.5) / source.height);
+}
+
+/**
+ * three r170's SMAA shaders fetch with `texture2D(t, uv, 0.0)` (a bias, a WebGL1 leftover: `texture` after three's
+ * GLSL 3 defines) or with an implicit LOD, also inside the search loops (divergent, with `break`) and after the edge
+ * pass's `discard`. None of the textures they read has mipmaps, and each has min filter == mag filter and anisotropy
+ * 1 (edges and weights targets: linear; the area texture: linear; the search texture: nearest; `_ldr`: linear), so
+ * every one of those fetches reads level 0 with the same filter whatever LOD it gets: `textureLod(t, uv, 0.0)` (GLSL
+ * ES 3.00, which three compiles every ShaderMaterial as) returns the same values without derivatives. Only the fetch
+ * calls change, no arithmetic. `fetches` is how many the shader has; a three update that changes them throws here.
+ */
+function levelZero(source: string, fetches: number): string {
+  const call = /\btexture2D\s*\(/g;
+  let out = '', from = 0, count = 0;
+  for (let match = call.exec(source); match !== null; match = call.exec(source)) {
+    // The call's arguments, split at its own top-level commas.
+    const args: string[] = [];
+    let depth = 0, start = call.lastIndex, end = start;
+    for (; end < source.length; end++) {
+      const c = source[end];
+      if (c === '(') depth++;
+      else if (c === ')' && depth-- === 0) break;
+      else if (c === ',' && depth === 0) {
+        args.push(source.slice(start, end).trim());
+        start = end + 1;
+      }
+    }
+    args.push(source.slice(start, end).trim());
+    if (end >= source.length || !(args.length === 2 || (args.length === 3 && args[2] === '0.0'))) {
+      throw new Error('three changed its SMAA shaders: update levelZero in render/postfx.ts');
+    }
+    out += `${source.slice(from, match.index)}textureLod( ${args[0]}, ${args[1]}, 0.0 )`;
+    from = call.lastIndex = end + 1;
+    count++;
+  }
+  out += source.slice(from);
+  // Every fetch counted, and no other texture call left (one three adds, or an unconverted form).
+  if (count !== fetches || /\btexture\w*\s*\(/.test(out.replace(/\btextureLod\( /g, ''))) {
+    throw new Error('three changed its SMAA shaders: update levelZero in render/postfx.ts');
+  }
+  return out;
 }
 
 /** Set or clear boolean defines; recompiles only when one actually changes. */
