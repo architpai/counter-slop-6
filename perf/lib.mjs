@@ -123,7 +123,8 @@ export const hold = (page, on) => page.evaluate(on => { window.__perf.hold = on;
  * Run `fn` under a Chrome trace of every process (browser CDP), and digest the scenario window (the page's
  * `perf:run:start`/`perf:run:end` marks): the game's rAF callbacks' thread CPU time (`tdur`: work, without the
  * waits), the main thread's waits on the GPU command buffer (it blocks when the ring is full: the GPU side is behind),
- * and per-frame CPU of the renderer main thread, the GPU process main thread and the display compositor.
+ * and per-frame CPU of the renderer main thread, the GPU process main thread and the display compositor, and (`gc`,
+ * only when the trace has any) V8's MinorGC/MajorGC on the main thread in the window: counts, total and longest ms.
  */
 export async function traced(browser, fn) {
   const cdp = await browser.newBrowserCDPSession();
@@ -166,6 +167,17 @@ function digestTrace(events) {
   const gpuPid = [...proc].find(([, n]) => n === 'GPU Process')?.[0];
   let wait = 0;
   for (const e of events) if (inWin(e) && `${e.pid}:${e.tid}` === main && e.name === 'CommandBufferProxyImpl::WaitForGetOffset') wait += e.dur;
+  // V8's MinorGC/MajorGC (devtools.timeline,v8) on the renderer main thread inside the window: X events, or B/E pairs.
+  const gcs = [], open = {};
+  for (const e of events) {
+    if ((e.name !== 'MinorGC' && e.name !== 'MajorGC') || `${e.pid}:${e.tid}` !== main) continue;
+    if (e.ph === 'X') gcs.push({ name: e.name, ts: e.ts, dur: e.dur ?? 0 });
+    else if (e.ph === 'B') open[e.name] = e.ts;
+    else if (e.ph === 'E' && open[e.name] !== undefined) { gcs.push({ name: e.name, ts: open[e.name], dur: e.ts - open[e.name] }); delete open[e.name]; }
+  }
+  const gcIn = gcs.filter(x => x.ts >= lo && x.ts + x.dur <= hi);
+  const gc = gcs.length === 0 ? null : { minor: gcIn.filter(x => x.name === 'MinorGC').length, major: gcIn.filter(x => x.name === 'MajorGC').length,
+    ms: +(gcIn.reduce((s, x) => s + x.dur, 0) / 1000).toFixed(3), maxMs: +(Math.max(0, ...gcIn.map(x => x.dur)) / 1000).toFixed(3) };
   return {
     frames: raf.length, windowMs: +((hi - lo) / 1000).toFixed(1),
     jsMs: stats(raf.map(e => (e.tdur ?? NaN) / 1000)), rafWallMs: stats(raf.map(e => e.dur / 1000)),
@@ -173,6 +185,7 @@ function digestTrace(events) {
     rendererMainCpuPerFrame: cpuOf(start.pid, 'CrRendererMain'),
     gpuMainCpuPerFrame: gpuPid === undefined ? null : cpuOf(gpuPid, 'CrGpuMain'),
     vizCpuPerFrame: gpuPid === undefined ? null : cpuOf(gpuPid, 'VizCompositorThread'),
+    ...(gc ? { gc } : {}),
   };
 }
 
@@ -316,8 +329,10 @@ export function pageInit(cfg) {
     const r = g.ctx.renderer, three = r.three, gl = three.getContext();
     three.info.autoReset = false;
     P.timer = makeTimer(gl);
+    const phases = loadPhases(g, r);
     const render = r.render;
     r.render = function (...args) {
+      if (P.load.readyMs === null) phases.before();
       P.renders++;
       three.info.reset();
       P.prof?.renderStart();
@@ -334,7 +349,67 @@ export function pageInit(cfg) {
         const load = P.load;
         if (load.firstPlayableMs === null) { if (g.gs.state === 'play' && load.enteredMs !== null) load.firstPlayableMs = now(); }
         else if (load.readyMs === null && P.ready()) load.readyMs = now();
+        if (!phases.done) phases.after();
       }
+    };
+  }
+
+  /**
+   * `load.phases`, read-only, from the first render until the one that sets readyMs (then nothing): per readiness flag
+   * (what `P.ready()` and `r.streaming` read), `on` = end of the first render that left it busy, `off` = end of the
+   * first render after which it stayed done, `frames` = renders that left it busy (null/0: never busy); `pace` = the
+   * upload back-off factor (`r._uploadPace`) at the first render and at each change, [ms, value]; `matchMs` = entry of
+   * the first render with the match live (boot's `setLive` runs just before it), `quietEndMs` = entry of the first
+   * live render past the quiet start; `window` = the frames from the match's start to ready: stepped-frame intervals
+   * (rAF to rAF, as the bench's `frameMs`) of the renders after the match's first, rAF frames the game skipped, and
+   * the renderer's wall time. Page times (performance.now()), as readyMs.
+   */
+  function loadPhases(g, r) {
+    const rd = x => (x === null ? null : +x.toFixed(1));
+    const ph = P.load.phases = { flags: {}, pace: [], matchMs: null, quietEndMs: null, renders: 0, deferredWarmupsAtReady: null,
+      window: { frames: 0, skipped: 0, maxMs: 0, over33: 0, over50: 0, renderMs: 0, renderMaxMs: 0 } };
+    const busy = new Map(), w = ph.window;
+    let t0 = 0, lastTs = null, skipped0 = null;
+    const flags = () => {
+      const realistic = g.quality.values.look === 'realistic';
+      return { sky: r.skyPending, skyLanding: r._skyLanding !== null, bakeLayout: r._bakeLayout !== null, bake: r.bakePending,
+        bakeFading: r.bakeFading, textures: r.texturesPending, fx: !!r.fx?.pending, weapons: !!r.weapons?.pending,
+        operators: !!r.operators?.pending, props: !!r.props?.pending, streaming: r.streaming, compiles: r._compiles.length > 0,
+        warmups: matchWarmups(r) > 0, programsCold: !r._programsWarm, effects: realistic && g.effects.realistic !== true,
+        weaponsReady: realistic && r.weapons.ready !== true };
+    };
+    return {
+      done: false,
+      before() {
+        t0 = now();
+        const m = r._match, inWin = ph.matchMs !== null;
+        if (!inWin && m.live) { ph.matchMs = rd(t0); skipped0 = P.skipped; }
+        if (ph.matchMs !== null && ph.quietEndMs === null && m.live && !m.quiet(t0)) ph.quietEndMs = rd(t0);
+        if (inWin && P.lastTs !== lastTs && P.lastStepTs !== null) {
+          const d = P.lastTs - P.lastStepTs;
+          w.frames++; w.maxMs = Math.max(w.maxMs, d);
+          if (d > 33.3) w.over33++;
+          if (d > 50) w.over50++;
+        }
+        lastTs = P.lastTs;
+      },
+      after() {
+        const t = now();
+        ph.renders++;
+        if (ph.matchMs !== null) { w.renderMs += t - t0; w.renderMaxMs = Math.max(w.renderMaxMs, t - t0); }
+        for (const [k, on] of Object.entries(flags())) {
+          const f = (ph.flags[k] ??= { on: null, off: null, frames: 0 });
+          if (on) { if (f.on === null) f.on = rd(t); f.frames++; f.off = null; busy.set(k, true); }
+          else if (busy.get(k)) { f.off = rd(t); busy.set(k, false); }
+        }
+        const pace = r._uploadPace;
+        if (ph.pace.length === 0 || ph.pace[ph.pace.length - 1][1] !== pace) ph.pace.push([rd(t), pace]);
+        if (P.load.readyMs === null) return;
+        this.done = true;
+        ph.deferredWarmupsAtReady = r._warmups.length - matchWarmups(r);
+        if (skipped0 !== null) w.skipped = P.skipped - skipped0;
+        w.maxMs = rd(w.maxMs); w.renderMs = rd(w.renderMs); w.renderMaxMs = rd(w.renderMaxMs);
+      },
     };
   }
 

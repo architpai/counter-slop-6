@@ -23,7 +23,12 @@ node perf/bench.mjs --label r3-shadows
 #   --no-trace      skip the traced replays (≈1/3 faster, no js/wait columns)
 #   --profile       separate run: CPU ms per sub-step and per-pass GPU cost by ablation (not comparable to bench runs)
 #   --build         run `npm run build` first
-# Writes perf/results/<label>.json and prints a markdown table.
+#   --scenarios fight   only these scenarios (comma list; default path,fight); warm-up, idle and calibration as always
+#   --load-only     per cell and repeat only the cold load + readiness wait (fresh browser, ≈1-10 s), then close:
+#                   load times and load.phases, no scenarios (e.g. --load-only --repeat 3)
+# Writes perf/results/<label>.json and prints a markdown table. Every cell's load.phases (both modes) has when each
+# readiness flag went busy/done, the upload back-off changes, the match start, the quiet start's end, and the load
+# window (match start to ready: frames, longest, >33/>50 ms, skipped). Traced scenarios add trace.gc (MinorGC/MajorGC).
 
 # 3. Compare against the baseline (median of its 3 runs) or the previous round, flagged against the noise floor
 #    (perf/noise.json). The suite aggregates (geomean per preset) print first: they carry the verdict.
@@ -67,6 +72,10 @@ git add -A src tests && git diff --cached --binary -- src tests > /tmp/round.pat
 perf/ab.sh x1 low,medium,high,ultra downtown,house,mexico,training 3 head headB /tmp/round.patch   # ≈1.5 h
 node perf/ab-agg.mjs x1   # paired geomean ratio vs head per preset (mean, median, p95)
 git stash pop
+# AB_ARGS adds bench.mjs arguments to every run (recorded in the manifest as `args`):
+AB_ARGS="--load-only --repeat 3" perf/ab.sh l1 low,high downtown,training 2 head headB /tmp/round.patch
+node perf/ab-load.mjs l1  # readyMs/firstPlayableMs geomean and paired ratio vs head, phase deltas, load-window frames
+AB_ARGS="--scenarios fight" perf/ab.sh f1 ...   # fight CPU only; ab-agg and ab-posfit read only the scenarios run
 ```
 
 ab.sh first checks every patch (`git apply --check`, paths only in src/ and tests/) and refuses a tag whose
@@ -98,6 +107,7 @@ targets, flags no **REG** elsewhere, and `quality.mjs compare baseline <label>` 
 | `noise.mjs` | noise floor from repeated runs → `noise.json` (per cell, and the suite aggregates) |
 | `table.mjs` | median table of several bench results |
 | `ab.sh`, `ab-agg.mjs` | per-cell interleaved A/B of patches vs HEAD, and its paired aggregate |
+| `ab-load.mjs` | load times of an A/B run (best with `AB_ARGS="--load-only --repeat N"`): paired ratios, phase deltas, load-window frames |
 | `ab-posfit.mjs` | diagnostic fit of an A/B run: variant effects corrected for run position |
 | `quality.mjs` | screenshot capture and SSIM gate |
 | `image.mjs` | PNG decode/encode (node:zlib), SSIM, diff heat maps |

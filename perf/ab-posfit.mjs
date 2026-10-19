@@ -4,6 +4,7 @@
 // result files it implies. Fails (exit 1) unless every variant x map x preset x round result exists and holds its own
 // cell; with --partial it drops every incomplete map x preset x round (all its variants) and lists them.
 // Positions come from ab.sh's rotation; the file mtimes are only a cross-check (a warning when they disagree).
+// `both` means the scenarios the run has (AB_ARGS="--scenarios fight": fight only); a --load-only run has none.
 import { existsSync, readFileSync, statSync } from 'node:fs';
 const die = msg => { console.error(`ab-posfit: ${msg}`); process.exit(1); };
 const argv = process.argv.slice(2), partial = argv.includes('--partial');
@@ -17,7 +18,11 @@ const dir = new URL('./results/', import.meta.url).pathname, mf = `${dir}scratch
 if (!existsSync(mf)) die(`no manifest ${mf}: not an ab.sh run`);
 const man = JSON.parse(readFileSync(mf)), N = man.variants.length;
 if (!man.variants.includes('head')) die(`manifest has no variant named 'head' (${man.variants.join(', ')})`);
-const scens = scen === 'both' ? ['path', 'fight'] : [scen];
+const args = man.args ?? [], si = args.indexOf('--scenarios');
+if (args.includes('--load-only')) die(`'${tag}' is a --load-only run: use node perf/ab-load.mjs ${tag}`);
+const ran = ['path', 'fight'].filter(s => si < 0 || args[si + 1]?.split(',').includes(s));
+if (scen !== 'both' && !ran.includes(scen)) die(`'${tag}' ran ${ran.join(', ')} only (AB_ARGS ${args.join(' ')})`);
+const scens = scen === 'both' ? ran : [scen];
 
 const obs = [], errs = [], skipped = [], warns = [];
 for (let r = 1; r <= man.rounds; r++) man.presets.forEach((preset, pi) => man.maps.forEach((map, mi) => {

@@ -3,9 +3,12 @@
 // resolution pinned to 1), the simulation on a fixed 1/60 s step so every run sees the same frames.
 //   node perf/bench.mjs [--label NAME] [--maps a,b] [--presets a,b] [--repeat N] [--frames N] [--quick] [--profile]
 //                       [--build] [--headed] [--no-trace] [--gpu-timer] [--raw] [--seed N] [--warmup N]
-//                       [--fight-warmup N] [--ablate-frames N]
+//                       [--fight-warmup N] [--ablate-frames N] [--scenarios path,fight] [--load-only]
 // --quick: downtown, low and ultra, 300 frames. --no-trace: skip the traced replays (about a third faster, no js/wait
 // numbers). --gpu-timer: record the raw query spans (gpuQueryMs) anyway. --raw: keep the per-frame arrays.
+// --scenarios fight: run only the named scenarios (the warm-up, idle and calibration as always). --load-only: per cell
+// and repeat only the cold load and readiness wait (the same code as a full cell) and the asserted facts, then close.
+// Every cell's load.phases holds the readiness flags' timeline (lib.mjs `loadPhases`).
 // Per cell: cold load (firstPlayableMs, readyMs), the facts the run depends on (asserted), a warm-up (a turn with
 // every fight kind in view, then fire held at the sky), an idle window (the uncapped rate, and the GPU timer's
 // check), then two scenarios:
@@ -49,11 +52,17 @@ const cfg = {
   raw: flag('raw'),
   build: flag('build'),
   quick,
+  /** The scenarios to run, in their fixed order (--scenarios). */
+  scenarios: ['path', 'fight'].filter(s => opt('scenarios', 'path,fight').split(',').includes(s)),
+  /** Only the cold load and readiness wait per cell and repeat (--load-only). */
+  loadOnly: flag('load-only'),
 };
 for (const m of cfg.maps) assert.ok(MAPS.includes(m), `unknown map ${m}`);
 for (const p of cfg.presets) assert.ok(PRESETS.includes(p), `unknown preset ${p}`);
+for (const s of opt('scenarios', 'path,fight').split(',')) assert.ok(['path', 'fight'].includes(s), `unknown scenario ${s}`);
+assert.ok(!(cfg.loadOnly && cfg.profile), '--load-only and --profile do not go together');
 
-const SCENARIOS = ['path', 'fight'];
+const SCENARIOS = cfg.scenarios;
 const RUN_TIMEOUT_MS = 30_000 + cfg.frames * 200;
 const TIMER_NOTE = 'EXT_disjoint_timer_query_webgl2 on ANGLE Metal returns non-zero, non-disjoint results that scale with GPU work, but '
   + 'they are spans of 2-2.5x the GPU-bound frame interval (e.g. Ultra downtown idle: query 8.4 ms at a 3.5 ms frame; one injected '
@@ -147,6 +156,9 @@ async function runCell(map, preset) {
     assert.deepEqual(facts.drawingBuffer, [VIEWPORT.width, VIEWPORT.height], 'drawing buffer');
     assert.equal(facts.level, map, 'map');
     assert.equal(facts.state, 'play', 'state');
+    const loadOut = { firstPlayableMs: r1(load.firstPlayableMs), readyMs: r1(load.readyMs), liveMs: r1(load.liveMs),
+      enteredMs: r1(load.enteredMs), phases: load.phases ?? null };
+    if (cfg.loadOnly) return { map, preset, chrome, load: loadOut, facts, errors: errors.slice(), cellMs: Date.now() - started };
     const route = await page.evaluate(() => window.__perf.buildPath());
     for (const w of route.warnings) errors.push({ type: 'harness', text: `path route: ${w}`, count: 1 });
     if (cfg.profile) await page.evaluate(() => window.__perf.installProfile());
@@ -186,8 +198,7 @@ async function runCell(map, preset) {
     ];
     timer.working = checks.every(([ok]) => ok);
     if (!timer.working) timer.reason = checks.filter(([ok]) => !ok).map(([, why]) => why).join('; ');
-    const out = { map, preset, chrome, load: { firstPlayableMs: r1(load.firstPlayableMs), readyMs: r1(load.readyMs), liveMs: r1(load.liveMs),
-      enteredMs: r1(load.enteredMs) }, facts, timer, route };
+    const out = { map, preset, chrome, load: loadOut, facts, timer, route };
     for (const name of SCENARIOS) {
       if (name === 'fight' && cfg.fightWarmup > 0) await run('fight', cfg.fightWarmup, cfg.seed + 1);
       // The traced replay first (the same frames: the run is deterministic), then the clean run for the headline numbers.
@@ -238,14 +249,38 @@ function table(cells) {
   for (const c of cells) {
     const m = c.median;
     if (!m) { rows.push(`| ${c.map} | ${c.preset} | FAILED | | | | | | | | | | | |`); continue; }
-    const p = m.path, f = m.fight;
-    const fr = s => `${r2(s.frameMs.med)} / ${r2(s.frameMs.p95)} / ${r2(s.frameMs.p99)}`;
-    const cpu = s => `${r2(s.cpuMs.med)}${s.trace?.jsMs ? ` (${r2(s.trace.jsMs.med)})` : ''}`;
-    const long = ['over33', 'over50', 'over2xMedian'].map(k => (p.longFrames[k] ?? 0) + (f.longFrames[k] ?? 0)).join('/');
-    rows.push(`| ${c.map} | ${c.preset} | ${fr(p)} | ${cpu(p)} | ${g(p, 'med') ?? '-'} | ${fr(f)} | ${cpu(f)} | ${g(f, 'med') ?? '-'} | `
-      + `${p.calls.med}/${f.calls.med} | ${r1(p.triangles.med / 1000)}/${r1(f.triangles.med / 1000)} | ${f.programs} | ${r1(m.load.readyMs)} | ${r1(Math.max(p.heapPeakMB, f.heapPeakMB))} | ${long} |`);
+    // A scenario left out (--scenarios) prints '-'.
+    const p = m.path ?? null, f = m.fight ?? null, both = [p, f].filter(Boolean);
+    const fr = s => (s ? `${r2(s.frameMs.med)} / ${r2(s.frameMs.p95)} / ${r2(s.frameMs.p99)}` : '-');
+    const cpu = s => (s ? `${r2(s.cpuMs.med)}${s.trace?.jsMs ? ` (${r2(s.trace.jsMs.med)})` : ''}` : '-');
+    const long = ['over33', 'over50', 'over2xMedian'].map(k => both.reduce((n, s) => n + (s.longFrames[k] ?? 0), 0)).join('/');
+    const pf = fn => `${p ? fn(p) : '-'}/${f ? fn(f) : '-'}`;
+    rows.push(`| ${c.map} | ${c.preset} | ${fr(p)} | ${cpu(p)} | ${(p && g(p, 'med')) ?? '-'} | ${fr(f)} | ${cpu(f)} | ${(f && g(f, 'med')) ?? '-'} | `
+      + `${pf(s => s.calls.med)} | ${pf(s => r1(s.triangles.med / 1000))} | ${(f ?? p)?.programs ?? '-'} | ${r1(m.load.readyMs)} | ${both.length ? r1(Math.max(...both.map(s => s.heapPeakMB))) : '-'} | ${long} |`);
   }
   return rows.join('\n');
+}
+
+/** --load-only: per cell the loads (first playable / ready, s) and the first load's phase timeline (ms, page time). */
+function loadTable(cells) {
+  const s = x => (x === null || x === undefined ? '-' : (x / 1000).toFixed(2));
+  const rows = ['| map | preset | first playable s (per load) | ready s (per load) | ready med s | match→ready max frame ms / >33 / >50 / skipped (per load) |',
+    '|---|---|---|---|---|---|'];
+  const lines = [];
+  for (const c of cells) {
+    const ok = c.runs.filter(r => !r.failed);
+    const w = r => r.load.phases?.window;
+    rows.push(`| ${c.map} | ${c.preset} | ${ok.map(r => s(r.load.firstPlayableMs)).join(', ')} | ${ok.map(r => s(r.load.readyMs)).join(', ')} | `
+      + `${s(median(ok.map(r => r.load.readyMs)))} | ${ok.map(r => (w(r) ? `${w(r).maxMs}/${w(r).over33}/${w(r).over50}/${w(r).skipped}` : '-')).join(', ')} |`
+      + (ok.length < c.runs.length ? ` ${c.runs.length - ok.length} FAILED` : ''));
+    const ph = ok[0]?.load.phases;
+    if (!ph) continue;
+    const offs = Object.entries(ph.flags).filter(([, f]) => f.on !== null).map(([k, f]) => [f.off ?? Infinity, `${k} ${f.on}-${f.off ?? 'never'}`]);
+    offs.push([ph.matchMs ?? 0, `MATCH ${ph.matchMs}`], [ph.quietEndMs ?? 0, `QUIET END ${ph.quietEndMs}`], [ok[0].load.readyMs, `READY ${ok[0].load.readyMs}`]);
+    lines.push(`- ${c.map} ${c.preset} (load 1, busy on-off ms): ${offs.sort((a, b) => a[0] - b[0]).map(([, t]) => t).join(', ')}; `
+      + `pace ${ph.pace.map(([t, v]) => `${v}@${t}`).join(' ')}; window ${JSON.stringify(ph.window)}`);
+  }
+  return `${rows.join('\n')}\n\n${lines.join('\n')}`;
 }
 
 function profileTable(cells) {
@@ -289,6 +324,8 @@ try {
       cell.runs.push(r);
       const s = x => (x ? `${r2(x.frameMs?.med)} ms (cpu ${r2(x.cpuMs?.med)}, gpu ${r2(x.gpuMs?.med) ?? '-'})` : '-');
       console.error(r.failed ? `FAIL ${cell.map} ${cell.preset}: ${r.failed.split('\n')[0]}`
+        : cfg.loadOnly ? `[${rep + 1}/${cfg.repeat}] ${cell.map} ${cell.preset}: first playable ${r.load.firstPlayableMs} ms, ready ${r.load.readyMs} ms, `
+          + `match ${r.load.phases?.matchMs}, window ${JSON.stringify(r.load.phases?.window)}, ${(r.cellMs / 1000).toFixed(1)} s`
         : `[${rep + 1}/${cfg.repeat}] ${cell.map} ${cell.preset}: ready ${r.load.readyMs} ms, idle ${r.facts.idle.fps} fps, path ${s(r.path)}, fight ${s(r.fight)}, `
           + `fight end ${JSON.stringify(r.fight?.summary)}, ${(r.cellMs / 1000).toFixed(1)} s`);
       for (const e of r.errors ?? []) console.error(`  ${e.type} x${e.count ?? 1}: ${e.text}`);
@@ -315,8 +352,9 @@ await mkdir(resolve(ROOT, 'perf/results'), { recursive: true });
 const file = resolve(ROOT, `perf/results/${cfg.label}.json`);
 await writeFile(file, JSON.stringify(result, null, 1));
 
-console.log(`\n## ${cfg.label} (${result.meta.git.sha?.slice(0, 7)}${result.meta.git.dirty ? '+dirty' : ''}, ${result.meta.chrome}, ${cfg.frames} frames, repeat ${cfg.repeat}${cfg.profile ? ', PROFILE' : ''})\n`);
-console.log(cfg.profile ? profileTable(cells) : table(cells));
+console.log(`\n## ${cfg.label} (${result.meta.git.sha?.slice(0, 7)}${result.meta.git.dirty ? '+dirty' : ''}, ${result.meta.chrome}, `
+  + `${cfg.loadOnly ? 'LOAD ONLY' : `${cfg.frames} frames`}, repeat ${cfg.repeat}${cfg.profile ? ', PROFILE' : ''})\n`);
+console.log(cfg.profile ? profileTable(cells) : cfg.loadOnly ? loadTable(cells) : table(cells));
 const errs = result.meta.errors;
 console.log(`\n${errs.length ? `errors (${errs.length}):\n${errs.map(e => `- ${e.cell} ${e.type}: ${e.text}`).join('\n')}` : 'no page errors'}`);
 console.log(`\n${file} (${(result.meta.durationMs / 1000).toFixed(0)} s)`);
