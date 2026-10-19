@@ -528,8 +528,9 @@ one Opus agent; review: GPT-6.1-Sol (below).
 **Machine state** (every reading: `perf/results/r4-power.log`, written by the new `perf/powered.sh`). The round
 started at 7-8 % on a 94 W charger; no bench ran until AC + 60 % (09:49). r4-pre, c1, n1, t1, c2, f1, p1 and f2 ran
 on AC at 60-100 %, no thermal or performance warning. The laptop then left AC at 18:36 (f3 voided by the watchdog).
-Back on AC at 19:25 (98 %), the battery drained to 46 % during f3b while on AC (the charger no longer kept up; the
-machine slowed ~23 % from round 1 to round 4 of f3b, same for every variant), and the first r4-post was voided at
+Back on AC by 19:25 (from the gate's output; the first logged reading is f3b's start stamp, 19:28, 98 %), the
+battery drained to 46 % during f3b while on AC (the charger no longer kept up; the machine slowed ~23 % from round 1
+to round 4 of f3b, same for every variant), and the first r4-post was voided at
 39 % (20:44). Desktop Chrome was open (idle) all day, as in earlier rounds.
 
 **Round baseline.** `r4-pre` (traced full matrix of `2c75479`, same `src/` as `r2-post`, charged machine, 565 s):
@@ -547,7 +548,7 @@ plus a healthier machine; `r2-pre`/`r3-pre` were throttled). This is the clean r
 | f1 headB/head (mean / med / p95) | -0.3 / -1.6 / 0.0 % | +0.1 / +0.1 / -0.3 % | +0.5 / +0.7 / +0.8 % | +1.7 / +1.9 / +3.0 % | +0.5 / +0.3 / +0.9 % |
 | **f2 repeat** (set vs pre-round tree, raw mean) | -0.4 % | -2.8 % | -1.8 % | -1.3 % | -1.6 % |
 | f2 vs the mean of both set arms | -0.6 % | -4.0 % | -2.7 % | -1.3 % | |
-| **f3b: what the exact part adds beyond g** (two g-only arms vs the set, mean) | | +1.9 / +3.0 % | +1.7 / +2.1 % | +1.8 / +2.2 % | +1.8 / +2.4 % |
+| **f3b: what the exact part adds beyond g** (g-only / g-onlyB vs the set, mean, 4 rounds aggregate) | | +1.9 / +3.0 % | +1.7 / +2.1 % | +1.8 / +2.2 % | +1.8 / +2.4 % |
 | f3b headB/head | | +0.7 % | 0.0 % | -0.1 % | +0.2 % |
 | js, fight cells (t1, traced, training + mexico): `a` | +5.0 % * | -4.3 % | -4.7 % | -5.4 % | -2.4 % |
 | js, fight cells (t1): `stat` | +0.2 % * | +1.1 % | -2.4 % | -4.0 % | -1.3 % |
@@ -556,12 +557,16 @@ plus a healthier machine; `r2-pre`/`r3-pre` were throttled). This is the clean r
 
 \* `a` and `stat` change nothing on Low's path except `stat`'s figure matrices; Low js in t1 moves with the control.
 
-**Verdict.** The set is kept on Medium, High and Ultra: f1 -3.3 / -2.8 / -3.0 % frame mean (past the ~2 % paired
-gate, headB ≤ 1.7 %), and the repeat f2 reads the same direction (-2.8 / -1.8 / -1.3 % raw; its control moved
--2.6 % on medium and -2.0 % on high, with a strong run-position ramp on medium, so f2 alone is weaker). The review
-asked whether the exact part earns its place next to `g` (P2): f3b, two g-only arms against two arms of the set,
-reads +1.8 to +3.0 % slower for g-only on every realistic preset in all four rounds (headB ≤ 0.7 %), which repeats
-f1's `bundle` arm (-2.6 / -1.7 / -1.5 % alone vs HEAD). g alone (c2): -2.5 / -3.6 / -2.3 %, repeating Round 3's s2.
+**Verdict.** The set is kept on Medium, High and Ultra, **provisionally** (Ultra most of all) until another balanced
+set-vs-pre-round-tree run on a charged machine passes (lead 0). f1 passes: -3.3 / -2.8 / -3.0 % frame mean (past
+the ~2 % paired gate, headB ≤ 1.7 %). The repeat f2 is weaker: the same direction (-2.8 / -1.8 / -1.3 % raw), but
+its control moved -2.6 % on medium and -2.0 % on high (strong run-position ramp on medium), and Ultra is only
+-1.3 % raw and against the mean of both set arms. The review asked whether the exact part earns its place next to
+`g` (P2): f3b, two g-only arms against two arms of the set, reads +1.7 to +3.0 % slower for g-only on every
+realistic preset in the aggregate of both arms (fitted high g-only +1.7 %; headB ≤ 0.7 %); per round mostly, not in
+every cell group (medium round 1: g-only 2.381 vs set 2.395 ms, about -0.6 %). It agrees with f1's `bundle` arm
+(-2.6 / -1.7 / -1.5 % alone vs HEAD), but it is a different comparison (exact part on top of g, on a draining
+machine), not a repeat of the set vs the pre-round tree. g alone (c2): -2.5 / -3.6 / -2.3 %, repeating Round 3's s2.
 **Low: no gain proven** (f1 mean -0.7 %, median -2.2 % with headB -1.6 %, p95 +0.4 %); this round has no Low win.
 The individual exact parts (`smaa`, `main`, `stat`, `a`, `d`) are not proven one by one (each ≤ ~2 %, see below);
 they are kept as one measured set. Calls drop in fights where operators cast (`a`: training ultra 367 → 308, high
@@ -595,38 +600,61 @@ The exact part alone (`bundle`, all minus g) gave 56/56 byte-identical vs r2; ea
 
 | probe (frame mean vs HEAD, 5 rounds, balanced) | low | high | ultra |
 |---|---|---|---|
-| pK: shadow maps drawn once, never redrawn (stale, still sampled) = the whole shadow pass | -3.9 % | -10.0 % (-0.28 ms) | -6.5 % (-0.26 ms) |
+| pK: shadow maps drawn once, never redrawn (stale, still sampled) = the whole shadow pass | -3.9 % | -10.0 % (-0.28 ms) | -6.5 % (-0.25 ms) |
 | pE: every map bound, cleared and stored, no caster drawn | -2.9 % | -4.8 % | -0.3 % (path +2.9, fight -3.5) |
 | pS: every shadow lookup returns 1.0 (sampling cost, on top of g) | -0.7 % | -2.4 % | -0.3 % |
 | pN: GTAO with coherent taps (sliceNoise = stepNoise = 0) | +0.4 % | +1.7 % | +1.6 % |
 | fight cpu: pE / pK | -5.9 / -5.6 % | -9.6 / -14.6 % | -7.6 / -12.1 % |
 
-Reading: on Ultra the shadow cost is mostly **bind + clear + store of the three maps** (pE - pK ≈ 6 %, ~0.22 ms),
-not casters (≈ 0 on the path); on High half and half (~0.14 ms each); caster submission costs CPU in fights
-(pE fight cpu -6 to -10 %). Sampling ideas (hardware compare, fewer taps) are capped at ~2.4 % on High and ~0 on
-Ultra after g. GTAO is not cache-bound: the deinterleaved GTAO idea is dead.
+Reading (observations from these probes, not isolated causes or hard limits; pE vs pK also changes shadow setup and
+map contents, and so the image; pS changes compilation and image-dependent work): on Ultra most of the shadow pass's
+frame cost remained when the maps were bound, cleared and stored without casters (pE ≈ HEAD, pK -6.5 %, pE - pK
+~0.23 ms), and dropping the casters gave ≈ 0 on the path; this suggests the per-map bind/clear/store is the larger
+part there, but the probes do not isolate it. On High the two parts read about half and half (~0.14 ms each).
+Dropping the casters cut fight cpu (pE -6 to -10 %), so caster submission costs CPU in fights. pS gained ≤ 2.4 %
+(High) and ~0 on Ultra: little room is suggested for sampling-only ideas (hardware compare, fewer taps) after g, not a
+strict cap. pN gave no gain (+1.7 % high, +1.6 % ultra, +1.3 % all); the probe also changes sample locations and
+compiled code, so whether GTAO is cache-bound stays open; deinterleaving is unproven, not ruled out.
 
 ### Harness (kept)
 
 `perf/ab.sh` `AB_TRACE=1` keeps the traced replays (js per frame; `ab-agg` adds js rows, all and fight only;
 `ab-posfit` takes `js`). `perf/powered.sh logfile name command...` logs `pmset -g batt`/`therm` before and after,
-checks every 60 s, stops and voids the run off AC or under `PERF_MIN_BATT` (40) %, checks once more at the end
-(review), and KILLs a child that ignores TERM after 30 s (the first r4-post void hung on `wait` until the tool limit).
+checks every 60 s, stops and voids the run off AC or under `PERF_MIN_BATT` (40) %, and checks once more at the end
+(review). The stop covers the whole process tree (ab.sh → node bench.mjs → chromium ..., listed by `pgrep -P`
+recursion and snapshotted before the TERM): TERM to all at once, which lets ab.sh restore src/, tests/ and out/; it
+waits up to 30 s for the root and every snapshotted or newly started descendant, then KILLs each survivor (also ones
+re-parented after the root died) and logs any pid still alive. KILL skips ab.sh's cleanup, so it then writes
+"== name KILLED: recovery needed" with the manual steps (rm the `out` link, `git checkout`/`git clean` src/ tests/,
+move `$AB_WORK/out-orig` back, delete the cut-short cell's JSON) to the log and stderr; it does not recover by itself.
+(The first r4-post void hung on `wait` until the tool limit; review 2 found the first KILL fix reached direct
+children only.) Tested with a fake `pmset`: a TERM-ignoring root with children, and a root that dies on TERM with a
+TERM-ignoring re-parented grandchild, both exit 3 in ~95 s with no survivor.
 
 ### Review (GPT-6.1-Sol, high effort)
 
 Round 1 (`perf-loop-r4-review-1`, on `2c75479..cad1329`): no P1, no game-code bug found (program keys for
 `ORM_PACKED`/`UV_SHARED`/`NO_AO_ALPHA`, `GRID_VIEW_MODEL`/`BACKDROP` defines, AO relink, frozen nodes vs players,
 shields, debris, weapon and LOD swaps, `shadowSwap` restore in `finally`, every SMAA input's filters, `fixUv` writers
-all checked). Three P2 findings, all addressed: (1) `powered.sh` checked the power only while the command ran → it
+all checked). Three P2 findings: (1) `powered.sh` checked the power only while the command ran → it
 checks once more after the end (`1cee56d`); (2) Low has no proven gain → stated above, not claimed; (3) the full set
-needed an independent repeat, and the exact part had not been shown to add to g → f2 (repeat vs the pre-round tree)
-and f3b (set vs g-only, two arms each; f3 was voided by the power watchdog and rerun).
-Round 2 (`perf-loop-r4-review-2`): pending.
+needed an independent repeat, and the exact part had not been shown to add to g → addressed in part (f2, repeat vs
+the pre-round tree; f3b, set vs g-only, two arms each; f3 was voided by the power watchdog and rerun); a further
+set-vs-base repeat is open (lead 0).
+Round 2 (`perf-loop-r4-review-2`): no P1. P2: (1) the watchdog's stop reached direct children only, and its KILL
+skipped ab.sh's cleanup without a word → whole process tree, KILL leaves a recovery note (Harness, above); (2) the
+repeat is not fully closed (f2 weaker, f3b a different comparison) → verdict provisional, lead 0; (3) the probe
+reading stated causes and caps the probes do not isolate → reworded as observations. P3: ultra pK was -0.25 ms,
+not -0.26 (fixed); the 19:25 back-on-AC time is from the gate's output, not from r4-power.log (first logged
+reading 19:28) → Machine state reworded.
 
 ### Hot spot leads (refreshed)
 
-1. **Shadow-map bind/clear/store on Ultra** (~0.22 ms, pE vs pK) and High (~0.14 ms): the colour store is sampled,
+0. **First next step: repeat the kept set vs the pre-round tree** (balanced, ≥ 4 rounds, with a HEAD/HEAD control,
+   on a charged machine on AC, under `perf/powered.sh`). The verdict above stays provisional (Ultra most) until it
+   passes.
+1. **Shadow-map bind/clear/store on Ultra** (pE vs pK ~0.23 ms; the probes suggest it, they do not isolate it) and
+   High (~0.14 ms): the colour store is sampled,
    so the exact lever left is the depth store (Round 1's A8 was inside noise: retry alone on Ultra with `ab.sh`,
    rounds = variants, now that the ceiling is known), or fewer bytes per map (not exact: depth-only/D16/R32F).
 2. **Shadow caster submission in fights** (pE fight cpu -6 to -10 %): CPU of the per-cascade scene walk and draws;
@@ -701,8 +729,9 @@ Format: round, idea, where, result numbers vs the noise floor, why rejected.
   centre once as the (0,0) tap and drops a dead `weight > 0` test). Exact in exact arithmetic, but the shader text
   change moved 401 px by 1-3/255 in 25 high/ultra images (2-81 px each) (Metal fast math; Medium, which has no AO, stayed exact).
   Gain estimated ≤ 0.02 ms; not measured. Rejected for pixels; patch `perf/patches/r4-gtao-trim.patch`.
-- **r4, deinterleaved GTAO** (4x4 depth atlas for coherent taps). Probe pN (coherent noise, same taps) was 1.3-1.7 %
-  *slower* on high/ultra: GTAO is not cache-bound. Not built.
+- **r4, deinterleaved GTAO** (4x4 depth atlas for coherent taps). Not built. The coherent-noise probe pN gave no gain
+  (+1.7 % high, +1.6 % ultra frame mean), but it also changes sample locations and compiled code, so it does not show
+  whether GTAO is cache-bound: unproven, not ruled out.
 - **r4, one main-pass draw per flat Low figure** (merged parts, per-slot matrices). Not exact by analysis: three sorts
   a figure's parts front to back every frame and the part drawn last wins depth ties at the joints; a merged draw
   has a fixed order. r170 also has no per-object uniform path for `MeshStandardMaterial` arrays (a material switch

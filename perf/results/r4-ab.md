@@ -404,7 +404,7 @@ ultra   base=0.6%  gonly=1.5%  headB=-0.5%  | pos1..: 0.4 -0.8 -2.2
 ```
 
 ## f3: medium/high/ultra, head(all)/gonly/headB(all)/gonlyB, 4 rounds planned, 17:54-18:36: VOID
-The watchdog stopped it at 18:36:33 after 2 complete rounds: the laptop left AC (battery 100 %, discharging; r4-power.log). Not used. Rerun as f3b after the machine was back on AC (19:25).
+The watchdog stopped it at 18:36:33 after 2 complete rounds: the laptop left AC (battery 100 %, discharging; r4-power.log). Not used. Rerun as f3b after the machine was back on AC (by 19:25 per the gate output; first logged reading 19:28).
 
 ## f3b (rerun of f3, on 1cee56d): medium/high/ultra, head(all)/gonly/headB(all)/gonlyB, 4 rounds (balanced), 19:28-20:35
 On AC, but the battery drained 98 → 46 % during the run (charger not keeping up); the suite frame mean rose round by round (3.20, 3.62, 3.82, 3.95 ms for head), alike for every variant. Ratios vs the kept set (head): gonly > 0 means g alone is slower.
