@@ -268,9 +268,10 @@ export class Renderer {
   _fogFar = FOG_FAR;
   _quality: Readonly<GfxValues> = PRESET_VALUES.high;
   /**
-   * High and Ultra (`fightCpuPaths`, set by `applyQuality`): each shadow redraw hides the rig and the worn operators'
+   * Ultra only (`fightCpuPaths`, set by `applyQuality`): each shadow redraw hides the rig and the worn operators'
    * caster-free subtrees (`OperatorAssets.shadowSwap`), and the post chain runs in one render (`Composite._oneRender`).
-   * Off on Low, Medium and custom values: the shadow pass walks every shown node, and each post pass renders itself.
+   * Off on Low, Medium, High and custom values: the shadow pass walks every shown node, and each post pass renders
+   * itself.
    */
   _fightCpu = false;
   /** Dynamic resolution's share of the render-scaled target, per axis. */
@@ -515,10 +516,10 @@ export class Renderer {
         if (this._ownMaterials.length > count) this._ownMaterials.length = this._ownGroups.length = count;
       }
     };
-    // High and Ultra (`_fightCpu`, read at each redraw): the rig casts nothing (`_prepareRigMesh`), so it is hidden
+    // Ultra only (`_fightCpu`, read at each redraw): the rig casts nothing (`_prepareRigMesh`), so it is hidden
     // for the pass and the cascades' walks skip it (three has listed the main pass's draws before its shadow pass, so
-    // that pass sees it as it was), and the worn operators' caster-free subtrees are hidden too. Low and Medium walk
-    // every shown node, as before.
+    // that pass sees it as it was), and the worn operators' caster-free subtrees are hidden too. Low, Medium and
+    // High walk every shown node, as before.
     shadowMap.render = (lights, scene, camera) => {
       if (!shadowMap.needsUpdate) return drawShadows(lights, scene, camera);
       const walk = this._fightCpu, rig = this.rig.visible;

@@ -397,14 +397,14 @@ export class Composite {
   readonly _sceneRegion = regionUniforms();
   readonly _clear = new THREE.Color();
   /**
-   * With `_oneRender` (High and Ultra: render/index.ts `_fightCpu`, set at each quality change and read at each
+   * With `_oneRender` (Ultra only: render/index.ts `_fightCpu`, set at each quality change and read at each
    * `draw`), the chain runs inside one `render` of `scene` (`_afterChain`, its `onAfterRender` for that render only),
    * each pass a `renderBufferDirect` there: the draw a render of the lone triangle made, without that render's list,
    * sort, light and shadow steps. Set by `draw` for that render (`_chainCamera`) and while its passes run
    * (`_inChain`); `_pass` outside it (the perf harness's calibration pass) renders as before. For the outer render
    * the triangle wears `_final` switched off (`visible`): not drawn, but its geometry is still uploaded. Not a
    * material of its own: three's constructor draws a uuid from Math.random, which would shift every random draw after
-   * it (the perf harness seeds it at boot). Off (Low, Medium, custom values), each pass renders itself, as before.
+   * it (the perf harness seeds it at boot). Off (Low, Medium, High, custom values), each pass renders itself, as before.
    */
   _oneRender = false;
   _chainCamera: THREE.PerspectiveCamera | null = null;
@@ -1154,7 +1154,7 @@ export class Composite {
     this._toneUniforms.shaftColor.value.copy(this._sunColor).multiplyScalar(strength * SHAFT_GAIN);
     // The first pass's target, bound before the outer render: that render then resolves nothing (the MSAA scene
     // target is still bound after the scene pass) and sets the clear colour as the pass's own render did. Without
-    // `_oneRender` (Low, Medium), Low's lone pass to the canvas, and a renderer that clears in every render
+    // `_oneRender` (Low, Medium, High), Low's lone pass to the canvas, and a renderer that clears in every render
     // (autoClear), each pass renders itself as before. The hook is on the scene for the one render only.
     const first = config.ao > 0 ? this._aoRaw : config.bloom ? this._bloom[0]! : strength > 0 ? this._shafts[0]
       : config.look === 'realistic' || smaa ? this._ldr : null;

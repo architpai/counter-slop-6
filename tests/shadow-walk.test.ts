@@ -93,7 +93,7 @@ function walk(node: Object3D, layers: THREE.Layers, shown: (node: Object3D) => b
 }
 
 /**
- * Around `shadowSwap` without the walk (Low, Medium): nothing hidden. With it (High, Ultra): the same casters in the same order with the hidden subtrees as without, none of them under a
+ * Around `shadowSwap` without the walk (Low, Medium, High): nothing hidden. With it (Ultra): the same casters in the same order with the hidden subtrees as without, none of them under a
  * hidden node, and every node shown or not as before once it is over. Returns the nodes hidden and the visits saved.
  */
 function check(assets: OperatorAssets, scene: Object3D, camera: THREE.Camera, what: string): { hidden: Object3D[]; saved: number } {
@@ -101,7 +101,7 @@ function check(assets: OperatorAssets, scene: Object3D, camera: THREE.Camera, wh
   scene.traverse(node => before.set(node, node.visible));
   const reference = { casters: [] as Object3D[], visits: 0 }, drawn = { casters: [] as Object3D[], visits: 0 };
   const hidden: Object3D[] = [];
-  // Low and Medium (no walk): the merged draws only, every node shown as it was.
+  // Low, Medium and High (no walk): the merged draws only, every node shown as it was.
   assets.shadowSwap(true, false);
   try {
     scene.traverse(node => expect(node.visible, `${what}, no walk: ${node.name}`).toBe(before.get(node)));
@@ -109,7 +109,7 @@ function check(assets: OperatorAssets, scene: Object3D, camera: THREE.Camera, wh
     assets.shadowSwap(false);
   }
   scene.traverse(node => expect(node.visible, `${what}, no walk: ${node.name} after`).toBe(before.get(node)));
-  // High and Ultra.
+  // Ultra.
   assets.shadowSwap(true, true);
   try {
     walk(scene, camera.layers, node => before.get(node)!, reference);
@@ -265,7 +265,7 @@ test('the merged and walked shadow draws give the same shadow map as the full wa
   renderer.shadowMap.render = (lights, at, from) => {
     const before = renderer.info.render.calls, shown = new Map<Object3D, boolean>();
     at.traverse(node => shown.set(node, node.visible));
-    // Medium and Low: the merged draws without the walk, nothing hidden.
+    // Low, Medium and High: the merged draws without the walk, nothing hidden.
     assets.shadowSwap(true, walked !== 'medium');
     if (walked === 'medium') at.traverse(node => expect(node.visible).toBe(shown.get(node)));
     // The full walk: the merged draws, every node shown as it was.
@@ -366,10 +366,11 @@ test('nothing in the view-model rig casts, and the shadow pass walks past it whi
   probe.onBeforeRender = (...args) => { drawn++; rigDepth.apply(probe, args); };
   const fx = { hurt: 0, flash: 0, slow: 0, lowHp: 0 };
   const swaps = vi.spyOn(renderer.operators, 'shadowSwap');
-  // High and Ultra hide the rig for each shadow redraw; Low and Medium walk it as before, also after a change mid-session.
-  for (const preset of ['high', 'medium', 'low', 'high'] as PresetName[]) {
+  // Ultra hides the rig for each shadow redraw; Low, Medium and High walk it as before (nothing hidden), also after a
+  // change mid-session (Ultra to High, and back to Ultra): no state stays from the preset before.
+  for (const preset of ['ultra', 'high', 'medium', 'low', 'ultra'] as PresetName[]) {
     renderer.applyQuality(PRESET_VALUES[preset]);
-    const walk = preset === 'high' || preset === 'ultra';
+    const walk = preset === 'ultra';
     expect(renderer._fightCpu, preset).toBe(walk);
     // Past the first frames' compiles and warm-up draws (which show the whole rig once).
     for (let i = 0; i < 100 && (i < 2 || renderer._compiles.length + renderer._warmups.length > 0); i++) {
