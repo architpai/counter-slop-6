@@ -776,9 +776,9 @@ alone (dsd and dr were captured together), and the Result table's low1 "-1.4 %" 
    ~1900 matrix products per frame; exact only with a flag cleared on every other writer: `setWeapon`, `dropShield`,
    `lend`, death). Est. 0.05-0.15 ms js on Low training; needs a bit-equal matrix test.
 
-## Round 6 — fight CPU bundle, load time (High/Ultra fight CPU and load-time trims kept)
+## Round 6 — fight CPU bundle, load time (Ultra fight CPU and exact load-time trims kept)
 
-2026-10-20, on `92d6dd3` → harness `8be1c38`, game change `52c96ba`, preset gate `2e63462` (review 1). Survey: three read-only Opus agents (load
+2026-10-20, on `92d6dd3` → harness `8be1c38`, game change `52c96ba`, preset gate `2e63462` (review 1), narrowed to Ultra `abca498` (review 2). Survey: three read-only Opus agents (load
 pipeline, shader programs, memory/GC); implementation: four Opus agents (`bundle` and `matrix` and `load` in their own
 worktrees, the harness in the main checkout on `perf/` only); review: GPT-6.1-Sol (below). Time budget ~4-5 h, at most
 3 A/Bs (2 used), no post-round bench (Round 7's pre-bench is the next reference).
@@ -848,21 +848,26 @@ every variant (bundle mexico +10 %, its round 1 being the outlier: 3.29 ms again
   on realistic presets. First playable is past ~2 % on medium (-2.3 %, narrowly), high (-5.8 %) and ultra (-7.1 %)
   with headB within ±0.6 %. Ready time on the realistic presets gains only 1.1-1.4 % (-75 to -125 ms of 7-9 s):
   consistent in sign, but under the ~2 % paired frame-time gate (no ready-time gate is established). **Low is
-  provisional**: -4.4 % ready / -2.7 % first playable, but its headB moved +2.5 %, which by `NOISE.md` asks for
-  another run; it was not run (the battery was at 34 % on the 20 W adapter and the time budget was spent). The three
-  items are preset-independent code (renderer setup, boot environment, props), so they are not gated. Load-window
+  unvalidated, and no Low gain is counted**: -4.4 % ready / -2.7 % first playable (11/12 cells faster), but its headB
+  moved +2.5 / +2.5 %, which by `NOISE.md` asks for another run; it was not run (the battery was at 34 % on the 20 W
+  adapter and the time budget was spent). **Explicit exception to the one-A/B rule**: `load` stays on Low too, because
+  its three items are preset-independent boot/streaming code (renderer setup, the boot environment, the props
+  merge's placement) and are exact; splitting them by preset would add preset logic to boot for no pixel or
+  gameplay reason. The repeat is lead 0. Load-window
   long frames about the same (median max frame medium 106 vs 119 ms, ultra 174 vs 165 ms, headB 119 / 169; > 33 ms
   frames 2.8-4.1 vs 3.0-4.1 per load).
-- **`cpu` (walk + D) is kept on High and Ultra only** (`fightCpuPaths` in `quality.ts`, commit `2e63462`). Ultra
-  fight frame mean -2.8 % raw / -2.9 % fitted against headB ≈ 0, js -4.9 %; High is the weaker of the two: -2.9 % raw
-  (headB +0.7 %), but fitted -1.6 % with a fitted headB of +2.6 %; js -7.6 / -8.6 % fitted (headB -2.8 / -3.1 %). The
+- **`cpu` (walk + D) is kept on Ultra only** (`fightCpuPaths` in `quality.ts`; `2e63462` gated it to High/Ultra,
+  review 2 narrowed it to Ultra). Ultra
+  fight frame mean -2.8 % raw / -2.9 % fitted against headB ≈ 0, js -4.9 %. **High: not validated, so rejected for now** (review 2): -2.9 % raw
+  (headB +0.7 %), but fitted -1.6 % with a fitted headB of +2.6 %; js -7.6 / -8.6 % fitted (headB -2.8 / -3.1 %): the
+  control moved past ~2 %, which asks for another run, and none was possible (lead 0). The
   gain sits in the training fight (the target), faster in both rounds on both presets (high 4.98/5.01 → 4.70/4.71 ms,
   ultra 5.22/5.63 → 5.08/5.23); mexico ±1 %. One A/B of 2 rounds on 2 maps, fights only: the size is approximate,
   and the path and the other maps were not re-measured (earlier evidence for the parts: r5R walk path+fight high
   -0.4 %, ultra -1.8 %; Round 2 D path cpu -1.1 %). The measured `bundle` also held low1, whose warm-up probe adds one
   program on every preset (e.g. training high 53 → 54); the kept set has no probe (programs as HEAD).
   **Medium and Low: rejected** (review 1): Medium's arm was void and Low showed no gain, so under the one-A/B rule
-  the gate keeps both on the pre-Round-6 paths (per-pass post renders, no subtree/rig hiding). Only the shadow
+  the gate keeps them (and now High) on the pre-Round-6 paths (per-pass post renders, no subtree/rig hiding). Only the shadow
   wrapper's array reuse (allocation only, same behaviour) runs on every preset.
 - **`low1` rejected**: in `bundle` it is the only part that changes Low's shadow draws (the rig hiding and the array
   reuse also ran there): Low +0.6 % mean, js -0.4 % (headB +0.9 %) despite training calls 470 → 431. Second time
@@ -879,8 +884,8 @@ strictly comparable.
 
 | change | where | evidence | pixels |
 |---|---|---|---|
-| **walk** (`r5-walk`): during each shadow redraw hide the caster-free subtrees of worn operators (pivots, armature bones; guards for lent pieces, gibs, socket casters) and the view-model rig; same casters in the same order. **High/Ultra only** | `operators.ts` `bare()`, `render/index.ts` shadow wrapper, `tests/shadow-walk.test.ts` | with D: r6cpu high/ultra above | exact |
-| **D** (Round 2's post chain in one `render()`, ported onto Round 4's `postfx.ts`/`drawCasters`): one render of the post scene, the passes run from `onAfterRender` via `renderBufferDirect` with three's per-pass state reset; Low and the harness's out-of-chain `_pass` keep the old path; **High/Ultra only** (Low/Medium render each pass as before); shadow-wrapper arrays reused (all presets) | `postfx.ts`, `render/index.ts`, `tests/render-chain.test.ts` (canvas bytes, calls, programs vs one render per pass) | as above | exact |
+| **walk** (`r5-walk`): during each shadow redraw hide the caster-free subtrees of worn operators (pivots, armature bones; guards for lent pieces, gibs, socket casters) and the view-model rig; same casters in the same order. **Ultra only** | `operators.ts` `bare()`, `render/index.ts` shadow wrapper, `tests/shadow-walk.test.ts` | with D: r6cpu high/ultra above | exact |
+| **D** (Round 2's post chain in one `render()`, ported onto Round 4's `postfx.ts`/`drawCasters`): one render of the post scene, the passes run from `onAfterRender` via `renderBufferDirect` with three's per-pass state reset; Low and the harness's out-of-chain `_pass` keep the old path; **Ultra only** (Low/Medium/High render each pass as before); shadow-wrapper arrays reused (all presets) | `postfx.ts`, `render/index.ts`, `tests/render-chain.test.ts` (canvas bytes, calls, programs vs one render per pass) | as above | exact |
 | **load 1**: `renderer.debug.checkShaderErrors = false` in production builds only (`process.env.NODE_ENV`, inlined by Next); dev and vitest keep it (a test asserts it): no blocking link-status / info-log queries at each program's first use | `render/index.ts` | r6ld | exact (three only reads logs; programs, uniforms unchanged); a failing shader is no longer reported in production |
 | **load 2**: the props merge's placement work (`DressingMerge.place()`, typed arrays only, no three object, no `Math.random`) runs every frame after the quiet start once the kit is in, not after every other stream; geometry creation and `#build` stay in the pump at their old point | `props.ts`, `tests/dressing.test.ts` (0 random draws and no objects in premerge; same uuids, ids, order; byte-identical arrays) | r6ld: props/ready -25 to -60 ms on realistic | exact |
 | **load 3**: the boot-time room environment compiles its programs (`three.compile`) before its first draw so links overlap | `render/index.ts`, `tests/render-chain.test.ts` (same program count/keys, identical texels) | r6ld: liveMs/first playable -9 to -46 ms | exact (program creation order changes; sort uses material ids) |
@@ -893,10 +898,12 @@ facts are equal.
 
 `node perf/quality.mjs compare baseline r6`: **PASS, 56/56, every SSIM 1.0000** (the changed pixels are Round 1/4's
 known LSBs). `compare r5 r6`: **56/56 byte-identical, 0 changed pixels**. After the preset gate (`2e63462`): `compare r6 r6b` 56/56
-byte-identical, `compare baseline r6b` PASS. All four candidates applied together
+byte-identical, `compare baseline r6b` PASS. After the Ultra-only narrowing (`abca498`): `compare r6 r6c` 56/56 byte-identical, `compare baseline
+r6c` PASS; `npm test` 45 files / 392 tests pass (two earlier full runs each lost one test to a timeout under load). All four candidates applied together
 (`bundle` + `matrix` + `load`, `scratch-r6-all`) were also 56/56 byte-identical vs `r5`. `npm run typecheck` and
 `npm test` (45 files, 392 tests) pass on the kept set, and again with the gate (its tests check one render on
-High/Ultra, one per pass on Low/Medium, preset switches, and that nothing is hidden on Low/Medium).
+High/Ultra, one per pass on Low/Medium, preset switches, and that nothing is hidden on Low/Medium); after the
+review-2 narrowing (`abca498`) the same with High on the old paths: see below.
 
 ### Review (GPT-6.1-Sol, high effort)
 
@@ -912,11 +919,20 @@ past the line on medium/high/ultra, ready small, Low provisional (repeat not run
 equal" was false (low1's probe adds one) and "only Low-active part" was too strong → corrected; (P3) the phase
 collection has a small timing cost → noted. Coverage limits named by the reviewer (not defects): streaming frames,
 live quality changes, resize and context restore are not in the 56-image capture.
+Round 2 (`perf-loop-r6-review-2`, on `143a937` with the findings and responses above): no P1 and no game-code defect;
+the gate checks out (every preset field takes part in the match, custom values take the old paths, `applyQuality`
+sets both flags, the temporary `onAfterRender` hook and chain state are restored in `finally`, the harness hooks stay
+reachable, the moved shaft/sun uniform writes do not change Low/Medium output, and Low/Medium render as on `92d6dd3`
+apart from the array reuse and `load`); numbers, counts, hashes and the 56/56 identities match. Findings: (P2) Low's
+`load` gain is unvalidated (headB +2.5 %) and "provisional" does not authorise keeping it → no Low gain counted, kept
+as a stated exception (shared exact boot code; above), repeat as lead 0; (P2) High's control moved past ~2 % (fitted
+mean +2.6 %, js -2.8 %) → walk + D narrowed to Ultra (`abca498`), High logged as not validated; (P3) the rejected-entry
+line on low1 said the rest of the bundle is kept → "kept on Ultra only".
 
 ### Hot spot leads (refreshed)
 
 0. **Charger**: still 20 W. Medium needs a clean balanced repeat for Round 4's set (2c75479 vs HEAD, ≥ 4 rounds),
-   and walk + D could be retried on Medium (`fightCpuPaths`); two rounds in a row its arm caught power-state
+   and walk + D could be retried on High and Medium (widen `fightCpuPaths`; High read -2.9 % raw, -5.7 % in training); two rounds in a row its arm caught power-state
    switches. Repeat Low's load A/B (`AB_ARGS=--load-only`, low only: ~4 min) to close its provisional verdict.
 1. **Load: upload slot packing.** Ready time is the 3 s quiet start plus 24 ms-paced serial uploads, one item per
    slot (textures ~36-54, weapons 27). Several small uploads per slot within the 60 kB/ms budget, or streams that
@@ -1025,7 +1041,7 @@ Format: round, idea, where, result numbers vs the noise floor, why rejected.
   shadow atlas (not exact: uv remap and edge taps); scissored clears (draw-based clear with a load: worse).
 - **r6, low1 again (in the CPU bundle)** (`perf/patches/r5-low1.patch`, in `r6-bundle.patch`). Exact. r6cpu (traced,
   training + mexico fights): Low mean +0.6 %, js -0.4 % (headB +3.4 / +0.9 %) although training calls drop 470 → 431.
-  Second time without a Low gain. Rejected; the rest of the bundle (walk + D) is kept.
+  Second time without a Low gain. Rejected; the rest of the bundle (walk + D) is kept on Ultra only.
 - **r6, matrix: skip three's second world-matrix walk for figures `syncModel` updated** (`render/fresh.ts`,
   `enemies/model.ts`, `figure.ts`, `operators.ts`; a per-step token, the root's world matrix compared bit for bit,
   every writer marks the figure stale; `tests/figure-matrix-skip.test.ts` compares 678,876 node matrices bit-equal to
@@ -1036,6 +1052,8 @@ Format: round, idea, where, result numbers vs the noise floor, why rejected.
   level geometry after upload (read later by `wearColours`, lightmap UVs and context restore; changes RSS only);
   upload pacing constants, the quiet start and the bake fade (in-match pacing / visible design, not exact); bake
   layout per frame without a slot (more script per match frame during the stream).
-- **r6, walk + D on Medium and Low** (kept on High/Ultra). Medium's r6cpu arm was void (power-state switches) and Low
-  read +0.6 % mean / -0.4 % js for the whole bundle; review 1: rejected on both under the one-A/B rule. Gated off by
+- **r6, walk + D on High, Medium and Low** (kept on Ultra). Medium's r6cpu arm was void (power-state switches) and Low
+  read +0.6 % mean / -0.4 % js for the whole bundle; review 1: rejected on both under the one-A/B rule. High read
+  -2.9 % raw mean (fitted -1.6 %) and js -7.6 %, but its control moved past ~2 % (fitted mean +2.6 %, js -2.8 %):
+  not validated after one A/B (review 2). Gated off by
   `fightCpuPaths` (`render/quality.ts`).
