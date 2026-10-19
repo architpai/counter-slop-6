@@ -1,0 +1,1227 @@
+diff --git a/src/engine/render/flat-shadows.ts b/src/engine/render/flat-shadows.ts
+new file mode 100644
+index 0000000..2372d60
+--- /dev/null
++++ b/src/engine/render/flat-shadows.ts
+@@ -0,0 +1,227 @@
++import * as THREE from 'three';
++import { quietly } from './materials';
++import type { FigureRig } from './figure';
++
++/**
++ * Low's flat figures (render/tactical.ts) in one shadow draw each: a figure's
++ * casters (a humanoid's 7, 8 with a shield) are one merged geometry, drawn
++ * where the first one three draws is in its scene walk, each vertex moved by
++ * its own part's matrix (`partMV[part]`). Its positions, triangles and order
++ * are the parts' own, and each part's matrix is the one three would upload
++ * for it (shadow camera inverse x world, rounded to float32), so the map's
++ * texels are the same as seven draws'. A part three would not draw (hidden,
++ * culled by the shadow frustum) gets `OUT_OF_VIEW`: its triangles collapse
++ * to a point behind the camera and are clipped.
++ */
++
++/** The most casters one draw takes: the program's matrix array. */
++export const FLAT_CASTERS = 12;
++
++/** Every vertex to (0, 0, 1e10) in view space: behind the light's camera, so clipped; one point, so no area. */
++const OUT_OF_VIEW: readonly number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1e10, 1];
++
++/** three's `project_vertex`, each vertex by its part's matrix; the rest of the depth program as three's own. */
++function flatDepthShader(this: THREE.Material, shader: THREE.WebGLProgramParametersWithUniforms): void {
++  shader.uniforms.partMV = (this.userData as FlatUserData).partMV;
++  shader.vertexShader = shader.vertexShader
++    .replace('#include <common>', `#include <common>\nuniform mat4 partMV[ ${FLAT_CASTERS} ];\nattribute float part;`)
++    .replace('#include <project_vertex>', THREE.ShaderChunk.project_vertex
++      .replace('mvPosition = modelViewMatrix * mvPosition;', 'mvPosition = partMV[ int( part ) ] * mvPosition;'));
++}
++const flatDepthKey = (): string => 'flat-shadow';
++
++interface FlatUserData { partMV: { value: Float32Array } }
++
++/** A depth material for one figure's draw (three's shadow one, `RGBADepthPacking`); make it `quietly`. */
++function flatDepthMaterial(): THREE.MeshDepthMaterial {
++  const material = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
++  const partMV = { value: new Float32Array(16 * FLAT_CASTERS) };
++  for (let i = 0; i < FLAT_CASTERS; i++) partMV.value.set(OUT_OF_VIEW, 16 * i);
++  (material.userData as FlatUserData).partMV = partMV;
++  material.onBeforeCompile = flatDepthShader;
++  material.customProgramCacheKey = flatDepthKey;
++  return material;
++}
++
++/** `casters`' positions, back to back, a `part` per vertex, and their triangles in order; null for one three draws otherwise. */
++export function mergeCasters(geometries: readonly THREE.BufferGeometry[]): THREE.BufferGeometry | null {
++  let vertices = 0, indices = 0;
++  for (const geometry of geometries) {
++    const position = geometry.getAttribute('position');
++    if (!(position instanceof THREE.BufferAttribute) || !(position.array instanceof Float32Array) || position.itemSize !== 3
++      || !geometry.index || geometry.groups.length > 0 || geometry.drawRange.start !== 0 || geometry.drawRange.count !== Infinity
++      || Object.keys(geometry.morphAttributes).length > 0) return null;
++    vertices += position.count;
++    indices += geometry.index.count;
++  }
++  const position = new Float32Array(3 * vertices), part = new Uint8Array(vertices);
++  const index = vertices > 0xffff ? new Uint32Array(indices) : new Uint16Array(indices);
++  let v = 0, i = 0;
++  geometries.forEach((geometry, k) => {
++    const source = geometry.getAttribute('position') as THREE.BufferAttribute, corners = geometry.index!.array;
++    position.set((source.array as Float32Array).subarray(0, 3 * source.count), 3 * v);
++    part.fill(k, v, v + source.count);
++    for (let c = 0; c < geometry.index!.count; c++) index[i + c] = v + corners[c]!;
++    v += source.count;
++    i += geometry.index!.count;
++  });
++  const geometry = new THREE.BufferGeometry();
++  geometry.setAttribute('position', new THREE.BufferAttribute(position, 3));
++  geometry.setAttribute('part', new THREE.BufferAttribute(part, 1));
++  geometry.setIndex(new THREE.BufferAttribute(index, 1));
++  // Page-level, like the parts it merges: disposers skip it.
++  geometry.userData.shared = true;
++  return geometry;
++}
++
++/** A figure's state between shadow frames. */
++interface Flat {
++  /** Its flat surfaces: a caster that is not one is not merged. */
++  readonly low: ReadonlySet<THREE.Object3D>;
++  /** Its casters in three's walk order and their geometries. */
++  readonly casters: THREE.Mesh[];
++  readonly geometries: THREE.BufferGeometry[];
++  merged: THREE.BufferGeometry | null;
++  /** Which caster carries the draw this pass, and what it had. */
++  carrier: number;
++  own: { geometry: THREE.BufferGeometry; depth: THREE.Material | undefined; culled: boolean } | null;
++}
++
++const _mv = new THREE.Matrix4();
++const isCaster = (node: THREE.Object3D): boolean => node.castShadow
++  && ((node as THREE.Mesh).isMesh === true || (node as THREE.Line).isLine === true || (node as THREE.Points).isPoints === true);
++
++/**
++ * Around Low's shadow pass (render/index.ts): `swap` puts each intact flat
++ * figure with two or more parts in the map on one draw, `restore` puts it
++ * back. Allocates nothing once each figure's merged geometry and the draws'
++ * materials are made (`quietly`).
++ */
++export class FlatShadows {
++  readonly #flats = new WeakMap<FigureRig, Flat>();
++  /** Merged geometries by their casters' geometry ids. */
++  readonly #merged = new Map<string, THREE.BufferGeometry | null>();
++  /** One depth material per figure drawn in a pass: consecutive draws switch material, so three uploads each one's matrices. */
++  readonly #materials: THREE.MeshDepthMaterial[] = [];
++  readonly #swapped: Flat[] = [];
++  readonly #next: THREE.Mesh[] = [];
++  readonly #shown: boolean[] = [];
++
++  /**
++   * Merge `figures` for the pass of `light`'s one map, as `camera` (three's layer test) draws it. The light's shadow
++   * camera and frustum are set here as three sets them again in the pass (`LightShadow.updateMatrices`, same inputs).
++   */
++  swap(figures: Iterable<FigureRig>, light: THREE.DirectionalLight, camera: THREE.Camera): void {
++    const shadow = light.shadow;
++    // A new map's first pass updates the projection first: left to three.
++    if (shadow.map === null) return;
++    shadow.updateMatrices(light);
++    const frustum = shadow.getFrustum();
++    for (const rig of figures) {
++      if (rig.disposed || rig.worn || rig.armature || rig.lent.size > 0 || !rig.root.parent) continue;
++      const flat = this.#flat(rig);
++      const next = this.#next, shown = this.#shown;
++      next.length = shown.length = 0;
++      if (!this.#collect(flat, rig.root, true, camera.layers) || next.length < 2) continue;
++      let same = next.length === flat.casters.length;
++      for (let i = 0; same && i < next.length; i++) same = next[i] === flat.casters[i] && next[i]!.geometry === flat.geometries[i];
++      if (!same) {
++        flat.casters.length = flat.geometries.length = 0;
++        for (const mesh of next) flat.casters.push(mesh), flat.geometries.push(mesh.geometry);
++        const key = flat.geometries.map(geometry => geometry.id).join();
++        if (!this.#merged.has(key)) this.#merged.set(key, quietly(() => mergeCasters(flat.geometries)));
++        flat.merged = this.#merged.get(key)!;
++      }
++      if (!flat.merged) continue;
++      // three's draw test for each, culling included (`renderObject`): drawn, its model-view matrix as three uploads it
++      // for its own draw (the shadow camera's inverse times its world, float32); not, `OUT_OF_VIEW`.
++      const material = this.#materials[this.#swapped.length] ??= quietly(flatDepthMaterial);
++      const out = (material.userData as FlatUserData).partMV.value;
++      let carrier = -1, drawn = 0;
++      for (let i = 0; i < next.length; i++) {
++        const mesh = next[i]!;
++        if (shown[i]! && (!mesh.frustumCulled || frustum.intersectsObject(mesh))) {
++          out.set(_mv.multiplyMatrices(shadow.camera.matrixWorldInverse, mesh.matrixWorld).elements, 16 * i);
++          if (drawn++ === 0) carrier = i;
++        } else out.set(OUT_OF_VIEW, 16 * i);
++      }
++      if (drawn < 2) continue;
++      const mesh = flat.casters[flat.carrier = carrier]!;
++      flat.own = { geometry: mesh.geometry, depth: mesh.customDepthMaterial, culled: mesh.frustumCulled };
++      this.#swapped.push(flat);
++      mesh.geometry = flat.merged;
++      mesh.customDepthMaterial = material;
++      mesh.frustumCulled = false;
++      for (let i = carrier + 1; i < flat.casters.length; i++) flat.casters[i]!.castShadow = false;
++    }
++  }
++
++  /** Every figure `swap` merged back as it was. */
++  restore(): void {
++    for (const flat of this.#swapped) {
++      const mesh = flat.casters[flat.carrier]!, own = flat.own!;
++      mesh.geometry = own.geometry;
++      mesh.customDepthMaterial = own.depth;
++      mesh.frustumCulled = own.culled;
++      for (let i = flat.carrier + 1; i < flat.casters.length; i++) flat.casters[i]!.castShadow = true;
++      flat.own = null;
++    }
++    this.#swapped.length = 0;
++  }
++
++  /** The figures merged this pass (tests). */
++  get swapped(): number { return this.#swapped.length; }
++
++  #flat(rig: FigureRig): Flat {
++    let flat = this.#flats.get(rig);
++    if (!flat) {
++      flat = { low: new Set(rig.low), casters: [], geometries: [], merged: null, carrier: 0, own: null };
++      this.#flats.set(rig, flat);
++    }
++    return flat;
++  }
++
++  /**
++   * Three's walk under `node` (render/WebGLShadowMap `renderObject`): its casters into `#next`, with whether three
++   * would draw each but for the frustum. False if a caster cannot go in the merged draw (not a flat surface, too many,
++   * a depth material of its own, or a material three would draw another way).
++   */
++  #collect(flat: Flat, node: THREE.Object3D, shown: boolean, layers: THREE.Layers): boolean {
++    shown &&= node.visible;
++    if (isCaster(node)) {
++      const mesh = node as THREE.Mesh, material = mesh.material;
++      if (!flat.low.has(mesh) || this.#next.length === FLAT_CASTERS || mesh.customDepthMaterial !== undefined
++        || (mesh as THREE.SkinnedMesh).isSkinnedMesh || (mesh as THREE.InstancedMesh).isInstancedMesh || mesh.morphTargetInfluences !== undefined
++        || Array.isArray(material) || !plain(material)) return false;
++      this.#next.push(mesh);
++      this.#shown.push(shown && mesh.layers.test(layers) && material.visible);
++    }
++    const children = node.children;
++    for (let i = 0; i < children.length; i++) if (!this.#collect(flat, children[i]!, shown, layers)) return false;
++    return true;
++  }
++}
++
++/** A material three's shadow pass draws with its plain depth material, double-sided (one front face for any part's matrix). */
++function plain(material: THREE.Material): boolean {
++  const side = material.shadowSide ?? material.side, maps = material as THREE.MeshStandardMaterial;
++  return side === THREE.DoubleSide && !maps.wireframe && material.alphaTest === 0 && !maps.map && !maps.alphaMap
++    && !maps.displacementMap && !(material.clippingPlanes?.length);
++}
++
++/**
++ * A caster drawn with the warm-up (render/index.ts `SHADOW_PROBE`): the merged draw's depth program links at the menu.
++ * One collapsed triangle, all parts `OUT_OF_VIEW`: no fragment in any pass.
++ */
++export function flatShadowProbe(): THREE.Mesh {
++  return quietly(() => {
++    const geometry = new THREE.BufferGeometry();
++    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(9), 3));
++    geometry.setAttribute('part', new THREE.BufferAttribute(new Uint8Array(3), 1));
++    geometry.setIndex(new THREE.BufferAttribute(new Uint16Array([0, 1, 2]), 1));
++    const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
++    mesh.castShadow = true;
++    mesh.customDepthMaterial = flatDepthMaterial();
++    return mesh;
++  });
++}
+diff --git a/src/engine/render/index.ts b/src/engine/render/index.ts
+index fc36da4..27952f0 100644
+--- a/src/engine/render/index.ts
++++ b/src/engine/render/index.ts
+@@ -20,6 +20,7 @@ import { WeaponAssets, weaponTextureSize } from './weapons';
+ import { FX_UNIFORMS, FxAssets, fxTemplate, fxTextureSize } from './fx';
+ import { useOperatorSource, usePropSource } from './figure';
+ import { OperatorAssets, operatorWant } from './operators';
++import { FlatShadows, flatShadowProbe } from './flat-shadows';
+ import { PropAssets, dressingSets, propTextureSize } from './props';
+ import type { PostFX } from './postfx';
+ import type { SkyUniforms } from './materials';
+@@ -157,6 +158,8 @@ const luminance = (c: THREE.Color): number => 0.2126 * c.r + 0.7152 * c.g + 0.07
+  */
+ const SHADOW_PROBE = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());
+ SHADOW_PROBE.castShadow = true;
++// And Low's merged figure draw's (render/flat-shadows.ts).
++SHADOW_PROBE.add(flatShadowProbe());
+ 
+ /**
+  * A root whose shader work is held off a match's frames (`Renderer._compiles`,
+@@ -266,6 +269,9 @@ export class Renderer {
+    * cascade, though the level's all cast alike.
+    */
+   _casters: { mesh: THREE.Mesh; material: THREE.Material[]; groups: THREE.GeometryGroup[] }[] = [];
++  /** The casters' own materials and groups while the shadow pass swaps them out, reused from frame to frame. */
++  readonly _ownMaterials: (THREE.Material | THREE.Material[])[] = [];
++  readonly _ownGroups: THREE.GeometryGroup[][] = [];
+   /** The texture sets the current level's tags need, and its detail kit's (R6) once `_dress` has asked. */
+   _surfaceSets: readonly TextureSet[] = [];
+   /** What the current level asks of the detail kit (its dressing and drones), null for none (Training). Made by `_dress`. */
+@@ -447,39 +453,54 @@ export class Renderer {
+       object.onAfterRender = this._afterRig;
+     };
+     // Between the scene's draw list and its draws: the level's casters and the detail kit's (R6) swap to their shadow
+-    // groups for this pass only, and the worn operators to one draw each (`OperatorAssets.shadowSwap`). Frames that
+-    // keep the shadow maps allocate nothing here.
++    // groups for this pass only, and the worn operators to one draw each (`OperatorAssets.shadowSwap`). No frame
++    // allocates here: the casters' own materials and groups wait in two reused arrays.
+     const shadowMap = this.three.shadowMap, drawShadows = shadowMap.render.bind(shadowMap);
+-    const drawCasters: typeof drawShadows = (lights, scene, camera) => {
+-      const props = this.props.casters;
+-      if (this._casters.length + props.length === 0) return drawShadows(lights, scene, camera);
+-      const lists = [this._casters, props], own: { material: THREE.Material | THREE.Material[]; groups: THREE.GeometryGroup[] }[] = [];
+-      for (const list of lists) {
+-        for (const { mesh, material, groups } of list) {
+-          own.push({ material: mesh.material, groups: mesh.geometry.groups });
+-          mesh.material = material;
+-          mesh.geometry.groups = groups;
+-        }
++    const swap = (list: readonly { mesh: THREE.Mesh; material: THREE.Material[]; groups: THREE.GeometryGroup[] }[], i: number): number => {
++      for (const { mesh, material, groups } of list) {
++        this._ownMaterials[i] = mesh.material;
++        this._ownGroups[i++] = mesh.geometry.groups;
++        mesh.material = material;
++        mesh.geometry.groups = groups;
++      }
++      return i;
++    };
++    const restore = (list: readonly { mesh: THREE.Mesh }[], i: number): number => {
++      for (const { mesh } of list) {
++        mesh.material = this._ownMaterials[i]!;
++        mesh.geometry.groups = this._ownGroups[i++]!;
+       }
++      return i;
++    };
++    const drawCasters: typeof drawShadows = (lights, scene, camera) => {
++      const props = this.props.casters, casters = this._casters, count = casters.length + props.length;
++      if (count === 0) return drawShadows(lights, scene, camera);
++      swap(props, swap(casters, 0));
+       try {
+         drawShadows(lights, scene, camera);
+       } finally {
+-        let i = 0;
+-        for (const list of lists) {
+-          for (const { mesh } of list) {
+-            mesh.material = own[i]!.material;
+-            mesh.geometry.groups = own[i++]!.groups;
+-          }
+-        }
++        restore(props, restore(casters, 0));
++        // Hold no reference past this map's casters (a smaller map's list after a bigger one).
++        if (this._ownMaterials.length > count) this._ownMaterials.length = this._ownGroups.length = count;
+       }
+     };
++    // Low's one map: each flat figure in one draw (`FlatShadows`).
++    const flats = new FlatShadows();
++    // The rig casts nothing (`_prepareRigMesh`): hidden for the pass, the cascades' walks skip it. Three has listed
++    // the main pass's draws before its shadow pass, so that pass sees it as it was.
+     shadowMap.render = (lights, scene, camera) => {
+       if (!shadowMap.needsUpdate) return drawShadows(lights, scene, camera);
++      const rig = this.rig.visible;
++      this.rig.visible = false;
+       this.operators.shadowSwap(true);
+       try {
++        const sun = lights.length === 1 && this._boxes === null && this._quality.look !== 'realistic' ? lights[0] : null;
++        if (sun instanceof THREE.DirectionalLight) flats.swap(this.operators.figures, sun, camera);
+         drawCasters(lights, scene, camera);
+       } finally {
++        flats.restore();
+         this.operators.shadowSwap(false);
++        this.rig.visible = rig;
+       }
+     };
+     this.weapons = new WeaponAssets({
+diff --git a/src/engine/render/operators.ts b/src/engine/render/operators.ts
+index 7f9964b..4986d51 100644
+--- a/src/engine/render/operators.ts
++++ b/src/engine/render/operators.ts
+@@ -162,6 +162,10 @@ export class OperatorAssets implements OperatorSource {
+    * kinds' template meshes (the warm-up draws them into the shadow maps, so the merged buffers upload there).
+    */
+   readonly #casters: { readonly meshes: readonly THREE.SkinnedMesh[]; readonly template: KindTemplate }[] = [];
++  /** The subtrees `shadowSwap` hid for the pass (`OperatorBody.bare`), the first `#hiddenCount`, shown again after it. */
++  readonly #hidden: (THREE.Object3D | null)[] = [];
++  #hiddenCount = 0;
++  readonly #bare = (body: OperatorBody): void => { this.#hiddenCount = body.bare(this.#hidden, this.#hiddenCount); };
+   /**
+    * Figures that go straight to their operator once it is in, in view or not: those in play at a settings
+    * change (another LOD or size, or Low to a realistic tier), which is not a fight's surprise. Only a
+@@ -187,6 +191,8 @@ export class OperatorAssets implements OperatorSource {
+   kind(kind: string): KindTemplate | null { return this.#kinds.get(kind) ?? null; }
+   /** Figures wearing an operator now. */
+   get worn(): number { return this.#bodies.size; }
++  /** Every figure that can wear one, worn or not (Low's flat shadows, render/flat-shadows.ts). */
++  get figures(): ReadonlySet<FigureRig> { return this.#figures; }
+ 
+   /** The baked occlusion's strength (`OPERATOR_AO`, by the AO setting), on the set materials: their twins and the figures' copies read it there. */
+   occlusion(intensity: number): void {
+@@ -439,7 +445,9 @@ export class OperatorAssets implements OperatorSource {
+    * Around the shadow pass (render/index.ts): `on`, each worn operator of more than one mesh draws once per cascade,
+    * its first mesh on its kind's merged geometry (`KindTemplate.shadow`), the others out of the pass; off, back. The
+    * meshes are siblings with one skeleton, bind matrix, sphere and depth material, drawn one after another, so the
+-   * one draw runs the same program on the same vertices and triangles in the same order. No allocation.
++   * one draw runs the same program on the same vertices and triangles in the same order. Also, `on`, every worn
++   * figure's subtrees that hold no caster are hidden (`OperatorBody.bare`): three walks every shown node once per
++   * cascade, and a hidden one ends the walk there. Its casters are drawn as before, in the same order. No allocation.
+    */
+   shadowSwap(on: boolean): void {
+     for (let i = 0; i < this.#casters.length; i++) {
+@@ -447,6 +455,14 @@ export class OperatorAssets implements OperatorSource {
+       meshes[0]!.geometry = on ? template.shadow! : template.meshes[0]!.geometry;
+       for (let k = 1; k < meshes.length; k++) meshes[k]!.castShadow = !on;
+     }
++    if (on) this.#bodies.forEach(this.#bare);
++    else {
++      for (let i = 0; i < this.#hiddenCount; i++) {
++        this.#hidden[i]!.visible = true;
++        this.#hidden[i] = null;
++      }
++      this.#hiddenCount = 0;
++    }
+   }
+ 
+   /**
+@@ -894,6 +910,32 @@ export class OperatorBody {
+     aimBone(fore, _w.subVectors(hand, fore.getWorldPosition(_f)).normalize(), weight);
+   }
+ 
++  /**
++   * For one shadow pass (`OperatorAssets.shadowSwap`), hide what casts nothing, into `hidden` from slot `at` (returns
++   * the next free one): the flat model's pivots (its surfaces on `HIT_LAYER`, stubs, anchors, the weapon group) and
++   * the bones (the socket, the prop: render/figure.ts `propMesh`); the skinned meshes stay. Not while a piece is lent
++   * (the debris casts all its meshes, a prop's too) or a gib rides a pivot (a lend the debris refused leaves it on the
++   * figure); the bones not while the socket holds a caster (a prop back from the debris, put in the hand of the next
++   * LOD's body).
++   */
++  bare(hidden: (THREE.Object3D | null)[], at: number): number {
++    const { rig } = this, pivots = rig.parts.hips ?? rig.parts.torso;
++    if (rig.disposed || rig.lent.size > 0 || this.#gibs.length > 0 || !pivots || pivots.parent !== rig.root) return at;
++    if (pivots.visible) {
++      pivots.visible = false;
++      hidden[at++] = pivots;
++    }
++    if (casts(this.socket)) return at;
++    const nodes = this.armature.children;
++    for (let i = 0; i < nodes.length; i++) {
++      const node = nodes[i]!;
++      if (!(node as THREE.Bone).isBone || !node.visible) continue;
++      node.visible = false;
++      hidden[at++] = node;
++    }
++    return at;
++  }
++
+   /** Back to the flat model: its surfaces drawn again, the prop in its weapon group, the operator's pieces gone. */
+   dispose(): void {
+     this.#returnProp();
+@@ -951,6 +993,14 @@ function aimBone(bone: THREE.Bone, dir: THREE.Vector3, weight: number): void {
+   if (weight < 1) bone.quaternion.copy(_was.slerp(bone.quaternion, weight));
+ }
+ 
++/** `node` or a node under it is a mesh, line or points that casts: three's shadow pass may draw it. */
++function casts(node: THREE.Object3D): boolean {
++  if (node.castShadow && ((node as THREE.Mesh).isMesh || (node as THREE.Line).isLine || (node as THREE.Points).isPoints)) return true;
++  const children = node.children;
++  for (let i = 0; i < children.length; i++) if (casts(children[i]!)) return true;
++  return false;
++}
++
+ function attached(part: THREE.Object3D, root: THREE.Object3D): boolean {
+   for (let node: THREE.Object3D | null = part; node; node = node.parent) if (node === root) return true;
+   return false;
+diff --git a/src/engine/render/postfx.ts b/src/engine/render/postfx.ts
+index dd1e85e..c880da3 100644
+--- a/src/engine/render/postfx.ts
++++ b/src/engine/render/postfx.ts
+@@ -396,6 +396,17 @@ export class Composite {
+   /** The drawn share of the scene target, for the passes that read it. */
+   readonly _sceneRegion = regionUniforms();
+   readonly _clear = new THREE.Color();
++  /**
++   * The chain runs inside one `render` of `scene` (its `onAfterRender`), each pass a `renderBufferDirect` there:
++   * the draw a render of the lone triangle made, without that render's list, sort, light and shadow steps. Set by
++   * `draw` for that render (`_chainCamera`) and while its passes run (`_inChain`); `_pass` outside it (the perf
++   * harness's calibration pass) renders as before. For the outer render the triangle wears `_final` switched off
++   * (`visible`): not drawn, but its geometry is still uploaded. Not a material of its own: three's constructor draws
++   * a uuid from Math.random, which would shift every random draw after it (the perf harness seeds it at boot).
++   */
++  _chainCamera: THREE.PerspectiveCamera | null = null;
++  _chainStrength = 0;
++  _inChain = false;
+ 
+   constructor() {
+     this.target = new THREE.WebGLRenderTarget(2, 2, {
+@@ -844,6 +855,18 @@ export class Composite {
+     // matrices, so no pass recomputes them.
+     this.scene.matrixWorldAutoUpdate = this.camera.matrixWorldAutoUpdate = false;
+     this.triangle.matrixAutoUpdate = false;
++    this.scene.onAfterRender = renderer => {
++      const camera = this._chainCamera;
++      if (camera === null) return;
++      this._chainCamera = null;
++      this._final.visible = true;
++      this._inChain = true;
++      try {
++        this._chain(renderer, camera, this._chainStrength);
++      } finally {
++        this._inChain = false;
++      }
++    };
+     this.setGrade(GRADE.neutral);
+   }
+ 
+@@ -1102,13 +1125,55 @@ export class Composite {
+     renderer.setRenderTarget(target);
+     // The canvas (null) is cleared in `draw`.
+     if (target !== null && this._fills.has(material)) renderer.clear(true, false, false);
+-    renderer.render(this.scene, this.camera);
++    if (!this._inChain) {
++      renderer.render(this.scene, this.camera);
++      return;
++    }
++    // What that render did around its one draw (the chain's materials are visible, opaque and single-sided; the
++    // triangle's and the camera's matrices stay identity; no pass target has MSAA or mipmaps to resolve): its
++    // background step set the clear colour in the target's colour space (the same on every linear target, so only
++    // the canvas sets it), and its scene step left depth and colour writes on (the next frame's shadow clears
++    // need the depth mask).
++    if (target === null) renderer.setClearColor(renderer.getClearColor(this._clear), renderer.getClearAlpha());
++    const triangle = this.triangle, state = renderer.state;
++    renderer.renderBufferDirect(this.camera, this.scene, triangle.geometry, material, triangle, null);
++    state.buffers.depth.setTest(true);
++    state.buffers.depth.setMask(true);
++    state.buffers.color.setMask(true);
++    state.setPolygonOffset(false);
+   }
+ 
+   draw(renderer: THREE.WebGLRenderer, time: number, fx: PostFX, camera: THREE.PerspectiveCamera): void {
+-    const config = this.config;
++    const config = this.config, smaa = config.smaa ? this._smaa : null;
+     this.uniforms.time.value = time;
+     for (const key of FX_KEYS) this.uniforms[key === 'hurt' ? 'hurtIn' : key].value = fx[key] ?? 0;
++    const strength = config.shafts && config.look === 'realistic' && this._shaftStrength > 0 ? this._shaftStrength * this._aimShafts(camera) : 0;
++    this._toneUniforms.shaftColor.value.copy(this._sunColor).multiplyScalar(strength * SHAFT_GAIN);
++    // The first pass's target, bound before the outer render: that render then resolves nothing (the MSAA scene
++    // target is still bound after the scene pass) and sets the clear colour as the pass's own render did. Low's
++    // lone pass to the canvas, and a renderer that clears in every render (autoClear), render each pass as before.
++    const first = config.ao > 0 ? this._aoRaw : config.bloom ? this._bloom[0]! : strength > 0 ? this._shafts[0]
++      : config.look === 'realistic' || smaa ? this._ldr : null;
++    if (first === null || renderer.autoClear) this._chain(renderer, camera, strength);
++    else {
++      renderer.setRenderTarget(first);
++      this.triangle.material = this._final;
++      this._final.visible = false;
++      this._chainCamera = camera;
++      this._chainStrength = strength;
++      try {
++        renderer.render(this.scene, this.camera);
++      } finally {
++        this._chainCamera = null;
++        this._final.visible = true;
++      }
++    }
++    this._softUniforms.softOn.value = 0;
++  }
++
++  /** The passes `draw` runs: inside its one render (`_inChain`), or each in a render of its own. */
++  _chain(renderer: THREE.WebGLRenderer, camera: THREE.PerspectiveCamera, strength: number): void {
++    const config = this.config;
+     if (config.ao > 0) {
+       const g = this._gtaoUniforms, projection = camera.projectionMatrix.elements;
+       g.cameraNear.value = this.uniforms.cameraNear.value = camera.near;
+@@ -1138,8 +1203,6 @@ export class Composite {
+         this._pass(renderer, this._up, this._bloom[i - 1]!);
+       }
+     }
+-    const strength = config.shafts && config.look === 'realistic' && this._shaftStrength > 0 ? this._shaftStrength * this._aimShafts(camera) : 0;
+-    this._toneUniforms.shaftColor.value.copy(this._sunColor).multiplyScalar(strength * SHAFT_GAIN);
+     if (strength > 0) {
+       const [rays, spare] = this._shafts, source = this.target;
+       this._shaftMaskUniforms.texel.value.set(1 / source.width, 1 / source.height);
+@@ -1174,7 +1237,6 @@ export class Composite {
+       renderer.clear();
+       this._pass(renderer, this._low, null);
+     }
+-    this._softUniforms.softOn.value = 0;
+   }
+ 
+   /** SMAA from `_ldr` into `target` (null: the canvas). Its passes clear to transparent black. */
+diff --git a/tests/flat-shadows.test.ts b/tests/flat-shadows.test.ts
+new file mode 100644
+index 0000000..8e27416
+--- /dev/null
++++ b/tests/flat-shadows.test.ts
+@@ -0,0 +1,217 @@
++import { afterEach, expect, test, vi } from 'vitest';
++import { BoxGeometry, DirectionalLight, Matrix4, Mesh, MeshBasicMaterial, PerspectiveCamera, Scene, WebGLRenderTarget, WebGLRenderer } from 'three';
++import type { BufferGeometry, Material, Object3D } from 'three';
++import { makeFigure } from '@/engine/render/figure';
++import type { Figure, FigureRig } from '@/engine/render/figure';
++import { FLAT_CASTERS, FlatShadows } from '@/engine/render/flat-shadows';
++import { TACTICAL_MODELS } from '@/engine/render/tactical';
++import { makeModel } from '@/engine/enemies/model';
++import { TYPES } from '@/engine/enemies/types';
++import type { EnemyKind } from '@/engine/types';
++
++const KINDS = Object.keys(TACTICAL_MODELS) as (keyof typeof TACTICAL_MODELS)[];
++const OUT_OF_VIEW = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1e10, 1];
++
++/** A figure of a kind, as the game makes it: enemies through their model, the player as players.ts does. */
++function figureOf(kind: string): Figure {
++  if (kind === 'player') return makeFigure({ kind: 'humanoid', tactical: 'player', color: 0x4c7dff, weapon: 'r4c', bodyWidth: 1, limbR: 0.033, hat: 'cap' });
++  const stats = TYPES[kind as EnemyKind];
++  const { figure } = makeModel(stats);
++  figure.root.scale.setScalar(stats.scale);
++  return figure;
++}
++
++/** The meshes three's shadow walk reaches that cast, in its order (depth first, child order). */
++function casters(root: Object3D): Mesh[] {
++  const out: Mesh[] = [];
++  root.traverse(node => { if (node instanceof Mesh && node.castShadow) out.push(node); });
++  return out;
++}
++
++/** Every mesh's fields the swap touches. */
++function fields(root: Object3D): unknown[] {
++  const out: unknown[] = [];
++  root.traverse(node => {
++    if (node instanceof Mesh) out.push(node, node.geometry, node.castShadow, node.customDepthMaterial, node.frustumCulled, node.material);
++  });
++  return out;
++}
++
++const bits = (array: ArrayLike<number>) => new Uint32Array(Float32Array.from(array).buffer);
++
++function sun(extent: number): DirectionalLight {
++  const light = new DirectionalLight(0xffffff, 2);
++  light.castShadow = true;
++  light.position.set(5, 12, 4);
++  light.shadow.mapSize.set(1024, 1024);
++  Object.assign(light.shadow.camera, { left: -extent, right: extent, top: extent, bottom: -extent, near: 0.5, far: 40 });
++  light.shadow.camera.updateProjectionMatrix();
++  return light;
++}
++
++const made: Figure[] = [];
++afterEach(() => {
++  for (const figure of made.splice(0)) figure.dispose();
++  vi.restoreAllMocks();
++});
++
++test('each flat figure casts in one draw: its casters\' triangles in walk order, each part by three\'s own matrix', () => {
++  const scene = new Scene(), camera = new PerspectiveCamera();
++  // A tight box: some figures are cut by it, so some parts are culled and some drawn.
++  const light = sun(3.2);
++  scene.add(light, light.target);
++  const figures = [...KINDS.map(figureOf), figureOf('shield')];
++  made.push(...figures);
++  figures.at(-1)!.dropShield();
++  for (const [i, figure] of figures.entries()) {
++    figure.root.position.set((i % 6) * 2.2 - 6, 0, Math.floor(i / 6) * 2.2 - 4);
++    figure.root.rotation.y = i * 0.7;
++    figure.parts.thighL?.rotation.set(-0.8, 0, 0);
++    scene.add(figure.root);
++  }
++  scene.updateMatrixWorld(true);
++  light.shadow.updateMatrices(light);
++  const frustum = light.shadow.getFrustum(), shadowCamera = light.shadow.camera;
++  const rigs = figures.map(figure => figure.rig!);
++  const before = figures.map(figure => fields(figure.root));
++  const expected = figures.map(figure => casters(figure.root));
++  // What three would draw of each caster in this pass, before the swap changes any.
++  const culled = expected.map(list => list.map(mesh => !frustum.intersectsObject(mesh)));
++  // Figures with fewer than two parts in the box are left to three (one draw or none either way).
++  const merging = culled.map(list => list.filter(out => !out).length >= 2);
++  light.shadow.map = new WebGLRenderTarget(1, 1);
++  const flats = new FlatShadows(), random = vi.spyOn(Math, 'random');
++  let parts = 0, out = 0;
++  for (let pass = 0; pass < 2; pass++) {
++    flats.swap(rigs, light, camera);
++    try {
++      expect(flats.swapped).toBe(merging.filter(Boolean).length);
++      for (const [f, figure] of figures.entries()) {
++        const list = expected[f]!, kind = figure.rig!.kind;
++        expect(list.length, kind).toBeGreaterThan(1);
++        expect(list.length, kind).toBeLessThanOrEqual(FLAT_CASTERS);
++        if (!merging[f]) {
++          expect(fields(figure.root), kind).toEqual(before[f]);
++          continue;
++        }
++        // The first part three draws carries the draw; the parts after it stop casting.
++        const at = culled[f]!.indexOf(false), carrier = list[at]!;
++        const merged = carrier.geometry, own = before[f]![before[f]!.indexOf(carrier) + 1] as BufferGeometry;
++        expect(merged, kind).not.toBe(own);
++        expect([carrier.castShadow, carrier.frustumCulled, ...list.map((mesh, k) => k === at || mesh.castShadow === k < at)], kind)
++          .toEqual([true, false, ...list.map(() => true)]);
++        // Positions bit for bit, a part index per vertex, triangles in order past the vertices before them.
++        const positions: number[] = [], part: number[] = [], corners: number[] = [];
++        list.forEach((mesh, k) => {
++          const geometry = mesh === carrier ? own : mesh.geometry, count = geometry.getAttribute('position').count;
++          for (const corner of geometry.index!.array) corners.push(corner + part.length);
++          positions.push(...(geometry.getAttribute('position').array as Float32Array).subarray(0, 3 * count));
++          for (let v = 0; v < count; v++) part.push(k);
++        });
++        expect(merged.getAttribute('position').array).toEqual(Float32Array.from(positions));
++        expect(bits(merged.getAttribute('position').array)).toEqual(bits(positions));
++        expect(Array.from(merged.getAttribute('part').array)).toEqual(part);
++        expect(Array.from(merged.index!.array)).toEqual(corners);
++        expect(merged.index!.array.constructor, kind).toBe(part.length > 0xffff ? Uint32Array : Uint16Array);
++        // At the draw: each part's model-view matrix as three uploads it (float32 of the double product), or out of view.
++        const depth = carrier.customDepthMaterial! as Material & { userData: { partMV: { value: Float32Array } } };
++        const uploaded = depth.userData.partMV.value;
++        list.forEach((mesh, k) => {
++          const want = culled[f]![k] ? OUT_OF_VIEW : new Matrix4().multiplyMatrices(shadowCamera.matrixWorldInverse, mesh.matrixWorld).elements;
++          expect(bits(uploaded.subarray(16 * k, 16 * k + 16)), `${kind} part ${k}`).toEqual(bits(want));
++          parts++;
++          if (culled[f]![k]) out++;
++        });
++      }
++    } finally {
++      flats.restore();
++    }
++    for (const [f, figure] of figures.entries()) expect(fields(figure.root), `${figure.rig!.kind} restored`).toEqual(before[f]);
++  }
++  light.shadow.map.dispose();
++  expect(random).not.toHaveBeenCalled();
++  expect(out, 'some parts out of the box').toBeGreaterThan(0);
++  expect(parts - out, 'some parts in it').toBeGreaterThan(0);
++  expect(merging.filter(Boolean).length, 'some figures merged').toBeGreaterThan(3);
++});
++
++test('figures it cannot merge exactly are left to three', () => {
++  const scene = new Scene(), camera = new PerspectiveCamera(), light = sun(9);
++  const [lent, hidden, foreign, shown] = ['grunt', 'grunt', 'heavy', 'medic'].map(figureOf) as [Figure, Figure, Figure, Figure];
++  made.push(lent, hidden, foreign, shown);
++  scene.add(light, light.target, lent.root, hidden.root, foreign.root, shown.root);
++  lent.lend(lent.parts.weapon!);
++  hidden.root.visible = false;
++  // A caster that is not a flat surface (the debris's dropped gun) sits under the figure.
++  const gun = new Mesh(new BoxGeometry(), new MeshBasicMaterial());
++  gun.castShadow = true;
++  foreign.parts.torso!.add(gun);
++  scene.updateMatrixWorld(true);
++  light.shadow.updateMatrices(light);
++  light.shadow.map = new WebGLRenderTarget(1, 1);
++  const flats = new FlatShadows(), rigs: FigureRig[] = [lent.rig!, hidden.rig!, foreign.rig!, shown.rig!];
++  flats.swap(rigs, light, camera);
++  try {
++    expect(flats.swapped).toBe(1);
++    expect(casters(shown.root).filter(mesh => mesh.castShadow)).toHaveLength(1);
++    for (const figure of [lent, hidden, foreign]) expect(casters(figure.root).every(mesh => mesh.customDepthMaterial === undefined)).toBe(true);
++  } finally {
++    flats.restore();
++  }
++});
++
++test('the merged draws give the same shadow map, one draw per flat figure', () => {
++  const renderer = new WebGLRenderer({ canvas: document.createElement('canvas') });
++  renderer.shadowMap.enabled = true;
++  renderer.shadowMap.autoUpdate = false;
++  const scene = new Scene(), camera = new PerspectiveCamera(60, 1, 0.1, 100), target = new WebGLRenderTarget(16, 16);
++  camera.position.set(0, 10, 15);
++  camera.lookAt(0, 0, 0);
++  // Cut through the rows, so culled parts are in it too.
++  const light = sun(7);
++  scene.add(light, light.target);
++  scene.overrideMaterial = new MeshBasicMaterial();
++  const figures = [...KINDS.map(figureOf), figureOf('breacher')];
++  made.push(...figures);
++  figures.at(-1)!.dropShield();
++  for (const [i, figure] of figures.entries()) {
++    figure.root.position.set((i % 6) * 2.2 - 6, 0, Math.floor(i / 6) * 2.2 - 4);
++    figure.root.rotation.y = i * 0.7;
++    figure.parts.upperR?.rotation.set(-1.5, 0, 0.4);
++    figure.parts.thighL?.rotation.set(-0.8, 0, 0);
++    scene.add(figure.root);
++  }
++  const flats = new FlatShadows(), rigs = figures.map(figure => figure.rig!);
++  const drawShadows = renderer.shadowMap.render.bind(renderer.shadowMap);
++  let merge = false, calls = 0;
++  renderer.shadowMap.render = (lights, at, from) => {
++    const before = renderer.info.render.calls;
++    if (merge) flats.swap(rigs, light, from);
++    try { drawShadows(lights, at, from); } finally { flats.restore(); }
++    calls = renderer.info.render.calls - before;
++  };
++  const shot = (merged: boolean) => {
++    merge = merged;
++    renderer.shadowMap.needsUpdate = true;
++    renderer.setRenderTarget(target);
++    renderer.render(scene, camera);
++    const map = light.shadow.map!, texels = new Uint8Array(map.width * map.height * 4);
++    renderer.readRenderTargetPixels(map, 0, 0, map.width, map.height, texels);
++    return { texels, calls };
++  };
++  try {
++    const apart = shot(false), merged = shot(true), again = shot(false);
++    let cast = 0;
++    for (let i = 0; i < apart.texels.length; i += 4) if (apart.texels[i] !== 255 || apart.texels[i + 3] !== 255) cast++;
++    expect(cast, 'the figures cast').toBeGreaterThan(10000);
++    expect(merged.texels.every((v, i) => v === apart.texels[i]), 'the same shadow map').toBe(true);
++    expect(again.texels.every((v, i) => v === apart.texels[i]), 'and after it').toBe(true);
++    // Every figure's casters that three drew, in one draw; none of those it culled whole.
++    expect(apart.calls - merged.calls).toBeGreaterThan(figures.length * 2);
++    expect(merged.calls).toBeLessThanOrEqual(figures.length);
++  } finally {
++    (scene.overrideMaterial as Material).dispose();
++    target.dispose();
++    renderer.dispose();
++  }
++});
+diff --git a/tests/render-chain.test.ts b/tests/render-chain.test.ts
+index f80d9c2..d25a578 100644
+--- a/tests/render-chain.test.ts
++++ b/tests/render-chain.test.ts
+@@ -228,6 +228,72 @@ test('a reduced dynamic scale shows only this frame: nothing beyond the drawn co
+   // Under 1 s alone; beside the other GPU test files it waits its turn for the GPU (9 s at 23af3f9), so it gets the time they do.
+ }, 60_000);
+ 
++test('the chain inside one render draws exactly what a render per pass did', () => {
++  const three = new THREE.WebGLRenderer({ canvas: document.createElement('canvas'), depth: false, stencil: false });
++  cleanup.push(() => { three.dispose(); three.forceContextLoss(); });
++  three.setSize(320, 200, false);
++  three.autoClear = false;
++  three.info.autoReset = false;
++  three.shadowMap.enabled = true;
++  const gl = three.getContext(), scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(80, 1.6, 0.08, 420);
++  const bright = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 3, 2) }));
++  bright.position.set(0.4, 0, -2);
++  const wall = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), new THREE.MeshBasicMaterial({ color: 0x406080 }));
++  wall.position.set(-1.5, 0, -3);
++  scene.add(bright, wall);
++  const post = new Composite();
++  cleanup.push(() => post.dispose());
++  post.resize(320, 200, 1.6);
++  post.setShafts(1, new THREE.Vector3(0.2, 0.3, -1), new THREE.Color(1, 0.9, 0.8));
++  const frame = (perPass: boolean): { pixels: Uint8Array; calls: number; triangles: number } => {
++    three.setClearColor(0x335577);
++    three.setRenderTarget(post.target);
++    three.clear();
++    three.render(scene, camera);
++    three.info.reset();
++    if (perPass) {
++      // `draw` with every pass rendering itself (its uniforms are the last frame's: the same view and time).
++      const strength = post.config.shafts && post.config.look === 'realistic' ? post._shaftStrength * post._aimShafts(camera) : 0;
++      post._chain(three, camera, strength);
++      post._softUniforms.softOn.value = 0;
++    } else post.draw(three, 0.5, fx, camera);
++    const { calls, triangles } = three.info.render;
++    const pixels = new Uint8Array(320 * 200 * 4);
++    gl.readPixels(0, 0, 320, 200, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
++    return { pixels, calls, triangles };
++  };
++  const configs: PostConfig[] = [
++    { look: 'realistic', samples: 4, fxaa: false, smaa: true, ao: 1, depth: true, bloom: true, shafts: true },
++    { look: 'realistic', samples: 2, fxaa: false, smaa: true, ao: 0, depth: false, bloom: true, shafts: false },
++    { look: 'realistic', samples: 0, fxaa: true, smaa: false, ao: 0, depth: false, bloom: false, shafts: false },
++    { look: 'lowpoly', samples: 0, fxaa: false, smaa: true, ao: 0.5, depth: false, bloom: true, shafts: false },
++  ];
++  for (const config of configs) {
++    post.configure(config);
++    for (const scale of [1, 0.7]) {
++      post.setScale(scale);
++      frame(false);
++      const programs = three.info.programs!.length;
++      const render = vi.spyOn(three, 'render');
++      const chained = frame(false);
++      // The scene pass, then the chain's one render (SMAA's passes render their own quad).
++      expect(render.mock.calls.filter(([s]) => s === post.scene)).toHaveLength(1);
++      render.mockRestore();
++      // The next frame's shadow maps clear their depth: the chain leaves depth writes on, as each render did.
++      expect(gl.getParameter(gl.DEPTH_WRITEMASK)).toBe(true);
++      const perPass = frame(true);
++      const label = `${config.look}, smaa ${config.smaa}, ao ${config.ao}, scale ${scale}`;
++      expect(chained.calls, label).toBeGreaterThan(1);
++      expect([chained.calls, chained.triangles], label).toEqual([perPass.calls, perPass.triangles]);
++      let differ = 0;
++      for (let i = 0; i < chained.pixels.length; i++) if (chained.pixels[i] !== perPass.pixels[i]) differ++;
++      expect(differ, label).toBe(0);
++      expect(three.info.programs!.length, label).toBe(programs);
++    }
++  }
++  expect(gl.getError()).toBe(gl.NO_ERROR);
++}, 60_000);
++
+ test('the rig draws into its own depth slice on every tier, so a transparent effect behind a wall stays hidden', async () => {
+   const renderer = makeRenderer();
+   const gl = renderer.three.getContext(), range = vi.spyOn(gl, 'depthRange');
+diff --git a/tests/shadow-walk.test.ts b/tests/shadow-walk.test.ts
+new file mode 100644
+index 0000000..ead7a2e
+--- /dev/null
++++ b/tests/shadow-walk.test.ts
+@@ -0,0 +1,369 @@
++import { afterEach, expect, test } from 'vitest';
++import * as THREE from 'three';
++import type { Object3D, Texture } from 'three';
++import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
++import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
++import { OperatorAssets } from '@/engine/render/operators';
++import { WeaponAssets } from '@/engine/render/weapons';
++import { makeFigure, useOperatorSource, usePropSource } from '@/engine/render/figure';
++import type { Figure, WeaponPropKind } from '@/engine/render/figure';
++import { Renderer } from '@/engine/render/index';
++import { PRESET_VALUES } from '@/engine/render/quality';
++import { TACTICAL_MODELS } from '@/engine/render/tactical';
++import { makeModel } from '@/engine/enemies/model';
++import { TYPES } from '@/engine/enemies/types';
++import { Gun, Sword } from '@/engine/weapons/index';
++import type { GunKind } from '@/engine/weapons/index';
++import { REAL_GUN } from '@/engine/weapons/models';
++import type { Ctx, EnemyKind, Player } from '@/engine/types';
++
++const KINDS = Object.keys(TACTICAL_MODELS) as (keyof typeof TACTICAL_MODELS)[];
++const PROPS: WeaponPropKind[] = ['none', 'r4c', 'rifle', 'pistol', 'shotgun', 'sniper', 'lmg', 'blade', 'knife', 'hammer'];
++
++/** The game's glbs and decoder; the maps are 1 x 1 stand-ins (no GPU, no transcoder). */
++const loaders = {
++  model: (url: string) => new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(url),
++  texture: async (url: string): Promise<Texture> => {
++    const texture = new THREE.DataTexture(new Uint8Array(4), 1, 1);
++    texture.name = url;
++    return texture;
++  },
++  upload: () => {},
++};
++
++async function until(check: () => boolean, what: string): Promise<void> {
++  for (let i = 0; i < 1500 && !check(); i++) await new Promise(resolve => setTimeout(resolve, 10));
++  if (!check()) throw new Error(`timed out waiting for ${what}`);
++}
++
++const cleanup: (() => void)[] = [];
++afterEach(() => { for (const done of cleanup.splice(0).reverse()) done(); });
++
++/** The Blender props in hand, as the realistic tiers give them (render/weapons.ts `prop`). */
++async function props(): Promise<WeaponAssets> {
++  const weapons = new WeaponAssets(loaders);
++  weapons.want(512);
++  await until(() => { weapons.pump(); return !weapons.pending; }, 'the weapons to stream');
++  expect(weapons.ready).toBe(true);
++  usePropSource(weapons);
++  cleanup.push(() => { usePropSource(null, weapons); weapons.clear(); });
++  return weapons;
++}
++
++async function operators(): Promise<OperatorAssets> {
++  const assets = new OperatorAssets(loaders);
++  useOperatorSource(assets);
++  cleanup.push(() => { assets.clear(); useOperatorSource(null, assets); });
++  return assets;
++}
++
++async function wear(assets: OperatorAssets, lod: 0 | 1): Promise<void> {
++  assets.want({ lod, size: lod === 1 ? 512 : 1024 });
++  await until(() => { assets.pump(); return !assets.pending; }, 'the operators to stream');
++}
++
++/** A figure of a kind, as the game makes it: enemies through their model, the player as players.ts does. */
++function figureOf(kind: string, weapon?: WeaponPropKind): Figure {
++  if (kind === 'player') {
++    return makeFigure({ kind: 'humanoid', tactical: 'player', color: 0x4c7dff, scale: 1, bodyWidth: 1, headSize: 1, limbR: 0.033, hat: 'cap', smile: false, shield: false, weapon: weapon ?? 'r4c' });
++  }
++  const stats = TYPES[kind as EnemyKind];
++  const { figure, nodes } = makeModel(stats);
++  figure.root.scale.setScalar(stats.scale);
++  // The aimbot's cooling core, shown while it is weak.
++  if (nodes.core) nodes.core.visible = true;
++  if (weapon) figure.setWeapon(weapon);
++  return figure;
++}
++
++const isCaster = (node: Object3D, layers: THREE.Layers): boolean =>
++  ((node as THREE.Mesh).isMesh || (node as THREE.Line).isLine || (node as THREE.Points).isPoints) === true && node.castShadow && node.layers.test(layers);
++
++/**
++ * What one cascade of three r170's shadow pass draws (`WebGLShadowMap` `renderObject`, PCF): depth first from the
++ * scene, every node it reaches counted, a hidden one ending the walk there; a caster on the camera's layers drawn.
++ * Its frustum test reads neither visibility nor order.
++ */
++function walk(node: Object3D, layers: THREE.Layers, shown: (node: Object3D) => boolean, out: { casters: Object3D[]; visits: number }): void {
++  out.visits++;
++  if (!shown(node)) return;
++  if (isCaster(node, layers)) out.casters.push(node);
++  for (const child of node.children) walk(child, layers, shown, out);
++}
++
++/**
++ * Around `shadowSwap`: the same casters in the same order with the hidden subtrees as without, none of them under a
++ * hidden node, and every node shown or not as before once it is over. Returns the nodes hidden and the visits saved.
++ */
++function check(assets: OperatorAssets, scene: Object3D, camera: THREE.Camera, what: string): { hidden: Object3D[]; saved: number } {
++  const before = new Map<Object3D, boolean>();
++  scene.traverse(node => before.set(node, node.visible));
++  const reference = { casters: [] as Object3D[], visits: 0 }, drawn = { casters: [] as Object3D[], visits: 0 };
++  const hidden: Object3D[] = [];
++  assets.shadowSwap(true);
++  try {
++    walk(scene, camera.layers, node => before.get(node)!, reference);
++    walk(scene, camera.layers, node => node.visible, drawn);
++    scene.traverse(node => { if (before.get(node) && !node.visible) hidden.push(node); });
++  } finally {
++    assets.shadowSwap(false);
++  }
++  const lost = reference.casters.filter(node => !drawn.casters.includes(node)).map(node => {
++    const path: string[] = [];
++    for (let p: Object3D | null = node; p; p = p.parent) path.push(`${p.name || p.type}${p.visible ? '' : '(hidden)'}`);
++    return path.join(' < ');
++  });
++  expect(lost, what).toEqual([]);
++  expect(drawn.casters.length, what).toBe(reference.casters.length);
++  expect(drawn.casters.every((node, i) => node === reference.casters[i]), `${what}: the same casters in the same order`).toBe(true);
++  expect(reference.casters.length, what).toBeGreaterThan(0);
++  for (const root of hidden) root.traverse(node => expect(isCaster(node, camera.layers), `${what}: ${node.name} under ${root.name}`).toBe(false));
++  scene.traverse(node => expect(node.visible, `${what}: ${node.name} back`).toBe(before.get(node)));
++  return { hidden, saved: reference.visits - drawn.visits };
++}
++
++test('the shadow pass skips what a worn operator cannot cast, and draws the same casters in the same order', async () => {
++  await props();
++  const assets = await operators();
++  // The camera three hands the shadow pass: the default layer only.
++  const camera = new THREE.PerspectiveCamera();
++  for (const lod of [0, 1] as const) {
++    await wear(assets, lod);
++    // Each kind alone: its pivots and its bones hidden, and the visits that saves per cascade (at 7c00ea2, both LODs:
++    // 67 on most humanoids, 70-72 on the shield carriers and two bosses, 53-61 on the blobs, 22-30 on the flyers).
++    for (const kind of KINDS) {
++      const scene = new THREE.Scene(), figure = figureOf(kind);
++      scene.add(figure.root);
++      try {
++        assets.frame(camera);
++        expect(figure.rig!.worn, kind).toBe(true);
++        const { hidden, saved: visits } = check(assets, scene, camera, `lod ${lod} ${kind}`);
++        expect(hidden[0], kind).toBe(figure.parts.hips ?? figure.parts.torso);
++        expect(hidden.slice(1).every(node => (node as THREE.Bone).isBone && node.parent === figure.rig!.armature), kind).toBe(true);
++        expect(hidden.length, kind).toBeGreaterThan(1);
++        expect(visits, kind).toBeGreaterThan(20);
++      } finally { figure.dispose(); }
++    }
++  }
++
++  // Every kind, and grunts and players with every prop, through what a fight does to them.
++  await wear(assets, 0);
++  const scene = new THREE.Scene(), figures: Figure[] = [];
++  const add = (figure: Figure): Figure => {
++    const i = figures.push(figure) - 1;
++    figure.root.position.set((i % 8) * 2.5, 0, Math.floor(i / 8) * 2.5);
++    figure.root.rotation.y = i * 0.7;
++    scene.add(figure.root);
++    return figure;
++  };
++  for (const kind of KINDS) add(figureOf(kind));
++  const grunts = new Map<WeaponPropKind, Figure>();
++  for (const weapon of PROPS) {
++    grunts.set(weapon, add(figureOf('grunt', weapon)));
++    add(figureOf('player', weapon));
++  }
++  cleanup.push(() => { for (const figure of figures) figure.dispose(); });
++  const by = (kind: string) => figures.find(figure => figure.rig?.kind === kind)!;
++  assets.frame(camera);
++  expect(assets.worn).toBe(figures.length);
++  const all = (what: string) => check(assets, scene, camera, what);
++  expect(all('worn').hidden.length).toBeGreaterThan(2 * figures.length - 1);
++  for (const figure of figures) figure.setTint(1, 0xff4757);
++  all('tinted');
++  for (const figure of figures) {
++    figure.setEyes(true);
++    figure.parts.upperR?.rotation.set(-1.5, 0, 0.4);
++    figure.parts.thighL?.rotation.set(-0.8, 0, 0);
++  }
++  assets.frame(camera);
++  all('posed, dead eyes');
++  // A weapon swap: a new prop to the hand.
++  by('player').setWeapon('shotgun');
++  figures[figures.length - 1]!.setWeapon('pistol');
++  assets.frame(camera);
++  all('swapped');
++
++  // Pieces to the debris as effects.ts `debris` takes them: lent first, then into the scene, every mesh casting.
++  const debris = (figure: Figure, part: Object3D): (() => void) => {
++    const gone = figure.lend(part);
++    scene.attach(part);
++    part.traverse(node => { if ((node as THREE.Mesh).isMesh) { node.castShadow = true; node.receiveShadow = false; } });
++    return () => { part.removeFromParent(); gone(); };
++  };
++  const [head, gun, arm, torso, body, shield, refused] = [by('grunt'), grunts.get('rifle')!, by('sniper'), by('heavy'), by('medic'), by('shield'), by('breacher')];
++  const back = [
++    debris(head, head.parts.head!),
++    debris(gun, gun.parts.weapon!),
++    debris(arm, arm.parts.upperR!),
++    debris(torso, torso.parts.torso!),
++    debris(body, body.root),
++    debris(shield, shield.dropShield()!),
++  ];
++  // A lend the debris refused (enemies/index.ts calls `lend` before `debris` takes it): the gib stays on the figure.
++  refused.lend(refused.parts.head!)();
++  assets.frame(camera);
++  const lent = all('lent');
++  for (const figure of [head, gun, arm, torso, body, shield, refused]) {
++    expect(lent.hidden.includes(figure.parts.hips ?? figure.parts.torso!), figure.rig!.kind).toBe(false);
++  }
++  for (const done of back) done();
++  assets.frame(camera);
++  const after = all('debris gone');
++  // A dropped gun leaves no gib: the walk skips that body again; the others keep a gib and are walked.
++  expect(after.hidden.includes(gun.parts.hips!)).toBe(true);
++  expect(after.hidden.includes(head.parts.hips!)).toBe(false);
++  expect(after.hidden.includes(refused.parts.hips!)).toBe(false);
++  // Disposed with a piece still lent (a corpse, or a player's ragdoll), and a settings change to LOD1 with them all in play.
++  const late = by('flyer'), piece = debris(late, late.root);
++  late.dispose();
++  all('disposed');
++  piece();
++  await wear(assets, 1);
++  assets.frame(camera);
++  const lod1 = all('lod 1 on the same figures');
++  // The new body takes the dropped gun's prop back into its hand, casting since the debris had it: its bones are walked.
++  expect(lod1.hidden.includes(gun.parts.hips!)).toBe(true);
++  expect(lod1.hidden.some(node => node.parent === gun.rig!.armature)).toBe(false);
++  expect(lod1.hidden.some(node => node.parent === grunts.get('pistol')!.rig!.armature)).toBe(true);
++}, 120_000);
++
++test('the merged and walked shadow draws give the same shadow map as the full walk', async () => {
++  await props();
++  const assets = await operators();
++  const renderer = new THREE.WebGLRenderer({ canvas: document.createElement('canvas') });
++  renderer.shadowMap.enabled = true;
++  renderer.shadowMap.autoUpdate = false;
++  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100), target = new THREE.WebGLRenderTarget(16, 16);
++  camera.position.set(0, 10, 15);
++  camera.lookAt(0, 0, 0);
++  const sun = new THREE.DirectionalLight(0xffffff, 2);
++  sun.castShadow = true;
++  sun.position.set(5, 12, 4);
++  sun.shadow.mapSize.set(1024, 1024);
++  Object.assign(sun.shadow.camera, { left: -9, right: 9, top: 9, bottom: -9, near: 0.5, far: 40 });
++  scene.add(sun, sun.target);
++  scene.overrideMaterial = new THREE.MeshBasicMaterial();
++  const figures: Figure[] = [];
++  cleanup.push(() => {
++    for (const figure of figures) figure.dispose();
++    (scene.overrideMaterial as THREE.Material).dispose();
++    target.dispose();
++    renderer.dispose();
++  });
++  const drawShadows = renderer.shadowMap.render.bind(renderer.shadowMap);
++  let walked = false, calls = 0;
++  renderer.shadowMap.render = (lights, at, from) => {
++    const before = renderer.info.render.calls, shown = new Map<Object3D, boolean>();
++    at.traverse(node => shown.set(node, node.visible));
++    assets.shadowSwap(true);
++    // The full walk: the merged draws, every node shown as it was.
++    if (!walked) at.traverse(node => { node.visible = shown.get(node)!; });
++    try { drawShadows(lights, at, from); } finally { assets.shadowSwap(false); }
++    calls = renderer.info.render.calls - before;
++  };
++  const shot = (walk: boolean) => {
++    walked = walk;
++    renderer.shadowMap.needsUpdate = true;
++    renderer.setRenderTarget(target);
++    renderer.render(scene, camera);
++    const map = sun.shadow.map!, texels = new Uint8Array(map.width * map.height * 4);
++    renderer.readRenderTargetPixels(map, 0, 0, map.width, map.height, texels);
++    return { texels, calls };
++  };
++  await wear(assets, 0);
++  const kinds = [...KINDS, 'grunt', 'player'];
++  for (const [i, kind] of kinds.entries()) {
++    const figure = figureOf(kind, i >= KINDS.length ? 'rifle' : undefined);
++    figures.push(figure);
++    figure.root.position.set((i % 6) * 2.2 - 6, 0, Math.floor(i / 6) * 2.2 - 4);
++    figure.root.rotation.y = i * 0.7;
++    figure.parts.upperR?.rotation.set(-1.5, 0, 0.4);
++    figure.parts.thighL?.rotation.set(-0.8, 0, 0);
++    scene.add(figure.root);
++  }
++  scene.updateMatrixWorld(true);
++  assets.frame(camera);
++  const full = shot(false), skipped = shot(true);
++  let cast = 0;
++  for (let i = 0; i < full.texels.length; i += 4) if (full.texels[i] !== 255 || full.texels[i + 3] !== 255) cast++;
++  expect(cast, 'the figures cast').toBeGreaterThan(10000);
++  expect(skipped.texels.every((v, i) => v === full.texels[i]), 'the same shadow map').toBe(true);
++  expect(skipped.calls).toBe(full.calls);
++}, 60_000);
++
++test('nothing in the view-model rig casts, and the shadow pass walks past it while the main pass draws it', async () => {
++  const canvas = document.createElement('canvas');
++  document.body.append(canvas);
++  const renderer = new Renderer(canvas);
++  cleanup.push(() => { renderer.dispose(); canvas.remove(); });
++  // Every view model on both looks (the Blender ones on stand-in maps), flagged by the renderer as the game does.
++  const weapons = new WeaponAssets(loaders);
++  const ctx = {
++    renderer: { rig: renderer.rig, weapons, prepareRig: (root: Object3D) => renderer.prepareRig(root) },
++    camera: { position: new THREE.Vector3() },
++    audio: new Proxy({}, { get: () => () => {} }),
++    effects: new Proxy({ shake: 0 }, { get: (_target, key) => key === 'shake' ? 0 : () => {} }),
++    input: { rumble: () => {} },
++    enemies: null,
++    world: { raycast: () => null, lineOfSight: () => true },
++    game: { raycastPlayers: () => null, onShot: () => {}, hitstop: () => {} },
++  } as unknown as Ctx;
++  const player = { eye: new THREE.Vector3(), forward: new THREE.Vector3(0, 0, -1), right: new THREE.Vector3(1, 0, 0), headshotT: 0,
++    recoil: () => {}, kickFov: () => {}, aimDir: (_s: number, out: THREE.Vector3) => out.set(0, 0, -1) } as unknown as Player;
++  const held = [...(['r4c', 'rifle', 'shotgun', 'sniper', 'pistol', 'lmg', 'revolver'] as const).map(kind => new Gun(ctx, player, kind)), new Sword(ctx, player)];
++  cleanup.push(() => { for (const weapon of held) weapon.dispose(); weapons.clear(); });
++  const noCaster = (look: string) => {
++    let meshes = 0;
++    renderer.rig.traverse(node => {
++      if ((node as THREE.Mesh).isMesh) meshes++;
++      expect(((node as THREE.Mesh).isMesh || (node as THREE.Line).isLine || (node as THREE.Points).isPoints) === true && node.castShadow, `${look}: ${node.name}`).toBe(false);
++    });
++    expect(meshes, look).toBeGreaterThan(held.length);
++  };
++  noCaster('flat');
++  weapons.want(512);
++  await until(() => { weapons.pump(); return !weapons.pending; }, 'the weapons to stream');
++  for (const weapon of held) expect(!!weapon._model.real, weapon.kind).toBe(weapon instanceof Sword || REAL_GUN[weapon.kind as GunKind] !== undefined);
++  noCaster('realistic');
++  // With one view model shown, a cascade's walk stops at the rig instead of visiting its shown nodes (18 to 37 at
++  // 7c00ea2, the hidden models' roots included).
++  for (const weapon of held) {
++    weapon.root.visible = true;
++    const visits = { casters: [] as Object3D[], visits: 0 };
++    walk(renderer.rig, renderer.camera.layers, node => node.visible, visits);
++    expect(visits.visits - 1, weapon.kind).toBeGreaterThan(held.length);
++    weapon.root.visible = false;
++  }
++
++  // A caster in view records the rig's state in each cascade; a rig mesh, that the main pass drew it.
++  const box = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshStandardMaterial());
++  box.castShadow = true;
++  box.position.set(0, 1, -4);
++  const seen: boolean[] = [];
++  box.onBeforeShadow = () => { seen.push(renderer.rig.visible); };
++  renderer.scene.add(box);
++  renderer.camera.position.set(0, 1.6, 0);
++  const probe = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.4), new THREE.MeshBasicMaterial());
++  probe.position.set(0.2, -0.2, -0.5);
++  renderer.rig.add(probe);
++  renderer.prepareRig(probe);
++  let drawn = 0;
++  const rigDepth = probe.onBeforeRender;
++  probe.onBeforeRender = (...args) => { drawn++; rigDepth.apply(probe, args); };
++  renderer.applyQuality(PRESET_VALUES.high);
++  const fx = { hurt: 0, flash: 0, slow: 0, lowHp: 0 };
++  // Past the first frames' compiles and warm-up draws (which show the whole rig once).
++  for (let i = 0; i < 100 && (i < 2 || renderer._compiles.length + renderer._warmups.length > 0); i++) {
++    renderer.render(0, fx);
++    await new Promise(resolve => setTimeout(resolve, 10));
++  }
++  for (const shown of [true, false]) {
++    renderer.rig.visible = shown;
++    seen.length = drawn = 0;
++    renderer.render(0, fx);
++    expect(seen.length, `rig shown: ${shown}`).toBeGreaterThan(0);
++    expect(seen.every(visible => !visible), `rig shown: ${shown}`).toBe(true);
++    expect(renderer.rig.visible).toBe(shown);
++    expect(drawn).toBe(shown ? 1 : 0);
++  }
++}, 60_000);

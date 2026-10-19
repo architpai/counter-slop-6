@@ -1,0 +1,37 @@
+== r6 start (survey phase)
+Tue Oct 20 02:42:01 JST 2026
+ Wattage = 20W
+ Current = 2220mA
+ Voltage = 9000mV
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	45%; charging; 20:00 remaining present: true
+ Wattage = 20W
+== job1-r6pre+r6ld start
+Tue Oct 20 04:21:16 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	50%; charging; 20:00 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== job1-r6pre+r6ld end
+Tue Oct 20 04:41:38 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	38%; charging; (no estimate) present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+ Wattage = 20W
+== job2-r6cpu start
+Tue Oct 20 05:35:44 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	50%; charging; 20:00 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== job2-r6cpu end
+Tue Oct 20 06:03:32 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	36%; charging; (no estimate) present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded

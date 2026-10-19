@@ -776,6 +776,132 @@ alone (dsd and dr were captured together), and the Result table's low1 "-1.4 %" 
    ~1900 matrix products per frame; exact only with a flag cleared on every other writer: `setWeapon`, `dropShield`,
    `lend`, death). Est. 0.05-0.15 ms js on Low training; needs a bit-equal matrix test.
 
+## Round 6 — fight CPU bundle, load time (High/Ultra fight CPU and load-time trims kept)
+
+2026-10-20, on `92d6dd3` → harness `8be1c38`, game change `52c96ba`. Survey: three read-only Opus agents (load
+pipeline, shader programs, memory/GC); implementation: four Opus agents (`bundle` and `matrix` and `load` in their own
+worktrees, the harness in the main checkout on `perf/` only); review: GPT-6.1-Sol (below). Time budget ~4-5 h, at most
+3 A/Bs (2 used), no post-round bench (Round 7's pre-bench is the next reference).
+
+**Machine state** (`perf/results/r6-power.log`). Still the **20 W USB-C adapter** all round (`pmset -g ac`: Wattage
+20); the 94 W charger was not connected. Gate: AC and ≥ 50 % at the start of each job, void under 35 %
+(`PERF_MIN_BATT=35`). Job 1 (r6-pre + load A/B) ran 50 → 38 % in 20 min, job 2 (CPU A/B) 50 → 36 % in 28 min;
+no void, no thermal or performance warning. Idle charging between jobs (36 → 50 % took ~55 min). Desktop Chrome open
+(idle), as in earlier rounds. So the **Medium confirmation arm (lead 3 of the brief) was skipped**: it needs ≥ 4
+balanced rounds, which the 20 W adapter cannot power.
+
+**Round baseline.** `r6-pre` (`8be1c38`, traced, all 4 presets on downtown + training, as `r5-pre`; 275 s):
+`perf/results/r6-pre.json`. Game code as `r5-pre` (the harness only adds read-only load timestamps until ready and a
+trace GC digest). Unpaired vs `r5-pre`: all +1.7 % frame mean (low +2.8, medium +2.8, high -0.9, ultra +2.1 %),
+js -1.8 %; calls, triangles and programs equal. Same code, so machine state (a hypothesis), not a change.
+
+### Harness (kept, commit `8be1c38`)
+
+- `bench.mjs --scenarios fight` (default `path,fight`) and `--load-only` (N fresh-browser cold loads per cell through
+  the same `loadAndWait`, same facts asserted; ~1 s per Low load, 6-10 s realistic).
+- `load.phases` in every result: for each readiness flag the first busy and the final done time (sky, skyLanding,
+  bakeLayout, bake, bakeFading, textures, fx, weapons, operators, props, compiles, warmups, …), upload-pace changes,
+  match start, quiet-start end, and the load window's frames / max frame / > 33 and > 50 ms counts. Read-only, stops
+  at ready; fight summaries match the old harness.
+- Traced replays record `trace.gc` (MinorGC/MajorGC count, ms, max) for the run window; `ab-agg` prints gc ms/frame.
+- `ab.sh` takes `AB_ARGS` (recorded in the manifest); `perf/ab-load.mjs <tag>` pairs readyMs / firstPlayableMs per
+  cell-round and prints per-phase median deltas.
+
+### Where load time goes (survey + `load.phases`, HEAD, medians over 48 loads)
+
+Realistic ready ≈ 7.0-9.7 s = ~0.33 s page + boot, ~0.1 s menu → match (the bench starts the match on the first
+menu frame), **3.0 s match quiet start** (`MATCH_QUIET_MS`: no uploads, layout, compiles or warm-ups; fetches and
+KTX2 transcode hide under it), then **2-6 s of slot-paced serial streaming**: sky landing ~0.2 s, bake layout ~0.35 s,
+bake (its 1.5 s fade runs in parallel), level textures (to ~6.0-7.5 s), fx, weapons (~0.85-1.2 s), operators, props
+(ready = props done on downtown/house/mexico). Every stream waits on the 24 ms upload floor (`UPLOAD_GAP_MS`) with
+one item per slot; the pace backs off to 2 near the end on most realistic loads. All of that is pacing by design
+(frame smoothness in a live match): not exact to change. The load window has ~3-4 frames > 33 ms (max ~120-170 ms).
+
+**Memory/GC.** GC is not a lever: traced fight GC is **~0.01 ms per frame** (r6cpu, all presets). The heap peak
+(100-385 MB) is V8's old-space growth limit, not live data (mexico's path reaches it too; heap end 55-85 MB), a
+hypothesis from the survey, not measured further. Allocation churn left after Round 2's C1/C2 is ~20-70 KB per fight
+frame, mostly short-lived. **Shaders.** No duplicate programs, no per-frame `needsUpdate`; three already enables
+`KHR_parallel_shader_compile`; the game holds compiles off match frames.
+
+### Result
+
+| paired, kept vs HEAD | low | medium | high | ultra |
+|---|---|---|---|---|
+| **readyMs** (r6ld, 3 balanced rounds, 4 maps, `load`) | 486 → 465 ms (-4.4 %, -21 ms) | 7034 → 6959 (-1.1 %, -75) | 7182 → 7092 (-1.3 %, -90) | 9150 → 9025 (-1.4 %, -125) |
+| readyMs headB/head | +2.5 % | -0.3 % | -0.3 % | 0.0 % |
+| **firstPlayableMs** (`load`) | 469 → 456 (-2.7 %, -13 ms) | 530 → 518 (-2.3 %, -12) | 562 → 530 (-5.8 %, -32) | 652 → 606 (-7.1 %, -46) |
+| firstPlayable headB/head | +2.5 % | -0.1 % | -0.6 % | +0.1 % |
+| `load` faster than head, cell-rounds (ready / first playable) | 11 / 11 of 12 | 11 / 12 of 12 | 10 / 11 of 12 | 10 / 11 of 12 |
+| **fight frame mean** (r6cpu, `bundle`, training + mexico, 2 rounds) | +0.6 % (low1 only; rejected) | void * | 4.381 → 4.256 ms (-2.9 %, -0.13) | 5.050 → 4.910 (-2.8 %, -0.14) |
+| fight frame median / p95 | 0.0 / +0.7 % | void * | -4.8 % (-0.20 ms) / 0.0 % | -0.9 % (-0.04) / -3.7 % (-0.29) |
+| fight js (traced) | -0.4 % | void * | 3.134 → 2.897 ms (-7.6 %, -0.24) | 3.658 → 3.478 (-4.9 %, -0.18) |
+| fitted (ab-posfit) mean / js | +1.6 / -0.6 % | void * | -1.6 / -8.6 % | -2.9 / -4.8 % |
+| headB/head raw mean / js (fitted mean / js) | +3.4 / +0.9 % (+3.5 / +0.7) | -4.0 / -7.6 % * | +0.7 / -2.8 % (+2.6 / -3.1) | +0.8 / -0.2 % (-0.1 / -0.3) |
+| heap / GC | no memory change made; GC ~0.01 ms/frame in every arm | | | |
+
+\* r6cpu's medium arm caught power-state switches again: every medium round-2 fight is 27-49 % slower than its round-1 pair in
+every variant (bundle mexico +10 %, its round 1 being the outlier: 3.29 ms against 2.37-2.43 for the other three). Not usable.
+
+**Verdict.**
+- **`load` is kept on every preset**: faster in 42/48 cell-rounds on readyMs (headB 23/48) and 45/48 on first
+  playable (headB 24/48); every phase moves 10-30 ms earlier from boot on (liveMs -9 ms) and props/ready a further
+  25-60 ms on realistic presets. Small in ms (-21 to -125 ms ready, -12 to -46 ms first playable), but the paired
+  sign test is clear. Load-window long frames about the same (median max frame medium 106 vs 119 ms, ultra 174 vs 165 ms, headB 119 / 169;
+  > 33 ms frames 2.8-4.1 vs 3.0-4.1 per load).
+- **`cpu` (walk + D) is kept, measured on High and Ultra**: ultra fight frame mean -2.8 % raw / -2.9 % fitted
+  against headB ≈ 0, js -4.9 %; high -2.9 % raw (fitted -1.6 %, headB +2.6 % fitted), js -7.6 / -8.6 %; the training
+  fight (the target) is faster in both rounds on both presets (high 4.98/5.01 → 4.70/4.71 ms, ultra 5.22/5.63 →
+  5.08/5.23). One A/B of 2 rounds on 2 maps: the size is approximate. **Medium: not measured** (void arm); kept because
+  the same code runs there and only removes work (fewer node visits in the shadow walk, one `render()` for the post
+  chain); confirming it is lead 0.
+- **`low1` rejected** (in `bundle` it is the only Low-active part): Low +0.6 % mean, js -0.4 % (headB +0.9 %) despite
+  training calls 470 → 431. Second time without a Low gain.
+- **`matrix` rejected**: low js -1.7 % (fitted -1.8, headB +0.7), ultra js -2.9 % (headB -0.2), high mean +1.4 %:
+  not clearly past noise after one A/B.
+Fight summaries (score, kills, hash) are identical across all four variants in every r6cpu cell; calls drop only
+where the patches aim (Low training 470 → 431, low1), programs equal.
+
+### Changes kept (commit `52c96ba`; patches `perf/patches/r6-cpu.patch`, `r6-load.patch`)
+
+| change | where | evidence | pixels |
+|---|---|---|---|
+| **walk** (`r5-walk`): during each shadow redraw hide the caster-free subtrees of worn operators (pivots, armature bones; guards for lent pieces, gibs, socket casters) and the view-model rig; same casters in the same order | `operators.ts` `bare()`, `render/index.ts` shadow wrapper, `tests/shadow-walk.test.ts` | with D: r6cpu high/ultra above | exact |
+| **D** (Round 2's post chain in one `render()`, ported onto Round 4's `postfx.ts`/`drawCasters`): one render of the post scene, the passes run from `onAfterRender` via `renderBufferDirect` with three's per-pass state reset; Low and the harness's out-of-chain `_pass` keep the old path; shadow-wrapper arrays reused | `postfx.ts`, `render/index.ts`, `tests/render-chain.test.ts` (canvas bytes, calls, programs vs one render per pass) | as above | exact |
+| **load 1**: `renderer.debug.checkShaderErrors = false` in production builds only (`process.env.NODE_ENV`, inlined by Next); dev and vitest keep it (a test asserts it): no blocking link-status / info-log queries at each program's first use | `render/index.ts` | r6ld | exact (three only reads logs; programs, uniforms unchanged); a failing shader is no longer reported in production |
+| **load 2**: the props merge's placement work (`DressingMerge.place()`, typed arrays only, no three object, no `Math.random`) runs every frame after the quiet start once the kit is in, not after every other stream; geometry creation and `#build` stay in the pump at their old point | `props.ts`, `tests/dressing.test.ts` (0 random draws and no objects in premerge; same uuids, ids, order; byte-identical arrays) | r6ld: props/ready -25 to -60 ms on realistic | exact |
+| **load 3**: the boot-time room environment compiles its programs (`three.compile`) before its first draw so links overlap | `render/index.ts`, `tests/render-chain.test.ts` (same program count/keys, identical texels) | r6ld: liveMs/first playable -9 to -46 ms | exact (program creation order changes; sort uses material ids) |
+
+One timing effect: with `load`, a warm-up that HEAD drew one frame after the quiet start (the `warmups` flag busy for
+one render at ~3.6 s) is drawn at the menu frame instead (its programs linked earlier); `deferredWarmups` (5) and all
+facts are equal.
+
+### Quality gate
+
+`node perf/quality.mjs compare baseline r6`: **PASS, 56/56, every SSIM 1.0000** (the changed pixels are Round 1/4's
+known LSBs). `compare r5 r6`: **56/56 byte-identical, 0 changed pixels**. All four candidates applied together
+(`bundle` + `matrix` + `load`, `scratch-r6-all`) were also 56/56 byte-identical vs `r5`. `npm run typecheck` and
+`npm test` (45 files, 392 tests) pass on the kept set.
+
+### Review (GPT-6.1-Sol, high effort)
+
+REVIEW_PLACEHOLDER
+
+### Hot spot leads (refreshed)
+
+0. **Charger**: still 20 W. Medium needs a clean balanced repeat for Round 4's set and for this round's `cpu`
+   (2c75479 / 92d6dd3 vs HEAD, ≥ 4 rounds); two rounds in a row its arm caught power-state switches.
+1. **Load: upload slot packing.** Ready time is the 3 s quiet start plus 24 ms-paced serial uploads, one item per
+   slot (textures ~36-54, weapons 27). Several small uploads per slot within the 60 kB/ms budget, or streams that
+   do not wait on each other, would cut 1-3 s, but they change in-match frame pacing during the stream: needs the
+   user's decision (a design change), and a stutter check from `load.phases.window`.
+2. **Bake layout in a worker** (0.2-0.6 s on downtown/house/mexico, exact by a byte-equal `uv1` test; medium effort).
+3. **One in-match program compile** on training high/ultra (programs 52 → 53 path → fight): find it with
+   `newPrograms` per warm-up and prewarm it (a hitch for real players, not seen by the bench).
+4. **Sky landing**: `scene.environment` swap makes every lit material rebuild its program key once (2-8 ms on one
+   frame); reuse the PMREM target.
+5. **Fight CPU**: what is left after walk + D is submission; `matrix` (exact, `r6-matrix.patch`) could be retried in
+   a bundle with other figure-CPU work on a stable charger.
+
 ## Tried / rejected ideas
 
 Format: round, idea, where, result numbers vs the noise floor, why rejected.
@@ -869,3 +995,16 @@ Format: round, idea, where, result numbers vs the noise floor, why rejected.
 - **r5, not tried (by analysis)**: hemisphere light removal (recompile on sky landing; ≤ 0.03 ms); Medium MSAA depth
   invalidate before the blit (≤ 0.06 ms, likely a no-op like dsd); render-to-texture MSAA (extension not exposed);
   shadow atlas (not exact: uv remap and edge taps); scissored clears (draw-based clear with a load: worse).
+- **r6, low1 again (in the CPU bundle)** (`perf/patches/r5-low1.patch`, in `r6-bundle.patch`). Exact. r6cpu (traced,
+  training + mexico fights): Low mean +0.6 %, js -0.4 % (headB +3.4 / +0.9 %) although training calls drop 470 → 431.
+  Second time without a Low gain. Rejected; the rest of the bundle (walk + D) is kept.
+- **r6, matrix: skip three's second world-matrix walk for figures `syncModel` updated** (`render/fresh.ts`,
+  `enemies/model.ts`, `figure.ts`, `operators.ts`; a per-step token, the root's world matrix compared bit for bit,
+  every writer marks the figure stale; `tests/figure-matrix-skip.test.ts` compares 678,876 node matrices bit-equal to
+  three's full walk). Exact (56/56 with the other candidates). r6cpu: low js -1.7 % (fitted -1.8 %, headB +0.7 %),
+  ultra js -2.9 % (headB -0.2 %), high mean +1.4 %; ~1,050 matrix products per training frame. Not clearly past
+  noise. Rejected; patch `perf/patches/r6-matrix.patch`.
+- **r6, not tried (by analysis)**: allocation pooling for GC (GC is ~0.01 ms per fight frame); freeing CPU copies of
+  level geometry after upload (read later by `wearColours`, lightmap UVs and context restore; changes RSS only);
+  upload pacing constants, the quiet start and the bake fade (in-match pacing / visible design, not exact); bake
+  layout per frame without a slot (more script per match frame during the stream).
