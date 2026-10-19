@@ -77,7 +77,8 @@ per run (all gitignored). On any exit (done, error, ^C) it resets src/ and tests
 `ab-agg` reads the manifest and fails unless every result exists and holds its own map and preset. One variant must
 be named `head`: the ratios pair each variant with it. Put the `ab-agg` output in the round's notes
 (`perf/results/rN-ab.md`). `node perf/ab-posfit.mjs <tag> [mean|med|p95|cpu] [path|fight|both] [--partial]` is a
-diagnostic: a least-squares fit with one run-position effect per preset (positions from the rotation, no uncertainty);
+diagnostic: a least-squares fit per preset row with run-position effects shared by its cells (the `all` row shares
+one set across presets; positions from the rotation, no uncertainty);
 `--partial` drops incomplete map x preset x rounds instead of failing. `--no-trace` fights end in other fixed states
 than traced ones: compare within a mode.
 

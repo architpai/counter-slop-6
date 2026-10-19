@@ -450,7 +450,8 @@ would pin the cost down.
 ### A/B protocol finding: run position
 
 `perf/ab-posfit.mjs <tag> [mean|med|p95|cpu] [path|fight|both]` (new) fits log(frame) = cell-scenario-round + variant
-+ run position by least squares (a diagnostic: one shared position effect per preset, no uncertainty estimate). In
++ run position by least squares (a diagnostic: each preset row is its own fit with position effects shared by its
+cells; the `all` row shares one set across presets; no uncertainty estimate). In
 s2 the frame time rose with the run's position inside a cell's set of 7 runs: on medium the raw position averages
 (position and variant mixed) went from -3.6 % (first) to +2.3 % (last) of the set's geomean, and the fitted position
 effects rose to +8 % by the 5th-7th run (`r3-ab.md`). With cyclic rotation `headB` runs next to `head` in most cells
@@ -465,7 +466,7 @@ balance), list `headB` away from `head` in the variant list, and read `ab-posfit
 |---|---|---|---|
 | `r3-a-opshadow` | one shadow draw per worn two-mesh operator per cascade: per kind a merged geometry (raw int16/uint8 arrays of both parts, u16 index, made under `quietly()`), swapped onto mesh 0 around the shadow pass while mesh 1 stops casting (`operators.ts` `shadowSwap`, `render/index.ts` wrapper) | 56/56 byte-identical | calls -16 % in training fights (ultra 367 → 308, high 313 → 271); frame mean s2 (order-corrected) high -0.5 %, ultra -0.2 %, medium void; training fight cpu high -9.2 %, ultra -1.5 % (headB up to ±7 % on training) — **not proven** |
 | `r3-d-vm` | view-model (`GRID_VIEW_MODEL`) and backdrop (`BACKDROP`, new define on the kit's `\|far` materials) programs skip the cascade loop at compile time (receiveShadow is false on them, so the result was always 1.0) | 56/56 byte-identical | s2 high -1.4 % mean / -2.2 % median, ultra -0.1 / -0.7 % — **not proven** |
-| `r3-g-ndotl` | skip shadow taps where N·L ≤ 0 (run-time branch; TOON/clearcoat excluded); High/Ultra cascade loop and three's Low/Medium ternary | 10 of 56 images, 1-3/255 on a few px; high/fight-mid: 17 px, a 6x3 cluster at x 1359-1365, y 626-628 up to 23/255 — the same SMAA edge Round 1's B1 flipped (x 1360-1362, y 627): a 1-LSB input change flips one edge decision | s1 low -0.4 %; s2 high -2.1 % mean / -2.2 % median, ultra -1.5 / -2.1 % — borderline, **not proven** |
+| `r3-g-ndotl` | skip shadow taps where N·L ≤ 0 (run-time branch; TOON/clearcoat excluded); High/Ultra cascade loop and three's Low/Medium ternary | 10 of 56 images, 1-3/255 on a few px; high/fight-mid: 17 px, a 7x3 cluster at x 1359-1365, y 626-628 up to 23/255 — the same SMAA edge Round 1's B1 flipped (x 1360-1362, y 627): a 1-LSB input change flips one edge decision | s1 low -0.4 %; s2 high -2.1 % mean / -2.2 % median, ultra -1.5 / -2.1 % — borderline, **not proven** |
 | `r3-dg-both` | d + g together (they conflict textually) | — | not run |
 | `r3-b-bones` | bone textures uploaded before the first shadow pass (`OperatorSkeleton` holds its update until released; three r170 updates skeletons again in the first cascade because the frame counter steps between listing and the shadow pass) | 56/56 byte-identical | s2 high -0.1 %, ultra +0.3 % (all +3.0 % includes the void medium arm) → **rejected** |
 | `r3-c-matrix` | rig `updateWorldMatrix(true,false)` instead of a full rig walk; `#reach` without the armature subtree update; precomputed rotor signs and arm bone indices | 56/56 byte-identical (bit-equal node transforms in a 1326-reach vitest) | s2 high +0.3 %, ultra -0.2 % → **rejected** |
@@ -496,6 +497,11 @@ the gate and the proposed run mixed d and g → rewritten; (P3) `ab-posfit` inpu
 operator patch chose u16 indices up to 65,536 vertices (65,535 is the primitive-restart index) → `> 65535` in
 `r3-a-opshadow.patch` (still applies on `7a3ceef`); the 23/255 cluster now has its location and cause; s2 medium's
 raw vs fitted control and the bones "all" figure are told apart.
+Round 2 (`perf-loop-r3-review-2`, on `c4ef91d..74def9a` with the findings and responses above): no P1/P2; the
+rotation formula matches `ab.sh`, `--partial` drops whole map/preset/rounds, the pivot check stops rank-deficient fits,
+the index threshold is right, the timing claims agree with `r3-ab.md`, and keeping no game change stays supported. Two
+P3 wording fixes applied: the `all` row of `ab-posfit` shares one position set across presets (each preset row is its
+own fit), and the pixel cluster is 7x3.
 
 ### Hot spot leads (refreshed)
 

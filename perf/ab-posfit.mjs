@@ -47,8 +47,8 @@ for (let r = 1; r <= man.rounds; r++) man.presets.forEach((preset, pi) => man.ma
   for (const o of rows) for (const s of scens) obs.push({ v: o.v, p: o.p, preset, g: `${cell}/${s}`, y: o.ys[s] });
 }));
 if (errs.length) die(`incomplete run '${tag}' (use --partial to drop incomplete map/preset/rounds):\n  ${errs.join('\n  ')}`);
-console.log(`diagnostic only: ${tag} log(${metric}, ${scen}) = cell-scenario-round + variant + run position; one position ` +
-  `effect per preset, shared by its cells (pos1..: vs the first run), positions from ab.sh's rotation, no uncertainty`);
+console.log(`diagnostic only: ${tag} log(${metric}, ${scen}) = cell-scenario-round + variant + run position; each preset row ` +
+  `is its own fit, its position effects shared by its cells (the all row shares one set across presets; pos1..: vs the first run), positions from ab.sh's rotation, no uncertainty`);
 if (skipped.length) console.log(`--partial: dropped ${skipped.length} incomplete map/preset/rounds:\n  ${skipped.join('\n  ')}`);
 if (warns.length) console.error(`ab-posfit: warning: ${warns.length} map/preset/rounds where the mtimes do not confirm ` +
   `the rotation:\n  ${warns.slice(0, 8).join('\n  ')}${warns.length > 8 ? '\n  ...' : ''}`);
