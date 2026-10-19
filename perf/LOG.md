@@ -440,19 +440,24 @@ mean vs `r2-pre`** (low +1.4 %, medium +23.9 %, high +20.3 %, ultra +34.4 %): th
 `--profile` ablations now record the **mean** next to the median, and every scenario records `frameParity` /
 `cpuParity` (mean of even vs odd intervals/callbacks; `facts.shadowEvery`). Reason (Low survey): the old ablation took
 the median of a bimodal distribution, so Low's "shadow 0.8-1.4 ms averaged, 1.6-2.8 ms per redraw" (Round 0) was a
-median jump; Medium and High show the same bimodal frame times while redrawing every frame. **Measured with the new
-fields (s1, 16 Low runs per variant): Low's shadow callbacks cost ~0.3 ms more than the others** (path cpu odd/even
-1.70 / 1.38 ms, fight 1.40 / 1.17 ms). Lead 7 is therefore about 0.15 ms averaged, not 0.8-1.4 ms.
+median jump; Medium and High show the same bimodal frame times while redrawing every frame. **With the new fields
+(s1, 16 Low runs per variant), Low's shadow callbacks take ~0.2-0.3 ms longer than the others** (callback wall time,
+GPU waits included: path cpu odd/even 1.70 / 1.38 ms, fight 1.40 / 1.17 ms). That is "shadow callbacks take longer",
+not a measured shadow GPU cost: work can spill across intervals and the game step can differ by parity. It does make
+the Round 0 reading (1.6-2.8 ms per redraw) unlikely. A paired shadow-off mean ablation and traced submission time
+would pin the cost down.
 
 ### A/B protocol finding: run position
 
 `perf/ab-posfit.mjs <tag> [mean|med|p95|cpu] [path|fight|both]` (new) fits log(frame) = cell-scenario-round + variant
-+ run position by least squares. In s2 the frame time rose with the run's position inside a cell's set of 7 runs:
-on medium, position 0 read -3.6 % and position 6 +2.3 % against the set's geomean. With cyclic rotation `headB`
-always runs next to `head`, so the control is blind to that ramp, and with rounds < variants the variants are
-confounded with positions (s2 medium: every patch +3-10 %, including `d`, which does not change Medium's shader at
-all). Use rounds = number of variants (exact balance), list `headB` away from `head` in the variant list, and read
-`ab-posfit` next to `ab-agg`.
++ run position by least squares (a diagnostic: one shared position effect per preset, no uncertainty estimate). In
+s2 the frame time rose with the run's position inside a cell's set of 7 runs: on medium the raw position averages
+(position and variant mixed) went from -3.6 % (first) to +2.3 % (last) of the set's geomean, and the fitted position
+effects rose to +8 % by the 5th-7th run (`r3-ab.md`). With cyclic rotation `headB` runs next to `head` in most cells
+(only when the set wraps does it span the whole set), so the control sees little of such a ramp, and with rounds <
+variants the variants are confounded with positions (s2 medium: every patch +3-10 %, including `d`, which does not
+change Medium's shader at all; medium headB +0.9 % raw, +2.4 % fitted). Use rounds = number of variants (exact
+balance), list `headB` away from `head` in the variant list, and read `ab-posfit` next to `ab-agg`.
 
 ### Patches (all in `perf/patches/`, on `7a3ceef`)
 
@@ -460,19 +465,37 @@ all). Use rounds = number of variants (exact balance), list `headB` away from `h
 |---|---|---|---|
 | `r3-a-opshadow` | one shadow draw per worn two-mesh operator per cascade: per kind a merged geometry (raw int16/uint8 arrays of both parts, u16 index, made under `quietly()`), swapped onto mesh 0 around the shadow pass while mesh 1 stops casting (`operators.ts` `shadowSwap`, `render/index.ts` wrapper) | 56/56 byte-identical | calls -16 % in training fights (ultra 367 → 308, high 313 → 271); frame mean s2 (order-corrected) high -0.5 %, ultra -0.2 %, medium void; training fight cpu high -9.2 %, ultra -1.5 % (headB up to ±7 % on training) — **not proven** |
 | `r3-d-vm` | view-model (`GRID_VIEW_MODEL`) and backdrop (`BACKDROP`, new define on the kit's `\|far` materials) programs skip the cascade loop at compile time (receiveShadow is false on them, so the result was always 1.0) | 56/56 byte-identical | s2 high -1.4 % mean / -2.2 % median, ultra -0.1 / -0.7 % — **not proven** |
-| `r3-g-ndotl` | skip shadow taps where N·L ≤ 0 (run-time branch; TOON/clearcoat excluded); High/Ultra cascade loop and three's Low/Medium ternary | 10 of 56 images, 1-3/255 on a few px, high/fight-mid one spot 23/255 (same class as R1 B1) | s1 low -0.4 %; s2 high -2.1 % mean / -2.2 % median, ultra -1.5 / -2.1 % — borderline, **not proven** |
+| `r3-g-ndotl` | skip shadow taps where N·L ≤ 0 (run-time branch; TOON/clearcoat excluded); High/Ultra cascade loop and three's Low/Medium ternary | 10 of 56 images, 1-3/255 on a few px; high/fight-mid: 17 px, a 6x3 cluster at x 1359-1365, y 626-628 up to 23/255 — the same SMAA edge Round 1's B1 flipped (x 1360-1362, y 627): a 1-LSB input change flips one edge decision | s1 low -0.4 %; s2 high -2.1 % mean / -2.2 % median, ultra -1.5 / -2.1 % — borderline, **not proven** |
 | `r3-dg-both` | d + g together (they conflict textually) | — | not run |
-| `r3-b-bones` | bone textures uploaded before the first shadow pass (`OperatorSkeleton` holds its update until released; three r170 updates skeletons again in the first cascade because the frame counter steps between listing and the shadow pass) | 56/56 byte-identical | s2 all +3.0 %, high -0.1 %, ultra +0.3 % → **rejected** |
+| `r3-b-bones` | bone textures uploaded before the first shadow pass (`OperatorSkeleton` holds its update until released; three r170 updates skeletons again in the first cascade because the frame counter steps between listing and the shadow pass) | 56/56 byte-identical | s2 high -0.1 %, ultra +0.3 % (all +3.0 % includes the void medium arm) → **rejected** |
 | `r3-c-matrix` | rig `updateWorldMatrix(true,false)` instead of a full rig walk; `#reach` without the armature subtree update; precomputed rotor signs and arm bone indices | 56/56 byte-identical (bit-equal node transforms in a 1326-reach vitest) | s2 high +0.3 %, ultra -0.2 % → **rejected** |
 | `r3-e-low2` | Low's shadow map double-buffered (spare target under `quietly()`) | 56/56 byte-identical | s1 low +1.0 % mean (headB +0.3 %); parity gap unchanged → **rejected** |
 
 ### Next steps for this round (or Round 4)
 
-Re-run on AC with a charged battery: `perf/ab.sh <tag> medium,high,ultra downtown,house,mexico,training 4 head
-perf/patches/r3-a-opshadow.patch headB perf/patches/r3-dg-both.patch` (4 variants, 4 rounds, ≈1.7 h: over the tool's
-2 h limit with more variants), plus a traced paired run of the training/mexico fights for `a`'s js. Keep `a` and `d`
-if they show any gain past headB (both exact); `g` only if it beats ~2 % on high/ultra (it moves LSBs). Review by
-GPT-6.1-Sol has not run on this round's patches (nothing kept).
+Re-run on AC with a charged battery and desktop GPU apps closed, one question per run, rounds = variants: e.g.
+`perf/ab.sh <tag> medium,high,ultra downtown,house,mexico,training 4 head a.patch headB d.patch` and a second run
+for `g` (copy the patches to short names: `ab-posfit` reads names from the manifest, but short names keep the result
+files readable), plus a traced paired run of the training/mexico fights for `a`'s js. Keep a change only past the
+established gate (`NOISE.md`: ≥ ~2 % paired on the targeted preset aggregate, repeated when near the line), not
+merely past one headB reading; `g` additionally moves LSBs. Run within the tool's 2 h background limit (≈5 min per
+variant-round on medium+high+ultra), and record `pmset` per run.
+
+### Review (GPT-6.1-Sol, high effort)
+
+Round 1 (`perf-loop-r3-review-1`, on `7a3ceef..c4ef91d`): no P1; keeping no game change and voiding s3 are supported;
+the harness parity alignment is correct (callback k renders `_frame = k+1`, odd cpu entries hold Low's shadow draws,
+even intervals hold the preceding odd callback, interval 0 excluded) and no existing JSON field changed; `quietly()`,
+shared bounds/bind matrices, the `BACKDROP` program key and the N·L guard (Toon/clearcoat excluded) check out.
+Findings, all fixed: (P2) `ab-posfit` parsed names by hyphens, so patch basenames with hyphens broke it → it reads
+the manifest, checks every file, fails on incomplete runs unless `--partial`, takes positions from `ab.sh`'s rotation
+formula (mtimes only cross-check) and stops on a rank-deficient design; (P2) the Low parity gap was worded as a
+shadow cost → reworded as callback wall time; (P2) "headB is blind to the ramp" was too strong, and raw position
+averages were quoted as fitted effects → reworded, both given; (P2) the next-run rule ("any gain past headB") weakened
+the gate and the proposed run mixed d and g → rewritten; (P3) `ab-posfit` input/rank checks → above; (P3) the
+operator patch chose u16 indices up to 65,536 vertices (65,535 is the primitive-restart index) → `> 65535` in
+`r3-a-opshadow.patch` (still applies on `7a3ceef`); the 23/255 cluster now has its location and cause; s2 medium's
+raw vs fitted control and the bones "all" figure are told apart.
 
 ### Hot spot leads (refreshed)
 
@@ -484,8 +507,9 @@ GPT-6.1-Sol has not run on this round's patches (nothing kept).
    `getShadow` → 1.0 variant, and a "clear+store only, no casters" ablation).
 2. **Static caster culling per cascade** by index ranges inside the merged level/prop geometries (exact, no new
    objects): survey estimate only 0.02-0.06 ms GPU on ultra: bundle only with other shadow work.
-3. **Low**: its shadow redraw is ~0.3 ms per draw frame (measured above); the bimodal frame time is presentation, not
-   the shadow map. Low's remaining structural lever is fewer figure draws (merging same-joint parts: not exact).
+3. **Low**: its shadow callbacks take ~0.2-0.3 ms longer (wall time, above), far less than Round 0's 1.6-2.8 ms
+   reading; the bimodal frame time also appears on presets that redraw every frame, so it is probably not the
+   shadow map (not proven). Low's remaining structural lever is fewer figure draws (merging same-joint parts: not exact).
 4. Fight CPU: training fights are draw-bound in submission; `a` cuts 40-60 calls per frame there (needs a clean run).
 
 ## Tried / rejected ideas
@@ -532,8 +556,9 @@ Format: round, idea, where, result numbers vs the noise floor, why rejected.
   under them); swap-remove in effect pools (changes instance order); `forceSinglePass` on the sword trail, slash wave
   and hazard ring (changes blending order); disabling `sortObjects` (depth-tie order).
 - **r3, b-bones: bone textures uploaded before the first shadow pass** (`operators.ts` `OperatorSkeleton`,
-  `render/index.ts` wrapper). Byte-identical. Paired s2 (order-corrected, 2 rounds): frame mean all +3.0 %, high
-  -0.1 %, ultra +0.3 % (medium void). No gain; it also updates/uploads skeletons culled from every pass. Rejected;
+  `render/index.ts` wrapper). Byte-identical. Paired s2 (order-corrected, 2 rounds): frame mean high -0.1 %,
+  ultra +0.3 % (medium void; the all-preset +3.0 % includes that arm). No gain; it also updates/uploads
+  skeletons culled from every pass. Rejected;
   patch `perf/patches/r3-b-bones.patch`.
 - **r3, c-matrix: duplicate rig/armature matrix walks and per-bone string tests** (`render/index.ts`,
   `operators.ts`, `enemies/model.ts`). Byte-identical. Paired s2: high +0.3 %, ultra -0.2 % frame mean; training fight

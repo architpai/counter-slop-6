@@ -127,7 +127,7 @@ index aaa037e..4632689 100644
      this.#template = null;
      this.#kinds.clear();
      this.#kindTwins.clear();
-@@ -592,6 +630,75 @@ function gibGeometries(template: KindTemplate): Map<string, THREE.BufferGeometry
+@@ -592,6 +630,76 @@ function gibGeometries(template: KindTemplate): Map<string, THREE.BufferGeometry
    return out;
  }
  
@@ -186,7 +186,8 @@ index aaa037e..4632689 100644
 +      merged.setAttribute(name, attribute);
 +    }
 +  }
-+  const index = new (total > 65536 ? Uint32Array : Uint16Array)(parts.reduce((sum, geometry) => sum + geometry.index!.count, 0));
++  // 32-bit when an index reaches 65535: in 16 bits that is WebGL2's primitive-restart index.
++  const index = new (total > 65535 ? Uint32Array : Uint16Array)(parts.reduce((sum, geometry) => sum + geometry.index!.count, 0));
 +  let at = 0, start = 0;
 +  parts.forEach((geometry, i) => {
 +    const own = geometry.index!.array;

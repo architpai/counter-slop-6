@@ -76,7 +76,10 @@ per run (all gitignored). On any exit (done, error, ^C) it resets src/ and tests
 `out/` back from `$AB_WORK/out-orig`. A failed run's JSON is removed; the script lists the failed cells and exits 1.
 `ab-agg` reads the manifest and fails unless every result exists and holds its own map and preset. One variant must
 be named `head`: the ratios pair each variant with it. Put the `ab-agg` output in the round's notes
-(`perf/results/rN-ab.md`). `--no-trace` fights end in other fixed states than traced ones: compare within a mode.
+(`perf/results/rN-ab.md`). `node perf/ab-posfit.mjs <tag> [mean|med|p95|cpu] [path|fight|both] [--partial]` is a
+diagnostic: a least-squares fit with one run-position effect per preset (positions from the rotation, no uncertainty);
+`--partial` drops incomplete map x preset x rounds instead of failing. `--no-trace` fights end in other fixed states
+than traced ones: compare within a mode.
 
 A round's change counts only if `compare` flags it **IMP** beyond the noise floor (see `NOISE.md`) on the cells it
 targets, flags no **REG** elsewhere, and `quality.mjs compare baseline <label>` passes. Then `npm run typecheck` and
@@ -94,6 +97,7 @@ targets, flags no **REG** elsewhere, and `quality.mjs compare baseline <label>` 
 | `noise.mjs` | noise floor from repeated runs → `noise.json` (per cell, and the suite aggregates) |
 | `table.mjs` | median table of several bench results |
 | `ab.sh`, `ab-agg.mjs` | per-cell interleaved A/B of patches vs HEAD, and its paired aggregate |
+| `ab-posfit.mjs` | diagnostic fit of an A/B run: variant effects corrected for run position |
 | `quality.mjs` | screenshot capture and SSIM gate |
 | `image.mjs` | PNG decode/encode (node:zlib), SSIM, diff heat maps |
 | `results/` | bench JSONs (≈185 kB, committed; `scratch-*` and `*-raw*` ignored); `baseline-1..3` are the reference, `baseline-profile` the profile |
