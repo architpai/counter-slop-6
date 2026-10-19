@@ -140,12 +140,14 @@ ultra  training fight head=5.154(+0.0) base=5.497(+6.7) dsd=5.541(+7.5) headB=5.
 ```
 
 Reading. **The medium arm is not usable**: within single cells the machine switched state between variants (medium
-mexico: head and base 12-23 % slower than the other three; medium training: headB +24-30 %, walk +9-15 %), the
+mexico: head +3 / +23 % and base +34 / +42 % (path / fight) against the geomean of the other four; medium training:
+headB +25 / +29 %, walk +6 / +10 %), the
 signature of Round 2's s4. The fitted medium numbers (dsd -6.9 %, headB +2.3 %) come from those switches. High and
 Ultra are clean (headB within -3.7 / +3.0 % per cell, -0.3 / +0.7 % fitted).
 - **base (Round 4 confirmation)**: slower than HEAD in 8/8 high cells (+1.1 to +16.6 %) and 7/8 ultra cells
   (house fight -2.1 %, where head itself read slow: headB -3.7 %); fitted mean high +5.8 %, ultra +4.1 %, medium
-  +4.1 % (the four medium cells outside mexico/training: +0.7 to +3.4 %, all slower). Round 4's kept set holds.
+  +4.1 % (that fit includes the void cells; the four medium cells outside mexico/training: +0.7 to +3.4 %, geomean
+  +2.3 % vs headB +0.6 %: supporting, not past noise). Round 4's kept set holds on High/Ultra (one round).
 - **dsd** (shadow-map depth discard): high +1.0 %, ultra -0.1 % fitted mean → no gain; rejected again.
 - **walk** (shadow-walk pruning): high -0.4 %, ultra -1.8 % mean (fight -2.5 %, fight callback cpu -3.0 %), inside
   headB's per-cell spread; not clearly past noise after one A/B → rejected.
