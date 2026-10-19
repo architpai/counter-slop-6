@@ -1,0 +1,15 @@
+diff --git a/src/engine/render/shadows.ts b/src/engine/render/shadows.ts
+index 419092f..afccaf0 100644
+--- a/src/engine/render/shadows.ts
++++ b/src/engine/render/shadows.ts
+@@ -117,6 +117,10 @@ const DIRECTIONAL_FACING = THREE_DIRECTIONAL.replace(DIRECTIONAL_SHADOW, '#if !
+   + '$1$2( directLight.visible && receiveShadow && dot( geometryNormal, directLight.direction ) > 0.0 )$3\n#else\n$&\n#endif');
+ 
+ THREE.ShaderChunk.lights_fragment_begin = CHUNK.slice(0, DIRECTIONAL) + CASCADED + DIRECTIONAL_FACING + '#endif\n\n' + CHUNK.slice(AFTER);
++// PROBE (throwaway): every shadow lookup returns lit; the passes still render.
++const PROBE_SIG = 'float getShadow( sampler2D shadowMap, vec2 shadowMapSize, float shadowIntensity, float shadowBias, float shadowRadius, vec4 shadowCoord ) {';
++if (!THREE.ShaderChunk.shadowmap_pars_fragment.includes(PROBE_SIG)) throw new Error('probe');
++THREE.ShaderChunk.shadowmap_pars_fragment = THREE.ShaderChunk.shadowmap_pars_fragment.replace(PROBE_SIG, PROBE_SIG + '\n\treturn 1.0;');
+ 
+ /** One cascade: the half-width of its box in metres and how far ahead of the eye its centre sits. */
+ export interface Cascade {

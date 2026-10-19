@@ -1,0 +1,12 @@
+diff --git a/src/engine/render/index.ts b/src/engine/render/index.ts
+index fc36da4..537c742 100644
+--- a/src/engine/render/index.ts
++++ b/src/engine/render/index.ts
+@@ -474,6 +474,7 @@ export class Renderer {
+       }
+     };
+     shadowMap.render = (lights, scene, camera) => {
++      scene = this.sun.target as unknown as THREE.Scene; // PROBE (throwaway): clear + store every map, draw no caster
+       if (!shadowMap.needsUpdate) return drawShadows(lights, scene, camera);
+       this.operators.shadowSwap(true);
+       try {

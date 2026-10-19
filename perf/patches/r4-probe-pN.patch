@@ -1,0 +1,13 @@
+diff --git a/src/engine/render/postfx.ts b/src/engine/render/postfx.ts
+index 2141847..5c39303 100644
+--- a/src/engine/render/postfx.ts
++++ b/src/engine/render/postfx.ts
+@@ -658,7 +658,7 @@ export class Composite {
+         if (pixels < 2.0) { gl_FragColor = vec4(1.0, -P.z, 0.0, 1.0); return; }
+         float falloffMul = -1.0 / (0.615 * RADIUS), falloffAdd = (1.0 - 0.615) / 0.615 + 1.0;
+         vec2 cell = floor(gl_FragCoord.xy);
+-        float sliceNoise = bayer4(cell), stepNoise = bayer4(cell.yx + vec2(1.0, 2.0));
++        float sliceNoise = 0.0, stepNoise = 0.0; // PROBE (throwaway): coherent taps
+         float visibility = 0.0;
+         for (int s = 0; s < SLICES; s++) {
+           float phi = (float(s) + sliceNoise) * PI / float(SLICES);
