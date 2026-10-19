@@ -10,7 +10,7 @@ import {
   standInLightmap, standInMaps, surfMat, wearMaps,
 } from './materials';
 import { BAKE_FILE, LIGHTMAP_SIZE, bakeFor, bakedTriangles, layoutSteps, lightmapChartSteps, wearLightmapUVs } from './lightmap';
-import { ANTIALIAS_SPEC, AO_SCALE, PRESET_VALUES, SHADOW_SPEC, VIEW_SCALE } from './quality';
+import { ANTIALIAS_SPEC, AO_SCALE, PRESET_VALUES, SHADOW_SPEC, VIEW_SCALE, fightCpuPaths } from './quality';
 import { GpuFences, MatchClock } from './pacing';
 import { aimShadowBox, cascadeCentre, sizeShadowBox } from './shadows';
 import { disposeSky, loadSky } from './sky';
@@ -267,6 +267,12 @@ export class Renderer {
   _fogNear = FOG_NEAR;
   _fogFar = FOG_FAR;
   _quality: Readonly<GfxValues> = PRESET_VALUES.high;
+  /**
+   * High and Ultra (`fightCpuPaths`, set by `applyQuality`): each shadow redraw hides the rig and the worn operators'
+   * caster-free subtrees (`OperatorAssets.shadowSwap`), and the post chain runs in one render (`Composite._oneRender`).
+   * Off on Low, Medium and custom values: the shadow pass walks every shown node, and each post pass renders itself.
+   */
+  _fightCpu = false;
   /** Dynamic resolution's share of the render-scaled target, per axis. */
   _dynamicScale = 1;
   /** Shadow boxes in force; null is Low's box centred on the eye. */
@@ -509,18 +515,20 @@ export class Renderer {
         if (this._ownMaterials.length > count) this._ownMaterials.length = this._ownGroups.length = count;
       }
     };
-    // The rig casts nothing (`_prepareRigMesh`): hidden for the pass, the cascades' walks skip it. Three has listed
-    // the main pass's draws before its shadow pass, so that pass sees it as it was.
+    // High and Ultra (`_fightCpu`, read at each redraw): the rig casts nothing (`_prepareRigMesh`), so it is hidden
+    // for the pass and the cascades' walks skip it (three has listed the main pass's draws before its shadow pass, so
+    // that pass sees it as it was), and the worn operators' caster-free subtrees are hidden too. Low and Medium walk
+    // every shown node, as before.
     shadowMap.render = (lights, scene, camera) => {
       if (!shadowMap.needsUpdate) return drawShadows(lights, scene, camera);
-      const rig = this.rig.visible;
-      this.rig.visible = false;
-      this.operators.shadowSwap(true);
+      const walk = this._fightCpu, rig = this.rig.visible;
+      if (walk) this.rig.visible = false;
+      this.operators.shadowSwap(true, walk);
       try {
         drawCasters(lights, scene, camera);
       } finally {
         this.operators.shadowSwap(false);
-        this.rig.visible = rig;
+        if (walk) this.rig.visible = rig;
       }
     };
     this.weapons = new WeaponAssets({
@@ -598,6 +606,8 @@ export class Renderer {
    */
   applyQuality(q: Readonly<GfxValues>): void {
     this._quality = q;
+    // Read at each shadow redraw and post draw: a change takes effect at the next frame, with nothing left over.
+    this.post._oneRender = this._fightCpu = fightCpuPaths(q);
     this._programsWarm = this._charactersHeld = false;
     this.three.setPixelRatio(Math.min(window.devicePixelRatio || 1, q.pixelRatio));
     const aa = ANTIALIAS_SPEC[q.antialias], ao = AO_SCALE[q.ao], samples = Math.min(aa.samples, this.three.capabilities.maxSamples);

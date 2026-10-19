@@ -130,6 +130,24 @@ export const PRESET_VALUES: Readonly<Record<PresetName, Readonly<GfxValues>>> = 
     fpsTarget: 0, antialias: 'msaa4smaa', shadows: 'ultra', ao: 'full', bloom: true, textures: 'high', effects: 'full', softParticles: true, shafts: true, viewDistance: 'long' }),
 });
 
+/** The preset whose values `values` are, field by field; null for values no preset has (a custom set). */
+export function presetOf(values: Readonly<GfxValues>): PresetName | null {
+  for (const name of PRESETS) {
+    const preset = PRESET_VALUES[name];
+    if (preset === values || (Object.keys(preset) as (keyof GfxValues)[]).every(key => preset[key] === values[key])) return name;
+  }
+  return null;
+}
+
+/**
+ * The fight-CPU paths that were measured as faster on High and Ultra only (perf/LOG.md, Round 6: the shadow walk's
+ * hidden subtrees and the post chain in one render). Low, Medium and custom values keep the old paths.
+ */
+export function fightCpuPaths(values: Readonly<GfxValues>): boolean {
+  const preset = presetOf(values);
+  return preset === 'high' || preset === 'ultra';
+}
+
 // ------------------------------------------------------------------ storage
 
 export const GFX_KEY = 'cs6_gfx';

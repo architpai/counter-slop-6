@@ -397,16 +397,31 @@ export class Composite {
   readonly _sceneRegion = regionUniforms();
   readonly _clear = new THREE.Color();
   /**
-   * The chain runs inside one `render` of `scene` (its `onAfterRender`), each pass a `renderBufferDirect` there:
-   * the draw a render of the lone triangle made, without that render's list, sort, light and shadow steps. Set by
-   * `draw` for that render (`_chainCamera`) and while its passes run (`_inChain`); `_pass` outside it (the perf
-   * harness's calibration pass) renders as before. For the outer render the triangle wears `_final` switched off
-   * (`visible`): not drawn, but its geometry is still uploaded. Not a material of its own: three's constructor draws
-   * a uuid from Math.random, which would shift every random draw after it (the perf harness seeds it at boot).
+   * With `_oneRender` (High and Ultra: render/index.ts `_fightCpu`, set at each quality change and read at each
+   * `draw`), the chain runs inside one `render` of `scene` (`_afterChain`, its `onAfterRender` for that render only),
+   * each pass a `renderBufferDirect` there: the draw a render of the lone triangle made, without that render's list,
+   * sort, light and shadow steps. Set by `draw` for that render (`_chainCamera`) and while its passes run
+   * (`_inChain`); `_pass` outside it (the perf harness's calibration pass) renders as before. For the outer render
+   * the triangle wears `_final` switched off (`visible`): not drawn, but its geometry is still uploaded. Not a
+   * material of its own: three's constructor draws a uuid from Math.random, which would shift every random draw after
+   * it (the perf harness seeds it at boot). Off (Low, Medium, custom values), each pass renders itself, as before.
    */
+  _oneRender = false;
   _chainCamera: THREE.PerspectiveCamera | null = null;
   _chainStrength = 0;
   _inChain = false;
+  readonly _afterChain = (renderer: THREE.WebGLRenderer): void => {
+    const camera = this._chainCamera;
+    if (camera === null) return;
+    this._chainCamera = null;
+    this._final.visible = true;
+    this._inChain = true;
+    try {
+      this._chain(renderer, camera, this._chainStrength);
+    } finally {
+      this._inChain = false;
+    }
+  };
 
   constructor() {
     this.target = new THREE.WebGLRenderTarget(2, 2, {
@@ -855,18 +870,6 @@ export class Composite {
     // matrices, so no pass recomputes them.
     this.scene.matrixWorldAutoUpdate = this.camera.matrixWorldAutoUpdate = false;
     this.triangle.matrixAutoUpdate = false;
-    this.scene.onAfterRender = renderer => {
-      const camera = this._chainCamera;
-      if (camera === null) return;
-      this._chainCamera = null;
-      this._final.visible = true;
-      this._inChain = true;
-      try {
-        this._chain(renderer, camera, this._chainStrength);
-      } finally {
-        this._inChain = false;
-      }
-    };
     this.setGrade(GRADE.neutral);
   }
 
@@ -1150,20 +1153,24 @@ export class Composite {
     const strength = config.shafts && config.look === 'realistic' && this._shaftStrength > 0 ? this._shaftStrength * this._aimShafts(camera) : 0;
     this._toneUniforms.shaftColor.value.copy(this._sunColor).multiplyScalar(strength * SHAFT_GAIN);
     // The first pass's target, bound before the outer render: that render then resolves nothing (the MSAA scene
-    // target is still bound after the scene pass) and sets the clear colour as the pass's own render did. Low's
-    // lone pass to the canvas, and a renderer that clears in every render (autoClear), render each pass as before.
+    // target is still bound after the scene pass) and sets the clear colour as the pass's own render did. Without
+    // `_oneRender` (Low, Medium), Low's lone pass to the canvas, and a renderer that clears in every render
+    // (autoClear), each pass renders itself as before. The hook is on the scene for the one render only.
     const first = config.ao > 0 ? this._aoRaw : config.bloom ? this._bloom[0]! : strength > 0 ? this._shafts[0]
       : config.look === 'realistic' || smaa ? this._ldr : null;
-    if (first === null || renderer.autoClear) this._chain(renderer, camera, strength);
+    if (!this._oneRender || first === null || renderer.autoClear) this._chain(renderer, camera, strength);
     else {
+      const scene = this.scene, after = scene.onAfterRender;
       renderer.setRenderTarget(first);
       this.triangle.material = this._final;
       this._final.visible = false;
       this._chainCamera = camera;
       this._chainStrength = strength;
+      scene.onAfterRender = this._afterChain;
       try {
-        renderer.render(this.scene, this.camera);
+        renderer.render(scene, this.camera);
       } finally {
+        scene.onAfterRender = after;
         this._chainCamera = null;
         this._final.visible = true;
       }

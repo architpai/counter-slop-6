@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import * as THREE from 'three';
 import type { Object3D, Texture } from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -9,6 +9,7 @@ import { makeFigure, useOperatorSource, usePropSource } from '@/engine/render/fi
 import type { Figure, WeaponPropKind } from '@/engine/render/figure';
 import { Renderer } from '@/engine/render/index';
 import { PRESET_VALUES } from '@/engine/render/quality';
+import type { PresetName } from '@/engine/render/quality';
 import { TACTICAL_MODELS } from '@/engine/render/tactical';
 import { makeModel } from '@/engine/enemies/model';
 import { TYPES } from '@/engine/enemies/types';
@@ -92,7 +93,7 @@ function walk(node: Object3D, layers: THREE.Layers, shown: (node: Object3D) => b
 }
 
 /**
- * Around `shadowSwap`: the same casters in the same order with the hidden subtrees as without, none of them under a
+ * Around `shadowSwap` without the walk (Low, Medium): nothing hidden. With it (High, Ultra): the same casters in the same order with the hidden subtrees as without, none of them under a
  * hidden node, and every node shown or not as before once it is over. Returns the nodes hidden and the visits saved.
  */
 function check(assets: OperatorAssets, scene: Object3D, camera: THREE.Camera, what: string): { hidden: Object3D[]; saved: number } {
@@ -100,7 +101,16 @@ function check(assets: OperatorAssets, scene: Object3D, camera: THREE.Camera, wh
   scene.traverse(node => before.set(node, node.visible));
   const reference = { casters: [] as Object3D[], visits: 0 }, drawn = { casters: [] as Object3D[], visits: 0 };
   const hidden: Object3D[] = [];
-  assets.shadowSwap(true);
+  // Low and Medium (no walk): the merged draws only, every node shown as it was.
+  assets.shadowSwap(true, false);
+  try {
+    scene.traverse(node => expect(node.visible, `${what}, no walk: ${node.name}`).toBe(before.get(node)));
+  } finally {
+    assets.shadowSwap(false);
+  }
+  scene.traverse(node => expect(node.visible, `${what}, no walk: ${node.name} after`).toBe(before.get(node)));
+  // High and Ultra.
+  assets.shadowSwap(true, true);
   try {
     walk(scene, camera.layers, node => before.get(node)!, reference);
     walk(scene, camera.layers, node => node.visible, drawn);
@@ -251,17 +261,19 @@ test('the merged and walked shadow draws give the same shadow map as the full wa
     renderer.dispose();
   });
   const drawShadows = renderer.shadowMap.render.bind(renderer.shadowMap);
-  let walked = false, calls = 0;
+  let walked: 'full' | 'walked' | 'medium' = 'full', calls = 0;
   renderer.shadowMap.render = (lights, at, from) => {
     const before = renderer.info.render.calls, shown = new Map<Object3D, boolean>();
     at.traverse(node => shown.set(node, node.visible));
-    assets.shadowSwap(true);
+    // Medium and Low: the merged draws without the walk, nothing hidden.
+    assets.shadowSwap(true, walked !== 'medium');
+    if (walked === 'medium') at.traverse(node => expect(node.visible).toBe(shown.get(node)));
     // The full walk: the merged draws, every node shown as it was.
-    if (!walked) at.traverse(node => { node.visible = shown.get(node)!; });
+    if (walked === 'full') at.traverse(node => { node.visible = shown.get(node)!; });
     try { drawShadows(lights, at, from); } finally { assets.shadowSwap(false); }
     calls = renderer.info.render.calls - before;
   };
-  const shot = (walk: boolean) => {
+  const shot = (walk: typeof walked) => {
     walked = walk;
     renderer.shadowMap.needsUpdate = true;
     renderer.setRenderTarget(target);
@@ -283,12 +295,14 @@ test('the merged and walked shadow draws give the same shadow map as the full wa
   }
   scene.updateMatrixWorld(true);
   assets.frame(camera);
-  const full = shot(false), skipped = shot(true);
+  const full = shot('full'), skipped = shot('walked'), medium = shot('medium');
   let cast = 0;
   for (let i = 0; i < full.texels.length; i += 4) if (full.texels[i] !== 255 || full.texels[i + 3] !== 255) cast++;
   expect(cast, 'the figures cast').toBeGreaterThan(10000);
   expect(skipped.texels.every((v, i) => v === full.texels[i]), 'the same shadow map').toBe(true);
   expect(skipped.calls).toBe(full.calls);
+  expect(medium.texels.every((v, i) => v === full.texels[i]), 'the same shadow map without the walk').toBe(true);
+  expect(medium.calls).toBe(full.calls);
 }, 60_000);
 
 test('nothing in the view-model rig casts, and the shadow pass walks past it while the main pass draws it', async () => {
@@ -350,20 +364,34 @@ test('nothing in the view-model rig casts, and the shadow pass walks past it whi
   let drawn = 0;
   const rigDepth = probe.onBeforeRender;
   probe.onBeforeRender = (...args) => { drawn++; rigDepth.apply(probe, args); };
-  renderer.applyQuality(PRESET_VALUES.high);
   const fx = { hurt: 0, flash: 0, slow: 0, lowHp: 0 };
-  // Past the first frames' compiles and warm-up draws (which show the whole rig once).
-  for (let i = 0; i < 100 && (i < 2 || renderer._compiles.length + renderer._warmups.length > 0); i++) {
-    renderer.render(0, fx);
-    await new Promise(resolve => setTimeout(resolve, 10));
+  const swaps = vi.spyOn(renderer.operators, 'shadowSwap');
+  // High and Ultra hide the rig for each shadow redraw; Low and Medium walk it as before, also after a change mid-session.
+  for (const preset of ['high', 'medium', 'low', 'high'] as PresetName[]) {
+    renderer.applyQuality(PRESET_VALUES[preset]);
+    const walk = preset === 'high' || preset === 'ultra';
+    expect(renderer._fightCpu, preset).toBe(walk);
+    // Past the first frames' compiles and warm-up draws (which show the whole rig once).
+    for (let i = 0; i < 100 && (i < 2 || renderer._compiles.length + renderer._warmups.length > 0); i++) {
+      renderer.render(0, fx);
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    for (const shown of [true, false]) {
+      const what = `${preset}, rig shown: ${shown}`;
+      renderer.rig.visible = shown;
+      seen.length = drawn = 0;
+      swaps.mockClear();
+      // Low redraws its shadow map every other frame.
+      renderer.render(0, fx);
+      renderer.render(0, fx);
+      expect(seen.length, what).toBeGreaterThan(0);
+      expect(seen.every(visible => visible === (walk ? false : shown)), what).toBe(true);
+      expect(swaps.mock.calls.filter(([on]) => on).every(([, walked]) => walked === walk), what).toBe(true);
+      expect(swaps.mock.calls.length, what).toBeGreaterThan(0);
+      expect(renderer.rig.visible, what).toBe(shown);
+      expect(drawn, what).toBe(shown ? 2 : 0);
+    }
   }
-  for (const shown of [true, false]) {
-    renderer.rig.visible = shown;
-    seen.length = drawn = 0;
-    renderer.render(0, fx);
-    expect(seen.length, `rig shown: ${shown}`).toBeGreaterThan(0);
-    expect(seen.every(visible => !visible), `rig shown: ${shown}`).toBe(true);
-    expect(renderer.rig.visible).toBe(shown);
-    expect(drawn).toBe(shown ? 1 : 0);
-  }
-}, 60_000);
+  swaps.mockRestore();
+  // Four looks' compiles: beside the other GPU test files it waits its turn for the GPU.
+}, 120_000);

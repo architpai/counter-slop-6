@@ -42,6 +42,21 @@ function passes(renderer: Renderer): string[] {
   return names;
 }
 
+/**
+ * One frame's renders of the post scene, and its passes (SMAA's render their own quad). High and Ultra run the
+ * chain inside one render (`Composite._oneRender`); Low and Medium render each pass. No hook stays on the scene.
+ */
+function postRenders(renderer: Renderer): { renders: number; passes: number } {
+  const post = renderer.post, render = vi.spyOn(renderer.three, 'render'), pass = vi.spyOn(post, '_pass');
+  renderer.render(0, fx);
+  const renders = render.mock.calls.filter(([scene]) => scene === post.scene).length, passes = pass.mock.calls.length;
+  render.mockRestore();
+  pass.mockRestore();
+  expect(post.scene.onAfterRender).toBe(THREE.Object3D.prototype.onAfterRender);
+  expect([post._chainCamera, post._inChain, post._final.visible]).toEqual([null, false, true]);
+  return { renders, passes };
+}
+
 const bloom = ['post:bloom-prefilter', ...Array(4).fill('post:bloom-down'), ...Array(4).fill('post:bloom-up')];
 const expected: Record<PresetName, { config: Omit<PostConfig, 'samples'>; samples: number; chain: string[]; lights: number; soft: boolean }> = {
   // Low: the phase-1 single pass (FXAA, soft shoulder, grade, feedback), one shadow box.
@@ -74,6 +89,12 @@ test('each preset reaches the renderer: passes, tone mapping, MSAA, AO depth, ca
     // The pass chain, which also names the tone mapper: the soft shoulder lives in the
     // composite (Low), AgX in its own pass (realistic).
     expect(passes(renderer), name).toEqual(want.chain);
+    // The post chain in one render on High and Ultra only; Low and Medium render each pass, as before Round 6.
+    const fast = name === 'high' || name === 'ultra';
+    expect([renderer._fightCpu, renderer.post._oneRender], name).toEqual([fast, fast]);
+    const { renders, passes: count } = postRenders(renderer);
+    expect(count, name).toBe(want.chain.filter(pass => pass !== 'smaa').length);
+    expect(renders, name).toBe(fast ? 1 : count);
     expect(renderer.post.target.samples).toBe(Math.min(want.samples, maxSamples));
     // AO, the soft particles (High, Ultra) and the light shafts (Ultra) read the depth texture.
     expect(renderer.post.target.depthTexture !== null).toBe(want.config.ao > 0 || want.config.depth || want.config.shafts);
@@ -89,6 +110,18 @@ test('each preset reaches the renderer: passes, tone mapping, MSAA, AO depth, ca
     const failed = programs.filter(program => program.diagnostics && !program.diagnostics.runnable);
     expect(failed.map(program => program.name), name).toEqual([]);
   }
+  // Ultra to Medium mid-session: back to a render per pass at the next frame, nothing left set; and back again.
+  renderer.applyQuality(PRESET_VALUES.medium);
+  const medium = expected.medium.chain.filter(pass => pass !== 'smaa').length;
+  expect(postRenders(renderer)).toEqual({ renders: medium, passes: medium });
+  renderer.applyQuality(PRESET_VALUES.high);
+  expect(postRenders(renderer).renders).toBe(1);
+  // A custom set with High's values is High; any other custom set keeps the old paths.
+  renderer.applyQuality({ ...PRESET_VALUES.ultra });
+  expect(renderer._fightCpu).toBe(true);
+  renderer.applyQuality({ ...PRESET_VALUES.ultra, fpsTarget: 60 });
+  expect([renderer._fightCpu, renderer.post._oneRender]).toEqual([false, false]);
+  expect(postRenders(renderer).renders).toBeGreaterThan(1);
   // Off frees every shadow light but the sun, which stops casting.
   renderer.applyQuality({ ...PRESET_VALUES.ultra, shadows: 'off' });
   expect(renderer.cascades).toHaveLength(0);
@@ -255,12 +288,10 @@ test('the chain inside one render draws exactly what a render per pass did', () 
     three.clear();
     three.render(scene, camera);
     three.info.reset();
-    if (perPass) {
-      // `draw` with every pass rendering itself (its uniforms are the last frame's: the same view and time).
-      const strength = post.config.shafts && post.config.look === 'realistic' ? post._shaftStrength * post._aimShafts(camera) : 0;
-      post._chain(three, camera, strength);
-      post._softUniforms.softOn.value = 0;
-    } else post.draw(three, 0.5, fx, camera);
+    // `draw` with every pass rendering itself (Low and Medium: the path before Round 6), or in one render (High, Ultra).
+    post._oneRender = !perPass;
+    post.draw(three, 0.5, fx, camera);
+    expect(post.scene.onAfterRender).toBe(THREE.Object3D.prototype.onAfterRender);
     const { calls, triangles } = three.info.render;
     const pixels = new Uint8Array(320 * 200 * 4);
     gl.readPixels(0, 0, 320, 200, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
@@ -278,14 +309,22 @@ test('the chain inside one render draws exactly what a render per pass did', () 
       post.setScale(scale);
       frame(false);
       const programs = three.info.programs!.length;
-      const render = vi.spyOn(three, 'render');
+      const render = vi.spyOn(three, 'render'), pass = vi.spyOn(post, '_pass');
       const chained = frame(false);
       // The scene pass, then the chain's one render (SMAA's passes render their own quad).
       expect(render.mock.calls.filter(([s]) => s === post.scene)).toHaveLength(1);
-      render.mockRestore();
+      const passes = pass.mock.calls.length;
+      expect(passes).toBeGreaterThan(1);
       // The next frame's shadow maps clear their depth: the chain leaves depth writes on, as each render did.
       expect(gl.getParameter(gl.DEPTH_WRITEMASK)).toBe(true);
+      render.mockClear();
+      pass.mockClear();
       const perPass = frame(true);
+      // A render of the post scene per pass, the same passes.
+      expect(render.mock.calls.filter(([s]) => s === post.scene)).toHaveLength(passes);
+      expect(pass.mock.calls.length).toBe(passes);
+      render.mockRestore();
+      pass.mockRestore();
       const label = `${config.look}, smaa ${config.smaa}, ao ${config.ao}, scale ${scale}`;
       expect(chained.calls, label).toBeGreaterThan(1);
       expect([chained.calls, chained.triangles], label).toEqual([perPass.calls, perPass.triangles]);

@@ -443,18 +443,20 @@ export class OperatorAssets implements OperatorSource {
    * Around the shadow pass (render/index.ts): `on`, each worn operator of more than one mesh draws once per cascade,
    * its first mesh on its kind's merged geometry (`KindTemplate.shadow`), the others out of the pass; off, back. The
    * meshes are siblings with one skeleton, bind matrix, sphere and depth material, drawn one after another, so the
-   * one draw runs the same program on the same vertices and triangles in the same order. Also, `on`, every worn
-   * figure's subtrees that hold no caster are hidden (`OperatorBody.bare`): three walks every shown node once per
-   * cascade, and a hidden one ends the walk there. Its casters are drawn as before, in the same order. No allocation.
+   * one draw runs the same program on the same vertices and triangles in the same order. Also, `on` with `walk`
+   * (High and Ultra: render/index.ts `_fightCpu`), every worn figure's subtrees that hold no caster are hidden
+   * (`OperatorBody.bare`): three walks every shown node once per cascade, and a hidden one ends the walk there. Its
+   * casters are drawn as before, in the same order. Off shows again whatever was hidden. No allocation.
    */
-  shadowSwap(on: boolean): void {
+  shadowSwap(on: boolean, walk = false): void {
     for (let i = 0; i < this.#casters.length; i++) {
       const { meshes, template } = this.#casters[i]!;
       meshes[0]!.geometry = on ? template.shadow! : template.meshes[0]!.geometry;
       for (let k = 1; k < meshes.length; k++) meshes[k]!.castShadow = !on;
     }
-    if (on) this.#bodies.forEach(this.#bare);
-    else {
+    if (on) {
+      if (walk) this.#bodies.forEach(this.#bare);
+    } else {
       for (let i = 0; i < this.#hiddenCount; i++) {
         this.#hidden[i]!.visible = true;
         this.#hidden[i] = null;
