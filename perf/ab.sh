@@ -7,6 +7,7 @@
 # untracked): save it as a patch first. Builds go to $AB_WORK (/tmp/perf-ab); out/ waits in $AB_WORK/out-orig and
 # comes back at the end (also on error or ^C). Results: perf/results/scratch-<tag>-<variant>-<map>-<preset>-<round>.json
 # and scratch-<tag>-manifest.json (gitignored). Exit 1 if any cell failed (its JSON is removed).
+# AB_TRACE=1 keeps the traced replays (js per frame; about 1.5x the time); the default is --no-trace.
 setopt extended_glob
 fail() { echo "ab.sh: $*" >&2; exit 1; }
 (( $# >= 5 )) || fail "usage: perf/ab.sh tag presets maps rounds variant..."
@@ -47,7 +48,7 @@ const variants = nv.filter((_, i) => i % 2 === 0), patches = {};
 for (let i = 0; i < nv.length; i += 2) if (nv[i + 1]) patches[nv[i]] = { path: nv[i + 1],
   sha256: require("node:crypto").createHash("sha256").update(fs.readFileSync(nv[i + 1])).digest("hex") };
 fs.writeFileSync(file, JSON.stringify({ tag, head, variants, patches, maps: maps.split(","), presets: presets.split(","),
-  rounds: +rounds, date: new Date().toISOString() }, null, 1) + "\n");
+  rounds: +rounds, trace: process.env.AB_TRACE === "1", date: new Date().toISOString() }, null, 1) + "\n");
 ' perf/results/scratch-$tag-manifest.json $tag $(git rev-parse HEAD) ${(j:,:)presets} ${(j:,:)maps} $rounds "${args[@]}" \
   || fail "cannot write the manifest"
 
@@ -77,14 +78,14 @@ to_head || fail "cannot reset src/ and tests/ to HEAD"
 
 # Cyclic rotation, shifted by map, preset and round: every (map, preset) cell gives each variant each position equally
 # often when rounds is a multiple of the variant count (per preset: when rounds or the map count is).
-failed=()
+failed=(); trace=(--no-trace); [[ $AB_TRACE == 1 ]] && trace=()
 for r in {1..$rounds}; do
   for pi in {1..$#presets}; do p=$presets[pi]; for mi in {1..$#maps}; do m=$maps[mi]
     k=$(( (mi + pi + r - 3) % $#names ))
     for n in ${names[k+1,-1]} ${names[1,k]}; do
       label=scratch-$tag-$n-$m-$p-$r; cur=perf/results/$label.json
       ln -s $work/out-$n out || fail "cannot link out to $work/out-$n"
-      if ! node perf/bench.mjs --label $label --maps $m --presets $p --no-trace > $work/log-$label.log 2>&1; then
+      if ! node perf/bench.mjs --label $label --maps $m --presets $p $trace > $work/log-$label.log 2>&1; then
         echo "FAIL $n $m $p $r: see $work/log-$label.log"; failed+=("$n $m $p $r"); rm -f $cur
       fi
       cur=; rm out || fail "cannot remove the out link"

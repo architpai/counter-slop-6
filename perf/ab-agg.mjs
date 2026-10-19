@@ -1,4 +1,5 @@
-// usage: node perf/ab-agg.mjs tag  -> per variant geomean of frame mean/med/p95 per preset, plus paired ratio vs head.
+// usage: node perf/ab-agg.mjs tag  -> per variant geomean of frame mean/med/p95 per preset, plus paired ratio vs head;
+// for a traced run (AB_TRACE=1) also js mean (traced main-thread ms per frame), all scenarios and fights only.
 // Reads perf/results/scratch-<tag>-manifest.json (written by ab.sh) and fails (exit 1) unless every variant x map x
 // preset x round result exists and holds exactly its own cell.
 import { existsSync, readFileSync } from 'node:fs';
@@ -20,7 +21,9 @@ for (const v of man.variants) for (const map of man.maps) for (const preset of m
   for (const s of ['path', 'fight']) {
     const fm = cells[0].runs?.[0]?.[s]?.frameMs;
     if (!fm) { errs.push(`${f}: no ${s} frame times`); continue; }
-    (rows[v] ??= {})[`${map}/${preset}/${s}/${r}`] = { mean: fm.mean, med: fm.med, p95: fm.p95, preset };
+    const js = cells[0].runs[0][s].trace?.jsMs?.mean;
+    if (man.trace && !(js > 0)) errs.push(`${f}: no ${s} js (traced run)`);
+    (rows[v] ??= {})[`${map}/${preset}/${s}/${r}`] = { mean: fm.mean, med: fm.med, p95: fm.p95, js, preset, s };
   }
 }
 if (errs.length) die(`incomplete run '${tag}':\n  ${errs.join('\n  ')}`);
@@ -28,10 +31,12 @@ console.log(`HEAD ${man.head}  variants: ${man.variants.join(', ')}  (${man.date
 console.log(`complete: ${man.variants.length} variants x ${Object.keys(rows.head).length} cell-scenario-rounds`);
 const vs = ['head', ...man.variants.filter(v => v !== 'head')];
 const g = x => Math.exp(x.reduce((s, v) => s + Math.log(v), 0) / x.length);
-for (const metric of ['mean', 'med', 'p95']) {
-  console.log(`\n## ${metric}: geomean (paired ratio vs head)`);
+const sections = [['mean'], ['med'], ['p95'], ...(man.trace ? [['js'], ['js', 'fight']] : [])];
+for (const [metric, only] of sections) {
+  console.log(`\n## ${metric}${only ? ` (${only} only)` : ''}: geomean (paired ratio vs head)`);
   for (const preset of ['all', ...man.presets]) {
-    const keys = Object.keys(rows.head).filter(k => preset === 'all' || rows.head[k].preset === preset), line = [preset.padEnd(7)];
+    const keys = Object.keys(rows.head).filter(k => (preset === 'all' || rows.head[k].preset === preset) && (!only || rows.head[k].s === only)),
+      line = [preset.padEnd(7)];
     for (const v of vs) {
       const val = g(keys.map(k => rows[v][k][metric])), ratio = g(keys.map(k => rows[v][k][metric] / rows.head[k][metric]));
       line.push(`${v}=${val.toFixed(3)} (${((ratio - 1) * 100).toFixed(1)}%)`);

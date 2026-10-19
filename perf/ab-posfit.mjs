@@ -1,4 +1,4 @@
-// usage: node perf/ab-posfit.mjs tag [mean|med|p95|cpu] [path|fight|both] [--partial]
+// usage: node perf/ab-posfit.mjs tag [mean|med|p95|cpu|js] [path|fight|both] [--partial]   (js: traced runs only)
 // Order-corrected paired estimate (a diagnostic): least squares log(metric) = cell-scenario-round + variant + run
 // position, per preset and over all presets. Reads perf/results/scratch-<tag>-manifest.json (written by ab.sh) and the
 // result files it implies. Fails (exit 1) unless every variant x map x preset x round result exists and holds its own
@@ -10,8 +10,8 @@ const argv = process.argv.slice(2), partial = argv.includes('--partial');
 const bad = argv.filter(a => a.startsWith('--') && a !== '--partial');
 if (bad.length) die(`unknown option ${bad.join(' ')}`);
 const [tag, metric = 'mean', scen = 'both', ...extra] = argv.filter(a => a !== '--partial');
-if (!tag || extra.length) die('usage: node perf/ab-posfit.mjs tag [mean|med|p95|cpu] [path|fight|both] [--partial]');
-if (!['mean', 'med', 'p95', 'cpu'].includes(metric)) die(`metric must be mean, med, p95 or cpu, not '${metric}'`);
+if (!tag || extra.length) die('usage: node perf/ab-posfit.mjs tag [mean|med|p95|cpu|js] [path|fight|both] [--partial]');
+if (!['mean', 'med', 'p95', 'cpu', 'js'].includes(metric)) die(`metric must be mean, med, p95, cpu or js, not '${metric}'`);
 if (!['path', 'fight', 'both'].includes(scen)) die(`scenario must be path, fight or both, not '${scen}'`);
 const dir = new URL('./results/', import.meta.url).pathname, mf = `${dir}scratch-${tag}-manifest.json`;
 if (!existsSync(mf)) die(`no manifest ${mf}: not an ab.sh run`);
@@ -31,8 +31,8 @@ for (let r = 1; r <= man.rounds; r++) man.presets.forEach((preset, pi) => man.ma
       return cellErrs.push(`${f}: holds ${cells.map(c => `${c.map}/${c.preset}`).join(' ') || 'no cells'}, not ${map}/${preset}`);
     const ys = {};
     for (const s of scens) {
-      const run = cells[0].runs?.[0]?.[s], val = metric === 'cpu' ? run?.cpuMs?.mean : run?.frameMs?.[metric];
-      if (!(val > 0)) { cellErrs.push(`${f}: no ${s} ${metric === 'cpu' ? 'cpu mean' : `frame ${metric}`}`); continue; }
+      const run = cells[0].runs?.[0]?.[s], val = metric === 'cpu' ? run?.cpuMs?.mean : metric === 'js' ? run?.trace?.jsMs?.mean : run?.frameMs?.[metric];
+      if (!(val > 0)) { cellErrs.push(`${f}: no ${s} ${metric === 'cpu' ? 'cpu mean' : metric === 'js' ? 'js mean (not a traced run?)' : `frame ${metric}`}`); continue; }
       ys[s] = Math.log(val);
     }
     rows.push({ v, p: (i - k + N) % N, t: statSync(dir + f).mtimeMs, ys });
