@@ -553,7 +553,9 @@ plus a healthier machine; `r2-pre`/`r3-pre` were throttled). This is the clean r
 | js, fight cells (t1, traced, training + mexico): `a` | +5.0 % * | -4.3 % | -4.7 % | -5.4 % | -2.4 % |
 | js, fight cells (t1): `stat` | +0.2 % * | +1.1 % | -2.4 % | -4.0 % | -1.3 % |
 | t1 headB/head (js fight) | +3.4 % | -1.1 % | -2.2 % | +3.2 % | +0.8 % |
-| **r4-post vs r4-pre** (traced full matrix, unpaired) | pending (power) | | | | |
+| **r4-post vs r4-pre** (traced full matrix, unpaired) | void, see below | | | | |
+
+**r4-post: void twice, not re-run.** The first run was voided by the watchdog at 20:44 (battery 39 % on AC, under the 40 % floor); the second, started at 23:16 (AC, 60 %), was cut off at 23:27 by the tool's 2 h job limit (the wait at the power gate counted against it) in its last cell. Round 5's pre-bench `r5-pre` runs the same code and replaces it as the after-Round-4 reference.
 
 \* `a` and `stat` change nothing on Low's path except `stat`'s figure matrices; Low js in t1 moves with the control.
 

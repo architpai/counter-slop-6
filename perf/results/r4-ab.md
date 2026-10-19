@@ -462,3 +462,6 @@ medium  gonly=2.5%  gonlyB=3.7%  headB=1.2%  | pos1..: 0.2 1.2 1.8
 high    gonly=2.1%  gonlyB=2.6%  headB=0.1%  | pos1..: 0.6 -0.4 1.0
 ultra   gonly=2.3%  gonlyB=2.7%  headB=-0.1%  | pos1..: -0.3 -0.4 0.3
 ```
+
+## r4-post: void twice, not re-run
+Voided by the watchdog at 20:44 (battery 39 % on AC, under the 40 % floor); rerun started 23:16 (AC, 60 %) and cut off at 23:27 by the tool's 2 h job limit in its last cell. No result file. Round 5's pre-bench `r5-pre` runs the same code and replaces it as the after-Round-4 reference.
