@@ -16,7 +16,11 @@ voided=0
 while kill -0 $pid 2>/dev/null; do
   for i in {1..60}; do sleep 1; kill -0 $pid 2>/dev/null || break; done
   if kill -0 $pid 2>/dev/null && bad; then voided=1; echo "== $name VOID at $(date +%T): power" >> $log
-    pmset -g batt >> $log; pkill -TERM -P $pid; kill -TERM $pid; wait $pid; break; fi
+    pmset -g batt >> $log; pkill -TERM -P $pid; kill -TERM $pid
+      # a child that ignores TERM (or hangs in its cleanup) gets KILL after 30 s, with its own children
+      for i in {1..30}; do kill -0 $pid 2>/dev/null || break; sleep 1; done
+      kill -0 $pid 2>/dev/null && { pkill -KILL -P $pid; kill -KILL $pid; }
+      break; fi
 done
 wait $pid 2>/dev/null; rc=$?
 if (( ! voided )) && bad; then voided=1; echo "== $name VOID at $(date +%T): power at end" >> $log

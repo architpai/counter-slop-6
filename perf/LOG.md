@@ -518,6 +518,126 @@ own fit), and the pixel cluster is 7x3.
    shadow map (not proven). Low's remaining structural lever is fewer figure draws (merging same-joint parts: not exact).
 4. Fight CPU: training fights are draw-bound in submission; `a` cuts 40-60 calls per frame there (needs a clean run).
 
+## Round 4 — post chain, main-pass varyings, carry-over shadow patches
+
+2026-10-19, on `2c75479` (harness) → game change `cad1329`, harness fixes `1cee56d` and later. Survey: five
+read-only Opus agents (GTAO, the rest of the post chain, shadow-map traffic, Low end to end, main pass and CPU);
+implementation: three Opus agents, each in its own worktree, one patch each (`post`, `main`, `stat`/`draw1`); fixes:
+one Opus agent; review: GPT-6.1-Sol (below).
+
+**Machine state** (every reading: `perf/results/r4-power.log`, written by the new `perf/powered.sh`). The round
+started at 7-8 % on a 94 W charger; no bench ran until AC + 60 % (09:49). r4-pre, c1, n1, t1, c2, f1, p1 and f2 ran
+on AC at 60-100 %, no thermal or performance warning. The laptop then left AC at 18:36 (f3 voided by the watchdog).
+Back on AC at 19:25 (98 %), the battery drained to 46 % during f3b while on AC (the charger no longer kept up; the
+machine slowed ~23 % from round 1 to round 4 of f3b, same for every variant), and the first r4-post was voided at
+39 % (20:44). Desktop Chrome was open (idle) all day, as in earlier rounds.
+
+**Round baseline.** `r4-pre` (traced full matrix of `2c75479`, same `src/` as `r2-post`, charged machine, 565 s):
+frame mean all 2.480 ms, low 1.644, medium 2.315, high 2.793, ultra 3.557; vs `r1-post` -9.6 % (Round 2's code
+plus a healthier machine; `r2-pre`/`r3-pre` were throttled). This is the clean reference Round 2 asked for.
+
+### Result
+
+| paired frame metric, kept set vs HEAD | low | medium | high | ultra | all |
+|---|---|---|---|---|---|
+| **f1 mean** (4 rounds, balanced) | 1.571 → 1.560 ms (-0.7 %, -0.01) | 2.335 → 2.258 (-3.3 %, -0.08) | 3.081 → 2.995 (-2.8 %, -0.09) | 3.818 → 3.702 (-3.0 %, -0.12) | 2.563 → 2.500 (-2.4 %, -0.06) |
+| f1 median | -2.2 % (-0.04 ms) | -2.1 % (-0.05) | -1.1 % (-0.04) | -3.4 % (-0.13) | -2.2 % (-0.06) |
+| f1 p95 | +0.4 % (+0.01 ms) | -1.8 % (-0.07) | -1.7 % (-0.08) | -1.3 % (-0.07) | -1.1 % (-0.05) |
+| f1 cpu (callback wall) mean, fitted | -0.8 % | -3.2 % | -4.0 % | -3.1 % | -2.8 % |
+| f1 headB/head (mean / med / p95) | -0.3 / -1.6 / 0.0 % | +0.1 / +0.1 / -0.3 % | +0.5 / +0.7 / +0.8 % | +1.7 / +1.9 / +3.0 % | +0.5 / +0.3 / +0.9 % |
+| **f2 repeat** (set vs pre-round tree, raw mean) | -0.4 % | -2.8 % | -1.8 % | -1.3 % | -1.6 % |
+| f2 vs the mean of both set arms | -0.6 % | -4.0 % | -2.7 % | -1.3 % | |
+| **f3b: what the exact part adds beyond g** (two g-only arms vs the set, mean) | | +1.9 / +3.0 % | +1.7 / +2.1 % | +1.8 / +2.2 % | +1.8 / +2.4 % |
+| f3b headB/head | | +0.7 % | 0.0 % | -0.1 % | +0.2 % |
+| js, fight cells (t1, traced, training + mexico): `a` | +5.0 % * | -4.3 % | -4.7 % | -5.4 % | -2.4 % |
+| js, fight cells (t1): `stat` | +0.2 % * | +1.1 % | -2.4 % | -4.0 % | -1.3 % |
+| t1 headB/head (js fight) | +3.4 % | -1.1 % | -2.2 % | +3.2 % | +0.8 % |
+| **r4-post vs r4-pre** (traced full matrix, unpaired) | pending (power) | | | | |
+
+\* `a` and `stat` change nothing on Low's path except `stat`'s figure matrices; Low js in t1 moves with the control.
+
+**Verdict.** The set is kept on Medium, High and Ultra: f1 -3.3 / -2.8 / -3.0 % frame mean (past the ~2 % paired
+gate, headB ≤ 1.7 %), and the repeat f2 reads the same direction (-2.8 / -1.8 / -1.3 % raw; its control moved
+-2.6 % on medium and -2.0 % on high, with a strong run-position ramp on medium, so f2 alone is weaker). The review
+asked whether the exact part earns its place next to `g` (P2): f3b, two g-only arms against two arms of the set,
+reads +1.8 to +3.0 % slower for g-only on every realistic preset in all four rounds (headB ≤ 0.7 %), which repeats
+f1's `bundle` arm (-2.6 / -1.7 / -1.5 % alone vs HEAD). g alone (c2): -2.5 / -3.6 / -2.3 %, repeating Round 3's s2.
+**Low: no gain proven** (f1 mean -0.7 %, median -2.2 % with headB -1.6 %, p95 +0.4 %); this round has no Low win.
+The individual exact parts (`smaa`, `main`, `stat`, `a`, `d`) are not proven one by one (each ≤ ~2 %, see below);
+they are kept as one measured set. Calls drop in fights where operators cast (`a`: training ultra 367 → 308, high
+313 → 271, Round 3 counts); programs, triangles and fight state hashes as HEAD.
+
+### Changes kept (commit `cad1329`)
+
+| change | where | evidence (paired frame mean unless named) | pixels |
+|---|---|---|---|
+| **smaa**: every SMAA fetch at level 0 (`textureLod(..., 0.0)`; three's port uses bias calls and implicit-LOD fetches in divergent loops); SMAA materials without depth test/write (no SMAA target has depth); `FX_KEYS` hoisted | `postfx.ts` `levelZero()` | n1: medium -0.6, high -0.1, ultra -0.7 % | exact (no texture SMAA reads has mipmaps; min = mag filter; anisotropy 1) |
+| **main**: `ORM_PACKED` also in the vertex shader (no `vAoMapUv`/`vMetalnessMapUv`); `UV_SHARED` key flag maps the normal/roughness uvs onto `vMapUv` when map, normal and ORM share a channel and bit-equal fixed matrices; `vGridPos` for the macro noise on unbaked non-far level/kit (no `vMacroPos`); `fixUv` (identity texture matrices composed once, `matrixAutoUpdate` off); AO alpha in `opaque_fragment` compiled out (`NO_AO_ALPHA`, key part, relink on AO toggle) when AO is off; PMREM irradiance line dropped where it was zeroed | `materials.ts`, `index.ts`, `postfx.ts` (OPAQUE_CHUNK), `tests/main-pass.test.ts` | n1: medium -1.7 %, high -0.1 %, ultra +0.2 % | exact |
+| **stat**: `freeze()` — `matrixAutoUpdate` off on enemy figure nodes that never move against their parent (surface roots and meshes, anchors, eyes, gun mount, weapon prop/tip; `lend()` turns it back on for debris); ~39 of ~54 nodes per grunt | `figure.ts`, `tests/figure-static.test.ts` (bit-equal matrices through motion, swaps, shield drop, debris, death) | t1 js fight: high -2.4 %, ultra -4.0 % | exact |
+| **a** (`r3-a-opshadow`): one merged shadow draw per worn two-mesh operator per cascade | `operators.ts`, `index.ts` | c1: ultra -1.7 % (medium/high +0.8 %); t1 js fight medium/high/ultra -4.3 / -4.7 / -5.4 % | exact |
+| **d** (`r3-d-vm`): view model and backdrop programs skip the cascade loop at compile time | `shadows.ts`, `materials.ts` | c1: high -2.6 %, ultra +0.8 %; n1: high -0.9 %, ultra -0.9 % | exact |
+| **g** (`r3-g-ndotl`): shadow taps skipped where N·L ≤ 0 (run-time branch; Toon/clearcoat excluded) | `shadows.ts` | c2: low +0.2, medium -2.5, high -3.6, ultra -2.3 % (p95 -0.6 / -3.1 / -3.5 / -2.8 %), headB ≤ 1.1 % | 39 px in 9 images (below) |
+
+d and g are applied as Round 3's `r3-dg-both.patch` (they touch the same lines).
+
+### Quality gate
+
+`node perf/quality.mjs compare baseline r4`: **PASS, 56/56, every SSIM 1.0000.** `compare r2 r4` (the tree before the
+round): 47/56 byte-identical; **39 changed pixels in 9 high/ultra images**, all from `g`: high downtown-fp 2 px,
+downtown-low-angle 4, fight-mid 17, house-fp 1; ultra downtown-fp 3, downtown-overview 4, house-fp 2, house-overview 4,
+training-overview 2; max 1-3/255 except high/fight-mid x 1360-1363, y 627 (10, 23, 14, 6 /255): the SMAA edge decision
+Round 1's B1 and Round 3's g flipped (a 1-LSB input change). A 10x crop side by side shows no visible difference.
+The exact part alone (`bundle`, all minus g) gave 56/56 byte-identical vs r2; each patch alone too (`stat`, `main`;
+`post` only after dropping its GTAO hunks, below). `r4` is byte-identical to the A/B's `scratch-r4-all` capture.
+`npm run typecheck` and `npm test` (44 files, 386 tests) pass on the set.
+
+### Probes (throwaway ceilings, p1, on `cad1329`; patches `perf/patches/r4-probe-*.patch`)
+
+| probe (frame mean vs HEAD, 5 rounds, balanced) | low | high | ultra |
+|---|---|---|---|
+| pK: shadow maps drawn once, never redrawn (stale, still sampled) = the whole shadow pass | -3.9 % | -10.0 % (-0.28 ms) | -6.5 % (-0.26 ms) |
+| pE: every map bound, cleared and stored, no caster drawn | -2.9 % | -4.8 % | -0.3 % (path +2.9, fight -3.5) |
+| pS: every shadow lookup returns 1.0 (sampling cost, on top of g) | -0.7 % | -2.4 % | -0.3 % |
+| pN: GTAO with coherent taps (sliceNoise = stepNoise = 0) | +0.4 % | +1.7 % | +1.6 % |
+| fight cpu: pE / pK | -5.9 / -5.6 % | -9.6 / -14.6 % | -7.6 / -12.1 % |
+
+Reading: on Ultra the shadow cost is mostly **bind + clear + store of the three maps** (pE - pK ≈ 6 %, ~0.22 ms),
+not casters (≈ 0 on the path); on High half and half (~0.14 ms each); caster submission costs CPU in fights
+(pE fight cpu -6 to -10 %). Sampling ideas (hardware compare, fewer taps) are capped at ~2.4 % on High and ~0 on
+Ultra after g. GTAO is not cache-bound: the deinterleaved GTAO idea is dead.
+
+### Harness (kept)
+
+`perf/ab.sh` `AB_TRACE=1` keeps the traced replays (js per frame; `ab-agg` adds js rows, all and fight only;
+`ab-posfit` takes `js`). `perf/powered.sh logfile name command...` logs `pmset -g batt`/`therm` before and after,
+checks every 60 s, stops and voids the run off AC or under `PERF_MIN_BATT` (40) %, checks once more at the end
+(review), and KILLs a child that ignores TERM after 30 s (the first r4-post void hung on `wait` until the tool limit).
+
+### Review (GPT-6.1-Sol, high effort)
+
+Round 1 (`perf-loop-r4-review-1`, on `2c75479..cad1329`): no P1, no game-code bug found (program keys for
+`ORM_PACKED`/`UV_SHARED`/`NO_AO_ALPHA`, `GRID_VIEW_MODEL`/`BACKDROP` defines, AO relink, frozen nodes vs players,
+shields, debris, weapon and LOD swaps, `shadowSwap` restore in `finally`, every SMAA input's filters, `fixUv` writers
+all checked). Three P2 findings, all addressed: (1) `powered.sh` checked the power only while the command ran → it
+checks once more after the end (`1cee56d`); (2) Low has no proven gain → stated above, not claimed; (3) the full set
+needed an independent repeat, and the exact part had not been shown to add to g → f2 (repeat vs the pre-round tree)
+and f3b (set vs g-only, two arms each; f3 was voided by the power watchdog and rerun).
+Round 2 (`perf-loop-r4-review-2`): pending.
+
+### Hot spot leads (refreshed)
+
+1. **Shadow-map bind/clear/store on Ultra** (~0.22 ms, pE vs pK) and High (~0.14 ms): the colour store is sampled,
+   so the exact lever left is the depth store (Round 1's A8 was inside noise: retry alone on Ultra with `ab.sh`,
+   rounds = variants, now that the ceiling is known), or fewer bytes per map (not exact: depth-only/D16/R32F).
+2. **Shadow caster submission in fights** (pE fight cpu -6 to -10 %): CPU of the per-cascade scene walk and draws;
+   Low's merged per-figure shadow caster in tree order (exact triangle order; one depth material per figure) is the
+   Low candidate from the `draw1` analysis.
+3. **Low**: no win this round. Its whole shadow pass is ~4 % (pK), casters ~3 % (pE). Low fights are draw-bound
+   (training: ~12 draws per flat figure); merging main-pass figure draws is not exact (depth-tie order).
+4. **Ultra main pass with MSAA4** (~2-2.5 ms): ablate the MSAA resolve (measurement only) to see if it is bandwidth.
+5. Small exact leftovers: hemisphere light at 0 (needs the pre-sky state through the probe and two test lines),
+   view-model `depthRange` per mesh.
+
 ## Tried / rejected ideas
 
 Format: round, idea, where, result numbers vs the noise floor, why rejected.
@@ -577,3 +697,20 @@ Format: round, idea, where, result numbers vs the noise floor, why rejected.
   a colour+depth copy costs more than redrawing); a lower-LOD operator in the wide cascades (silhouette error ≈ a
   texel, flips penumbra texels: visible in blend zones); splitting Low's redraw over two frames (half the casters a
   frame stale: visible); front-to-back caster sorting (Apple's hidden-surface removal makes order irrelevant).
+- **r4, GTAO/blur trims** (`postfx.ts`: the `pixels < 2` exit before the normal reconstruction; the blur reads its
+  centre once as the (0,0) tap and drops a dead `weight > 0` test). Exact in exact arithmetic, but the shader text
+  change moved 401 px by 1-3/255 in 25 high/ultra images (2-81 px each) (Metal fast math; Medium, which has no AO, stayed exact).
+  Gain estimated ≤ 0.02 ms; not measured. Rejected for pixels; patch `perf/patches/r4-gtao-trim.patch`.
+- **r4, deinterleaved GTAO** (4x4 depth atlas for coherent taps). Probe pN (coherent noise, same taps) was 1.3-1.7 %
+  *slower* on high/ultra: GTAO is not cache-bound. Not built.
+- **r4, one main-pass draw per flat Low figure** (merged parts, per-slot matrices). Not exact by analysis: three sorts
+  a figure's parts front to back every frame and the part drawn last wins depth ties at the joints; a merged draw
+  has a fixed order. r170 also has no per-object uniform path for `MeshStandardMaterial` arrays (a material switch
+  per figure per pass). Not built.
+- **r4, not tried (by analysis)**: hemisphere light off on realistic presets (the pre-sky state cannot go through
+  the probe SH bit-exactly, and two render-chain test assertions pin it); view-model `depthRange` once per frame
+  (rig transparents interleave with world transparents; ~20 GL calls); canvas `alpha: false` (three r170 creates the
+  context with `alpha: true` regardless); D16 shadow depth (4.9 mm steps tie near-coplanar casters: flips taps);
+  depth-only or R32F shadow maps and hardware compare (different sampled values); one-tap AO lookup in the tone pass
+  at full res (2e-4 weight dropped: LSBs); skipping the AO blur on sky texels (run-time branch); SMAA area/search
+  as RG8/R8, weights pass discard, bloom formats (≈ 0 or not exact).
