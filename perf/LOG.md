@@ -1096,13 +1096,35 @@ first run 402/403 (the render-chain sky test, one of HEAD's three), second run *
 
 ### Review (GPT-6.1-Sol, high effort)
 
-REVIEW_PLACEHOLDER
+Round 1 (`perf-loop-r7-review-1`, on `00a8411..ca2d555`): no P1 and no game-code defect found (no stale worker reply
+applied across map changes/disposal, no transfer/detach fault, a silent worker still lets the main-thread steps finish;
+no warm-up target contamination; no missing HUD variable reader; no fence-switch fault; no rig-matrix reader between
+the camera line and the render); the A/B tables reproduce from the raw JSON; the packing numbers are stated fairly
+against the old HEAD (they do not measure packing on top of the kept set; Ultra packing unproven). Findings: (P2) the
+hud+misc keep exceeded r7f's evidence on Low/High/Ultra → `r7f2`, the third A/B (above): Ultra and Low shown, High not
+validated; (P2) map coverage incomplete and the worker's Ultra -1.6 % under the gate; the ready numbers measure the
+whole set → coverage stated, Ultra ready gain not counted, layout/bake times attributed; (P3) the hitch claim
+overstated and its JSON absent → per-load wording, `perf/results/r7-hitch.json`; (P2) full-suite validation → two
+full runs with `--maxWorkers=2`, the second 403/403.
+
+Round 2 (`perf-loop-r7-review-2`, on `af73e8f` with the findings and responses above): no P1 and no game-code P2
+(worker lifecycle, warm-up targets, HUD replay, fence ring and rig matrix readers checked again); the r7f2 rows, robust
+values, position fit, r7ld figures and the hitch JSON match the raw files; fight summaries and state trails match
+across all variants in r7f and r7f2. **Open (P2), for the user to decide**: (1) the rules have no exception clause:
+keeping `hud` + `misc` on **High** (not validated) and counting the worker on **Ultra** (ready -1.6 %, under ~2 %)
+as preset-independent exact code needs the user's explicit approval; otherwise gate them off there (High would then
+keep the old HUD variable writes and rig walk; the worker would stay on for Medium/High only). (2) Coverage is below
+the full matrix of `NOISE.md`: Medium fights on 2 maps (r7f), the path scenario not re-measured although the rig walk
+runs every frame, the worker's load A/B without training. Both are lead 0. No third review (round limit).
 
 ### Hot spot leads (refreshed)
 
-0. **Charger**: the 94 W charger is in. Bench on a charged machine (r7f caught power-state jumps while charging at
-   70-83 %). Open: the Medium confirmation for Round 4 (2c75479 vs HEAD, ≥ 4 rounds), and if wanted the split of
-   the kept set (hud / rig / fence) with traces (`AB_TRACE=1`, `trace.outside`) to size High/Ultra.
+0. **User decisions and open validation** (review 2): approve or reject the High exception for `hud` + `misc` and the
+   Ultra exception for `worker` (above). Round 8 should close the coverage gaps on a charged machine (r7f caught
+   power-state jumps while charging at 70-83 %; r7f2 at 97-100 % was clean): the set vs the pre-round tree on the
+   full matrix (path + fight, all maps; Medium on 4 maps; High to validate), the worker's load A/B with training,
+   and the Medium confirmation for Round 4 (2c75479 vs HEAD, ≥ 4 rounds). Optional: split the set (hud / rig /
+   fence) with traces (`AB_TRACE=1`, `trace.outside`).
 1. **Upload packing**: the user's decision (above). If accepted, decide Ultra's slot budget.
 2. **Load-time spikes**: in ~1 of 6 loads (both variants) a warm-up draw lands on the sky-landing frame (120-230 ms,
    sometimes one new program); the landing frame itself is ~5-8 ms, mostly the bake stream's first step (~4-5 ms) and

@@ -1,0 +1,346 @@
+diff --git a/src/engine/render/index.ts b/src/engine/render/index.ts
+index 37f7666..1ef873b 100644
+--- a/src/engine/render/index.ts
++++ b/src/engine/render/index.ts
+@@ -127,33 +127,6 @@ function* bakeLayoutSteps(surfaces: readonly LevelSurface[], bounds: Level['boun
+  * short fade reads as the room dimming at spawn.
+  */
+ export const BAKE_FADE_MS = 1500;
+-/**
+- * three's shader checks (`renderer.debug.checkShaderErrors`): on in development and the tests, off in a production
+- * build (Next inlines `NODE_ENV`). With them on, three reads each program's link status and its three logs at its
+- * first use: blocking queries that wait for the link. The programs and what they draw are the same either way; off,
+- * a shader that fails to link only goes unreported (no `diagnostics`, no console error).
+- */
+-export const CHECK_SHADER_ERRORS = process.env.NODE_ENV !== 'production';
+-
+-/**
+- * The room environment's PMREM (`fromScene`), its scene's programs linking side by side: at fromScene's first draw
+- * (its cube target and tone mapping set, as for the room's draws) the room is compiled (three's `compile`, no
+- * query), so the room's programs link while the background box's links and draws. The same programs (their keys
+- * are made as at the room's own draws), objects and pixels as `pmrem.fromScene(room, 0.04)`.
+- */
+-export function roomEnvironment(three: THREE.WebGLRenderer, pmrem: THREE.PMREMGenerator, room: THREE.Scene): THREE.WebGLRenderTarget {
+-  const render = three.render;
+-  three.render = function (scene, camera) {
+-    three.render = render;
+-    three.compile(room, camera);
+-    render.call(three, scene, camera);
+-  };
+-  try {
+-    return pmrem.fromScene(room, 0.04);
+-  } finally {
+-    three.render = render;
+-  }
+-}
+ /**
+  * Point lights the realistic tiers' shots and blasts share (R5): always in
+  * the scene there, at zero until an effect takes one, since a light count is
+@@ -423,7 +396,6 @@ export class Renderer {
+     // No depth buffer on the canvas: every draw into it is a post pass over the whole frame, with no depth test
+     // (SMAA's blend pass tests, but alone on a cleared canvas it always passes, as with no depth buffer).
+     this.three = new THREE.WebGLRenderer({ canvas, antialias: false, depth: false, stencil: false, powerPreference: 'high-performance' });
+-    this.three.debug.checkShaderErrors = CHECK_SHADER_ERRORS;
+     this.three.outputColorSpace = THREE.SRGBColorSpace;
+     this.three.toneMapping = THREE.NoToneMapping;
+     this.three.autoClear = false;
+@@ -437,7 +409,7 @@ export class Renderer {
+     this.scene = new THREE.Scene();
+     this.scene.fog = new THREE.Fog(SURF.fog, FOG_NEAR, FOG_FAR);
+     this._pmrem = new THREE.PMREMGenerator(this.three);
+-    this.scene.environment = this._roomEnv = roomEnvironment(this.three, this._pmrem, new RoomEnvironment()).texture;
++    this.scene.environment = this._roomEnv = this._pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+     this.scene.environmentIntensity = ENV_INTENSITY;
+     this._sky = {
+       horizon: { value: new THREE.Color(SURF.fog) }, zenith: { value: new THREE.Color(LIGHT.zenith) },
+@@ -1307,8 +1279,7 @@ export class Renderer {
+    * start (it parses on the main thread); the atlases upload in the
+    * level's upload slots once its bake and sets are on (the props wear those
+    * sets), and the dressing merges a few milliseconds a frame in between,
+-   * never in a match's quiet start. Its placements are written every frame
+-   * once the kit is in (no slot needed); its meshes are made in the slots.
++   * never in a match's quiet start.
+    */
+   _streamProps(): void {
+     const size = propTextureSize(this._quality);
+@@ -1317,15 +1288,12 @@ export class Renderer {
+     const now = performance.now();
+     if (this._match.quiet(now)) return;
+     this.props.fetch();
+-    if (this.props.pending && !this.bakePending && !this.texturesPending && now >= this._uploadAt) {
+-      const bytes = this.props.pump();
+-      if (bytes > 0) {
+-        if (performance.now() - now > UPLOAD_SLOW_MS) this._uploadPace = Math.min(4, this._uploadPace * 2);
+-        this._uploadAt = now + Math.max(UPLOAD_GAP_MS, bytes / UPLOAD_BYTES_PER_MS) * this._uploadPace;
+-      }
++    if (!this.props.pending || this.bakePending || this.texturesPending || now < this._uploadAt) return;
++    const bytes = this.props.pump();
++    if (bytes > 0) {
++      if (performance.now() - now > UPLOAD_SLOW_MS) this._uploadPace = Math.min(4, this._uploadPace * 2);
++      this._uploadAt = now + Math.max(UPLOAD_GAP_MS, bytes / UPLOAD_BYTES_PER_MS) * this._uploadPace;
+     }
+-    // After the slot's pump and its timing: the dressing's placements need no slot (`PropAssets.premerge`).
+-    this.props.premerge();
+   }
+ 
+   /** A realistic tier's detail kit (or the current map's merge of it) is still streaming. */
+diff --git a/src/engine/render/props.ts b/src/engine/render/props.ts
+index 196c8ea..bed9294 100644
+--- a/src/engine/render/props.ts
++++ b/src/engine/render/props.ts
+@@ -480,8 +480,6 @@ export class DressingMerge {
+   #next = 0;
+   #pending: [DressingPart['kind'], Batch][] | null = null;
+   readonly parts: DressingPart[] = [];
+-  /** The streamer has stepped it in its upload slots (`PropAssets.pump`); before that it may only be placed (`place`). */
+-  claimed = false;
+ 
+   constructor(dressing: LevelDressing, kit: Kit, cell = PROP_CELL) {
+     this.#dressing = dressing;
+@@ -508,41 +506,24 @@ export class DressingMerge {
+     return cellBatch(this.#large, (cable.from[0] + cable.to[0]) / 2, (cable.from[2] + cable.to[2]) / 2, this.#cell);
+   }
+ 
+-  /** Is this the merge of this dressing, kit and cell? */
+-  fits(dressing: LevelDressing, kit: Kit, cell: number): boolean {
+-    return this.#dressing === dressing && this.#kit === kit && this.#cell === cell;
+-  }
+-
+-  /**
+-   * Write placements into the batches for about `budget` ms (at least one), then the cables; true once all are
+-   * written. Plain arrays only: no three object (a geometry draws `Math.random` for its uuid), so it can run
+-   * outside the upload slots; the meshes are finished in `step`.
+-   */
+-  place(budget: number): boolean {
+-    if (this.#pending !== null) return true;
+-    const until = performance.now() + budget, props = this.#dressing.props;
+-    do {
+-      const p = props[this.#next];
+-      if (p === undefined) break;
+-      addPiece(this.#batchOf(p), this.#kit.get(p.piece)!, p);
+-      this.#next++;
+-    } while (performance.now() < until);
+-    if (this.#next < props.length) return false;
+-    for (const cable of this.#dressing.cables) addCable(this.#cableBatch(cable), cable);
+-    const cells = (kind: DressingPart['kind'], batches: Map<string, Batch>) =>
+-      [...batches.keys()].sort().map(key => [kind, batches.get(key)!] as [DressingPart['kind'], Batch]);
+-    this.#pending = [...cells('large', this.#large), ['backdrop', this.#backdrop], ...cells('small', this.#small)];
+-    this.#pending = this.#pending.filter(([, batch]) => !batch.empty);
+-    return true;
+-  }
+-
+   /** Work for about `budget` ms; true once every mesh is finished (`parts`). */
+   step(budget: number): boolean {
++    const until = performance.now() + budget, props = this.#dressing.props;
+     if (this.#pending === null) {
+-      this.place(budget);
++      do {
++        const p = props[this.#next];
++        if (p === undefined) break;
++        addPiece(this.#batchOf(p), this.#kit.get(p.piece)!, p);
++        this.#next++;
++      } while (performance.now() < until);
++      if (this.#next < props.length) return false;
++      for (const cable of this.#dressing.cables) addCable(this.#cableBatch(cable), cable);
++      const cells = (kind: DressingPart['kind'], batches: Map<string, Batch>) =>
++        [...batches.keys()].sort().map(key => [kind, batches.get(key)!] as [DressingPart['kind'], Batch]);
++      this.#pending = [...cells('large', this.#large), ['backdrop', this.#backdrop], ...cells('small', this.#small)];
++      this.#pending = this.#pending.filter(([, batch]) => !batch.empty);
+       return false;
+     }
+-    const until = performance.now() + budget;
+     do {
+       const next = this.#pending.shift();
+       if (next) this.parts.push({ kind: next[0], ...next[1].geometry() });
+@@ -783,30 +764,12 @@ export class PropAssets {
+     const kit = this.#kit, dressing = this.#request.dressing;
+     if (dressing !== null && (kit === null || this.#kitFamily !== dressing.family)) return 0;
+     if (dressing !== null && kit !== null) {
+-      // The merge the slots would start now (a placed one too, `premerge`); once claimed it runs to its end, as before.
+-      const cell = propDetail(this.#size!).cell;
+-      if (this.#merge === null || (!this.#merge.claimed && !this.#merge.fits(dressing, kit, cell))) this.#merge = new DressingMerge(dressing, kit, cell);
+-      this.#merge.claimed = true;
++      this.#merge ??= new DressingMerge(dressing, kit, propDetail(this.#size!).cell);
+       if (!this.#merge.step(MERGE_STEP_MS)) return 0;
+     }
+     return this.#build(kit);
+   }
+ 
+-  /**
+-   * Once the family's kit is in: write the map's dressing into the merge's arrays (`DressingMerge.place`,
+-   * `MERGE_STEP_MS` of script), every frame past a match's quiet start, ahead of the upload slots and the atlases.
+-   * It makes no three object, so the meshes, their materials and the build come from `pump` at the same point as
+-   * before, only with fewer of its steps left to run.
+-   */
+-  premerge(): void {
+-    if (this.#built !== null || this.#request === null || this.#size === null || !this.pending) return;
+-    const kit = this.#kit, dressing = this.#request.dressing;
+-    if (dressing === null || kit === null || this.#kitFamily !== dressing.family) return;
+-    const cell = propDetail(this.#size).cell;
+-    if (this.#merge === null || (!this.#merge.claimed && !this.#merge.fits(dressing, kit, cell))) this.#merge = new DressingMerge(dressing, kit, cell);
+-    this.#merge.place(MERGE_STEP_MS);
+-  }
+-
+   #wear(atlases: Atlases): void {
+     signsMat().map = atlases.maps!.get('signs')!;
+     grimeMat().uniforms.map!.value = atlases.maps!.get('grime')!;
+diff --git a/tests/dressing.test.ts b/tests/dressing.test.ts
+index fb240e6..3bc17bd 100644
+--- a/tests/dressing.test.ts
++++ b/tests/dressing.test.ts
+@@ -24,7 +24,6 @@ import { buildDowntown } from '@/engine/level/downtown';
+ import { Dresser } from '@/engine/level/dressing';
+ import { ROCK_STACKS } from '@/engine/level/mexico';
+ import type { Kit } from '@/engine/render/props';
+-import type { TextureSize } from '@/engine/render/surfaces';
+ import type { Level, PropFamily } from '@/engine/types';
+ 
+ const MAPS = [['downtown', false], ['downtown', true], ['house', false], ['house', true], ['mexico', false], ['mexico', true], ['training', false]] as const;
+@@ -483,85 +482,3 @@ test('Medium\'s kit merges in wider cells and hides its small pieces nearer; a T
+   expect(index.count).toBe(count);
+   assets.want(null, null);
+ });
+-
+-test('premerge: the placements run ahead of the atlases and slots, make no three object, and the build is the same', async () => {
+-  const { level } = build('downtown');
+-  const scene = (await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(propsUrl('downtown'))).scene;
+-  const request = { dressing: level.dressing, movers: level.movers };
+-  const start = (size: TextureSize) => {
+-    const warmed: THREE.Group[] = [];
+-    const assets = new PropAssets({
+-      model: async () => ({ scene: scene.clone() }),
+-      texture: async () => new THREE.DataTexture(new Uint8Array(4), 1, 1),
+-      upload: () => {},
+-      warm: root => { warmed.push(root as THREE.Group); return new Promise<void>(() => {}); },
+-    });
+-    assets.want(request, size);
+-    assets.fetch();
+-    return { assets, warmed };
+-  };
+-  /** Pump to the build with a seeded `Math.random`: the same draws in the same order give the same uuids. */
+-  const pumpOut = ({ assets, warmed }: ReturnType<typeof start>) => {
+-    const random = Math.random;
+-    let s = 7, draws = 0;
+-    Math.random = () => { draws++; s = (s * 16807) % 2147483647; return s / 2147483647; };
+-    try {
+-      for (let i = 0; i < 4000 && warmed.length === 0; i++) assets.pump();
+-    } finally {
+-      Math.random = random;
+-    }
+-    expect(warmed.length).toBe(1);
+-    return { group: warmed[0]!, draws };
+-  };
+-  /** Counts the draws of `Math.random` in `run`. */
+-  const counted = (run: () => void) => {
+-    const random = Math.random;
+-    let draws = 0;
+-    Math.random = () => { draws++; return random(); };
+-    try {
+-      run();
+-    } finally {
+-      Math.random = random;
+-    }
+-    return draws;
+-  };
+-  const ids = () => [new THREE.BufferGeometry(), new THREE.Object3D(), new THREE.MeshBasicMaterial()].map(o => o.id);
+-  // A first build makes the kit's shared materials, so the two compared below make the same objects.
+-  const first = start(TEXTURE_SIZE.high), head = start(TEXTURE_SIZE.high), early = start(TEXTURE_SIZE.low);
+-  await new Promise(done => setTimeout(done, 0));
+-  pumpOut(first);
+-  // Before any atlas is up: the placements only, with no Math.random draw and no three object made.
+-  let before = ids();
+-  expect(counted(() => { for (let i = 0; i < 4000; i++) early.assets.premerge(); })).toBe(0);
+-  expect(ids()).toEqual(before.map(id => id + 1));
+-  // A Textures change before the slots claim the merge: the placements start again at the new detail's cell.
+-  early.assets.want(request, TEXTURE_SIZE.high);
+-  await new Promise(done => setTimeout(done, 0));
+-  before = ids();
+-  expect(counted(() => { for (let i = 0; i < 4000; i++) early.assets.premerge(); })).toBe(0);
+-  expect(ids()).toEqual(before.map(id => id + 1));
+-  expect(early.warmed.length).toBe(0);
+-  // The atlases' uploads and the merge's meshes come from the pumps, in the same order as with no premerge.
+-  const a = pumpOut(head), b = pumpOut(early);
+-  expect(b.draws).toBe(a.draws);
+-  const meshes = (group: THREE.Group) => group.children as THREE.Mesh[];
+-  const looks = (mesh: THREE.Mesh) => (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).map(m => m.id);
+-  expect(meshes(b.group).map(m => [m.name, m.uuid, m.geometry.uuid, looks(m)])).toEqual(meshes(a.group).map(m => [m.name, m.uuid, m.geometry.uuid, looks(m)]));
+-  const digest = async (array: ArrayLike<number> & ArrayBufferView) =>
+-    Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new Uint8Array(array.buffer as ArrayBuffer, array.byteOffset, array.byteLength))), n => n.toString(16)).join('');
+-  for (const [i, mesh] of meshes(a.group).entries()) {
+-    const g = mesh.geometry, h = meshes(b.group)[i]!.geometry;
+-    expect(h.groups).toEqual(g.groups);
+-    expect(h.boundingBox).toEqual(g.boundingBox);
+-    expect(h.boundingSphere).toEqual(g.boundingSphere);
+-    expect(Object.keys(h.attributes)).toEqual(Object.keys(g.attributes));
+-    for (const name of Object.keys(g.attributes)) {
+-      const x = g.getAttribute(name).array as Float32Array, y = h.getAttribute(name).array as Float32Array;
+-      expect(y.constructor).toBe(x.constructor);
+-      expect(await digest(y), `${mesh.name} ${name}`).toBe(await digest(x));
+-    }
+-    expect(h.index?.array.constructor).toBe(g.index?.array.constructor);
+-    if (g.index) expect(await digest(h.index!.array as Uint16Array)).toBe(await digest(g.index.array as Uint16Array));
+-  }
+-  for (const run of [first, head, early]) run.assets.want(null, null);
+-});
+diff --git a/tests/render-chain.test.ts b/tests/render-chain.test.ts
+index 2b02d60..b32500a 100644
+--- a/tests/render-chain.test.ts
++++ b/tests/render-chain.test.ts
+@@ -1,7 +1,6 @@
+ import { afterEach, expect, test, vi } from 'vitest';
+ import * as THREE from 'three';
+-import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+-import { CHECK_SHADER_ERRORS, Renderer, roomEnvironment } from '@/engine/render/index';
++import { Renderer } from '@/engine/render/index';
+ import { MATCH_QUIET_MS } from '@/engine/render/pacing';
+ import { Composite, RIG_DEPTH } from '@/engine/render/postfx';
+ import { PRESETS, PRESET_VALUES } from '@/engine/render/quality';
+@@ -71,9 +70,6 @@ const expected: Record<PresetName, { config: Omit<PostConfig, 'samples'>; sample
+ 
+ test('each preset reaches the renderer: passes, tone mapping, MSAA, AO depth, cascades', () => {
+   const renderer = makeRenderer();
+-  // three checks every program's link here (off only in a production build), so the check below has logs to read.
+-  expect(CHECK_SHADER_ERRORS).toBe(true);
+-  expect(renderer.three.debug.checkShaderErrors).toBe(true);
+   const maxSamples = renderer.three.capabilities.maxSamples;
+   // A lit, shadowed floor and box in view, so every preset compiles the (cascaded) lighting chunk.
+   const floor = new THREE.Mesh(new THREE.BoxGeometry(40, 0.2, 40), new THREE.MeshLambertMaterial());
+@@ -637,38 +633,3 @@ test('opaque lit materials write the share of their light that AO may darken int
+   plane.material = new THREE.MeshLambertMaterial({ transparent: true, opacity: 0.5, blending: THREE.NoBlending });
+   expect(alpha()).toBeCloseTo(0.5, 5);
+ });
+-
+-test('the room environment compiles its scene at fromScene\'s first draw: the same programs and texels as fromScene alone', () => {
+-  const run = (early: boolean) => {
+-    const canvas = document.createElement('canvas');
+-    const three = new THREE.WebGLRenderer({ canvas, antialias: false, depth: false, stencil: false });
+-    three.outputColorSpace = THREE.SRGBColorSpace;
+-    three.toneMapping = THREE.NoToneMapping;
+-    three.autoClear = false;
+-    three.shadowMap.enabled = true;
+-    three.setClearColor(0x8fa3b8);
+-    const pmrem = new THREE.PMREMGenerator(three), render = three.render;
+-    const target = early ? roomEnvironment(three, pmrem, new RoomEnvironment()) : pmrem.fromScene(new RoomEnvironment(), 0.04);
+-    expect(three.render).toBe(render);
+-    const texels = new Uint16Array(target.width * target.height * 4);
+-    three.readRenderTargetPixels(target, 0, 0, target.width, target.height, texels);
+-    // A shader material's key starts with its two shader stages' ids, which count across renderers: left out.
+-    const programs = three.info.programs!.map(program => `${program.name}|${program.name ? program.cacheKey.split(',').slice(2).join() : program.cacheKey}`);
+-    expect(three.getContext().getError()).toBe(three.getContext().NO_ERROR);
+-    target.dispose();
+-    pmrem.dispose();
+-    three.dispose();
+-    three.forceContextLoss();
+-    return { texels, programs };
+-  };
+-  const alone = run(false), early = run(true);
+-  // The room's programs are made first (the background box's draw first made the basic one), and none is added or changed.
+-  expect(alone.programs[0]!.startsWith('|basic,')).toBe(true);
+-  expect(early.programs[0]!.startsWith('|physical,')).toBe(true);
+-  expect(early.programs).toHaveLength(alone.programs.length);
+-  expect([...early.programs].sort()).toEqual([...alone.programs].sort());
+-  let differ = 0;
+-  for (let i = 0; i < alone.texels.length; i++) if (alone.texels[i] !== early.texels[i]) differ++;
+-  expect(differ).toBe(0);
+-  expect(alone.texels.some(v => v !== 0)).toBe(true);
+-});
