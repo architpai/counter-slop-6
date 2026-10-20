@@ -34,3 +34,12 @@ Keep rule (written before the numbers it governs):
         Otherwise the exception is settled: kept.
     Pixels (kept set): Mac quality.mjs compare baseline + msi-r1-keep (the tree before this round), MSI compare
       msi-baseline + msi-r1-keep: PASS, 0 changed px vs msi-r1-keep (or every px explained). Typecheck, vitest on the Mac.
+
+    ## Addendum (05:30, after msir2a was read, before any macr2 or msir2b number existed)
+    msir2a verdict under the rule above: matrix is the only MSI winner (Medium). Mac A/B macr2 = head, headB, matrix,
+      prer1 (4 rounds).
+    Final MSI verification msir2b, started now (before the Mac verdict, to save time): head, headB, matrix, prer1;
+      4 maps x 4 presets x 4 rounds. It REPORTS the final tree against 5423a85's game tree (prer1); it is not a keep
+      gate. Final tree = matrix if the Mac keeps it and keeps round 1's High change; otherwise the arm that matches
+      the Mac verdict (head = round 1 only; prer1 = neither). The matrix and head arms there are a further reading,
+      reported but not used to change the msir2a verdict.
