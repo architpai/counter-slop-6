@@ -22,8 +22,11 @@ batinfo() { local d; for d in /sys/class/power_supply/BAT*; do [[ -r $d/capacity
 GPUQ=pstate,temperature.gpu,clocks.gr,clocks.sm,clocks.mem,power.draw,utilization.gpu,clocks_event_reasons.active
 gpuinfo() { command -v nvidia-smi > /dev/null || { echo 'gpu=?'; return; }
   nvidia-smi --query-gpu=$GPUQ --format=csv,noheader,nounits 2>/dev/null | awk -F', ' '{ printf "gpu %s %sC gr=%s sm=%s mem=%s MHz %sW util=%s%% reasons=%s", $1, $2, $3, $4, $5, $6, $7, $8 }'; }
-cputhrottle() { local c=0 f; for f in /sys/devices/system/cpu/cpu*/thermal_throttle/core_throttle_count; do c=$(( c + $(cat $f) )); done
-  echo "$c $(cat /sys/devices/system/cpu/cpu0/thermal_throttle/package_throttle_count 2>/dev/null || echo 0)"; }
+cputhrottle() {  # "core package" event counts; '?' where the counter is not readable
+  local c=0 n=0 f p=/sys/devices/system/cpu/cpu0/thermal_throttle/package_throttle_count
+  for f in /sys/devices/system/cpu/cpu*/thermal_throttle/core_throttle_count; do [[ -r $f ]] && { c=$(( c + $(cat $f) )); n=1; }; done
+  (( n )) || c='?'; echo "$c $([[ -r $p ]] && cat $p || echo '?')"; }
+delta() { [[ $1 == '?' || $2 == '?' ]] && echo '?' || echo $(( $1 - $2 )); }
 cputemp() { local h; for h in /sys/class/hwmon/hwmon*; do [[ $(cat $h/name 2>/dev/null) == coretemp ]] && { echo $(( $(cat $h/temp1_input) / 1000 )); return; }; done; echo '?'; }
 cpufreq() { awk '{ s += $1; if ($1 > m) m = $1; n++ } END { if (n) printf "%d/%d", s / n / 1000, m / 1000; else printf "?" }' \
   /sys/devices/system/cpu/cpu*/cpufreq/scaling_cur_freq 2>/dev/null; }
@@ -34,7 +37,7 @@ others() {  # every other user's process on the GPU: pid, its CPU %, its GPU mem
   done; }
 prev=($(cputhrottle))
 sample() { local t=($(cputhrottle))
-  echo "$(date +%T) ac=$(ac) $(batinfo) | $(gpuinfo) | cpu $(cpufreq) MHz pkg=$(cputemp)C throttle core+$(( t[0] - prev[0] )) pkg+$(( t[1] - prev[1] )) |$(others)"
+  echo "$(date +%T) ac=$(ac) $(batinfo) | $(gpuinfo) | cpu $(cpufreq) MHz pkg=$(cputemp)C throttle core+$(delta ${t[0]} ${prev[0]}) pkg+$(delta ${t[1]} ${prev[1]}) |$(others)"
   prev=("${t[@]}"); }
 stamp() { { echo "== $name $1"; date; sample
   nvidia-smi --query-gpu=name,driver_version,pstate,temperature.gpu,clocks.gr,clocks.max.gr,clocks.mem,power.draw,power.limit,clocks_event_reasons.active,clocks_event_reasons.sw_power_cap,clocks_event_reasons.sw_thermal_slowdown,clocks_event_reasons.hw_thermal_slowdown,clocks_event_reasons.hw_slowdown,clocks_event_reasons.hw_power_brake_slowdown --format=csv 2>&1
@@ -69,6 +72,7 @@ recovery() {
   and delete the cut-short cell's JSON (the newest perf/results/scratch-<tag>-*.json)."
   echo "$msg" >> "$log"; echo "$msg" >&2
 }
+mkdir -p "$(dirname "$log")" && touch "$log" 2>/dev/null || { echo "powered-linux.sh: cannot write the log $log" >&2; exit 2; }
 stamp start
 bad $start_min && { echo "== $name VOID before start (not on AC or battery < $start_min %)" >> "$log"; exit 3; }
 "$@" & pid=$!

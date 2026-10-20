@@ -115,7 +115,7 @@ throttle events every 60 s). `ab.sh` runs as `zsh perf/ab.sh ...`. Setup, flags 
 ```sh
 cd /home/fleet/perf-scratch-shooter/repo && source perf/msi-env.sh
 perf/powered-linux.sh $S/logs/power.log x1 zsh perf/ab.sh x1 low,medium,high,ultra downtown 3 head /tmp/x.patch headB
-__GL_SHADER_DISK_CACHE=0 node perf/hitch.mjs sweep --out out   # cold driver compiles
+__GL_SHADER_DISK_CACHE=0 perf/powered-linux.sh $S/logs/power.log sweep node perf/hitch.mjs sweep --out out   # cold driver compiles
 ```
 
 ## Files

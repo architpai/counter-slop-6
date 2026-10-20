@@ -1,0 +1,85 @@
+r0 final downtown/low: ready 771 ms, programs ready/fight/bench 23/23/23; first 120 fight frames max 11.7 p99 7.1 p95 2.9 med 1.1 ms, >33 0; cpu max 4.2 ms (#21 4.2, #59 2.7, #49 2.3); compiles none; later 0
+r0 r0 downtown/low: ready 1004 ms, programs ready/fight/bench 21/21/21; first 120 fight frames max 12.9 p99 7.7 p95 3.8 med 1.6 ms, >33 0; cpu max 5.6 ms (#21 5.6, #59 4.2, #83 2.2); compiles none; later 0
+r0 final downtown/medium: ready 6176 ms, programs ready/fight/bench 55/55/55; first 120 fight frames max 12.8 p99 8.1 p95 3.6 med 1.4 ms, >33 0; cpu max 5.6 ms (#21 5.6, #35 3.9, #100 2.6); compiles none; later 0
+r0 r0 downtown/medium: ready 8587 ms, programs ready/fight/bench 52/52/52; first 120 fight frames max 8.8 p99 8.8 p95 5.2 med 2.2 ms, >33 0; cpu max 6.5 ms (#21 6.5, #35 6.5, #76 3.5); compiles none; later 0
+r0 final downtown/high: ready 6557 ms, programs ready/fight/bench 57/57/57; first 120 fight frames max 8.3 p99 6.4 p95 4.2 med 1.9 ms, >33 0; cpu max 5.7 ms (#21 5.7, #35 4.1, #100 2.8); compiles none; later 0
+r0 r0 downtown/high: ready 9122 ms, programs ready/fight/bench 54/56/56; first 120 fight frames max 35.2 p99 17.6 p95 5.4 med 2 ms, >33 1; cpu max 35.9 ms (#21 35.9, #76 23.2, #35 5.2); compiles #21 (cpu 35.9, frame 35.2 ms) #76 (cpu 23.2, frame 17.6 ms); later 0
+    fight#21 ShaderMaterial:fx:sprite-soft key 33f150fc via draw ShaderMaterial:fx:sprite-soft#979 [Mesh:effects:lit < Scene] target 1920x1080
+    fight#76 ShaderMaterial:fx:sprite-fire-soft key c3a61ff5 via draw ShaderMaterial:fx:sprite-fire-soft#978 [Mesh:effects:fire < Scene] target 1920x1080
+r0 final downtown/ultra: ready 10469 ms, programs ready/fight/bench 59/59/59; first 120 fight frames max 12.2 p99 8.4 p95 4 med 1.6 ms, >33 0; cpu max 6 ms (#21 6, #35 4.1, #100 3.3); compiles none; later 0
+r0 r0 downtown/ultra: ready 11793 ms, programs ready/fight/bench 56/58/58; first 120 fight frames max 35.6 p99 17.9 p95 6.6 med 2.1 ms, >33 1; cpu max 38.6 ms (#21 38.6, #76 20.8, #35 6); compiles #21 (cpu 38.6, frame 35.6 ms) #76 (cpu 20.8, frame 17.9 ms); later 0
+    fight#21 ShaderMaterial:fx:sprite-soft key 33f150fc via draw ShaderMaterial:fx:sprite-soft#979 [Mesh:effects:lit < Scene] target 1920x1080
+    fight#76 ShaderMaterial:fx:sprite-fire-soft key c3a61ff5 via draw ShaderMaterial:fx:sprite-fire-soft#978 [Mesh:effects:fire < Scene] target 1920x1080
+r0 final house/low: ready 727 ms, programs ready/fight/bench 23/23/23; first 120 fight frames max 11.8 p99 4.5 p95 2.9 med 1.1 ms, >33 0; cpu max 3 ms (#21 3, #78 2.9, #36 2.3); compiles none; later 0
+r0 r0 house/low: ready 907 ms, programs ready/fight/bench 21/21/21; first 120 fight frames max 12.8 p99 6.4 p95 3.4 med 1.4 ms, >33 0; cpu max 4.5 ms (#78 4.5, #21 3.2, #59 2.3); compiles none; later 0
+r0 final house/medium: ready 6141 ms, programs ready/fight/bench 55/55/55; first 120 fight frames max 13.4 p99 5.9 p95 4.3 med 1.5 ms, >33 0; cpu max 3.9 ms (#21 3.9, #104 3.9, #36 3.5); compiles none; later 0
+r0 r0 house/medium: ready 8543 ms, programs ready/fight/bench 52/52/52; first 120 fight frames max 9 p99 7.1 p95 5 med 2.4 ms, >33 0; cpu max 6.3 ms (#45 6.3, #85 5.8, #21 4.4); compiles none; later 0
+r0 final house/high: ready 6695 ms, programs ready/fight/bench 57/57/57; first 120 fight frames max 13.5 p99 5.5 p95 3.9 med 1.7 ms, >33 0; cpu max 4.4 ms (#104 4.4, #21 4, #36 3.6); compiles none; later 0
+r0 r0 house/high: ready 8919 ms, programs ready/fight/bench 54/56/56; first 120 fight frames max 34.7 p99 18.3 p95 6 med 2 ms, >33 1; cpu max 35.1 ms (#21 35.1, #85 26.6, #104 4.9); compiles #21 (cpu 35.1, frame 34.7 ms) #85 (cpu 26.6, frame 18.3 ms); later 0
+    fight#21 ShaderMaterial:fx:sprite-soft key 33f150fc via draw ShaderMaterial:fx:sprite-soft#993 [Mesh:effects:lit < Scene] target 1920x1080
+    fight#85 ShaderMaterial:fx:sprite-fire-soft key c3a61ff5 via draw ShaderMaterial:fx:sprite-fire-soft#992 [Mesh:effects:fire < Scene] target 1920x1080
+r0 final house/ultra: ready 10464 ms, programs ready/fight/bench 59/59/59; first 120 fight frames max 12.8 p99 10.4 p95 4.2 med 1.7 ms, >33 0; cpu max 4.3 ms (#104 4.3, #21 3.9, #36 3.4); compiles none; later 0
+r0 r0 house/ultra: ready 11195 ms, programs ready/fight/bench 54/56/58; first 120 fight frames max 36.2 p99 17.9 p95 11.2 med 2.1 ms, >33 1; cpu max 46.5 ms (#21 46.5, #85 27.6, #104 4.2); compiles #21 (cpu 46.5, frame 36.2 ms) #85 (cpu 27.6, frame 17.9 ms); later 2
+    fight#21 ShaderMaterial:fx:sprite-soft key 33f150fc via draw ShaderMaterial:fx:sprite-soft#993 [Mesh:effects:lit < Scene] target 1920x1080
+    fight#85 ShaderMaterial:fx:sprite-fire-soft key c3a61ff5 via draw ShaderMaterial:fx:sprite-fire-soft#992 [Mesh:effects:fire < Scene] target 1920x1080
+r0 final mexico/low: ready 777 ms, programs ready/fight/bench 22/22/22; first 120 fight frames max 11.6 p99 6.7 p95 3 med 1.2 ms, >33 0; cpu max 4.2 ms (#21 4.2, #59 2.9, #112 2.5); compiles none; later 0
+r0 r0 mexico/low: ready 848 ms, programs ready/fight/bench 20/20/20; first 120 fight frames max 11.4 p99 8 p95 3.6 med 1.7 ms, >33 0; cpu max 5.7 ms (#21 5.7, #112 3.4, #59 3); compiles none; later 0
+r0 final mexico/medium: ready 6268 ms, programs ready/fight/bench 54/54/54; first 120 fight frames max 9.6 p99 5.3 p95 4.4 med 1.9 ms, >33 0; cpu max 6.1 ms (#21 6.1, #35 3.1, #59 3); compiles none; later 0
+r0 r0 mexico/medium: ready 7505 ms, programs ready/fight/bench 51/51/51; first 120 fight frames max 11.3 p99 7 p95 4.6 med 2.4 ms, >33 0; cpu max 7.7 ms (#21 7.7, #75 5, #59 3.9); compiles none; later 0
+r0 final mexico/high: ready 6311 ms, programs ready/fight/bench 56/56/56; first 120 fight frames max 13.5 p99 10.5 p95 4.6 med 1.9 ms, >33 0; cpu max 6.8 ms (#21 6.8, #59 3.8, #113 3.6); compiles none; later 0
+r0 r0 mexico/high: ready 8286 ms, programs ready/fight/bench 53/55/55; first 120 fight frames max 35.6 p99 18.2 p95 5.4 med 2.1 ms, >33 1; cpu max 36.4 ms (#21 36.4, #75 20.8, #45 14.3); compiles #21 (cpu 36.4, frame 35.6 ms) #75 (cpu 20.8, frame 18 ms); later 0
+    fight#21 ShaderMaterial:fx:sprite-soft key 33f150fc via draw ShaderMaterial:fx:sprite-soft#997 [Mesh:effects:lit < Scene] target 1920x1080
+    fight#75 ShaderMaterial:fx:sprite-fire-soft key c3a61ff5 via draw ShaderMaterial:fx:sprite-fire-soft#996 [Mesh:effects:fire < Scene] target 1920x1080
+r0 final mexico/ultra: ready 9123 ms, programs ready/fight/bench 58/58/58; first 120 fight frames max 8 p99 5.1 p95 4.3 med 2.1 ms, >33 0; cpu max 5.7 ms (#21 5.7, #59 3.1, #113 3); compiles none; later 0
+r0 r0 mexico/ultra: ready 10140 ms, programs ready/fight/bench 55/57/57; first 120 fight frames max 35.5 p99 18.4 p95 5.4 med 2.2 ms, >33 1; cpu max 36.9 ms (#21 36.9, #75 20.8, #45 3.6); compiles #21 (cpu 36.9, frame 35.5 ms) #75 (cpu 20.8, frame 18.4 ms); later 0
+    fight#21 ShaderMaterial:fx:sprite-soft key 33f150fc via draw ShaderMaterial:fx:sprite-soft#997 [Mesh:effects:lit < Scene] target 1920x1080
+    fight#75 ShaderMaterial:fx:sprite-fire-soft key c3a61ff5 via draw ShaderMaterial:fx:sprite-fire-soft#996 [Mesh:effects:fire < Scene] target 1920x1080
+r0 final training/low: ready 856 ms, programs ready/fight/bench 24/24/24; first 120 fight frames max 16.2 p99 6.5 p95 4.4 med 2.1 ms, >33 0; cpu max 4.2 ms (#21 4.2, #69 4, #35 3.4); compiles none; later 0
+r0 r0 training/low: ready 1064 ms, programs ready/fight/bench 22/22/22; first 120 fight frames max 13.8 p99 8.3 p95 5.8 med 2.8 ms, >33 0; cpu max 6.1 ms (#21 6.1, #69 4.4, #35 3.6); compiles none; later 0
+r0 final training/medium: ready 6195 ms, programs ready/fight/bench 52/52/52; first 120 fight frames max 17.4 p99 9.5 p95 5.2 med 2.3 ms, >33 0; cpu max 5.1 ms (#83 5.1, #21 5, #35 3.5); compiles none; later 0
+r0 r0 training/medium: ready 6316 ms, programs ready/fight/bench 49/49/49; first 120 fight frames max 18.5 p99 18.5 p95 6.5 med 3.2 ms, >33 0; cpu max 15.4 ms (#45 15.4, #21 6.7, #83 5.2); compiles none; later 0
+r0 final training/high: ready 6405 ms, programs ready/fight/bench 54/54/54; first 120 fight frames max 8.9 p99 7.9 p95 5.1 med 2.7 ms, >33 0; cpu max 5.8 ms (#21 5.8, #83 5.5, #35 4.2); compiles none; later 0
+r0 r0 training/high: ready 6471 ms, programs ready/fight/bench 51/53/53; first 120 fight frames max 37.3 p99 20.3 p95 6.2 med 3.4 ms, >33 1; cpu max 37.6 ms (#21 37.6, #25 20.8, #45 6.9); compiles #21 (cpu 37.6, frame 37.3 ms) #25 (cpu 20.8, frame 20.3 ms); later 0
+    fight#21 ShaderMaterial:fx:sprite-soft key 33f150fc via draw ShaderMaterial:fx:sprite-soft#979 [Mesh:effects:lit < Scene] target 1920x1080
+    fight#25 ShaderMaterial:fx:sprite-fire-soft key c3a61ff5 via draw ShaderMaterial:fx:sprite-fire-soft#978 [Mesh:effects:fire < Scene] target 1920x1080
+r0 final training/ultra: ready 7268 ms, programs ready/fight/bench 56/56/56; first 120 fight frames max 17.7 p99 8.2 p95 4.7 med 2.2 ms, >33 0; cpu max 5.1 ms (#21 5.1, #83 5, #35 3.9); compiles none; later 0
+r0 r0 training/ultra: ready 7570 ms, programs ready/fight/bench 53/55/55; first 120 fight frames max 36.9 p99 21.1 p95 6.8 med 3.7 ms, >33 1; cpu max 37.9 ms (#21 37.9, #25 22.3, #45 6.7); compiles #21 (cpu 37.9, frame 36.9 ms) #25 (cpu 22.3, frame 21.1 ms); later 0
+    fight#21 ShaderMaterial:fx:sprite-soft key 33f150fc via draw ShaderMaterial:fx:sprite-soft#979 [Mesh:effects:lit < Scene] target 1920x1080
+    fight#25 ShaderMaterial:fx:sprite-fire-soft key c3a61ff5 via draw ShaderMaterial:fx:sprite-fire-soft#978 [Mesh:effects:fire < Scene] target 1920x1080
+
+| build | cell | loads | ready ms | programs ready / fight / bench | max frame ms (each load) | p99 | p95 | med | max cpu ms | compile frames (cpu ms) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| final | downtown/low | 1 | 770.9 | 23/23/23 | 11.7 (11.7) | 7.1 | 2.9 | 1.1 | 4.2 (4.2) | - |
+| r0 | downtown/low | 1 | 1004.1 | 21/21/21 | 12.9 (12.9) | 7.7 | 3.8 | 1.6 | 5.6 (5.6) | - |
+| final | downtown/medium | 1 | 6175.5 | 55/55/55 | 12.8 (12.8) | 8.1 | 3.6 | 1.4 | 5.6 (5.6) | - |
+| r0 | downtown/medium | 1 | 8586.8 | 52/52/52 | 8.8 (8.8) | 8.8 | 5.2 | 2.2 | 6.5 (6.5) | - |
+| final | downtown/high | 1 | 6556.7 | 57/57/57 | 8.3 (8.3) | 6.4 | 4.2 | 1.9 | 5.7 (5.7) | - |
+| r0 | downtown/high | 1 | 9121.5 | 54/56/56 | 35.2 (35.2) | 17.6 | 5.4 | 2 | 35.9 (35.9) | #21 (35.9) #76 (23.2) |
+| final | downtown/ultra | 1 | 10469.3 | 59/59/59 | 12.2 (12.2) | 8.4 | 4 | 1.6 | 6 (6) | - |
+| r0 | downtown/ultra | 1 | 11793 | 56/58/58 | 35.6 (35.6) | 17.9 | 6.6 | 2.1 | 38.6 (38.6) | #21 (38.6) #76 (20.8) |
+| final | house/low | 1 | 726.8 | 23/23/23 | 11.8 (11.8) | 4.5 | 2.9 | 1.1 | 3 (3) | - |
+| r0 | house/low | 1 | 906.8 | 21/21/21 | 12.8 (12.8) | 6.4 | 3.4 | 1.4 | 4.5 (4.5) | - |
+| final | house/medium | 1 | 6140.7 | 55/55/55 | 13.4 (13.4) | 5.9 | 4.3 | 1.5 | 3.9 (3.9) | - |
+| r0 | house/medium | 1 | 8543 | 52/52/52 | 9 (9) | 7.1 | 5 | 2.4 | 6.3 (6.3) | - |
+| final | house/high | 1 | 6695.2 | 57/57/57 | 13.5 (13.5) | 5.5 | 3.9 | 1.7 | 4.4 (4.4) | - |
+| r0 | house/high | 1 | 8919 | 54/56/56 | 34.7 (34.7) | 18.3 | 6 | 2 | 35.1 (35.1) | #21 (35.1) #85 (26.6) |
+| final | house/ultra | 1 | 10463.6 | 59/59/59 | 12.8 (12.8) | 10.4 | 4.2 | 1.7 | 4.3 (4.3) | - |
+| r0 | house/ultra | 1 | 11195 | 54/56/58 | 36.2 (36.2) | 17.9 | 11.2 | 2.1 | 46.5 (46.5) | #21 (46.5) #85 (27.6) |
+| final | mexico/low | 1 | 776.8 | 22/22/22 | 11.6 (11.6) | 6.7 | 3 | 1.2 | 4.2 (4.2) | - |
+| r0 | mexico/low | 1 | 847.6 | 20/20/20 | 11.4 (11.4) | 8 | 3.6 | 1.7 | 5.7 (5.7) | - |
+| final | mexico/medium | 1 | 6267.6 | 54/54/54 | 9.6 (9.6) | 5.3 | 4.4 | 1.9 | 6.1 (6.1) | - |
+| r0 | mexico/medium | 1 | 7504.8 | 51/51/51 | 11.3 (11.3) | 7 | 4.6 | 2.4 | 7.7 (7.7) | - |
+| final | mexico/high | 1 | 6311.1 | 56/56/56 | 13.5 (13.5) | 10.5 | 4.6 | 1.9 | 6.8 (6.8) | - |
+| r0 | mexico/high | 1 | 8285.5 | 53/55/55 | 35.6 (35.6) | 18.2 | 5.4 | 2.1 | 36.4 (36.4) | #21 (36.4) #75 (20.8) |
+| final | mexico/ultra | 1 | 9122.7 | 58/58/58 | 8 (8) | 5.1 | 4.3 | 2.1 | 5.7 (5.7) | - |
+| r0 | mexico/ultra | 1 | 10140 | 55/57/57 | 35.5 (35.5) | 18.4 | 5.4 | 2.2 | 36.9 (36.9) | #21 (36.9) #75 (20.8) |
+| final | training/low | 1 | 855.5 | 24/24/24 | 16.2 (16.2) | 6.5 | 4.4 | 2.1 | 4.2 (4.2) | - |
+| r0 | training/low | 1 | 1064 | 22/22/22 | 13.8 (13.8) | 8.3 | 5.8 | 2.8 | 6.1 (6.1) | - |
+| final | training/medium | 1 | 6194.7 | 52/52/52 | 17.4 (17.4) | 9.5 | 5.2 | 2.3 | 5.1 (5.1) | - |
+| r0 | training/medium | 1 | 6315.8 | 49/49/49 | 18.5 (18.5) | 18.5 | 6.5 | 3.2 | 15.4 (15.4) | - |
+| final | training/high | 1 | 6404.5 | 54/54/54 | 8.9 (8.9) | 7.9 | 5.1 | 2.7 | 5.8 (5.8) | - |
+| r0 | training/high | 1 | 6471 | 51/53/53 | 37.3 (37.3) | 20.3 | 6.2 | 3.4 | 37.6 (37.6) | #21 (37.6) #25 (20.8) |
+| final | training/ultra | 1 | 7268.1 | 56/56/56 | 17.7 (17.7) | 8.2 | 4.7 | 2.2 | 5.1 (5.1) | - |
+| r0 | training/ultra | 1 | 7569.6 | 53/55/55 | 36.9 (36.9) | 21.1 | 6.8 | 3.7 | 37.9 (37.9) | #21 (37.9) #25 (22.3) |
+
+/home/fleet/perf-scratch-shooter/repo/perf/results/scratch-hitch-msi-hitch-measure.json

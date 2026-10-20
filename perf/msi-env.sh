@@ -16,4 +16,4 @@ export PATH=$S/sysroot/usr/bin:$PATH MODULE_PATH=$S/sysroot/usr/lib/x86_64-linux
 export PERF_GPU_ARGS='--use-gl=angle --use-angle=gl-egl'
 export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
 export PERF_GPU_EXPECT='NVIDIA GeForce RTX 4090'
-mkdir -p $S/home $S/tmp $S/xdg/cache $S/xdg/config $S/xdg/data $S/npm-cache $S/pw-browsers $S/nv-cache $S/mesa-cache $S/ab-work
+mkdir -p $S/home $S/tmp $S/xdg/cache $S/xdg/config $S/xdg/data $S/npm-cache $S/pw-browsers $S/nv-cache $S/mesa-cache $S/ab-work $S/logs

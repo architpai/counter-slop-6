@@ -321,17 +321,23 @@ async function withServer(dir, fn) {
 
 async function load(map, preset, inits = []) {
   const browser = await launch();
-  const { page, errors } = await openPage(browser, { map, preset });
-  await page.addInitScript(hitchInit);
-  for (const init of inits) await page.addInitScript(init);
-  const loaded = await loadAndWait(page);
-  // The hook snapshots the count on the first stepped frame after ready; wait for it.
-  await page.waitForFunction(() => window.__hitch?.atReady !== null, null, { polling: 50 });
-  const facts = await page.evaluate(() => window.__perf.prepare());
-  if (facts.preset !== preset || facts.level !== map) throw new Error(`wrong cell ${facts.preset}/${facts.level}`);
-  checkGpu(facts);
-  const run = (name, frames, seed = SEED) => page.evaluate(([n, f, s]) => { window.__hitch.step = n; return window.__perf.run(n, f, { seed: s }); }, [name, frames, seed]);
-  return { browser, page, errors, loaded, run };
+  try {
+    const { page, errors } = await openPage(browser, { map, preset });
+    await page.addInitScript(hitchInit);
+    for (const init of inits) await page.addInitScript(init);
+    const loaded = await loadAndWait(page);
+    // The hook snapshots the count on the first stepped frame after ready; wait for it.
+    await page.waitForFunction(() => window.__hitch?.atReady !== null, null, { polling: 50 });
+    const facts = await page.evaluate(() => window.__perf.prepare());
+    if (facts.preset !== preset || facts.level !== map) throw new Error(`wrong cell ${facts.preset}/${facts.level}`);
+    checkGpu(facts);
+    const run = (name, frames, seed = SEED) => page.evaluate(([n, f, s]) => { window.__hitch.step = n; return window.__perf.run(n, f, { seed: s }); }, [name, frames, seed]);
+    return { browser, page, errors, loaded, run };
+  } catch (error) {
+    // The callers close the browser only once load() has returned it.
+    await browser.close().catch(() => {});
+    throw error;
+  }
 }
 
 const phase = (loaded, k) => { const f = loaded.phases?.flags?.[k]; return f ? { on: f.on, off: f.off, frames: f.frames } : null; };

@@ -15,10 +15,10 @@ Date 2026-10-21. Tree: `perf/loop` at `36cc1aa` (the game is `0447e97`'s src/ an
   (Mac: -5.4 / -20.4 / -17.8 / -20.4 %); 94/96 pairs faster; controls within ±2.4 %. Ready -7.9 / -21.9 / -21.5 /
   -8.0 %. Programs after ready 4-13 → 0 (the Mac's counts exactly); first-fight compiles on High/Ultra (35-37 ms) → none.
 - **Bottleneck**: every fight (all presets) and the training paths are bound by the **renderer main thread** (no GPU
-  waits); downtown's realistic paths are bound by Chrome's GPU-process thread (decoder + ANGLE + driver). The 4090
-  itself is not the limit in any measured cell. CPU-side work now shows 1:1 in frame time: section 7 ranks the
+  waits); downtown's realistic paths are bound by Chrome's GPU-process thread (decoder + ANGLE + driver). No measured
+  cell showed the 4090 itself as the limit (no fight waits on the GPU side). CPU-side work now shows 1:1 in frame time: section 7 ranks the
   retries (cpuhm, matrix, HUD/outside-rAF, low1, clips, …).
-- **Caveats**: CPU thermal throttling all the time under load (package 82-98 °C); 0.1 ms timer steps on 0.3-2.7 ms
+- **Caveats**: CPU thermal throttling all the time under load (package peaks 82-98 °C per job); 0.1 ms timer steps on 0.3-2.7 ms
   frames (use means); GL-EGL path stalls (p99) that ANGLE Vulkan does not have.
 
 ## 1. Machine and setup
@@ -67,7 +67,7 @@ know; in this build's default feature table (full chromium, new headless) `Vulka
 mode always picks SwiftShader. Caveat: desktop Chrome on NVIDIA reports a desktop GL context (`OpenGL 4.5.0 NVIDIA …`,
 GLX or EGL on X11/Wayland); here ANGLE runs a GLES 3.2 context on the same NVIDIA driver, a different ANGLE translator
 output (ESSL instead of desktop GLSL) and context type. The driver, its compiler and its submission path are the
-same. ANGLE Vulkan works too (probe only; no game run, no A/B time spent on it).
+same. ANGLE Vulkan works too: the probe, and one game check (section 5: downtown High/Ultra path, 2 runs, no failure); no A/B time spent on it.
 
 **Proof, per cell**: every bench, capture and hitch cell asserts the page's renderer string against
 `PERF_GPU_EXPECT='NVIDIA GeForce RTX 4090'` (a mismatch fails the cell; none failed). Every result's `meta.gpu` reads
@@ -209,7 +209,8 @@ median ready difference over all 48 loads is +874 ms.
 
 ### Hitches (Round 0 → final)
 
-Both with the **NVIDIA shader disk cache disabled** (`__GL_SHADER_DISK_CACHE=0`; Chrome's own program cache is per
+Results: `perf/results/msi-s1-sweep-final.json`, `msi-s1-sweep-r0.json`, `msi-s1-hitch-measure.json` (printed table:
+`msi-s1-hitch-measure.txt`). Both with the **NVIDIA shader disk cache disabled** (`__GL_SHADER_DISK_CACHE=0`; Chrome's own program cache is per
 profile, and every launch gets a fresh one): every compile is a cold driver compile.
 
 **Programs linked after ready** (`hitch.mjs sweep`, the content the bench never touches, one fresh browser per cell):
@@ -255,20 +256,22 @@ sizes are single readings; the program counts are exact.
   19.4 ms vs rAF CPU p99 0.96 ms, waits 0.08-0.47 ms per frame on average). Training (no sky) has none. A backend
   check (`downtown`, High + Ultra, path, GL / Vulkan / GL / Vulkan): **ANGLE Vulkan has the same mean** (High 0.81 /
   0.82 vs 0.79 / 0.80 ms, Ultra 1.12 / 1.13 vs 1.12 / 1.12 ms) **but no stalls** (p99 2.9-5.6 vs 8.9-18.0 ms, max 6-11 vs
-  35-36 ms). So the stalls belong to the GL-EGL presentation/driver path, not to the game: p99 on paths here is a
-  backend artifact; means are unaffected. (The game does no GPU readback; its only sync is the pacing fence polled with
+  35-36 ms). So the stall tail depends on the backend (GL-EGL presentation/driver path), not on the game alone: path
+  p99 on GL-EGL is mostly a backend effect. The equal means do not prove that the stalls cost nothing: they are part of
+  the GL mean (Vulkan spends the time as a higher median, 0.7 / 1.0 vs 0.5-0.6 ms), and this was checked on downtown
+  High/Ultra only (`perf/results/msi-s1-backend-{gl,vk}-{1,2}.json`). (The game does no GPU readback; its only sync is the pacing fence polled with
   `getSyncParameter`.)
 - **Power**: AC the whole time, battery 80 % (held by the charge threshold; `current_now` 0 mA, never discharging),
   no job void. `perf/results/msi-s1-power.log` has every sample.
-- **CPU thermal throttling is constant under load**: package 82-98 °C during the timed jobs, 3,000-36,000 core
-  thermal-throttle events per job (~2,000-3,600 per minute; idle: 0), CPU mean frequency 0.8-2.7 GHz at the
-  samples (the max core 1.4-5.5 GHz). The governor is `powersave` with EPP `balance_performance` (not changed). The
+- **CPU thermal throttling is constant under load**: package up to 82-98 °C in every timed job (58 °C in the idle
+  samples at job edges), 3,000-36,000 core thermal-throttle events per job (~2,000-3,600 per minute while running;
+  idle: 0), CPU mean frequency 0.8-2.8 GHz at the samples (the fastest core up to 5.7 GHz). The governor is `powersave` with EPP `balance_performance` (not changed). The
   paired interleaving shares this between arms (the controls above are the result); unpaired runs on this machine
   are not comparable.
-- **GPU**: P0, graphics clock 0.7-2.34 GHz (mostly 2.34) while busy, 45-175 W, 57-66 °C, never a thermal slowdown
+- **GPU**: P0, graphics clock 1.38-2.34 GHz at P0 (mostly 2.34), up to 175 W, 45-68 °C, never a thermal slowdown
   reason; **SW power cap** (`clocks_event_reasons` 0x4) in 12 of the 81 samples of the timed jobs. Utilisation snapshots (one per
   minute, mixed load and run phases) 7-100 %.
-- **Other load**: `llama-server` 0.2-0.3 % CPU and 262 MiB GPU at every sample (logged at every job start and
+- **Other load**: `llama-server` 0.2-0.5 % CPU and 262 MiB GPU at every sample (logged at every job start and
   minute); the T3 server (`t3 serve`) of user fleet ~0.2 %.
 
 ## 6. Bottleneck survey (final tree)
@@ -308,8 +311,11 @@ means "that thread is the frame").
 **Verdict per scenario, on the 4090:**
 
 - **Every fight, every preset: CPU-bound on the renderer main thread.** `main/frame` 0.99-1.17, `wait` 0.00: the main
-  thread never waits for the GPU side; the GPU process runs at 0.41-0.54 of the frame. The per-pass ablation finds no
-  GPU pass whose removal shortens a fight frame (all deltas within the ablation noise, 0.1-0.7 ms). JS in the rAF
+  thread never waits for the GPU side; the GPU process runs at 0.41-0.54 of the frame. In the per-pass ablation (`msi-profile`) no
+  post pass shortens a fight frame past its noise; skipping the **shadow pass** does (training fights: mean -0.22 ms
+  High, -0.27 ms Ultra, noise 0.14 / 0.09 ms; median -0.2 / -0.35 ms), but that ablation also removes the pass's
+  main-thread work (render.shadows 0.39-0.51 ms CPU there), so it fits the CPU-bound reading and does not show a GPU
+  limit. The survey covers downtown and training only. JS in the rAF
   callback is 0.82-2.10 ms of a 1.19-2.69 ms frame; the rest of the main thread (outside rAF) is 0.46-0.57 ms.
 - **Training paths (dummies in view), every preset: main-thread-bound** as well (`main/frame` 1.09-1.14, `wait` 0).
 - **Downtown paths, Medium/High/Ultra: bound by the GPU process thread**, not by the GPU and not by JS: `gpuProc/frame`
@@ -389,7 +395,7 @@ for p99 work, it has the same means); keep every run under `perf/powered-linux.s
 - Everything this step made is in `/home/fleet/perf-scratch-shooter` (2.6 GB: repo + node_modules 1.3 GB,
   Playwright 658 MB, builds 181 MB, A/B builds 273 MB, npm cache 127 MB, bundle 106 MB, zsh sysroot 22 MB, NVIDIA
   shader cache 16 MB, captures in `repo/perf/shots/msi-*`, logs). **Kept** for steps 2-3; the final step deletes it.
-- Check against `msi-prestate.txt`: the only new entry in `~` is `perf-scratch-shooter`. Nothing new in
+- Check against `msi-prestate.txt`, listing after the step in `perf/results/msi-poststate.txt`: the only new entry in `~` is `perf-scratch-shooter`. Nothing new in
   `~/.cache` (no `ms-playwright`, no `nvidia` change: `~/.cache/nvidia/GLCache` is from 2026-10-20 17:26), `~/.npm`,
   `~/.nv`, `~/.pki`, `~/.config`, `~/.local/share`, `/tmp` (no `playwright*`, no `.org.chromium*`) or `/dev/shm`.
   Files outside the scratch folder that changed during the step belong to services already running on the MSI, not to

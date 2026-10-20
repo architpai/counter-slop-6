@@ -1694,7 +1694,7 @@ playable gains less than on the Mac (-4 to -8 % vs -18 to -20 %): Round 0's `new
 ~100 ms.
 
 **Bottleneck** (traced `msi-survey` and `msi-profile`, downtown + training): every fight and the training paths are
-bound by the renderer main thread (`main/frame` 0.99-1.17, no command-buffer waits; no pass ablation moves a fight);
+bound by the renderer main thread (`main/frame` 0.99-1.17, no command-buffer waits; no post-pass ablation moves a fight, the shadow-pass ablation's -0.22/-0.27 ms on training High/Ultra includes its 0.39-0.51 ms CPU);
 downtown's realistic paths by the GPU-process thread (`gpuProc/frame` 0.97-0.98). Main thread per fight frame: render
 of the main pass 0.4-0.9 ms, shadows 0.07-0.51, outside rAF ~0.5 (tasks, one style recalc, layout), enemies 0.12-0.25,
 render.pre 0.11-0.15 (realistic), GC ~0.01.
@@ -1707,8 +1707,8 @@ consent). Not here: the GPU-side ideas (A8/dsd, b-bones, GTAO trims, B4-B6, shad
 
 - **Read means.** Frames are 0.3-2.7 ms and `performance.now()` is 0.1 ms-coarse: medians move in 0.1 ms steps.
 - **GL-EGL path stalls**: ~1 % of realistic outdoor path frames are 9-18 ms (main thread waiting on the command
-  buffer); ANGLE Vulkan has the same means without them. Do not judge path p99 on GL-EGL.
-- **CPU thermal throttling is constant** under load (package 82-98 °C, ~2,000-3,600 core throttle events per minute):
+  buffer); ANGLE Vulkan has the same means without them (checked on downtown High/Ultra only). Do not judge path p99 on GL-EGL.
+- **CPU thermal throttling is constant** under load (package peaks 82-98 °C per job, ~2,000-3,600 core throttle events per minute):
   paired, interleaved runs only; the HEAD/HEAD control per preset is ±1-2.4 % on aggregates, up to ±7 % per map on Low.
 - **Cold compiles**: the NVIDIA shader disk cache persists across launches (in `$S/nv-cache`): prime it for every arm
   before load A/Bs; set `__GL_SHADER_DISK_CACHE=0` for hitch work.
