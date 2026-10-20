@@ -3,7 +3,7 @@ import { choose, clamp, lerp, rand, TAU } from './util';
 import { BLOOD, TONE, TONE_HEX, WHITE_HEX, SMOKE_HEX, unlitMat } from './render/index';
 import { flatDecalMaterial, lowGlowMaterial, splatMaterial, tracerGeometry, tracerMaterial } from './render/fx';
 import { impactFor, surfaceAt } from './render/impacts';
-import { RealEffects } from './effects-real';
+import { flushInstances, RealEffects, showFilled, trackDrawn } from './effects-real';
 import type { RealContext, ShellKind, SmokeHandle } from './effects-real';
 import type { SurfaceData } from './render/impacts';
 import type { World } from './physics';
@@ -143,6 +143,12 @@ function randomVector(yMin = -1, yMax = 1, xz = 1): THREE.Vector3 {
   return new THREE.Vector3(rand(-xz, xz), rand(yMin, yMax), rand(-xz, xz));
 }
 
+/** `randomVector`'s draws, in its order, into the frame step's scratch: for a spec `particle` copies straight away. */
+const stepVel = new THREE.Vector3();
+function randomStepVector(): THREE.Vector3 {
+  return stepVel.set(rand(-1, 1), rand(-1, 1), rand(-1, 1));
+}
+
 function makePool(scene: THREE.Scene, name: string, geometry: THREE.BufferGeometry, capacity: number,
   material: THREE.Material = unlitMat(WHITE_HEX)): Pool {
   const mesh = new THREE.InstancedMesh(geometry, material, capacity);
@@ -152,6 +158,7 @@ function makePool(scene: THREE.Scene, name: string, geometry: THREE.BufferGeomet
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   mesh.setColorAt(0, color.setHex(TONE_HEX[TONE.HOSTILE]));
   mesh.instanceColor?.setUsage(THREE.DynamicDrawUsage);
+  trackDrawn(mesh);
   scene.add(mesh);
   return { mesh, capacity, limit: capacity, next: 0, generations: new Uint32Array(capacity) };
 }
@@ -187,6 +194,7 @@ function slot(pool: Pool): number {
   const index = pool.next;
   pool.next = (index + 1) % pool.limit;
   pool.mesh.count = Math.min(pool.limit, pool.mesh.count + 1);
+  showFilled(pool.mesh);
   pool.generations[index] = (pool.generations[index] ?? 0) + 1;
   return index;
 }
@@ -303,6 +311,7 @@ export class Effects {
     for (const pool of this._splats) pool.mesh.material = context ? splatMaterial() : flatDecalMaterial();
     for (const pool of this._splats) pool.mesh.receiveShadow = context !== null;
     this._holes.mesh.count = this._holes.next = 0;
+    for (const pool of this._pools) showFilled(pool.mesh);
   }
 
   /** Scale particle counts and decal/debris pool use; 1 is full detail. */
@@ -311,6 +320,7 @@ export class Effects {
     for (const pool of this._pools) {
       pool.limit = Math.max(1, Math.floor(pool.capacity * this.detail));
       pool.mesh.count = Math.min(pool.mesh.count, pool.limit);
+      showFilled(pool.mesh);
       pool.next %= pool.limit;
     }
     this._real?.setDetail(this.detail);
@@ -367,7 +377,7 @@ export class Effects {
         while (p.acc >= 1) {
           p.acc--;
           this.particle({ kind: 'drop', pos: p.pos,
-            vel: randomVector().multiplyScalar(1.2).addScaledVector(p.emitDir, rand(2, 5)),
+            vel: randomStepVector().multiplyScalar(1.2).addScaledVector(p.emitDir, rand(2, 5)),
             size: rand(0.02, 0.05), life: rand(1, 2), tone: p.tone, hex: p.hex, blood: p.blood,
             collide: 'decal', gravity: 22, decalSize: 6 });
         }
@@ -408,6 +418,7 @@ export class Effects {
     }
     for (let i = this._debris.length - 1; i >= 0; i--) this._stepDebris(i, dt);
     for (const p of this._particles) if (p.kind !== 'emitter') this._draw(p);
+    for (const pool of this._pools) showFilled(pool.mesh);
     this._drawTracers(dt);
     this._real?.update(dt);
   }
@@ -433,11 +444,9 @@ export class Effects {
     }
     geometry.instanceCount = n;
     this._tracerMesh.visible = n > 0;
-    for (const attribute of [start, end, tint]) {
-      attribute.clearUpdateRanges();
-      attribute.addUpdateRange(0, n * 4);
-      attribute.needsUpdate = true;
-    }
+    flushInstances(start, n * 4);
+    flushInstances(end, n * 4);
+    flushInstances(tint, n * 4);
   }
 
   _draw(p: Particle): void {
@@ -676,7 +685,7 @@ export class Effects {
         d.trailT += dt;
         while (d.trailT >= 0.05 / this.gore) {
           d.trailT -= 0.05 / this.gore;
-          this.particle({ kind: 'drop', pos: d.pos, vel: randomVector().addScaledVector(d.vel, 0.3),
+          this.particle({ kind: 'drop', pos: d.pos, vel: randomStepVector().addScaledVector(d.vel, 0.3),
             size: rand(0.02, 0.045), life: 1.5, hex: this.bloodHex(), blood: true, collide: 'decal', gravity: 22, decalSize: 6 });
         }
       }
@@ -694,6 +703,7 @@ export class Effects {
     while (this._debris.length) this._removeDebris(this._debris.length - 1);
     for (const pool of this._pools) {
       pool.mesh.count = pool.next = 0;
+      showFilled(pool.mesh);
       pool.generations.fill(0);
     }
     this._tracers.length = 0;

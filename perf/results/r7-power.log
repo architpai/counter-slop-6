@@ -1,0 +1,92 @@
+2026-10-20 06:54:53 start r7:  Wattage = 20W  Adapter Name = 20W USB-C Power Adapter  |  -InternalBattery-0 (id=22282339)	32%; charging; 20:00 remaining present: true
+2026-10-20 06:55:33 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 32%; charging; 20:00 remaining present: true
+2026-10-20 07:00:33 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 33%; charging; 20:00 remaining present: true
+2026-10-20 07:05:33 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 30%; charging; 20:00 remaining present: true
+2026-10-20 07:10:33 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 28%; charging; (no estimate) present: true
+2026-10-20 07:15:33 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 26%; charging; (no estimate) present: true
+2026-10-20 07:20:34 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 24%; charging; (no estimate) present: true
+2026-10-20 07:25:34 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 22%; charging; (no estimate) present: true
+2026-10-20 07:30:34 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 20%; charging; (no estimate) present: true
+2026-10-20 07:35:34 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 17%; charging; (no estimate) present: true
+2026-10-20 07:40:34 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 15%; charging; (no estimate) present: true
+2026-10-20 07:45:34 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 16%; charging; (no estimate) present: true
+2026-10-20 07:50:34 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 13%; charging; 20:00 remaining present: true
+2026-10-20 07:55:34 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 12%; charging; (no estimate) present: true
+2026-10-20 08:00:34 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 9%; charging; (no estimate) present: true
+2026-10-20 08:05:34 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 8%; charging; (no estimate) present: true
+2026-10-20 08:10:34 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 6%; charging; 20:00 remaining present: true
+2026-10-20 08:15:34 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 6%; charging; 20:00 remaining present: true
+2026-10-20 08:20:35 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 7%; charging; 20:00 remaining present: true
+2026-10-20 08:25:35 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 7%; charging; (no estimate) present: true
+2026-10-20 08:30:35 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 7%; charging; 20:00 remaining present: true
+2026-10-20 08:35:35 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 8%; charging; (no estimate) present: true
+2026-10-20 08:40:35 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 8%; charging; (no estimate) present: true
+2026-10-20 08:45:50 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 8%; charging; (no estimate) present: true
+2026-10-20 08:50:50 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 7%; charging; 20:00 remaining present: true
+2026-10-20 08:55:50 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 7%; charging; (no estimate) present: true
+2026-10-20 09:00:50 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 7%; charging; 20:00 remaining present: true
+2026-10-20 09:05:50 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 8%; charging; 20:00 remaining present: true
+2026-10-20 09:10:51 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 9%; charging; 20:00 remaining present: true
+2026-10-20 09:15:51 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 7%; charging; (no estimate) present: true
+2026-10-20 09:20:51 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 6%; charging; 20:00 remaining present: true
+2026-10-20 09:25:51 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 7%; charging; 20:00 remaining present: true
+2026-10-20 09:30:51 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 8%; charging; 20:00 remaining present: true
+2026-10-20 09:35:51 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 9%; charging; 19:22 remaining present: true
+2026-10-20 09:40:51 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 10%; charging; 18:32 remaining present: true
+2026-10-20 09:45:51 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 11%; charging; 17:32 remaining present: true
+2026-10-20 09:50:51 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 12%; charging; 16:42 remaining present: true
+2026-10-20 09:55:51 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 13%; charging; (no estimate) present: true
+2026-10-20 10:00:51 gate(50):  Wattage = 20W |  -InternalBattery-0 (id=22282339) 13%; charging; 16:02 remaining present: true
+2026-10-20 10:05:51 gate(50):  |  -InternalBattery-0 (id=22282339) 13%; discharging; 2:00 remaining present: true
+2026-10-20 10:10:51 gate(50):  |  -InternalBattery-0 (id=22282339) 13%; discharging; 2:07 remaining present: true
+2026-10-20 10:15:51 gate(50):  |  -InternalBattery-0 (id=22282339) 12%; discharging; 1:51 remaining present: true
+2026-10-20 10:20:51 gate(50):  |  -InternalBattery-0 (id=22282339) 12%; discharging; 1:30 remaining present: true
+2026-10-20 10:25:51 gate(50):  |  -InternalBattery-0 (id=22282339) 11%; discharging; 1:37 remaining present: true
+2026-10-20 10:30:51 gate(50):  Wattage = 94W |  -InternalBattery-0 (id=22282339) 19%; charging; 1:50 remaining present: true
+2026-10-20 10:37:09 gate(50):  Wattage = 94W |  -InternalBattery-0 (id=22282339) 30%; charging; 1:31 remaining present: true
+2026-10-20 10:42:09 gate(50):  Wattage = 94W |  -InternalBattery-0 (id=22282339) 39%; charging; 1:18 remaining present: true
+2026-10-20 10:47:09 gate(50):  Wattage = 94W |  -InternalBattery-0 (id=22282339) 47%; charging; 1:19 remaining present: true
+2026-10-20 10:52:09 gate(50):  Wattage = 94W |  -InternalBattery-0 (id=22282339) 56%; charging; 1:02 remaining present: true
+ Wattage = 94W
+== job1a start
+Tue Oct 20 10:52:10 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	56%; charging; 1:02 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== job1a end
+Tue Oct 20 11:18:35 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	70%; charging; 1:43 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== job1b start
+Tue Oct 20 11:18:49 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	70%; charging; 1:43 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== job1b end
+Tue Oct 20 11:45:14 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	83%; charging; 1:23 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== job2-r7f2 start
+Tue Oct 20 12:08:43 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	97%; charging; 0:13 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== job2-r7f2 end
+Tue Oct 20 12:31:38 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	100%; finishing charge; 0:00 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded

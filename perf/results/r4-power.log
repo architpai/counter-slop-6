@@ -1,0 +1,161 @@
+== r4-pre start
+Mon Oct 19 09:49:42 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	60%; charging; 0:56 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r4-pre end
+Mon Oct 19 09:59:42 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	66%; charging; 1:41 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r4c1 start
+Mon Oct 19 10:07:29 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	71%; charging; 1:41 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r4c1 end
+Mon Oct 19 11:04:31 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	80%; AC attached; not charging present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r4n1 start
+Mon Oct 19 11:05:04 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	80%; AC attached; not charging present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r4n1 end
+Mon Oct 19 12:16:05 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	80%; AC attached; not charging present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r4t1 start
+Mon Oct 19 12:16:27 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	80%; AC attached; not charging present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r4t1 end
+Mon Oct 19 13:37:32 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	99%; finishing charge; 0:00 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r4c2 start
+Mon Oct 19 13:38:47 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	99%; finishing charge; 0:00 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r4c2 end
+Mon Oct 19 14:16:48 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	100%; charged; 0:00 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r4f1 start
+Mon Oct 19 14:26:39 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	100%; charged; 0:00 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r4f1 end
+Mon Oct 19 15:31:41 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	100%; charged; 0:00 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r4p1 start
+Mon Oct 19 15:33:00 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	100%; charged; 0:00 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r4p1 end
+Mon Oct 19 16:48:02 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	100%; charged; 0:00 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r4f2 start
+Mon Oct 19 16:49:16 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	100%; charged; 0:00 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r4f2 end
+Mon Oct 19 17:53:35 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	100%; charged; 0:00 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r4f3 start
+Mon Oct 19 17:54:13 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	100%; charged; 0:00 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r4f3 VOID at 18:36:33: power
+Now drawing from 'Battery Power'
+ -InternalBattery-0 (id=22282339)	100%; discharging; (no estimate) present: true
+== r4f3 end
+Mon Oct 19 18:36:33 JST 2026
+Now drawing from 'Battery Power'
+ -InternalBattery-0 (id=22282339)	100%; discharging; (no estimate) present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r4f3b start
+Mon Oct 19 19:28:04 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	98%; charging; 1:06 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r4f3b end
+Mon Oct 19 20:35:13 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	46%; charging; (no estimate) present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r4-post start
+Mon Oct 19 20:35:17 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	46%; charging; (no estimate) present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r4-post VOID at 20:44:52: power
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	39%; charging; (no estimate) present: true
+== r4-post start
+Mon Oct 19 23:16:46 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	60%; charging; 20:00 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r4-post (23:16) cut off at 23:27 by the tool's 2 h job limit (not power); no result

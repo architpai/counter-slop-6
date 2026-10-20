@@ -6,20 +6,22 @@ import { FOG_UNIFORMS, fogAt, setAtmosphere } from './atmosphere';
 import { GRADE, LIGHT, SURF } from './palette';
 import { Composite, RIG_DEPTH } from './postfx';
 import {
-  BAKE_UNIFORMS, GRID_UNIFORMS, OPERATOR_AO, casterGroups, hiddenMat, levelDepthMat, realMat, realMaterials, skyMat, standInGrid, standInLightmap,
-  standInMaps, surfMat, wearMaps,
+  BAKE_UNIFORMS, GRID_UNIFORMS, OPERATOR_AO, casterGroups, fixUv, hiddenMat, levelDepthMat, realMat, realMaterials, setAoAlpha, skyMat, standInGrid,
+  standInLightmap, standInMaps, surfMat, wearMaps,
 } from './materials';
-import { BAKE_FILE, LIGHTMAP_SIZE, bakeFor, bakedTriangles, layoutSteps, lightmapChartSteps, wearLightmapUVs } from './lightmap';
-import { ANTIALIAS_SPEC, AO_SCALE, PRESET_VALUES, SHADOW_SPEC, VIEW_SCALE } from './quality';
+import { BAKE_FILE, bakeFor, bakedTriangles, wearLightmapUVs } from './lightmap';
+import { dropLayout, postLayout } from './lightmapJob';
+import { bakeLayoutSteps, laidOut } from './lightmapLayout';
+import { ANTIALIAS_SPEC, AO_SCALE, PRESET_VALUES, SHADOW_SPEC, VIEW_SCALE, fightCpuPaths } from './quality';
 import { GpuFences, MatchClock } from './pacing';
 import { aimShadowBox, cascadeCentre, sizeShadowBox } from './shadows';
 import { disposeSky, loadSky } from './sky';
 import { TEXTURE_SETS, TEXTURE_SIZE, resolveMaterial, setInfo, setsFor } from './surfaces';
 import { BakeStreamer, TextureStreamer, fetchGrid, ktx2Loader, lightmapLoader, warmCompressedUploads } from './textures';
 import { WeaponAssets, weaponTextureSize } from './weapons';
-import { FX_UNIFORMS, FxAssets, fxTemplate, fxTextureSize } from './fx';
+import { FX_UNIFORMS, FxAssets, fxLateTemplate, fxTemplate, fxTextureSize } from './fx';
 import { useOperatorSource, usePropSource } from './figure';
-import { OperatorAssets, operatorWant } from './operators';
+import { OperatorAssets, disposeSkinnedDepthProbe, operatorWant, skinnedDepthProbe } from './operators';
 import { PropAssets, dressingSets, propTextureSize } from './props';
 import type { PostFX } from './postfx';
 import type { SkyUniforms } from './materials';
@@ -28,6 +30,7 @@ import type { SkyAssets, SkySource } from './sky';
 import type { TextureSet } from './surfaces';
 import type { BakedLight, LoadBake } from './textures';
 import type { BakeInfo, BakedTriangles, LightmapLayout } from './lightmap';
+import type { LayoutTicket } from './lightmapJob';
 import type { PropRequest } from './props';
 import type { Level, LevelSurface, Mood } from '../types';
 
@@ -104,6 +107,16 @@ export const UPLOAD_GAP_MS = 24;
 const UPLOAD_BYTES_PER_MS = 6e4;
 const UPLOAD_SLOW_MS = 4;
 /**
+ * A slot uploads several streamed items, from one stream or the next ones in
+ * line, as long as they sum to at most a gap's worth of the average rate
+ * (`UPLOAD_GAP_MS` × `UPLOAD_BYTES_PER_MS`, 1.44 MB: eight 512 maps, two 1K
+ * ones) and the slot has spent under `SLOT_PACK_MS` uploading; the gap after
+ * it follows the slot's sum as it follows one map's bytes. A bigger item
+ * still goes alone, first in a slot, as before.
+ */
+export const SLOT_BYTES = UPLOAD_GAP_MS * UPLOAD_BYTES_PER_MS;
+const SLOT_PACK_MS = 2;
+/**
  * The wait after a level load or a look change before the first upload. The
  * GPU process is still busy with the new level's buffers and programs then,
  * and an upload in that time waited 60-130 ms for it (Ultra, second and later
@@ -113,20 +126,39 @@ export const UPLOAD_SETTLE_MS = 500;
 /** Script a slot spends laying a bake's charts out (`_layBake`): a map's layout takes several slots, no frame a long one. */
 const LAYOUT_STEP_MS = 4;
 
-/** A bake's layout as steps: the chart pass, then packing and writing `uv1` (render/lightmap.ts). */
-function* bakeLayoutSteps(surfaces: readonly LevelSurface[], bounds: Level['bounds'], triangles: BakedTriangles,
-  density: number): Generator<void, LightmapLayout | null> {
-  const charts = yield* lightmapChartSteps(surfaces, bounds, triangles);
-  yield;
-  return yield* layoutSteps(charts, LIGHTMAP_SIZE, density);
-}
-
 /**
  * A map's bake fades in over this long (eased) once it is on the GPU, so the
  * light does not pop: indoors the bake is about half the probe's light, and a
  * short fade reads as the room dimming at spawn.
  */
 export const BAKE_FADE_MS = 1500;
+/**
+ * three's shader checks (`renderer.debug.checkShaderErrors`): on in development and the tests, off in a production
+ * build (Next inlines `NODE_ENV`). With them on, three reads each program's link status and its three logs at its
+ * first use: blocking queries that wait for the link. The programs and what they draw are the same either way; off,
+ * a shader that fails to link only goes unreported (no `diagnostics`, no console error).
+ */
+export const CHECK_SHADER_ERRORS = process.env.NODE_ENV !== 'production';
+
+/**
+ * The room environment's PMREM (`fromScene`), its scene's programs linking side by side: at fromScene's first draw
+ * (its cube target and tone mapping set, as for the room's draws) the room is compiled (three's `compile`, no
+ * query), so the room's programs link while the background box's links and draws. The same programs (their keys
+ * are made as at the room's own draws), objects and pixels as `pmrem.fromScene(room, 0.04)`.
+ */
+export function roomEnvironment(three: THREE.WebGLRenderer, pmrem: THREE.PMREMGenerator, room: THREE.Scene): THREE.WebGLRenderTarget {
+  const render = three.render;
+  three.render = function (scene, camera) {
+    three.render = render;
+    three.compile(room, camera);
+    render.call(three, scene, camera);
+  };
+  try {
+    return pmrem.fromScene(room, 0.04);
+  } finally {
+    three.render = render;
+  }
+}
 /**
  * Point lights the realistic tiers' shots and blasts share (R5): always in
  * the scene there, at zero until an effect takes one, since a light count is
@@ -161,7 +193,10 @@ SHADOW_PROBE.castShadow = true;
 /**
  * A root whose shader work is held off a match's frames (`Renderer._compiles`,
  * `_warmups`); `valid` is false once it was freed. `inMatch`: its warm-up draw
- * may also run in a live match once its quiet start is over.
+ * may also run in a live match once its quiet start is over. `own`: work that
+ * is not the world pass's (the soft layer's sprites, the post passes), which
+ * compiles and draws itself where it draws in a frame, in place of the root
+ * compiled for the scene and drawn in it.
  */
 interface Warmup {
   root: THREE.Object3D;
@@ -169,6 +204,13 @@ interface Warmup {
   valid: () => boolean;
   inMatch: boolean;
   drawn: boolean;
+  own?: OwnWarmup;
+}
+
+/** A warm-up's own compile (returns the materials, as `three.compile` does) and its unseen draw. */
+interface OwnWarmup {
+  compile(): THREE.Material[];
+  draw(): void;
 }
 
 /** Vertex colours that have gone to the GPU (`wearColours`). */
@@ -240,6 +282,15 @@ export class Renderer {
   _fogNear = FOG_NEAR;
   _fogFar = FOG_FAR;
   _quality: Readonly<GfxValues> = PRESET_VALUES.high;
+  /**
+   * High and Ultra (`fightCpuPaths`, set by `applyQuality`): each shadow redraw hides the rig and the worn operators'
+   * caster-free subtrees (`OperatorAssets.shadowSwap`), and the post chain runs in one render (`Composite._oneRender`).
+   * Off on Low, Medium and custom values: the shadow pass walks every shown node, and each post pass renders itself.
+   */
+  _fightCpu = false;
+  /** This renderer's skinned depth probe (render/operators.ts `skinnedDepthProbe`): made at its first realistic menu
+   * warm-up, freed in `dispose`. Not shared, so one renderer's dispose cannot free a probe another has queued. */
+  _depthProbe: THREE.SkinnedMesh | null = null;
   /** Dynamic resolution's share of the render-scaled target, per axis. */
   _dynamicScale = 1;
   /** Shadow boxes in force; null is Low's box centred on the eye. */
@@ -266,6 +317,9 @@ export class Renderer {
    * cascade, though the level's all cast alike.
    */
   _casters: { mesh: THREE.Mesh; material: THREE.Material[]; groups: THREE.GeometryGroup[] }[] = [];
+  /** The casters' own materials and groups while the shadow pass swaps them out, reused from frame to frame. */
+  readonly _ownMaterials: (THREE.Material | THREE.Material[])[] = [];
+  readonly _ownGroups: THREE.GeometryGroup[][] = [];
   /** The texture sets the current level's tags need, and its detail kit's (R6) once `_dress` has asked. */
   _surfaceSets: readonly TextureSet[] = [];
   /** What the current level asks of the detail kit (its dressing and drones), null for none (Training). Made by `_dress`. */
@@ -283,6 +337,11 @@ export class Renderer {
   /** No upload before this time (`performance.now()`), and the current stream's slow-down factor (1, 2 or 4). */
   _uploadAt = 0;
   _uploadPace = 1;
+  /** This frame's upload slot once something went up in it (`_upload`): when it opened, its bytes, and whether more may join. */
+  _slotFrame = -1;
+  _slotStart = 0;
+  _slotBytes = 0;
+  _slotOpen = false;
   /** A compressed upload has warmed the driver (`warmCompressedUploads`). */
   _uploadsWarm = false;
   /** The streamer's current sets are on the materials. */
@@ -300,10 +359,11 @@ export class Renderer {
   /**
    * The current level's lightmap layout still to make (`_layBake`): its
    * triangles, the chart pass and packing as steps (render/lightmap.ts), and
-   * the `uv1` arrays (zeros till then) they fill. Null once laid out, or
-   * with no bake.
+   * the `uv1` arrays (zeros till then) they fill, and the same layout
+   * posted to the worker (render/lightmapJob.ts; null without one). Null once
+   * laid out, or with no bake.
    */
-  _bakeLayout: { triangles: BakedTriangles; steps: Generator<void, LightmapLayout | null>; uvs: Float32Array[] } | null = null;
+  _bakeLayout: { triangles: BakedTriangles; steps: Generator<void, LightmapLayout | null>; uvs: Float32Array[]; ticket: LayoutTicket | null } | null = null;
   /** Realistic tiers: the bake streaming or on the level. Null on Low. */
   _bakes: BakeStreamer | null = null;
   /**
@@ -383,7 +443,10 @@ export class Renderer {
   _disposed = false;
 
   constructor(canvas: HTMLCanvasElement) {
-    this.three = new THREE.WebGLRenderer({ canvas, antialias: false, stencil: false, powerPreference: 'high-performance' });
+    // No depth buffer on the canvas: every draw into it is a post pass over the whole frame, with no depth test
+    // (SMAA's blend pass tests, but alone on a cleared canvas it always passes, as with no depth buffer).
+    this.three = new THREE.WebGLRenderer({ canvas, antialias: false, depth: false, stencil: false, powerPreference: 'high-performance' });
+    this.three.debug.checkShaderErrors = CHECK_SHADER_ERRORS;
     this.three.outputColorSpace = THREE.SRGBColorSpace;
     this.three.toneMapping = THREE.NoToneMapping;
     this.three.autoClear = false;
@@ -397,7 +460,7 @@ export class Renderer {
     this.scene = new THREE.Scene();
     this.scene.fog = new THREE.Fog(SURF.fog, FOG_NEAR, FOG_FAR);
     this._pmrem = new THREE.PMREMGenerator(this.three);
-    this.scene.environment = this._roomEnv = this._pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    this.scene.environment = this._roomEnv = roomEnvironment(this.three, this._pmrem, new RoomEnvironment()).texture;
     this.scene.environmentIntensity = ENV_INTENSITY;
     this._sky = {
       horizon: { value: new THREE.Color(SURF.fog) }, zenith: { value: new THREE.Color(LIGHT.zenith) },
@@ -445,29 +508,51 @@ export class Renderer {
       object.onAfterRender = this._afterRig;
     };
     // Between the scene's draw list and its draws: the level's casters and the detail kit's (R6) swap to their shadow
-    // groups for this pass only. Frames that keep the shadow maps allocate nothing here.
+    // groups for this pass only, and the worn operators to one draw each (`OperatorAssets.shadowSwap`). No frame
+    // allocates here: the casters' own materials and groups wait in two reused arrays.
     const shadowMap = this.three.shadowMap, drawShadows = shadowMap.render.bind(shadowMap);
-    shadowMap.render = (lights, scene, camera) => {
-      const props = this.props.casters;
-      if (!shadowMap.needsUpdate || this._casters.length + props.length === 0) return drawShadows(lights, scene, camera);
-      const lists = [this._casters, props], own: { material: THREE.Material | THREE.Material[]; groups: THREE.GeometryGroup[] }[] = [];
-      for (const list of lists) {
-        for (const { mesh, material, groups } of list) {
-          own.push({ material: mesh.material, groups: mesh.geometry.groups });
-          mesh.material = material;
-          mesh.geometry.groups = groups;
-        }
+    const swap = (list: readonly { mesh: THREE.Mesh; material: THREE.Material[]; groups: THREE.GeometryGroup[] }[], i: number): number => {
+      for (const { mesh, material, groups } of list) {
+        this._ownMaterials[i] = mesh.material;
+        this._ownGroups[i++] = mesh.geometry.groups;
+        mesh.material = material;
+        mesh.geometry.groups = groups;
       }
+      return i;
+    };
+    const restore = (list: readonly { mesh: THREE.Mesh }[], i: number): number => {
+      for (const { mesh } of list) {
+        mesh.material = this._ownMaterials[i]!;
+        mesh.geometry.groups = this._ownGroups[i++]!;
+      }
+      return i;
+    };
+    const drawCasters: typeof drawShadows = (lights, scene, camera) => {
+      const props = this.props.casters, casters = this._casters, count = casters.length + props.length;
+      if (count === 0) return drawShadows(lights, scene, camera);
+      swap(props, swap(casters, 0));
       try {
         drawShadows(lights, scene, camera);
       } finally {
-        let i = 0;
-        for (const list of lists) {
-          for (const { mesh } of list) {
-            mesh.material = own[i]!.material;
-            mesh.geometry.groups = own[i++]!.groups;
-          }
-        }
+        restore(props, restore(casters, 0));
+        // Hold no reference past this map's casters (a smaller map's list after a bigger one).
+        if (this._ownMaterials.length > count) this._ownMaterials.length = this._ownGroups.length = count;
+      }
+    };
+    // High and Ultra (`_fightCpu`, read at each redraw): the rig casts nothing (`_prepareRigMesh`), so it is hidden
+    // for the pass and the cascades' walks skip it (three has listed the main pass's draws before its shadow pass, so
+    // that pass sees it as it was), and the worn operators' caster-free subtrees are hidden too. Low and Medium walk
+    // every shown node, as before.
+    shadowMap.render = (lights, scene, camera) => {
+      if (!shadowMap.needsUpdate) return drawShadows(lights, scene, camera);
+      const walk = this._fightCpu, rig = this.rig.visible;
+      if (walk) this.rig.visible = false;
+      this.operators.shadowSwap(true, walk);
+      try {
+        drawCasters(lights, scene, camera);
+      } finally {
+        this.operators.shadowSwap(false);
+        if (walk) this.rig.visible = rig;
       }
     };
     this.weapons = new WeaponAssets({
@@ -545,6 +630,8 @@ export class Renderer {
    */
   applyQuality(q: Readonly<GfxValues>): void {
     this._quality = q;
+    // Read at each shadow redraw and post draw: a change takes effect at the next frame, with nothing left over.
+    this.post._oneRender = this._fightCpu = fightCpuPaths(q);
     this._programsWarm = this._charactersHeld = false;
     this.three.setPixelRatio(Math.min(window.devicePixelRatio || 1, q.pixelRatio));
     const aa = ANTIALIAS_SPEC[q.antialias], ao = AO_SCALE[q.ao], samples = Math.min(aa.samples, this.three.capabilities.maxSamples);
@@ -554,6 +641,8 @@ export class Renderer {
     const shafts = q.look === 'realistic' && q.shafts && (samples === 0 || this.msaaDepthReadable);
     this.post.configure({ look: q.look, samples, fxaa: aa.fxaa, smaa: aa.smaa, ao, depth: this._softFx, bloom: q.bloom, shafts });
     this.operators.occlusion(ao > 0 ? OPERATOR_AO.withGtao : OPERATOR_AO.alone);
+    // The patched lit materials write the scene alpha GTAO reads only while AO is on (materials.ts `setAoAlpha`).
+    let relink = setAoAlpha(ao > 0);
     this._setFxLights(q.look === 'realistic' ? FX_LIGHTS : 0);
     const shadow = SHADOW_SPEC[q.shadows];
     this.sun.castShadow = shadow !== null;
@@ -571,17 +660,21 @@ export class Renderer {
       const type = shadow.soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
       if (this.three.shadowMap.type !== type) {
         this.three.shadowMap.type = type;
-        // three keys programs on the filter but never checks it again once a material has
-        // compiled. It does check the fog object, on every fogged material's next draw, so a
-        // new one reaches the cached enemy and weapon materials that are not in the scene now.
-        // The unfogged ones (clouds) receive no shadows; the traversal still marks those in view.
-        if (this.scene.fog instanceof THREE.Fog) this.scene.fog = this.scene.fog.clone();
-        this.scene.traverse(node => {
-          if (!isMesh(node)) return;
-          for (const material of Array.isArray(node.material) ? node.material : [node.material]) material.needsUpdate = true;
-        });
+        relink = true;
       }
       this._shadowEvery = shadow.every;
+    }
+    if (relink) {
+      // three keys programs on the shadow filter (and the hooks' keys on the AO alpha) but never checks
+      // either again once a material has compiled. It does check the fog object, on every fogged
+      // material's next draw, so a new one reaches the cached enemy and weapon materials that are not in
+      // the scene now. The unfogged ones (clouds) receive no shadows and have no hook; the traversal still
+      // marks those in view.
+      if (this.scene.fog instanceof THREE.Fog) this.scene.fog = this.scene.fog.clone();
+      this.scene.traverse(node => {
+        if (!isMesh(node)) return;
+        for (const material of Array.isArray(node.material) ? node.material : [node.material]) material.needsUpdate = true;
+      });
     }
     const view = VIEW_SCALE[q.viewDistance];
     this.camera.far = FAR * view;
@@ -610,6 +703,8 @@ export class Renderer {
       }
       this._pmrem?.dispose();
       this._pmrem = null;
+      // It puts no fences (`render`): none kept from the last realistic frames for a later realistic tier to read.
+      this._fences.clear();
     }
     this.resize();
   }
@@ -972,6 +1067,7 @@ export class Renderer {
     if (this._bakeChecked === this._surfaces) return;
     this._bakeChecked = this._surfaces;
     this._bake = null;
+    dropLayout(this._bakeLayout?.ticket ?? null);
     this._bakeLayout = null;
     const level = this._level, bake = level ? bakeFor(level) : null;
     if (!level || !bake) return;
@@ -985,17 +1081,20 @@ export class Renderer {
       || !uvs.every((uv, i) => uv.length === 2 * triangles.surfaces[i]!.mesh.geometry.getAttribute('position').count))) uvs = null;
     if (!uvs) {
       uvs = triangles.surfaces.map(s => new Float32Array(2 * s.mesh.geometry.getAttribute('position').count));
-      this._bakeLayout = { triangles, steps: bakeLayoutSteps(this._surfaces, level.bounds, triangles, bake.info.density), uvs };
+      // The worker lays it out during the quiet start; the steps are the same layout on the main thread, if it is late.
+      const ticket = postLayout(triangles, level.bounds, bake.info.density);
+      this._bakeLayout = { triangles, steps: bakeLayoutSteps(this._surfaces, level.bounds, triangles, bake.info.density), uvs, ticket };
     }
     wearLightmapUVs(triangles.surfaces, uvs);
     this._bake = bake;
   }
 
   /**
-   * The current level's lightmap layout (render/lightmap.ts) for about
-   * `budget` ms of script, in an upload slot: its charts, then the atlas,
-   * written into the `uv1` zeros `_checkBake` put on (a map's whole layout is
-   * 30-80 ms on a desktop). True once laid out (or nothing to lay out). A
+   * The current level's lightmap layout (render/lightmap.ts) in an upload
+   * slot: the worker's, once it has answered (the same bytes), else about
+   * `budget` ms of its steps on the main thread (a map's whole layout is
+   * 30-80 ms on a desktop): its charts, then the atlas, written into the
+   * `uv1` zeros `_checkBake` put on. True once laid out (or nothing to lay out). A
    * layout that no longer matches its manifest (the map changed since its
    * bake, in a way the hash misses) takes the bake off: the level keeps the
    * probe.
@@ -1003,13 +1102,18 @@ export class Renderer {
   _layBake(budget = LAYOUT_STEP_MS): boolean {
     const pending = this._bakeLayout, bake = this._bake;
     if (!pending || !bake) return true;
-    const until = performance.now() + budget;
-    let next = pending.steps.next();
-    while (!next.done && performance.now() < until) next = pending.steps.next();
-    if (!next.done) return false;
-    const layout = next.value;
+    let layout;
+    if (pending.ticket?.done) layout = pending.ticket.layout;
+    else {
+      const until = performance.now() + budget;
+      let next = pending.steps.next();
+      while (!next.done && performance.now() < until) next = pending.steps.next();
+      if (!next.done) return false;
+      layout = laidOut(next.value);
+      dropLayout(pending.ticket);
+    }
     this._bakeLayout = null;
-    if (!layout || layout.charts.length !== bake.info.charts || layout.rows !== bake.info.rows || layout.triangles !== bake.info.triangles) {
+    if (!layout || layout.charts !== bake.info.charts || layout.rows !== bake.info.rows || layout.triangles !== bake.info.triangles) {
       // The zero `uv1` stays on: the unbaked materials never read it, and a removed attribute's buffer, drawn once
       // already, would outlive its geometry's disposal (as `shedColours` says).
       this._bakeMismatch(bake.name);
@@ -1038,6 +1142,7 @@ export class Renderer {
    */
   _wearBake(light: BakedLight | null): void {
     const lightmap = light?.lightmap ?? standInLightmap();
+    fixUv(lightmap);
     for (const material of realMaterials()) if (material.userData.baked) material.lightMap = lightmap;
     GRID_UNIFORMS.probeGrid.value = light?.grid ?? standInGrid();
     if (light?.name !== this._bakeWorn) {
@@ -1053,6 +1158,49 @@ export class Renderer {
     GRID_UNIFORMS.probeGridCells.value.fromArray(info.grid.cells);
     GRID_UNIFORMS.probeGridCell.value = info.grid.cell;
     GRID_UNIFORMS.probeGridScale.value = info.probeScale * Math.PI;
+  }
+
+  /**
+   * Upload with `pump` in this frame's upload slot: once `_uploadAt` is past,
+   * the first item at any size, then more (from this stream, or from a later
+   * stream in the same frame) while the slot's items sum to `SLOT_BYTES` at
+   * most (`pump(limit)` leaves a bigger one for a slot of its own) and it has
+   * spent under `SLOT_PACK_MS`. The next slot is the slot's bytes at the
+   * average rate (at least `UPLOAD_GAP_MS`) times the pace; an upload slower
+   * than `UPLOAD_SLOW_MS` doubles the pace (`backOff`; not for the bake) and
+   * closes the slot. The caller checks the match's quiet start.
+   */
+  _upload(pump: (limit: number) => number, backOff = true): void {
+    let start: number, used: number;
+    if (this._slotFrame === this._frame) {
+      if (!this._slotOpen) return;
+      start = this._slotStart;
+      used = this._slotBytes;
+    } else {
+      start = performance.now();
+      if (start < this._uploadAt) return;
+      used = 0;
+    }
+    const before = used;
+    let open = true;
+    for (;;) {
+      const t = performance.now();
+      if (used > 0 && (used >= SLOT_BYTES || t - start >= SLOT_PACK_MS)) break;
+      const bytes = pump(used > 0 ? SLOT_BYTES - used : Infinity);
+      if (bytes <= 0) break;
+      used += bytes;
+      if (backOff && performance.now() - t > UPLOAD_SLOW_MS) {
+        this._uploadPace = Math.min(4, this._uploadPace * 2);
+        open = false;
+        break;
+      }
+    }
+    if (used === before) return;
+    this._slotFrame = this._frame;
+    this._slotStart = start;
+    this._slotBytes = used;
+    this._slotOpen = open;
+    this._uploadAt = start + Math.max(UPLOAD_GAP_MS, used / UPLOAD_BYTES_PER_MS) * this._uploadPace;
   }
 
   /**
@@ -1087,10 +1235,7 @@ export class Renderer {
       return;
     }
     if (!bakes.ready) {
-      if (now >= this._uploadAt && !this._match.quiet(now)) {
-        const bytes = bakes.pump();
-        if (bytes > 0) this._uploadAt = now + Math.max(UPLOAD_GAP_MS, bytes / UPLOAD_BYTES_PER_MS) * this._uploadPace;
-      }
+      if (!this._match.quiet(now)) this._upload(limit => bakes.pump(limit), false);
       return;
     }
     const light = bakes.take();
@@ -1147,14 +1292,7 @@ export class Renderer {
       this._uploadPace = 1;
     }
     if (this._texturesWorn) return;
-    const now = performance.now();
-    if (now >= this._uploadAt && !this._match.quiet(now)) {
-      const bytes = streamer.pump();
-      if (bytes > 0) {
-        if (performance.now() - now > UPLOAD_SLOW_MS) this._uploadPace = Math.min(4, this._uploadPace * 2);
-        this._uploadAt = now + Math.max(UPLOAD_GAP_MS, bytes / UPLOAD_BYTES_PER_MS) * this._uploadPace;
-      }
-    }
+    if (!this._match.quiet(performance.now())) this._upload(limit => streamer.pump(limit));
     if (!streamer.ready) return;
     for (const material of realMaterials()) {
       const set = material.userData.set as TextureSet;
@@ -1181,12 +1319,8 @@ export class Renderer {
     if (size === null || !this.weapons.wanted) return;
     this.weapons.want(size);
     const now = performance.now();
-    if (!this.weapons.pending || this.bakePending || this.texturesPending || now < this._uploadAt || this._match.quiet(now)) return;
-    const bytes = this.weapons.pump();
-    if (bytes > 0) {
-      if (performance.now() - now > UPLOAD_SLOW_MS) this._uploadPace = Math.min(4, this._uploadPace * 2);
-      this._uploadAt = now + Math.max(UPLOAD_GAP_MS, bytes / UPLOAD_BYTES_PER_MS) * this._uploadPace;
-    }
+    if (!this.weapons.pending || this.bakePending || this.texturesPending || this._match.quiet(now)) return;
+    this._upload(limit => this.weapons.pump(limit));
   }
 
   /**
@@ -1203,12 +1337,8 @@ export class Renderer {
     if (want === null || this._prewarmed.size === 0) return;
     this.operators.want(want);
     const now = performance.now();
-    if (!this.operators.pending || this.bakePending || this.texturesPending || now < this._uploadAt || this._match.quiet(now)) return;
-    const bytes = this.operators.pump();
-    if (bytes > 0) {
-      if (performance.now() - now > UPLOAD_SLOW_MS) this._uploadPace = Math.min(4, this._uploadPace * 2);
-      this._uploadAt = now + Math.max(UPLOAD_GAP_MS, bytes / UPLOAD_BYTES_PER_MS) * this._uploadPace;
-    }
+    if (!this.operators.pending || this.bakePending || this.texturesPending || this._match.quiet(now)) return;
+    this._upload(limit => this.operators.pump(limit));
   }
 
   /**
@@ -1222,12 +1352,8 @@ export class Renderer {
     if (size === null || !this.fx.wanted) return;
     this.fx.want(size);
     const now = performance.now();
-    if (!this.fx.pending || this.bakePending || this.texturesPending || now < this._uploadAt || this._match.quiet(now)) return;
-    const bytes = this.fx.pump();
-    if (bytes > 0) {
-      if (performance.now() - now > UPLOAD_SLOW_MS) this._uploadPace = Math.min(4, this._uploadPace * 2);
-      this._uploadAt = now + Math.max(UPLOAD_GAP_MS, bytes / UPLOAD_BYTES_PER_MS) * this._uploadPace;
-    }
+    if (!this.fx.pending || this.bakePending || this.texturesPending || this._match.quiet(now)) return;
+    this._upload(limit => this.fx.pump(limit));
   }
 
   /**
@@ -1236,7 +1362,8 @@ export class Renderer {
    * start (it parses on the main thread); the atlases upload in the
    * level's upload slots once its bake and sets are on (the props wear those
    * sets), and the dressing merges a few milliseconds a frame in between,
-   * never in a match's quiet start.
+   * never in a match's quiet start. Its placements are written every frame
+   * once the kit is in (no slot needed); its meshes are made in the slots.
    */
   _streamProps(): void {
     const size = propTextureSize(this._quality);
@@ -1245,12 +1372,9 @@ export class Renderer {
     const now = performance.now();
     if (this._match.quiet(now)) return;
     this.props.fetch();
-    if (!this.props.pending || this.bakePending || this.texturesPending || now < this._uploadAt) return;
-    const bytes = this.props.pump();
-    if (bytes > 0) {
-      if (performance.now() - now > UPLOAD_SLOW_MS) this._uploadPace = Math.min(4, this._uploadPace * 2);
-      this._uploadAt = now + Math.max(UPLOAD_GAP_MS, bytes / UPLOAD_BYTES_PER_MS) * this._uploadPace;
-    }
+    if (this.props.pending && !this.bakePending && !this.texturesPending) this._upload(limit => this.props.pump(limit));
+    // After the slot's pump and its timing: the dressing's placements need no slot (`PropAssets.premerge`).
+    this.props.premerge();
   }
 
   /** A realistic tier's detail kit (or the current map's merge of it) is still streaming. */
@@ -1287,8 +1411,8 @@ export class Renderer {
   }
 
   /** Queue `root` for a held compile or warm-up draw; resolves once it is done, or dropped as freed. */
-  _hold(list: Warmup[], root: THREE.Object3D, valid: () => boolean, inMatch = false): Promise<void> {
-    return new Promise<void>(done => { list.push({ root, done, valid, inMatch, drawn: false }); });
+  _hold(list: Warmup[], root: THREE.Object3D, valid: () => boolean, inMatch = false, own?: OwnWarmup): Promise<void> {
+    return new Promise<void>(done => { list.push({ root, done, valid, inMatch, drawn: false, own }); });
   }
 
   /**
@@ -1319,11 +1443,65 @@ export class Renderer {
     this._programsWarm = true;
     void this._hold(this._compiles, this.rig, () => true).then(() => this._hold(this._warmups, this.rig, () => true));
     void this._hold(this._warmups, SHADOW_PROBE, () => true);
+    // The worn operators' skinned shadow program, which their glb's compile does not link (realistic tiers).
+    if (operatorWant(this._quality) !== null) void this._hold(this._warmups, this._depthProbe ??= skinnedDepthProbe(), () => true);
     const probe = this._skyProbe;
     if (this._quality.look === 'realistic') void this._hold(this._compiles, probe, () => true).then(() => this._hold(this._warmups, probe, () => true));
     // The effects' programs (R5): tracers and flat decals on every look, the realistic sprites, decals, casings and flashes too.
     const fx = fxTemplate(this._quality.look, this._softFx);
     void this._hold(this._compiles, fx, () => true).then(() => this._hold(this._warmups, fx, () => true));
+    // The soft particles' sprites (High, Ultra) in the soft layer's scene, and the light shafts' passes (Ultra),
+    // which the sun out of view all through a load leaves undrawn: as their first frames draw them.
+    const late = fxLateTemplate(this._quality.look, this._softFx);
+    if (late) this._holdOwn(late, () => this._softFx, this._lateWarmup(late));
+    if (this.post.config.shafts) {
+      const post = this.post;
+      this._holdOwn(post.scene, () => post.config.shafts, { compile: () => post.compileShafts(this.three), draw: () => post.warmShafts(this.three) });
+    }
+  }
+
+  /** A held compile, then a held warm-up draw (at a menu), of work that compiles and draws itself (`Warmup.own`). */
+  _holdOwn(root: THREE.Object3D, valid: () => boolean, own: OwnWarmup): void {
+    void this._hold(this._compiles, root, valid, false, own).then(() => this._hold(this._warmups, root, valid, false, own));
+  }
+
+  /**
+   * The soft sprites' template compiled and drawn as `post.drawSoft` draws
+   * the pools: in `fxScene` (no lights) with the scene's fog, into the soft
+   * layer, which every soft frame clears before it draws and nothing reads
+   * on another frame. Only the template draws: the pools in the layer's
+   * scene are hidden for it.
+   */
+  _lateWarmup(late: THREE.Group): OwnWarmup {
+    const scene = this.fxScene;
+    return {
+      compile: () => {
+        scene.fog = this.scene.fog;
+        this.three.setRenderTarget(this.post._soft);
+        try {
+          return [...this.three.compile(late, this.camera, scene)];
+        } finally {
+          this.three.setRenderTarget(this.post.target);
+        }
+      },
+      draw: () => {
+        const shown = scene.children.filter(child => child.visible);
+        for (const child of shown) child.visible = false;
+        late.scale.setScalar(1e-5);
+        late.position.copy(this.camera.position);
+        scene.add(late);
+        scene.fog = this.scene.fog;
+        try {
+          this.three.setRenderTarget(this.post._soft);
+          this.three.render(scene, this.camera);
+        } finally {
+          scene.remove(late);
+          late.scale.setScalar(1);
+          late.position.set(0, 0, 0);
+          for (const child of shown) child.visible = true;
+        }
+      },
+    };
   }
 
   /**
@@ -1335,14 +1513,14 @@ export class Renderer {
     if (this._compiles.length === 0 || this._match.quiet(performance.now())) return;
     const target = this.three.getRenderTarget();
     this.three.setRenderTarget(this.post.target);
-    for (const { root, done, valid } of this._compiles.splice(0)) {
+    for (const { root, done, valid, own } of this._compiles.splice(0)) {
       if (!valid()) {
         done();
         continue;
       }
       // three's `compileAsync`, except that a material freed while its program links (Low, a lost
       // context) counts as done: three's own poll throws on it.
-      const materials = [...this.three.compile(root, this.camera, this.scene)];
+      const materials = own ? own.compile() : [...this.three.compile(root, this.camera, this.scene)];
       const linked = () => this._disposed || materials.every(material =>
         (this.three.properties.get(material) as { currentProgram?: { isReady(): boolean } }).currentProgram?.isReady() !== false);
       const poll = () => { if (linked()) done(); else setTimeout(poll, 10); };
@@ -1371,6 +1549,27 @@ export class Renderer {
     const live = this._match.live;
     const list = live ? this._warmups.filter(w => w.inMatch).slice(0, 1) : this._warmups;
     if (list.length === 0 || this._match.quiet(performance.now())) return;
+    const world = list.filter(w => !w.own);
+    if (world.length > 0) this._drawWorldWarmups(world, live);
+    // Then the ones that draw themselves, with no shadow work (their scenes have no lights): the frame's own
+    // render still redraws the maps if this frame does.
+    const own = list.filter(w => w.own);
+    if (own.length > 0) {
+      const shadows = this.three.shadowMap.needsUpdate;
+      this.three.shadowMap.needsUpdate = false;
+      try {
+        for (const warm of own) {
+          warm.own!.draw();
+          warm.drawn = true;
+        }
+      } finally {
+        this.three.shadowMap.needsUpdate = shadows;
+      }
+    }
+  }
+
+  /** `_drawWarmups`' roots that draw in the world pass, in one extra render of the scene. */
+  _drawWorldWarmups(list: Warmup[], live: boolean): void {
     const shown: THREE.Object3D[] = [];
     for (const { root } of list) {
       if (root === this.rig) {
@@ -1564,6 +1763,8 @@ export class Renderer {
     this._landSky();
     this.weapons.clear();
     this.operators.clear();
+    if (this._depthProbe) disposeSkinnedDepthProbe(this._depthProbe);
+    this._depthProbe = null;
     this.fx.clear();
     this.props.clear();
     this._setFxLights(0);
@@ -1604,20 +1805,33 @@ export class Renderer {
     this.sky.position.copy(this.camera.position);
     this._drawWarmups();
     this._updateFx();
-    // The operators follow their figures' pivots and clips, and figures out of view put theirs on.
-    this.camera.updateMatrixWorld();
+    // The operators follow their figures' pivots and clips, and figures out of view put theirs on. They read the
+    // camera's matrices only: its children (the rig, every view model in it) wait for `render`'s scene walk, which
+    // computes them again from the same inputs (three's Camera override keeps `matrixWorldInverse` in step).
+    this.camera.updateWorldMatrix(false, false);
     this.operators.frame(this.camera);
     this.props.update(this.camera);
     this.three.setRenderTarget(this.post.target);
-    this.three.clear();
-    this.three.render(this.scene, this.camera);
+    // The scene target is cleared inside `render`, after the shadow maps (three's background step clears with
+    // autoClear on), not before it: a clear and then a switch to the shadow targets would make a tiled GPU store
+    // the cleared target and load it again. It clears as the explicit clear did: colour, depth and stencil, every
+    // mask on, inside the target's scissor (three puts it back after the shadows). Its colour is the fog in the
+    // target's linear space (the explicit clear took whatever the last render had set); the dome covers every
+    // pixel, so it is never seen.
+    this.three.autoClear = true;
+    try {
+      this.three.render(this.scene, this.camera);
+    } finally {
+      this.three.autoClear = false;
+    }
     if (this._softFx && this.fxScene.children.some(child => child.visible)) {
       // Into their own layer, reading the depth the scene's render left (postfx.ts `drawSoft`).
       this.fxScene.fog = this.scene.fog;
       this.post.drawSoft(this.three, this.fxScene, this.camera);
     }
     this.post.draw(this.three, time, fx, this.camera);
-    this._fences.mark(performance.now());
+    // Only the realistic look streams (`gpuBehind`), so only its frames put a fence (a sync object each).
+    if (this._quality.look === 'realistic') this._fences.mark(performance.now());
   }
 }
 

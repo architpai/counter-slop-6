@@ -1,0 +1,66 @@
+# Round 5 power log (perf/powered.sh; PERF_MIN_BATT=35)
+start of round: Mon Oct 19 23:34:22 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	53%; charging; 20:00 remaining present: true
+== r5-pre start
+Mon Oct 19 23:34:22 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	53%; charging; 20:00 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r5-pre end
+Mon Oct 19 23:38:50 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	49%; charging; (no estimate) present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+
+Tue Oct 20 00:02:32 JST 2026: charger check: pmset -g ac reports 'Adapter Name = 20W USB-C Power Adapter' (Wattage = 20W), not 94 W. Idle on AC: 49-50 % for 20 min; under r5-pre load 53 -> 49 % in 4.5 min.
+ Wattage = 20W
+ Current = 2220mA
+ Voltage = 9000mV
+battery poll (2 min, /tmp/r5-batt-poll.log):
+23:39:04 'AC Power' 49%; charging 
+23:41:05 'AC Power' 49%; charging 
+23:43:05 'AC Power' 49%; charging 
+23:45:05 'AC Power' 49%; charging 
+23:47:05 'AC Power' 49%; charging 
+23:49:05 'AC Power' 49%; charging 
+23:51:05 'AC Power' 50%; charging 
+23:53:05 'AC Power' 50%; charging 
+23:55:05 'AC Power' 50%; charging 
+23:57:05 'AC Power' 50%; charging 
+23:59:05 'AC Power' 49%; charging 
+00:01:05 'AC Power' 47%; charging 
+== r5L start
+Tue Oct 20 01:01:47 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	50%; charging; 20:00 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r5L end
+Tue Oct 20 01:16:55 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	43%; charging; (no estimate) present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r5L summary: AC 50 -> 43 % in 15 min (01:02-01:17), no warnings
+== r5R start
+Tue Oct 20 02:10:46 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	55%; charging; 20:00 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r5R end
+Tue Oct 20 02:30:56 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	46%; charging; (no estimate) present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r5R summary: AC 55 -> 46 % in 20 min (02:11-02:31), no warnings; medium arm shows mid-cell state switches (mexico, training)

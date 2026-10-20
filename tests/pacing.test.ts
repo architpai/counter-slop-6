@@ -132,6 +132,38 @@ test('a GPU behind skips frames only while something streams in', () => {
   renderer.dispose();
 });
 
+test('only the realistic look puts a fence after each frame; a change to Low frees those it put', () => {
+  const canvas = document.createElement('canvas');
+  const renderer = new Renderer(canvas);
+  const fx = { hurt: 0, flash: 0, slow: 0, lowHp: 0 };
+  const marks = vi.spyOn(renderer._fences, 'mark');
+  // Low streams nothing (`streaming` is false on it), so its fences were never read.
+  renderer.applyQuality(PRESET_VALUES.low);
+  for (let i = 0; i < 3; i++) renderer.render(0, fx);
+  expect(renderer.streaming).toBe(false);
+  expect(marks).not.toHaveBeenCalled();
+  expect(renderer._fences.inFlight(performance.now())).toBe(0);
+  for (const preset of ['medium', 'high', 'ultra'] as const) {
+    renderer.applyQuality(PRESET_VALUES[preset]);
+    marks.mockClear();
+    for (let i = 0; i < 3; i++) renderer.render(0, fx);
+    expect(marks, preset).toHaveBeenCalledTimes(3);
+  }
+  // A live switch to Low drops the fences left (none to time out while it runs), and back to a realistic tier marks again.
+  const clears = vi.spyOn(renderer._fences, 'clear');
+  renderer.applyQuality(PRESET_VALUES.low);
+  expect(clears).toHaveBeenCalled();
+  expect(renderer._fences.inFlight(performance.now())).toBe(0);
+  marks.mockClear();
+  renderer.render(0, fx);
+  expect(marks).not.toHaveBeenCalled();
+  expect(renderer.gpuBehind).toBe(false);
+  renderer.applyQuality(PRESET_VALUES.high);
+  renderer.render(0, fx);
+  expect(marks).toHaveBeenCalledTimes(1);
+  renderer.dispose();
+}, 60_000);
+
 test('in a live match past its quiet start, the weapons\' warm-up draws one a frame; the rig\'s waits for a menu', async () => {
   const canvas = document.createElement('canvas');
   document.body.append(canvas);

@@ -1,0 +1,467 @@
+== smoke-quick start
+Wed Oct 21 12:14:38 AM JST 2026
+00:14:39 ac=1 bat=80% Not_charging I=0mA | gpu P8 44C gr=210 sm=210 mem=405 MHz 2.88W util=0% reasons=0x0000000000000001 | cpu 1060/3706 MHz pkg=58C throttle core+0 pkg+0 | llama-server[85592] cpu=0.2% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P8, 44, 210 MHz, 3105 MHz, 405 MHz, 2.88 W, [N/A], 0x0000000000000001, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 0.12 0.14 0.07
+USER         PID %CPU COMMAND
+root        1895  1.3 nvidia-powerd
+fleet      92850  1.3 bash
+root       92767  1.1 sshd-session
+root        1909  0.3 tailscaled
+fleet       2514  0.2 node-MainThread
+== smoke-quick end
+Wed Oct 21 12:15:00 AM JST 2026
+00:15:01 ac=1 bat=80% Not_charging I=0mA | gpu P0 52C gr=2340 sm=2340 mem=9001 MHz 56.06W util=0% reasons=0x0000000000000000 | cpu 803/902 MHz pkg=66C throttle core+94 pkg+47 | llama-server[85592] cpu=0.2% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P0, 52, 2340 MHz, 3105 MHz, 9001 MHz, 56.06 W, [N/A], 0x0000000000000000, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 0.89 0.32 0.14
+USER         PID %CPU COMMAND
+fleet      93367  200 ps
+root        1895  1.3 nvidia-powerd
+root        1909  0.3 tailscaled
+fleet       2514  0.2 node-MainThread
+llama      85592  0.2 llama-server
+== abtest start
+Wed Oct 21 12:15:33 AM JST 2026
+00:15:33 ac=1 bat=80% Not_charging I=0mA | gpu P8 46C gr=210 sm=210 mem=405 MHz 2.96W util=0% reasons=0x0000000000000001 | cpu 793/800 MHz pkg=60C throttle core+0 pkg+0 | llama-server[85592] cpu=0.2% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P8, 46, 210 MHz, 3105 MHz, 405 MHz, 2.96 W, [N/A], 0x0000000000000001, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 0.54 0.29 0.13
+USER         PID %CPU COMMAND
+root       93462  1.4 sshd-session
+root        1895  1.3 nvidia-powerd
+fleet      93555  1.2 bash
+root        1909  0.3 tailscaled
+fleet       2514  0.2 node-MainThread
+== abtest end
+Wed Oct 21 12:15:41 AM JST 2026
+00:15:41 ac=1 bat=80% Not_charging I=0mA | gpu P0 48C gr=2355 sm=2355 mem=9001 MHz 45.69W util=0% reasons=0x0000000000000000 | cpu 805/911 MHz pkg=63C throttle core+26 pkg+13 | llama-server[85592] cpu=0.2% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P0, 48, 2355 MHz, 3105 MHz, 9001 MHz, 41.90 W, [N/A], 0x0000000000000000, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 0.68 0.33 0.15
+USER         PID %CPU COMMAND
+root        1895  1.3 nvidia-powerd
+root        1909  0.3 tailscaled
+root       93462  0.3 sshd-session
+fleet       2514  0.2 node-MainThread
+llama      85592  0.2 llama-server
+== msiprime start
+Wed Oct 21 12:23:41 AM JST 2026
+00:23:41 ac=1 bat=80% Not_charging I=0mA | gpu P8 45C gr=210 sm=210 mem=405 MHz 2.92W util=0% reasons=0x0000000000000001 | cpu 803/1106 MHz pkg=58C throttle core+0 pkg+0 | llama-server[85592] cpu=0.2% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P8, 45, 210 MHz, 3105 MHz, 405 MHz, 2.92 W, [N/A], 0x0000000000000001, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 1.35 1.34 0.72
+USER         PID %CPU COMMAND
+fleet     103669  100 ps
+root        1895  1.3 nvidia-powerd
+fleet     103538  1.2 bash
+root      103447  1.0 sshd-session
+root        1909  0.3 tailscaled
+00:24:42 ac=1 bat=80% Not_charging I=0mA | gpu P0 55C gr=2340 sm=2340 mem=9001 MHz 62.81W util=1% reasons=0x0000000000000000 | cpu 2683/5315 MHz pkg=98C throttle core+341 pkg+171 | llama-server[85592] cpu=0.2% gpumem=262MiB
+00:25:42 ac=1 bat=80% Not_charging I=0mA | gpu P0 62C gr=2340 sm=2340 mem=9001 MHz 114.32W util=43% reasons=0x0000000000000000 | cpu 1293/4378 MHz pkg=82C throttle core+3595 pkg+1784 | llama-server[85592] cpu=0.2% gpumem=262MiB
+00:26:43 ac=1 bat=80% Not_charging I=0mA | gpu P0 60C gr=2340 sm=2340 mem=9001 MHz 115.39W util=44% reasons=0x0000000000000000 | cpu 960/1427 MHz pkg=69C throttle core+3342 pkg+1668 | llama-server[85592] cpu=0.2% gpumem=262MiB
+00:27:43 ac=1 bat=80% Not_charging I=0mA | gpu P0 64C gr=2340 sm=2340 mem=9001 MHz 123.96W util=53% reasons=0x0000000000000004 | cpu 2019/5200 MHz pkg=73C throttle core+760 pkg+376 | llama-server[85592] cpu=0.3% gpumem=262MiB
+== msiprime end
+Wed Oct 21 12:28:25 AM JST 2026
+00:28:25 ac=1 bat=80% Not_charging I=0mA | gpu P0 57C gr=2340 sm=2340 mem=9001 MHz 52.16W util=0% reasons=0x0000000000000000 | cpu 805/999 MHz pkg=69C throttle core+3196 pkg+1594 | llama-server[85592] cpu=0.3% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P0, 57, 2340 MHz, 3105 MHz, 9001 MHz, 52.16 W, [N/A], 0x0000000000000000, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 2.37 1.87 1.11
+USER         PID %CPU COMMAND
+root        1895  1.4 nvidia-powerd
+root        1909  0.3 tailscaled
+llama      85592  0.3 llama-server
+fleet       2514  0.2 node-MainThread
+fleet     103542  0.0 bash
+== msib-downtown start
+Wed Oct 21 12:28:26 AM JST 2026
+00:28:26 ac=1 bat=80% Not_charging I=0mA | gpu P4 56C gr=600 sm=600 mem=6001 MHz 35.87W util=0% reasons=0x0000000000000001 | cpu 800/801 MHz pkg=69C throttle core+0 pkg+0 | llama-server[85592] cpu=0.3% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P4, 56, 600 MHz, 3105 MHz, 6001 MHz, 35.87 W, [N/A], 0x0000000000000001, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 2.26 1.85 1.10
+USER         PID %CPU COMMAND
+root        1895  1.4 nvidia-powerd
+fleet     113445  1.1 bash
+root        1909  0.3 tailscaled
+llama      85592  0.3 llama-server
+fleet       2514  0.2 node-MainThread
+00:29:27 ac=1 bat=80% Not_charging I=0mA | gpu P0 56C gr=2340 sm=2340 mem=9001 MHz 63.58W util=1% reasons=0x0000000000000000 | cpu 1565/5459 MHz pkg=92C throttle core+1772 pkg+879 | llama-server[85592] cpu=0.3% gpumem=262MiB
+00:30:27 ac=1 bat=80% Not_charging I=0mA | gpu P0 63C gr=2340 sm=2340 mem=9001 MHz 122.60W util=49% reasons=0x0000000000000000 | cpu 1179/2486 MHz pkg=71C throttle core+2328 pkg+1151 | llama-server[85592] cpu=0.3% gpumem=262MiB
+00:31:28 ac=1 bat=80% Not_charging I=0mA | gpu P0 64C gr=2340 sm=2340 mem=9001 MHz 116.73W util=50% reasons=0x0000000000000000 | cpu 1038/1947 MHz pkg=70C throttle core+2316 pkg+1155 | llama-server[85592] cpu=0.3% gpumem=262MiB
+00:32:28 ac=1 bat=80% Not_charging I=0mA | gpu P0 66C gr=2010 sm=2010 mem=9001 MHz 143.62W util=81% reasons=0x0000000000000004 | cpu 2045/5200 MHz pkg=88C throttle core+2533 pkg+1266 | llama-server[85592] cpu=0.3% gpumem=262MiB
+00:33:29 ac=1 bat=80% Not_charging I=0mA | gpu P0 62C gr=2340 sm=2340 mem=9001 MHz 57.18W util=7% reasons=0x0000000000000000 | cpu 2450/4000 MHz pkg=76C throttle core+2725 pkg+1343 | llama-server[85592] cpu=0.3% gpumem=262MiB
+00:34:29 ac=1 bat=80% Not_charging I=0mA | gpu P0 64C gr=2340 sm=2340 mem=9001 MHz 143.97W util=76% reasons=0x0000000000000004 | cpu 2264/5547 MHz pkg=94C throttle core+2406 pkg+1194 | llama-server[85592] cpu=0.3% gpumem=262MiB
+== msib-downtown end
+Wed Oct 21 12:34:31 AM JST 2026
+00:34:31 ac=1 bat=80% Not_charging I=0mA | gpu P0 58C gr=2340 sm=2340 mem=9001 MHz 76.29W util=0% reasons=0x0000000000000000 | cpu 800/800 MHz pkg=71C throttle core+130 pkg+65 | llama-server[85592] cpu=0.3% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P0, 58, 2340 MHz, 3105 MHz, 9001 MHz, 56.74 W, [N/A], 0x0000000000000000, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 1.81 1.97 1.41
+USER         PID %CPU COMMAND
+fleet     121783  100 ps
+root        1895  1.4 nvidia-powerd
+llama      85592  0.3 llama-server
+root        1909  0.3 tailscaled
+fleet       2514  0.2 node-MainThread
+== msib-house start
+Wed Oct 21 12:34:32 AM JST 2026
+00:34:32 ac=1 bat=80% Not_charging I=0mA | gpu P0 58C gr=2340 sm=2340 mem=9001 MHz 48.40W util=0% reasons=0x0000000000000000 | cpu 826/1200 MHz pkg=71C throttle core+0 pkg+0 | llama-server[85592] cpu=0.3% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P4, 58, 2340 MHz, 3105 MHz, 9001 MHz, 48.40 W, [N/A], 0x0000000000000000, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 1.81 1.97 1.41
+USER         PID %CPU COMMAND
+root        1895  1.4 nvidia-powerd
+fleet     121787  1.0 bash
+llama      85592  0.3 llama-server
+root        1909  0.3 tailscaled
+fleet       2514  0.2 node-MainThread
+00:35:33 ac=1 bat=80% Not_charging I=0mA | gpu P0 57C gr=2340 sm=2340 mem=9001 MHz 43.55W util=8% reasons=0x0000000000000000 | cpu 2847/4700 MHz pkg=76C throttle core+2546 pkg+1272 | llama-server[85592] cpu=0.3% gpumem=262MiB
+00:36:33 ac=1 bat=80% Not_charging I=0mA | gpu P0 62C gr=2340 sm=2340 mem=9001 MHz 117.45W util=40% reasons=0x0000000000000000 | cpu 1335/3552 MHz pkg=70C throttle core+2624 pkg+1305 | llama-server[85592] cpu=0.3% gpumem=262MiB
+00:37:34 ac=1 bat=80% Not_charging I=0mA | gpu P0 62C gr=2340 sm=2340 mem=9001 MHz 129.72W util=52% reasons=0x0000000000000000 | cpu 1458/5200 MHz pkg=78C throttle core+3044 pkg+1516 | llama-server[85592] cpu=0.3% gpumem=262MiB
+00:38:34 ac=1 bat=80% Not_charging I=0mA | gpu P0 62C gr=2310 sm=2310 mem=9001 MHz 124.78W util=53% reasons=0x0000000000000000 | cpu 1356/4642 MHz pkg=71C throttle core+2534 pkg+1263 | llama-server[85592] cpu=0.3% gpumem=262MiB
+00:39:35 ac=1 bat=80% Not_charging I=0mA | gpu P0 60C gr=2340 sm=2340 mem=9001 MHz 93.71W util=33% reasons=0x0000000000000000 | cpu 1987/5614 MHz pkg=93C throttle core+2527 pkg+1260 | llama-server[85592] cpu=0.3% gpumem=262MiB
+00:40:35 ac=1 bat=80% Not_charging I=0mA | gpu P0 63C gr=2115 sm=2115 mem=9001 MHz 129.83W util=49% reasons=0x0000000000000000 | cpu 1073/2333 MHz pkg=71C throttle core+2295 pkg+1136 | llama-server[85592] cpu=0.3% gpumem=262MiB
+== msib-house end
+Wed Oct 21 12:40:42 AM JST 2026
+00:40:42 ac=1 bat=80% Not_charging I=0mA | gpu P0 59C gr=2340 sm=2340 mem=9001 MHz 82.89W util=0% reasons=0x0000000000000000 | cpu 806/974 MHz pkg=71C throttle core+764 pkg+371 | llama-server[85592] cpu=0.3% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P0, 58, 2340 MHz, 3105 MHz, 9001 MHz, 71.58 W, [N/A], 0x0000000000000000, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 2.53 2.36 1.80
+USER         PID %CPU COMMAND
+root        1895  1.5 nvidia-powerd
+llama      85592  0.3 llama-server
+root        1909  0.3 tailscaled
+fleet       2514  0.2 node-MainThread
+fleet     121787  0.0 bash
+== msib-mexico start
+Wed Oct 21 12:40:43 AM JST 2026
+00:40:43 ac=1 bat=80% Not_charging I=0mA | gpu P0 58C gr=2340 sm=2340 mem=9001 MHz 47.93W util=0% reasons=0x0000000000000000 | cpu 958/3964 MHz pkg=71C throttle core+0 pkg+0 | llama-server[85592] cpu=0.3% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P0, 58, 2340 MHz, 3105 MHz, 9001 MHz, 47.93 W, [N/A], 0x0000000000000000, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 2.53 2.36 1.80
+USER         PID %CPU COMMAND
+root        1895  1.5 nvidia-powerd
+fleet     130369  1.2 bash
+llama      85592  0.3 llama-server
+root        1909  0.3 tailscaled
+fleet       2514  0.2 node-MainThread
+00:41:43 ac=1 bat=80% Not_charging I=0mA | gpu P0 57C gr=2340 sm=2340 mem=9001 MHz 59.98W util=1% reasons=0x0000000000000000 | cpu 2387/5200 MHz pkg=96C throttle core+2912 pkg+1448 | llama-server[85592] cpu=0.3% gpumem=262MiB
+00:42:44 ac=1 bat=80% Not_charging I=0mA | gpu P0 66C gr=1965 sm=1965 mem=9001 MHz 168.13W util=100% reasons=0x0000000000000004 | cpu 1995/5100 MHz pkg=86C throttle core+3009 pkg+1500 | llama-server[85592] cpu=0.3% gpumem=262MiB
+00:43:44 ac=1 bat=80% Not_charging I=0mA | gpu P0 63C gr=2340 sm=2340 mem=9001 MHz 127.25W util=72% reasons=0x0000000000000000 | cpu 1960/5200 MHz pkg=84C throttle core+3555 pkg+1767 | llama-server[85592] cpu=0.3% gpumem=262MiB
+00:44:45 ac=1 bat=80% Not_charging I=0mA | gpu P0 59C gr=2340 sm=2340 mem=9001 MHz 52.37W util=35% reasons=0x0000000000000000 | cpu 2297/5100 MHz pkg=86C throttle core+3278 pkg+1628 | llama-server[85592] cpu=0.4% gpumem=262MiB
+00:45:45 ac=1 bat=80% Not_charging I=0mA | gpu P0 65C gr=2070 sm=2070 mem=9001 MHz 131.63W util=68% reasons=0x0000000000000004 | cpu 2463/4900 MHz pkg=87C throttle core+2726 pkg+1356 | llama-server[85592] cpu=0.4% gpumem=262MiB
+== msib-mexico end
+Wed Oct 21 12:46:41 AM JST 2026
+00:46:41 ac=1 bat=80% Not_charging I=0mA | gpu P0 57C gr=2340 sm=2340 mem=9001 MHz 52.88W util=0% reasons=0x0000000000000000 | cpu 880/1980 MHz pkg=69C throttle core+2806 pkg+1395 | llama-server[85592] cpu=0.4% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P0, 57, 2340 MHz, 3105 MHz, 9001 MHz, 46.56 W, [N/A], 0x0000000000000000, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 2.12 2.25 1.92
+USER         PID %CPU COMMAND
+root        1895  1.5 nvidia-powerd
+llama      85592  0.4 llama-server
+root        1909  0.3 tailscaled
+fleet       2514  0.2 node-MainThread
+fleet     130369  0.0 bash
+== msib-training start
+Wed Oct 21 12:46:42 AM JST 2026
+00:46:42 ac=1 bat=80% Not_charging I=0mA | gpu P4 57C gr=2340 sm=2340 mem=9001 MHz 46.56W util=0% reasons=0x0000000000000000 | cpu 927/2434 MHz pkg=69C throttle core+0 pkg+0 | llama-server[85592] cpu=0.4% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P4, 57, 2340 MHz, 3105 MHz, 9001 MHz, 46.56 W, [N/A], 0x0000000000000000, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 2.12 2.25 1.92
+USER         PID %CPU COMMAND
+root        1895  1.5 nvidia-powerd
+fleet     138751  1.2 bash
+llama      85592  0.4 llama-server
+root        1909  0.3 tailscaled
+fleet       2514  0.2 node-MainThread
+00:47:43 ac=1 bat=80% Not_charging I=0mA | gpu P0 52C gr=1455 sm=1455 mem=9001 MHz 30.01W util=14% reasons=0x0000000000000001 | cpu 1692/4816 MHz pkg=77C throttle core+2162 pkg+1076 | llama-server[85592] cpu=0.4% gpumem=262MiB
+00:48:43 ac=1 bat=80% Not_charging I=0mA | gpu P0 59C gr=2340 sm=2340 mem=9001 MHz 89.28W util=29% reasons=0x0000000000000000 | cpu 1887/5386 MHz pkg=89C throttle core+2466 pkg+1233 | llama-server[85592] cpu=0.4% gpumem=262MiB
+00:49:43 ac=1 bat=80% Not_charging I=0mA | gpu P0 58C gr=2340 sm=2340 mem=9001 MHz 88.63W util=35% reasons=0x0000000000000000 | cpu 1787/5099 MHz pkg=86C throttle core+3620 pkg+1804 | llama-server[85592] cpu=0.4% gpumem=262MiB
+00:50:44 ac=1 bat=80% Not_charging I=0mA | gpu P0 58C gr=2340 sm=2340 mem=9001 MHz 121.64W util=54% reasons=0x0000000000000000 | cpu 1615/5461 MHz pkg=93C throttle core+3676 pkg+1839 | llama-server[85592] cpu=0.4% gpumem=262MiB
+00:51:44 ac=1 bat=80% Not_charging I=0mA | gpu P0 53C gr=1425 sm=1425 mem=9001 MHz 44.63W util=28% reasons=0x0000000000000001 | cpu 1648/4801 MHz pkg=76C throttle core+2294 pkg+1140 | llama-server[85592] cpu=0.4% gpumem=262MiB
+00:52:45 ac=1 bat=80% Not_charging I=0mA | gpu P0 58C gr=2310 sm=2310 mem=9001 MHz 100.88W util=33% reasons=0x0000000000000000 | cpu 1552/3981 MHz pkg=70C throttle core+4074 pkg+2037 | llama-server[85592] cpu=0.4% gpumem=262MiB
+== msib-training end
+Wed Oct 21 12:53:13 AM JST 2026
+00:53:13 ac=1 bat=80% Not_charging I=0mA | gpu P0 55C gr=1455 sm=1455 mem=9001 MHz 40.74W util=0% reasons=0x0000000000000001 | cpu 957/3001 MHz pkg=69C throttle core+1624 pkg+810 | llama-server[85592] cpu=0.4% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P0, 55, 1455 MHz, 3105 MHz, 9001 MHz, 40.74 W, [N/A], 0x0000000000000001, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 2.50 2.21 1.99
+USER         PID %CPU COMMAND
+root        1895  1.5 nvidia-powerd
+llama      85592  0.4 llama-server
+root        1909  0.3 tailscaled
+fleet       2514  0.2 node-MainThread
+fleet     138751  0.0 bash
+== msil start
+Wed Oct 21 12:53:14 AM JST 2026
+00:53:14 ac=1 bat=80% Not_charging I=0mA | gpu P4 54C gr=915 sm=915 mem=6001 MHz 25.06W util=0% reasons=0x0000000000000001 | cpu 821/1145 MHz pkg=69C throttle core+0 pkg+0 | llama-server[85592] cpu=0.4% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P5, 54, 915 MHz, 3105 MHz, 6001 MHz, 25.06 W, [N/A], 0x0000000000000001, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 2.50 2.21 1.99
+USER         PID %CPU COMMAND
+root        1895  1.5 nvidia-powerd
+fleet     147228  1.0 bash
+llama      85592  0.4 llama-server
+root        1909  0.3 tailscaled
+fleet       2514  0.2 node-MainThread
+00:54:15 ac=1 bat=80% Not_charging I=0mA | gpu P0 56C gr=2340 sm=2340 mem=9001 MHz 82.84W util=0% reasons=0x0000000000000000 | cpu 2029/5235 MHz pkg=93C throttle core+1789 pkg+890 | llama-server[85592] cpu=0.4% gpumem=262MiB
+00:55:16 ac=1 bat=80% Not_charging I=0mA | gpu P0 62C gr=2340 sm=2340 mem=9001 MHz 115.99W util=54% reasons=0x0000000000000000 | cpu 1152/4866 MHz pkg=69C throttle core+3441 pkg+1708 | llama-server[85592] cpu=0.4% gpumem=262MiB
+00:56:16 ac=1 bat=80% Not_charging I=0mA | gpu P0 62C gr=2340 sm=2340 mem=9001 MHz 117.73W util=43% reasons=0x0000000000000000 | cpu 1155/4100 MHz pkg=69C throttle core+3558 pkg+1774 | llama-server[85592] cpu=0.4% gpumem=262MiB
+00:57:17 ac=1 bat=80% Not_charging I=0mA | gpu P0 65C gr=2340 sm=2340 mem=9001 MHz 122.92W util=46% reasons=0x0000000000000000 | cpu 1129/3376 MHz pkg=81C throttle core+790 pkg+389 | llama-server[85592] cpu=0.4% gpumem=262MiB
+00:58:17 ac=1 bat=80% Not_charging I=0mA | gpu P0 64C gr=1980 sm=1980 mem=9001 MHz 168.37W util=100% reasons=0x0000000000000004 | cpu 2277/5201 MHz pkg=74C throttle core+3122 pkg+1555 | llama-server[85592] cpu=0.4% gpumem=262MiB
+00:59:18 ac=1 bat=80% Not_charging I=0mA | gpu P0 57C gr=2250 sm=2250 mem=9001 MHz 46.53W util=12% reasons=0x0000000000000001 | cpu 2357/5600 MHz pkg=98C throttle core+2206 pkg+1084 | llama-server[85592] cpu=0.4% gpumem=262MiB
+01:00:18 ac=1 bat=80% Not_charging I=0mA | gpu P0 66C gr=2340 sm=2340 mem=9001 MHz 139.06W util=55% reasons=0x0000000000000000 | cpu 1296/4316 MHz pkg=71C throttle core+2440 pkg+1214 | llama-server[85592] cpu=0.4% gpumem=262MiB
+01:01:19 ac=1 bat=80% Not_charging I=0mA | gpu P0 62C gr=2205 sm=2205 mem=9001 MHz 133.87W util=55% reasons=0x0000000000000000 | cpu 1848/4665 MHz pkg=69C throttle core+3066 pkg+1528 | llama-server[85592] cpu=0.4% gpumem=262MiB
+01:02:19 ac=1 bat=80% Not_charging I=0mA | gpu P0 63C gr=2340 sm=2340 mem=9001 MHz 103.02W util=44% reasons=0x0000000000000000 | cpu 1793/5000 MHz pkg=93C throttle core+1333 pkg+666 | llama-server[85592] cpu=0.4% gpumem=262MiB
+01:03:20 ac=1 bat=80% Not_charging I=0mA | gpu P0 63C gr=2340 sm=2340 mem=9001 MHz 109.60W util=50% reasons=0x0000000000000000 | cpu 1974/5638 MHz pkg=86C throttle core+3299 pkg+1638 | llama-server[85592] cpu=0.4% gpumem=262MiB
+01:04:20 ac=1 bat=80% Not_charging I=0mA | gpu P0 55C gr=2340 sm=2340 mem=9001 MHz 54.63W util=1% reasons=0x0000000000000000 | cpu 1303/5225 MHz pkg=79C throttle core+2990 pkg+1483 | llama-server[85592] cpu=0.4% gpumem=262MiB
+01:05:21 ac=1 bat=80% Not_charging I=0mA | gpu P0 61C gr=2340 sm=2340 mem=9001 MHz 101.64W util=43% reasons=0x0000000000000000 | cpu 1890/4952 MHz pkg=94C throttle core+2948 pkg+1465 | llama-server[85592] cpu=0.4% gpumem=262MiB
+01:06:21 ac=1 bat=80% Not_charging I=0mA | gpu P0 62C gr=2340 sm=2340 mem=9001 MHz 118.44W util=48% reasons=0x0000000000000000 | cpu 1372/5025 MHz pkg=70C throttle core+1412 pkg+690 | llama-server[85592] cpu=0.4% gpumem=262MiB
+== msil end
+Wed Oct 21 01:07:13 AM JST 2026
+01:07:13 ac=1 bat=80% Not_charging I=0mA | gpu P0 58C gr=2340 sm=2340 mem=9001 MHz 61.13W util=0% reasons=0x0000000000000000 | cpu 852/1429 MHz pkg=71C throttle core+3558 pkg+1765 | llama-server[85592] cpu=0.4% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P0, 58, 2340 MHz, 3105 MHz, 9001 MHz, 47.53 W, [N/A], 0x0000000000000000, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 1.58 1.87 1.98
+USER         PID %CPU COMMAND
+fleet     173874  100 ps
+root        1895  1.6 nvidia-powerd
+llama      85592  0.4 llama-server
+root        1909  0.3 tailscaled
+fleet       2514  0.2 node-MainThread
+== msi-sweep-final start
+Wed Oct 21 01:07:14 AM JST 2026
+01:07:14 ac=1 bat=80% Not_charging I=0mA | gpu P4 58C gr=2340 sm=2340 mem=9001 MHz 47.53W util=0% reasons=0x0000000000000000 | cpu 908/2511 MHz pkg=71C throttle core+0 pkg+0 | llama-server[85592] cpu=0.4% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P4, 56, 525 MHz, 3105 MHz, 6001 MHz, 36.03 W, [N/A], 0x0000000000000001, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 1.58 1.87 1.98
+USER         PID %CPU COMMAND
+root        1895  1.6 nvidia-powerd
+llama      85592  0.4 llama-server
+root        1909  0.3 tailscaled
+fleet       2514  0.2 node-MainThread
+root        1903  0.0 systemd-logind
+01:08:15 ac=1 bat=80% Not_charging I=0mA | gpu P0 66C gr=1980 sm=1980 mem=9001 MHz 170.59W util=100% reasons=0x0000000000000004 | cpu 1925/5100 MHz pkg=89C throttle core+1740 pkg+872 | llama-server[85592] cpu=0.4% gpumem=262MiB
+01:09:15 ac=1 bat=80% Not_charging I=0mA | gpu P0 64C gr=2190 sm=2190 mem=9001 MHz 161.52W util=87% reasons=0x0000000000000004 | cpu 2052/5220 MHz pkg=89C throttle core+2112 pkg+1047 | llama-server[85592] cpu=0.5% gpumem=262MiB
+01:10:16 ac=1 bat=80% Not_charging I=0mA | gpu P0 63C gr=2250 sm=2250 mem=9001 MHz 128.05W util=89% reasons=0x0000000000000004 | cpu 1403/3401 MHz pkg=82C throttle core+1516 pkg+756 | llama-server[85592] cpu=0.5% gpumem=262MiB
+01:11:16 ac=1 bat=80% Not_charging I=0mA | gpu P0 56C gr=2340 sm=2340 mem=9001 MHz 93.22W util=37% reasons=0x0000000000000000 | cpu 1910/5373 MHz pkg=87C throttle core+2320 pkg+1155 | llama-server[85592] cpu=0.5% gpumem=262MiB
+== msi-sweep-final end
+Wed Oct 21 01:11:50 AM JST 2026
+01:11:51 ac=1 bat=80% Not_charging I=0mA | gpu P0 56C gr=2340 sm=2340 mem=9001 MHz 61.00W util=0% reasons=0x0000000000000000 | cpu 800/800 MHz pkg=70C throttle core+750 pkg+375 | llama-server[85592] cpu=0.5% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P0, 55, 2340 MHz, 3105 MHz, 9001 MHz, 50.21 W, [N/A], 0x0000000000000000, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 1.99 1.91 1.97
+USER         PID %CPU COMMAND
+fleet     177684  100 ps
+root        1895  1.6 nvidia-powerd
+llama      85592  0.5 llama-server
+root        1909  0.3 tailscaled
+fleet       2514  0.2 node-MainThread
+== msi-sweep-r0 start
+Wed Oct 21 01:11:51 AM JST 2026
+01:11:52 ac=1 bat=80% Not_charging I=0mA | gpu P4 55C gr=2340 sm=2340 mem=9001 MHz 44.50W util=0% reasons=0x0000000000000000 | cpu 879/2224 MHz pkg=68C throttle core+0 pkg+0 | llama-server[85592] cpu=0.5% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P4, 55, 2340 MHz, 3105 MHz, 9001 MHz, 44.50 W, [N/A], 0x0000000000000000, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 1.91 1.89 1.97
+USER         PID %CPU COMMAND
+fleet     177815  100 ps
+root        1895  1.6 nvidia-powerd
+llama      85592  0.5 llama-server
+root        1909  0.3 tailscaled
+fleet       2514  0.2 node-MainThread
+01:12:52 ac=1 bat=80% Not_charging I=0mA | gpu P0 63C gr=2340 sm=2340 mem=9001 MHz 117.46W util=47% reasons=0x0000000000000000 | cpu 2410/5700 MHz pkg=93C throttle core+2756 pkg+1375 | llama-server[85592] cpu=0.5% gpumem=262MiB
+01:13:53 ac=1 bat=80% Not_charging I=0mA | gpu P0 61C gr=2340 sm=2340 mem=9001 MHz 130.36W util=65% reasons=0x0000000000000000 | cpu 2187/5523 MHz pkg=82C throttle core+3934 pkg+1934 | llama-server[85592] cpu=0.5% gpumem=262MiB
+01:14:53 ac=1 bat=80% Not_charging I=0mA | gpu P0 61C gr=2340 sm=2340 mem=9001 MHz 112.19W util=25% reasons=0x0000000000000000 | cpu 1922/4902 MHz pkg=87C throttle core+3992 pkg+1988 | llama-server[85592] cpu=0.5% gpumem=262MiB
+01:15:54 ac=1 bat=80% Not_charging I=0mA | gpu P5 56C gr=735 sm=735 mem=810 MHz 24.02W util=28% reasons=0x0000000000000001 | cpu 2262/5235 MHz pkg=90C throttle core+1678 pkg+837 | llama-server[85592] cpu=0.5% gpumem=262MiB
+01:16:54 ac=1 bat=80% Not_charging I=0mA | gpu P0 55C gr=2340 sm=2340 mem=9001 MHz 82.50W util=27% reasons=0x0000000000000000 | cpu 1896/4700 MHz pkg=76C throttle core+1858 pkg+927 | llama-server[85592] cpu=0.5% gpumem=262MiB
+== msi-sweep-r0 end
+Wed Oct 21 01:17:25 AM JST 2026
+01:17:25 ac=1 bat=80% Not_charging I=0mA | gpu P0 53C gr=1380 sm=1380 mem=9001 MHz 38.34W util=0% reasons=0x0000000000000001 | cpu 817/1181 MHz pkg=68C throttle core+304 pkg+152 | llama-server[85592] cpu=0.5% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P0, 53, 1380 MHz, 3105 MHz, 9001 MHz, 38.34 W, [N/A], 0x0000000000000001, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 2.06 2.01 2.00
+USER         PID %CPU COMMAND
+root        1895  1.7 nvidia-powerd
+llama      85592  0.5 llama-server
+root        1909  0.3 tailscaled
+fleet       2514  0.2 node-MainThread
+fleet     177688  0.0 bash
+== msi-hitch-measure start
+Wed Oct 21 01:17:26 AM JST 2026
+01:17:26 ac=1 bat=80% Not_charging I=0mA | gpu P4 52C gr=870 sm=870 mem=6001 MHz 23.13W util=0% reasons=0x0000000000000001 | cpu 800/980 MHz pkg=68C throttle core+0 pkg+0 | llama-server[85592] cpu=0.5% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P4, 52, 870 MHz, 3105 MHz, 6001 MHz, 23.13 W, [N/A], 0x0000000000000001, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 2.06 2.01 2.00
+USER         PID %CPU COMMAND
+root        1895  1.7 nvidia-powerd
+fleet     181458  1.1 bash
+llama      85592  0.5 llama-server
+root        1909  0.3 tailscaled
+fleet       2514  0.2 node-MainThread
+01:18:27 ac=1 bat=80% Not_charging I=0mA | gpu P0 64C gr=2340 sm=2340 mem=9001 MHz 148.05W util=73% reasons=0x0000000000000004 | cpu 1651/5276 MHz pkg=93C throttle core+1050 pkg+518 | llama-server[85592] cpu=0.5% gpumem=262MiB
+01:19:27 ac=1 bat=80% Not_charging I=0mA | gpu P0 64C gr=2265 sm=2265 mem=9001 MHz 122.62W util=44% reasons=0x0000000000000004 | cpu 1215/4100 MHz pkg=75C throttle core+2810 pkg+1391 | llama-server[85592] cpu=0.5% gpumem=262MiB
+01:20:28 ac=1 bat=80% Not_charging I=0mA | gpu P0 56C gr=2100 sm=2100 mem=9001 MHz 45.96W util=0% reasons=0x0000000000000001 | cpu 1514/5200 MHz pkg=93C throttle core+2336 pkg+1156 | llama-server[85592] cpu=0.5% gpumem=262MiB
+01:21:28 ac=1 bat=80% Not_charging I=0mA | gpu P0 57C gr=1965 sm=1965 mem=9001 MHz 61.35W util=4% reasons=0x0000000000000001 | cpu 1937/5100 MHz pkg=97C throttle core+3496 pkg+1750 | llama-server[85592] cpu=0.5% gpumem=262MiB
+01:22:28 ac=1 bat=80% Not_charging I=0mA | gpu P0 57C gr=2160 sm=2160 mem=9001 MHz 84.96W util=31% reasons=0x0000000000000001 | cpu 1808/5665 MHz pkg=90C throttle core+4983 pkg+2482 | llama-server[85592] cpu=0.5% gpumem=262MiB
+== msi-hitch-measure end
+Wed Oct 21 01:22:30 AM JST 2026
+01:22:30 ac=1 bat=80% Not_charging I=0mA | gpu P0 54C gr=2250 sm=2250 mem=9001 MHz 58.83W util=0% reasons=0x0000000000000001 | cpu 811/1181 MHz pkg=68C throttle core+131 pkg+65 | llama-server[85592] cpu=0.5% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P0, 54, 2250 MHz, 3105 MHz, 9001 MHz, 50.68 W, [N/A], 0x0000000000000001, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 2.34 2.15 2.05
+USER         PID %CPU COMMAND
+fleet     188140  100 ps
+root        1895  1.7 nvidia-powerd
+llama      85592  0.5 llama-server
+root        1909  0.3 tailscaled
+fleet       2514  0.2 node-MainThread
+== msi-survey start
+Wed Oct 21 01:22:31 AM JST 2026
+01:22:31 ac=1 bat=80% Not_charging I=0mA | gpu P4 54C gr=2250 sm=2250 mem=9001 MHz 43.00W util=0% reasons=0x0000000000000001 | cpu 840/1643 MHz pkg=68C throttle core+0 pkg+0 | llama-server[85592] cpu=0.5% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P4, 54, 2250 MHz, 3105 MHz, 9001 MHz, 43.00 W, [N/A], 0x0000000000000001, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 2.34 2.15 2.05
+USER         PID %CPU COMMAND
+root        1895  1.7 nvidia-powerd
+fleet     188144  1.0 bash
+llama      85592  0.5 llama-server
+root        1909  0.3 tailscaled
+fleet       2514  0.2 node-MainThread
+01:23:32 ac=1 bat=80% Not_charging I=0mA | gpu P0 68C gr=1950 sm=1950 mem=9001 MHz 174.79W util=100% reasons=0x0000000000000004 | cpu 2445/4058 MHz pkg=84C throttle core+1032 pkg+510 | llama-server[85592] cpu=0.5% gpumem=262MiB
+01:24:32 ac=1 bat=80% Not_charging I=0mA | gpu P0 61C gr=2340 sm=2340 mem=9001 MHz 123.43W util=54% reasons=0x0000000000000000 | cpu 1869/5100 MHz pkg=81C throttle core+3202 pkg+1598 | llama-server[85592] cpu=0.5% gpumem=262MiB
+== msi-survey end
+Wed Oct 21 01:24:48 AM JST 2026
+01:24:48 ac=1 bat=80% Not_charging I=0mA | gpu P0 56C gr=2340 sm=2340 mem=9001 MHz 59.31W util=0% reasons=0x0000000000000000 | cpu 800/800 MHz pkg=69C throttle core+102 pkg+51 | llama-server[85592] cpu=0.5% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P0, 56, 2340 MHz, 3105 MHz, 9001 MHz, 46.38 W, [N/A], 0x0000000000000000, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 2.34 2.25 2.10
+USER         PID %CPU COMMAND
+root        1895  1.7 nvidia-powerd
+llama      85592  0.5 llama-server
+root        1909  0.3 tailscaled
+fleet       2514  0.2 node-MainThread
+fleet     188144  0.0 bash
+== msi-profile start
+Wed Oct 21 01:24:48 AM JST 2026
+01:24:49 ac=1 bat=80% Not_charging I=0mA | gpu P0 56C gr=2340 sm=2340 mem=9001 MHz 46.38W util=0% reasons=0x0000000000000000 | cpu 800/815 MHz pkg=69C throttle core+0 pkg+0 | llama-server[85592] cpu=0.5% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P4, 56, 2340 MHz, 3105 MHz, 9001 MHz, 46.38 W, [N/A], 0x0000000000000000, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 2.34 2.25 2.10
+USER         PID %CPU COMMAND
+root        1895  1.7 nvidia-powerd
+fleet     190320  1.3 bash
+llama      85592  0.5 llama-server
+root        1909  0.3 tailscaled
+fleet       2514  0.2 node-MainThread
+01:25:49 ac=1 bat=80% Not_charging I=0mA | gpu P0 60C gr=2340 sm=2340 mem=9001 MHz 44.66W util=10% reasons=0x0000000000000000 | cpu 2085/3734 MHz pkg=73C throttle core+386 pkg+192 | llama-server[85592] cpu=0.5% gpumem=262MiB
+01:26:50 ac=1 bat=80% Not_charging I=0mA | gpu P0 60C gr=2340 sm=2340 mem=9001 MHz 103.60W util=51% reasons=0x0000000000000000 | cpu 2165/4301 MHz pkg=74C throttle core+1488 pkg+738 | llama-server[85592] cpu=0.5% gpumem=262MiB
+01:27:50 ac=1 bat=80% Not_charging I=0mA | gpu P0 60C gr=2340 sm=2340 mem=9001 MHz 99.40W util=38% reasons=0x0000000000000000 | cpu 2426/5000 MHz pkg=82C throttle core+874 pkg+436 | llama-server[85592] cpu=0.5% gpumem=262MiB
+== msi-profile end
+Wed Oct 21 01:28:04 AM JST 2026
+01:28:04 ac=1 bat=80% Not_charging I=0mA | gpu P0 57C gr=2340 sm=2340 mem=9001 MHz 51.86W util=0% reasons=0x0000000000000000 | cpu 823/1272 MHz pkg=69C throttle core+496 pkg+248 | llama-server[85592] cpu=0.5% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P0, 57, 2340 MHz, 3105 MHz, 9001 MHz, 51.86 W, [N/A], 0x0000000000000000, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 2.27 2.27 2.14
+USER         PID %CPU COMMAND
+fleet     192563  100 ps
+root        1895  1.7 nvidia-powerd
+llama      85592  0.5 llama-server
+root        1909  0.3 tailscaled
+fleet       2514  0.2 node-MainThread
+== vk-gl-1 start
+Wed Oct 21 01:32:01 AM JST 2026
+01:32:01 ac=1 bat=80% Not_charging I=0mA | gpu P8 48C gr=210 sm=210 mem=405 MHz 3.06W util=0% reasons=0x0000000000000001 | cpu 903/2357 MHz pkg=60C throttle core+0 pkg+0 | llama-server[85592] cpu=0.5% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P8, 48, 210 MHz, 3105 MHz, 405 MHz, 3.06 W, [N/A], 0x0000000000000001, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 1.20 1.74 1.94
+USER         PID %CPU COMMAND
+fleet     197427  100 ps
+root        1895  1.8 nvidia-powerd
+fleet     197299  1.2 bash
+fleet     197297  1.1 bash
+llama      85592  0.5 llama-server
+== vk-gl-1 end
+Wed Oct 21 01:32:22 AM JST 2026
+01:32:22 ac=1 bat=80% Not_charging I=0mA | gpu P0 54C gr=2340 sm=2340 mem=9001 MHz 58.27W util=0% reasons=0x0000000000000000 | cpu 800/800 MHz pkg=68C throttle core+158 pkg+80 | llama-server[85592] cpu=0.5% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P0, 54, 2340 MHz, 3105 MHz, 9001 MHz, 58.27 W, [N/A], 0x0000000000000000, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 1.00 1.64 1.90
+USER         PID %CPU COMMAND
+root        1895  1.8 nvidia-powerd
+llama      85592  0.5 llama-server
+root        1909  0.3 tailscaled
+fleet       2514  0.2 node-MainThread
+fleet     197299  0.1 bash
+== vk-vk-1 start
+Wed Oct 21 01:32:22 AM JST 2026
+01:32:23 ac=1 bat=80% Not_charging I=0mA | gpu P0 54C gr=2340 sm=2340 mem=9001 MHz 58.27W util=0% reasons=0x0000000000000000 | cpu 846/1299 MHz pkg=68C throttle core+0 pkg+0 | llama-server[85592] cpu=0.5% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P4, 53, 2340 MHz, 3105 MHz, 9001 MHz, 39.13 W, [N/A], 0x0000000000000000, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 1.00 1.64 1.90
+USER         PID %CPU COMMAND
+root        1895  1.8 nvidia-powerd
+llama      85592  0.5 llama-server
+root        1909  0.3 tailscaled
+fleet       2514  0.2 node-MainThread
+fleet     197297  0.0 bash
+== vk-vk-1 end
+Wed Oct 21 01:32:44 AM JST 2026
+01:32:44 ac=1 bat=80% Not_charging I=0mA | gpu P0 57C gr=2340 sm=2340 mem=9001 MHz 71.73W util=0% reasons=0x0000000000000000 | cpu 815/1236 MHz pkg=69C throttle core+304 pkg+152 | llama-server[85592] cpu=0.5% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P0, 56, 2340 MHz, 3105 MHz, 9001 MHz, 56.74 W, [N/A], 0x0000000000000000, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 1.50 1.72 1.92
+USER         PID %CPU COMMAND
+root        1895  1.8 nvidia-powerd
+llama      85592  0.5 llama-server
+root        1909  0.3 tailscaled
+fleet       2514  0.2 node-MainThread
+fleet     197821  0.0 bash
+== vk-gl-2 start
+Wed Oct 21 01:32:45 AM JST 2026
+01:32:45 ac=1 bat=80% Not_charging I=0mA | gpu P0 56C gr=2340 sm=2340 mem=9001 MHz 44.13W util=0% reasons=0x0000000000000000 | cpu 950/2738 MHz pkg=69C throttle core+0 pkg+0 | llama-server[85592] cpu=0.5% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P0, 56, 2340 MHz, 3105 MHz, 9001 MHz, 44.13 W, [N/A], 0x0000000000000000, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 1.50 1.72 1.92
+USER         PID %CPU COMMAND
+root        1895  1.8 nvidia-powerd
+llama      85592  0.5 llama-server
+root        1909  0.3 tailscaled
+fleet       2514  0.2 node-MainThread
+root        1903  0.0 systemd-logind
+== vk-gl-2 end
+Wed Oct 21 01:33:06 AM JST 2026
+01:33:06 ac=1 bat=80% Not_charging I=0mA | gpu P0 58C gr=2340 sm=2340 mem=9001 MHz 57.68W util=0% reasons=0x0000000000000000 | cpu 846/1714 MHz pkg=69C throttle core+482 pkg+237 | llama-server[85592] cpu=0.5% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P0, 58, 2340 MHz, 3105 MHz, 9001 MHz, 57.68 W, [N/A], 0x0000000000000000, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 1.71 1.75 1.93
+USER         PID %CPU COMMAND
+fleet     198985  200 ps
+root        1895  1.8 nvidia-powerd
+llama      85592  0.5 llama-server
+root        1909  0.3 tailscaled
+fleet       2514  0.2 node-MainThread
+== vk-vk-2 start
+Wed Oct 21 01:33:07 AM JST 2026
+01:33:07 ac=1 bat=80% Not_charging I=0mA | gpu P4 56C gr=465 sm=465 mem=6001 MHz 40.29W util=0% reasons=0x0000000000000001 | cpu 803/903 MHz pkg=69C throttle core+0 pkg+0 | llama-server[85592] cpu=0.5% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P4, 56, 465 MHz, 3105 MHz, 6001 MHz, 40.29 W, [N/A], 0x0000000000000001, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 1.66 1.74 1.92
+USER         PID %CPU COMMAND
+fleet     199114  100 ps
+root        1895  1.8 nvidia-powerd
+fleet     198987  1.1 bash
+llama      85592  0.5 llama-server
+root        1909  0.3 tailscaled
+== vk-vk-2 end
+Wed Oct 21 01:33:27 AM JST 2026
+01:33:28 ac=1 bat=80% Not_charging I=0mA | gpu P0 59C gr=2340 sm=2340 mem=9001 MHz 89.79W util=0% reasons=0x0000000000000000 | cpu 802/865 MHz pkg=71C throttle core+584 pkg+290 | llama-server[85592] cpu=0.5% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P0, 59, 2340 MHz, 3105 MHz, 9001 MHz, 53.71 W, [N/A], 0x0000000000000000, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 2.02 1.82 1.95
+USER         PID %CPU COMMAND
+fleet     199680  100 ps
+root        1895  1.8 nvidia-powerd
+llama      85592  0.5 llama-server
+root        1909  0.3 tailscaled
+fleet       2514  0.2 node-MainThread

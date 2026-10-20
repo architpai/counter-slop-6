@@ -1,0 +1,1148 @@
+{
+ "meta": {
+  "label": "scratch-be-gl-2",
+  "mode": "bench",
+  "date": "2026-10-20T16:33:05.348Z",
+  "git": {
+   "sha": "36cc1aa7ca30eb2695ee02801d835add3aa46664",
+   "branch": "perf/loop",
+   "dirty": false
+  },
+  "chrome": "153.0.8010.12",
+  "gpu": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090 Laptop GPU/PCIe/SSE2, OpenGL ES 3.2)",
+  "viewport": {
+   "width": 1920,
+   "height": 1080,
+   "deviceScaleFactor": 1
+  },
+  "chromeArgs": [
+   "--use-gl=angle",
+   "--use-angle=gl-egl",
+   "--ignore-gpu-blocklist",
+   "--disable-gpu-vsync",
+   "--disable-frame-rate-limit",
+   "--enable-precise-memory-info"
+  ],
+  "platform": "linux",
+  "gpuEnv": {
+   "PERF_GPU_ARGS": "--use-gl=angle --use-angle=gl-egl",
+   "PERF_GPU_EXPECT": "NVIDIA GeForce RTX 4090",
+   "__EGL_VENDOR_LIBRARY_FILENAMES": "/usr/share/glvnd/egl_vendor.d/10_nvidia.json",
+   "__GL_SHADER_DISK_CACHE_PATH": "/home/fleet/perf-scratch-shooter/nv-cache"
+  },
+  "node": "v22.23.3",
+  "args": [
+   "--label",
+   "scratch-be-gl-2",
+   "--maps",
+   "downtown",
+   "--presets",
+   "high,ultra",
+   "--scenarios",
+   "path",
+   "--no-trace"
+  ],
+  "config": {
+   "label": "scratch-be-gl-2",
+   "maps": [
+    "downtown"
+   ],
+   "presets": [
+    "high",
+    "ultra"
+   ],
+   "repeat": 1,
+   "frames": 900,
+   "warmup": 240,
+   "fightWarmup": 240,
+   "ablateFrames": 240,
+   "idle": 120,
+   "seed": 20261018,
+   "profile": false,
+   "trace": false,
+   "gpuTimer": false,
+   "headed": false,
+   "raw": false,
+   "build": false,
+   "quick": false,
+   "scenarios": [
+    "path"
+   ],
+   "loadOnly": false
+  },
+  "timer": {
+   "downtown/high#0": {
+    "supported": true,
+    "reason": "query 0.858 ms over the 0.6 ms frame interval; the extra pass moved the frame interval by 0 ms only; the query grew nullx what the extra pass added to the frame interval",
+    "read": 270,
+    "zero": 0,
+    "disjoint": 0,
+    "base": {
+     "queryMedMs": 0.858,
+     "frameMedMs": 0.6,
+     "results": 97
+    },
+    "calibrated": {
+     "queryMedMs": 1.375,
+     "frameMedMs": 0.6,
+     "results": 61
+    },
+    "slope": null,
+    "working": false
+   },
+   "downtown/ultra#0": {
+    "supported": true,
+    "reason": "query 1.143 ms over the 0.7 ms frame interval; the extra pass moved the frame interval by -0.1 ms only; the query grew nullx what the extra pass added to the frame interval",
+    "read": 270,
+    "zero": 0,
+    "disjoint": 0,
+    "base": {
+     "queryMedMs": 1.143,
+     "frameMedMs": 0.7,
+     "results": 110
+    },
+    "calibrated": {
+     "queryMedMs": 1.663,
+     "frameMedMs": 0.6,
+     "results": 92
+    },
+    "slope": null,
+    "working": false
+   }
+  },
+  "timerNote": "EXT_disjoint_timer_query_webgl2 on ANGLE Metal returns non-zero, non-disjoint results that scale with GPU work, but they are spans of 2-2.5x the GPU-bound frame interval (e.g. Ultra downtown idle: query 8.4 ms at a 3.5 ms frame; one injected fullscreen pass: query 20.7 ms at an 8.1 ms frame), so not GPU busy time. gpuMs is null where the per-cell check fails (query median > 1.1x frame median); frameMs is the GPU-bound measure (trace.waitMsPerFrame shows the main thread waiting on the GPU side).",
+  "parityNote": "P.reset zeroes the renderer's _frame at each run's start, so recorded callback k renders with _frame = k + 1, and a preset that redraws its shadow map every 2nd frame (Low, facts.shadowEvery 2) draws it in callbacks k = 1, 3, 5, ... cpuParity indexes callbacks (cpu[k] is callback k): the shadow callbacks are the ODD ones. frameParity indexes intervals (frame[i] runs from callback i-1's rAF to callback i's, so it holds callback i-1's work): the shadow callbacks fall in the EVEN intervals; interval 0 holds a callback from before the reset and is left out. The GPU may finish a frame after its interval ends (frames in flight), so GPU cost can show an interval later: read the gap between the sides. Means over finite values; N is the count per side.",
+  "durationMs": 19099,
+  "errors": []
+ },
+ "cells": [
+  {
+   "map": "downtown",
+   "preset": "high",
+   "runs": [
+    {
+     "map": "downtown",
+     "preset": "high",
+     "chrome": "153.0.8010.12",
+     "load": {
+      "firstPlayableMs": 694.2,
+      "readyMs": 5604.6,
+      "liveMs": 417.7,
+      "enteredMs": 679.6,
+      "phases": {
+       "flags": {
+        "sky": {
+         "on": 670.7,
+         "off": 3912.5,
+         "frames": 1772
+        },
+        "skyLanding": {
+         "on": 930.3,
+         "off": 3912.5,
+         "frames": 1764
+        },
+        "bakeLayout": {
+         "on": 670.7,
+         "off": 3912.5,
+         "frames": 1772
+        },
+        "bake": {
+         "on": 670.7,
+         "off": 3986.5,
+         "frames": 1813
+        },
+        "bakeFading": {
+         "on": 3986.5,
+         "off": 5498.7,
+         "frames": 933
+        },
+        "textures": {
+         "on": 670.7,
+         "off": 4953.7,
+         "frames": 2413
+        },
+        "fx": {
+         "on": 670.7,
+         "off": 5014,
+         "frames": 2454
+        },
+        "weapons": {
+         "on": 670.7,
+         "off": 5379.2,
+         "frames": 2678
+        },
+        "operators": {
+         "on": 670.7,
+         "off": 5525.8,
+         "frames": 2759
+        },
+        "props": {
+         "on": 670.7,
+         "off": 5604.6,
+         "frames": 2785
+        },
+        "streaming": {
+         "on": 670.7,
+         "off": 5604.6,
+         "frames": 2785
+        },
+        "compiles": {
+         "on": 800.4,
+         "off": 3709.4,
+         "frames": 1712
+        },
+        "warmups": {
+         "on": 670.7,
+         "off": 3806.5,
+         "frames": 2
+        },
+        "programsCold": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "effects": {
+         "on": 670.7,
+         "off": 5014,
+         "frames": 2454
+        },
+        "weaponsReady": {
+         "on": 670.7,
+         "off": 5379.2,
+         "frames": 2678
+        }
+       },
+       "pace": [
+        [
+         670.7,
+         1
+        ]
+       ],
+       "matchMs": 691.8,
+       "quietEndMs": 3692.2,
+       "renders": 2786,
+       "deferredWarmupsAtReady": 6,
+       "window": {
+        "frames": 2784,
+        "skipped": 129,
+        "maxMs": 107.6,
+        "over33": 6,
+        "over50": 2,
+        "renderMs": 1744.4,
+        "renderMaxMs": 38
+       }
+      }
+     },
+     "facts": {
+      "preset": "high",
+      "look": "realistic",
+      "fpsTarget": 0,
+      "dynamicRes": true,
+      "renderScale": 1,
+      "pixelRatio": 1,
+      "devicePixelRatio": 1,
+      "drawingBuffer": [
+       1920,
+       1080
+      ],
+      "sceneTarget": [
+       1920,
+       1080
+      ],
+      "msaa": 2,
+      "shadowEvery": 1,
+      "deferredWarmups": 6,
+      "level": "downtown",
+      "mode": "solo",
+      "state": "play",
+      "gpu": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090 Laptop GPU/PCIe/SSE2, OpenGL ES 3.2)",
+      "timer": {
+       "supported": true,
+       "reason": null
+      },
+      "crossOriginIsolated": false,
+      "dynamicScale": 1,
+      "idle": {
+       "frameMedMs": 0.8,
+       "fps": 1250,
+       "cpuMedMs": 0.6
+      }
+     },
+     "timer": {
+      "supported": true,
+      "reason": "query 0.858 ms over the 0.6 ms frame interval; the extra pass moved the frame interval by 0 ms only; the query grew nullx what the extra pass added to the frame interval",
+      "read": 270,
+      "zero": 0,
+      "disjoint": 0,
+      "base": {
+       "queryMedMs": 0.858,
+       "frameMedMs": 0.6,
+       "results": 97
+      },
+      "calibrated": {
+       "queryMedMs": 1.375,
+       "frameMedMs": 0.6,
+       "results": 61
+      },
+      "slope": null,
+      "working": false
+     },
+     "route": {
+      "points": 1307,
+      "length": 301.6,
+      "warnings": []
+     },
+     "path": {
+      "frames": 900,
+      "skipped": 0,
+      "streamingFrames": 0,
+      "compilingFrames": 0,
+      "newPrograms": 0,
+      "frameMs": {
+       "med": 0.6,
+       "p95": 0.9,
+       "p99": 8.9,
+       "mean": 0.804,
+       "max": 35.9,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 0.4,
+       "p95": 0.6,
+       "p99": 6.6,
+       "mean": 0.681,
+       "max": 36.5,
+       "n": 900
+      },
+      "gpuMs": null,
+      "calls": {
+       "med": 194,
+       "max": 243
+      },
+      "triangles": {
+       "med": 261718,
+       "max": 311752
+      },
+      "points": {
+       "med": 0,
+       "max": 0
+      },
+      "lines": {
+       "med": 0,
+       "max": 0
+      },
+      "programs": 57,
+      "geometries": 293,
+      "textures": 196,
+      "longFrames": {
+       "over33": 1,
+       "over50": 0,
+       "over2xMedian": 22
+      },
+      "frameParity": {
+       "evenMs": 0.768,
+       "oddMs": 0.84,
+       "evenN": 449,
+       "oddN": 450
+      },
+      "cpuParity": {
+       "evenMs": 0.686,
+       "oddMs": 0.677,
+       "evenN": 450,
+       "oddN": 450
+      },
+      "heapPeakMB": 212.51,
+      "dynamicScale": 1,
+      "summary": {
+       "kills": 0,
+       "score": 0,
+       "alive": 0,
+       "listed": 0,
+       "particles": 0,
+       "debris": 0,
+       "tracers": 0,
+       "gibs": 0,
+       "pickups": 0,
+       "hash": "cb963c47"
+      },
+      "trail": [
+       "eae2d7d5",
+       "390528f6",
+       "26195f5d",
+       "86fb41c3",
+       "ff755caa",
+       "99b77c6b",
+       "a22a07b2",
+       "9a829eb0",
+       "e5191a1b",
+       "7313b225",
+       "e24b3ad5",
+       "eb115490",
+       "ca1a38ab",
+       "b10781a5",
+       "3e99d012",
+       "8381bddc",
+       "193d4a7e",
+       "1198cf9e",
+       "4782727",
+       "228eee25",
+       "df9b946",
+       "d647175b",
+       "61bf86a1",
+       "17c661ae",
+       "b95566d3",
+       "cd16db20",
+       "2d2a2be7",
+       "1250fd8d",
+       "c7b701bd",
+       "78aab381"
+      ],
+      "pathLength": 301.6,
+      "speedMps": 20.1,
+      "worstYDrift": 2.75,
+      "heapEndMB": 64.79
+     },
+     "errors": [],
+     "cellMs": 7599,
+     "repeat": 0
+    }
+   ],
+   "median": {
+    "load": {
+     "firstPlayableMs": 694.2,
+     "readyMs": 5604.6,
+     "liveMs": 417.7,
+     "enteredMs": 679.6,
+     "phases": {
+      "flags": {
+       "sky": {
+        "on": 670.7,
+        "off": 3912.5,
+        "frames": 1772
+       },
+       "skyLanding": {
+        "on": 930.3,
+        "off": 3912.5,
+        "frames": 1764
+       },
+       "bakeLayout": {
+        "on": 670.7,
+        "off": 3912.5,
+        "frames": 1772
+       },
+       "bake": {
+        "on": 670.7,
+        "off": 3986.5,
+        "frames": 1813
+       },
+       "bakeFading": {
+        "on": 3986.5,
+        "off": 5498.7,
+        "frames": 933
+       },
+       "textures": {
+        "on": 670.7,
+        "off": 4953.7,
+        "frames": 2413
+       },
+       "fx": {
+        "on": 670.7,
+        "off": 5014,
+        "frames": 2454
+       },
+       "weapons": {
+        "on": 670.7,
+        "off": 5379.2,
+        "frames": 2678
+       },
+       "operators": {
+        "on": 670.7,
+        "off": 5525.8,
+        "frames": 2759
+       },
+       "props": {
+        "on": 670.7,
+        "off": 5604.6,
+        "frames": 2785
+       },
+       "streaming": {
+        "on": 670.7,
+        "off": 5604.6,
+        "frames": 2785
+       },
+       "compiles": {
+        "on": 800.4,
+        "off": 3709.4,
+        "frames": 1712
+       },
+       "warmups": {
+        "on": 670.7,
+        "off": 3806.5,
+        "frames": 2
+       },
+       "programsCold": {
+        "on": null,
+        "off": null,
+        "frames": 0
+       },
+       "effects": {
+        "on": 670.7,
+        "off": 5014,
+        "frames": 2454
+       },
+       "weaponsReady": {
+        "on": 670.7,
+        "off": 5379.2,
+        "frames": 2678
+       }
+      },
+      "pace": [
+       [
+        670.7,
+        1
+       ]
+      ],
+      "matchMs": 691.8,
+      "quietEndMs": 3692.2,
+      "renders": 2786,
+      "deferredWarmupsAtReady": 6,
+      "window": {
+       "frames": 2784,
+       "skipped": 129,
+       "maxMs": 107.6,
+       "over33": 6,
+       "over50": 2,
+       "renderMs": 1744.4,
+       "renderMaxMs": 38
+      }
+     }
+    },
+    "path": {
+     "frames": 900,
+     "skipped": 0,
+     "streamingFrames": 0,
+     "compilingFrames": 0,
+     "newPrograms": 0,
+     "frameMs": {
+      "med": 0.6,
+      "p95": 0.9,
+      "p99": 8.9,
+      "mean": 0.804,
+      "max": 35.9,
+      "n": 900
+     },
+     "cpuMs": {
+      "med": 0.4,
+      "p95": 0.6,
+      "p99": 6.6,
+      "mean": 0.681,
+      "max": 36.5,
+      "n": 900
+     },
+     "gpuMs": null,
+     "calls": {
+      "med": 194,
+      "max": 243
+     },
+     "triangles": {
+      "med": 261718,
+      "max": 311752
+     },
+     "points": {
+      "med": 0,
+      "max": 0
+     },
+     "lines": {
+      "med": 0,
+      "max": 0
+     },
+     "programs": 57,
+     "geometries": 293,
+     "textures": 196,
+     "longFrames": {
+      "over33": 1,
+      "over50": 0,
+      "over2xMedian": 22
+     },
+     "frameParity": {
+      "evenMs": 0.768,
+      "oddMs": 0.84,
+      "evenN": 449,
+      "oddN": 450
+     },
+     "cpuParity": {
+      "evenMs": 0.686,
+      "oddMs": 0.677,
+      "evenN": 450,
+      "oddN": 450
+     },
+     "heapPeakMB": 212.51,
+     "dynamicScale": 1,
+     "summary": {
+      "kills": 0,
+      "score": 0,
+      "alive": 0,
+      "listed": 0,
+      "particles": 0,
+      "debris": 0,
+      "tracers": 0,
+      "gibs": 0,
+      "pickups": 0,
+      "hash": "cb963c47"
+     },
+     "trail": [
+      "eae2d7d5",
+      "390528f6",
+      "26195f5d",
+      "86fb41c3",
+      "ff755caa",
+      "99b77c6b",
+      "a22a07b2",
+      "9a829eb0",
+      "e5191a1b",
+      "7313b225",
+      "e24b3ad5",
+      "eb115490",
+      "ca1a38ab",
+      "b10781a5",
+      "3e99d012",
+      "8381bddc",
+      "193d4a7e",
+      "1198cf9e",
+      "4782727",
+      "228eee25",
+      "df9b946",
+      "d647175b",
+      "61bf86a1",
+      "17c661ae",
+      "b95566d3",
+      "cd16db20",
+      "2d2a2be7",
+      "1250fd8d",
+      "c7b701bd",
+      "78aab381"
+     ],
+     "pathLength": 301.6,
+     "speedMps": 20.1,
+     "worstYDrift": 2.75,
+     "heapEndMB": 64.79
+    },
+    "fight": null
+   }
+  },
+  {
+   "map": "downtown",
+   "preset": "ultra",
+   "runs": [
+    {
+     "map": "downtown",
+     "preset": "ultra",
+     "chrome": "153.0.8010.12",
+     "load": {
+      "firstPlayableMs": 746.3,
+      "readyMs": 8899.8,
+      "liveMs": 448.2,
+      "enteredMs": 732,
+      "phases": {
+       "flags": {
+        "sky": {
+         "on": 721.9,
+         "off": 3958.8,
+         "frames": 1542
+        },
+        "skyLanding": {
+         "on": 1017,
+         "off": 3958.8,
+         "frames": 1535
+        },
+        "bakeLayout": {
+         "on": 721.9,
+         "off": 3958.8,
+         "frames": 1542
+        },
+        "bake": {
+         "on": 721.9,
+         "off": 4076.3,
+         "frames": 1598
+        },
+        "bakeFading": {
+         "on": 4076.3,
+         "off": 5576.5,
+         "frames": 708
+        },
+        "textures": {
+         "on": 721.9,
+         "off": 7146.4,
+         "frames": 3097
+        },
+        "fx": {
+         "on": 721.9,
+         "off": 7347.2,
+         "frames": 3181
+        },
+        "weapons": {
+         "on": 721.9,
+         "off": 8302.6,
+         "frames": 3634
+        },
+        "operators": {
+         "on": 721.9,
+         "off": 8732.8,
+         "frames": 3817
+        },
+        "props": {
+         "on": 721.9,
+         "off": 8899.8,
+         "frames": 3876
+        },
+        "streaming": {
+         "on": 721.9,
+         "off": 8899.8,
+         "frames": 3876
+        },
+        "compiles": {
+         "on": 887.7,
+         "off": 3761.1,
+         "frames": 1499
+        },
+        "warmups": {
+         "on": 721.9,
+         "off": 3878.3,
+         "frames": 2
+        },
+        "programsCold": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "effects": {
+         "on": 721.9,
+         "off": 7347.2,
+         "frames": 3181
+        },
+        "weaponsReady": {
+         "on": 721.9,
+         "off": 8302.6,
+         "frames": 3634
+        }
+       },
+       "pace": [
+        [
+         721.9,
+         1
+        ]
+       ],
+       "matchMs": 743.9,
+       "quietEndMs": 3744.6,
+       "renders": 3877,
+       "deferredWarmupsAtReady": 7,
+       "window": {
+        "frames": 3875,
+        "skipped": 253,
+        "maxMs": 106.5,
+        "over33": 6,
+        "over50": 4,
+        "renderMs": 2811.4,
+        "renderMaxMs": 38.7
+       }
+      }
+     },
+     "facts": {
+      "preset": "ultra",
+      "look": "realistic",
+      "fpsTarget": 0,
+      "dynamicRes": false,
+      "renderScale": 1,
+      "pixelRatio": 1,
+      "devicePixelRatio": 1,
+      "drawingBuffer": [
+       1920,
+       1080
+      ],
+      "sceneTarget": [
+       1920,
+       1080
+      ],
+      "msaa": 4,
+      "shadowEvery": 1,
+      "deferredWarmups": 7,
+      "level": "downtown",
+      "mode": "solo",
+      "state": "play",
+      "gpu": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090 Laptop GPU/PCIe/SSE2, OpenGL ES 3.2)",
+      "timer": {
+       "supported": true,
+       "reason": null
+      },
+      "crossOriginIsolated": false,
+      "dynamicScale": 1,
+      "idle": {
+       "frameMedMs": 0.8,
+       "fps": 1250,
+       "cpuMedMs": 0.6
+      }
+     },
+     "timer": {
+      "supported": true,
+      "reason": "query 1.143 ms over the 0.7 ms frame interval; the extra pass moved the frame interval by -0.1 ms only; the query grew nullx what the extra pass added to the frame interval",
+      "read": 270,
+      "zero": 0,
+      "disjoint": 0,
+      "base": {
+       "queryMedMs": 1.143,
+       "frameMedMs": 0.7,
+       "results": 110
+      },
+      "calibrated": {
+       "queryMedMs": 1.663,
+       "frameMedMs": 0.6,
+       "results": 92
+      },
+      "slope": null,
+      "working": false
+     },
+     "route": {
+      "points": 1307,
+      "length": 301.6,
+      "warnings": []
+     },
+     "path": {
+      "frames": 900,
+      "skipped": 0,
+      "streamingFrames": 0,
+      "compilingFrames": 0,
+      "newPrograms": 0,
+      "frameMs": {
+       "med": 0.6,
+       "p95": 1.3,
+       "p99": 18,
+       "mean": 1.122,
+       "max": 35.7,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 0.5,
+       "p95": 0.8,
+       "p99": 19.6,
+       "mean": 1.001,
+       "max": 45.5,
+       "n": 900
+      },
+      "gpuMs": null,
+      "calls": {
+       "med": 219,
+       "max": 265
+      },
+      "triangles": {
+       "med": 321876,
+       "max": 377536
+      },
+      "points": {
+       "med": 0,
+       "max": 0
+      },
+      "lines": {
+       "med": 0,
+       "max": 0
+      },
+      "programs": 59,
+      "geometries": 293,
+      "textures": 200,
+      "longFrames": {
+       "over33": 3,
+       "over50": 0,
+       "over2xMedian": 49
+      },
+      "frameParity": {
+       "evenMs": 1.071,
+       "oddMs": 1.175,
+       "evenN": 449,
+       "oddN": 450
+      },
+      "cpuParity": {
+       "evenMs": 1.059,
+       "oddMs": 0.944,
+       "evenN": 450,
+       "oddN": 450
+      },
+      "heapPeakMB": 403.06,
+      "dynamicScale": 1,
+      "summary": {
+       "kills": 0,
+       "score": 0,
+       "alive": 0,
+       "listed": 0,
+       "particles": 0,
+       "debris": 0,
+       "tracers": 0,
+       "gibs": 0,
+       "pickups": 0,
+       "hash": "cb963c47"
+      },
+      "trail": [
+       "eae2d7d5",
+       "390528f6",
+       "26195f5d",
+       "86fb41c3",
+       "ff755caa",
+       "99b77c6b",
+       "a22a07b2",
+       "9a829eb0",
+       "e5191a1b",
+       "7313b225",
+       "e24b3ad5",
+       "eb115490",
+       "ca1a38ab",
+       "b10781a5",
+       "3e99d012",
+       "8381bddc",
+       "193d4a7e",
+       "1198cf9e",
+       "4782727",
+       "228eee25",
+       "df9b946",
+       "d647175b",
+       "61bf86a1",
+       "17c661ae",
+       "b95566d3",
+       "cd16db20",
+       "2d2a2be7",
+       "1250fd8d",
+       "c7b701bd",
+       "78aab381"
+      ],
+      "pathLength": 301.6,
+      "speedMps": 20.1,
+      "worstYDrift": 2.75,
+      "heapEndMB": 59.34
+     },
+     "errors": [],
+     "cellMs": 11300,
+     "repeat": 0
+    }
+   ],
+   "median": {
+    "load": {
+     "firstPlayableMs": 746.3,
+     "readyMs": 8899.8,
+     "liveMs": 448.2,
+     "enteredMs": 732,
+     "phases": {
+      "flags": {
+       "sky": {
+        "on": 721.9,
+        "off": 3958.8,
+        "frames": 1542
+       },
+       "skyLanding": {
+        "on": 1017,
+        "off": 3958.8,
+        "frames": 1535
+       },
+       "bakeLayout": {
+        "on": 721.9,
+        "off": 3958.8,
+        "frames": 1542
+       },
+       "bake": {
+        "on": 721.9,
+        "off": 4076.3,
+        "frames": 1598
+       },
+       "bakeFading": {
+        "on": 4076.3,
+        "off": 5576.5,
+        "frames": 708
+       },
+       "textures": {
+        "on": 721.9,
+        "off": 7146.4,
+        "frames": 3097
+       },
+       "fx": {
+        "on": 721.9,
+        "off": 7347.2,
+        "frames": 3181
+       },
+       "weapons": {
+        "on": 721.9,
+        "off": 8302.6,
+        "frames": 3634
+       },
+       "operators": {
+        "on": 721.9,
+        "off": 8732.8,
+        "frames": 3817
+       },
+       "props": {
+        "on": 721.9,
+        "off": 8899.8,
+        "frames": 3876
+       },
+       "streaming": {
+        "on": 721.9,
+        "off": 8899.8,
+        "frames": 3876
+       },
+       "compiles": {
+        "on": 887.7,
+        "off": 3761.1,
+        "frames": 1499
+       },
+       "warmups": {
+        "on": 721.9,
+        "off": 3878.3,
+        "frames": 2
+       },
+       "programsCold": {
+        "on": null,
+        "off": null,
+        "frames": 0
+       },
+       "effects": {
+        "on": 721.9,
+        "off": 7347.2,
+        "frames": 3181
+       },
+       "weaponsReady": {
+        "on": 721.9,
+        "off": 8302.6,
+        "frames": 3634
+       }
+      },
+      "pace": [
+       [
+        721.9,
+        1
+       ]
+      ],
+      "matchMs": 743.9,
+      "quietEndMs": 3744.6,
+      "renders": 3877,
+      "deferredWarmupsAtReady": 7,
+      "window": {
+       "frames": 3875,
+       "skipped": 253,
+       "maxMs": 106.5,
+       "over33": 6,
+       "over50": 4,
+       "renderMs": 2811.4,
+       "renderMaxMs": 38.7
+      }
+     }
+    },
+    "path": {
+     "frames": 900,
+     "skipped": 0,
+     "streamingFrames": 0,
+     "compilingFrames": 0,
+     "newPrograms": 0,
+     "frameMs": {
+      "med": 0.6,
+      "p95": 1.3,
+      "p99": 18,
+      "mean": 1.122,
+      "max": 35.7,
+      "n": 900
+     },
+     "cpuMs": {
+      "med": 0.5,
+      "p95": 0.8,
+      "p99": 19.6,
+      "mean": 1.001,
+      "max": 45.5,
+      "n": 900
+     },
+     "gpuMs": null,
+     "calls": {
+      "med": 219,
+      "max": 265
+     },
+     "triangles": {
+      "med": 321876,
+      "max": 377536
+     },
+     "points": {
+      "med": 0,
+      "max": 0
+     },
+     "lines": {
+      "med": 0,
+      "max": 0
+     },
+     "programs": 59,
+     "geometries": 293,
+     "textures": 200,
+     "longFrames": {
+      "over33": 3,
+      "over50": 0,
+      "over2xMedian": 49
+     },
+     "frameParity": {
+      "evenMs": 1.071,
+      "oddMs": 1.175,
+      "evenN": 449,
+      "oddN": 450
+     },
+     "cpuParity": {
+      "evenMs": 1.059,
+      "oddMs": 0.944,
+      "evenN": 450,
+      "oddN": 450
+     },
+     "heapPeakMB": 403.06,
+     "dynamicScale": 1,
+     "summary": {
+      "kills": 0,
+      "score": 0,
+      "alive": 0,
+      "listed": 0,
+      "particles": 0,
+      "debris": 0,
+      "tracers": 0,
+      "gibs": 0,
+      "pickups": 0,
+      "hash": "cb963c47"
+     },
+     "trail": [
+      "eae2d7d5",
+      "390528f6",
+      "26195f5d",
+      "86fb41c3",
+      "ff755caa",
+      "99b77c6b",
+      "a22a07b2",
+      "9a829eb0",
+      "e5191a1b",
+      "7313b225",
+      "e24b3ad5",
+      "eb115490",
+      "ca1a38ab",
+      "b10781a5",
+      "3e99d012",
+      "8381bddc",
+      "193d4a7e",
+      "1198cf9e",
+      "4782727",
+      "228eee25",
+      "df9b946",
+      "d647175b",
+      "61bf86a1",
+      "17c661ae",
+      "b95566d3",
+      "cd16db20",
+      "2d2a2be7",
+      "1250fd8d",
+      "c7b701bd",
+      "78aab381"
+     ],
+     "pathLength": 301.6,
+     "speedMps": 20.1,
+     "worstYDrift": 2.75,
+     "heapEndMB": 59.34
+    },
+    "fight": null
+   }
+  }
+ ]
+}

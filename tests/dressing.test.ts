@@ -24,6 +24,7 @@ import { buildDowntown } from '@/engine/level/downtown';
 import { Dresser } from '@/engine/level/dressing';
 import { ROCK_STACKS } from '@/engine/level/mexico';
 import type { Kit } from '@/engine/render/props';
+import type { TextureSize } from '@/engine/render/surfaces';
 import type { Level, PropFamily } from '@/engine/types';
 
 const MAPS = [['downtown', false], ['downtown', true], ['house', false], ['house', true], ['mexico', false], ['mexico', true], ['training', false]] as const;
@@ -481,4 +482,86 @@ test('Medium\'s kit merges in wider cells and hides its small pieces nearer; a T
   expect(mesh.geometry.getAttribute('position').array.length).toBe(0);
   expect(index.count).toBe(count);
   assets.want(null, null);
+});
+
+test('premerge: the placements run ahead of the atlases and slots, make no three object, and the build is the same', async () => {
+  const { level } = build('downtown');
+  const scene = (await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(propsUrl('downtown'))).scene;
+  const request = { dressing: level.dressing, movers: level.movers };
+  const start = (size: TextureSize) => {
+    const warmed: THREE.Group[] = [];
+    const assets = new PropAssets({
+      model: async () => ({ scene: scene.clone() }),
+      texture: async () => new THREE.DataTexture(new Uint8Array(4), 1, 1),
+      upload: () => {},
+      warm: root => { warmed.push(root as THREE.Group); return new Promise<void>(() => {}); },
+    });
+    assets.want(request, size);
+    assets.fetch();
+    return { assets, warmed };
+  };
+  /** Pump to the build with a seeded `Math.random`: the same draws in the same order give the same uuids. */
+  const pumpOut = ({ assets, warmed }: ReturnType<typeof start>) => {
+    const random = Math.random;
+    let s = 7, draws = 0;
+    Math.random = () => { draws++; s = (s * 16807) % 2147483647; return s / 2147483647; };
+    try {
+      for (let i = 0; i < 4000 && warmed.length === 0; i++) assets.pump();
+    } finally {
+      Math.random = random;
+    }
+    expect(warmed.length).toBe(1);
+    return { group: warmed[0]!, draws };
+  };
+  /** Counts the draws of `Math.random` in `run`. */
+  const counted = (run: () => void) => {
+    const random = Math.random;
+    let draws = 0;
+    Math.random = () => { draws++; return random(); };
+    try {
+      run();
+    } finally {
+      Math.random = random;
+    }
+    return draws;
+  };
+  const ids = () => [new THREE.BufferGeometry(), new THREE.Object3D(), new THREE.MeshBasicMaterial()].map(o => o.id);
+  // A first build makes the kit's shared materials, so the two compared below make the same objects.
+  const first = start(TEXTURE_SIZE.high), head = start(TEXTURE_SIZE.high), early = start(TEXTURE_SIZE.low);
+  await new Promise(done => setTimeout(done, 0));
+  pumpOut(first);
+  // Before any atlas is up: the placements only, with no Math.random draw and no three object made.
+  let before = ids();
+  expect(counted(() => { for (let i = 0; i < 4000; i++) early.assets.premerge(); })).toBe(0);
+  expect(ids()).toEqual(before.map(id => id + 1));
+  // A Textures change before the slots claim the merge: the placements start again at the new detail's cell.
+  early.assets.want(request, TEXTURE_SIZE.high);
+  await new Promise(done => setTimeout(done, 0));
+  before = ids();
+  expect(counted(() => { for (let i = 0; i < 4000; i++) early.assets.premerge(); })).toBe(0);
+  expect(ids()).toEqual(before.map(id => id + 1));
+  expect(early.warmed.length).toBe(0);
+  // The atlases' uploads and the merge's meshes come from the pumps, in the same order as with no premerge.
+  const a = pumpOut(head), b = pumpOut(early);
+  expect(b.draws).toBe(a.draws);
+  const meshes = (group: THREE.Group) => group.children as THREE.Mesh[];
+  const looks = (mesh: THREE.Mesh) => (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).map(m => m.id);
+  expect(meshes(b.group).map(m => [m.name, m.uuid, m.geometry.uuid, looks(m)])).toEqual(meshes(a.group).map(m => [m.name, m.uuid, m.geometry.uuid, looks(m)]));
+  const digest = async (array: ArrayLike<number> & ArrayBufferView) =>
+    Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new Uint8Array(array.buffer as ArrayBuffer, array.byteOffset, array.byteLength))), n => n.toString(16)).join('');
+  for (const [i, mesh] of meshes(a.group).entries()) {
+    const g = mesh.geometry, h = meshes(b.group)[i]!.geometry;
+    expect(h.groups).toEqual(g.groups);
+    expect(h.boundingBox).toEqual(g.boundingBox);
+    expect(h.boundingSphere).toEqual(g.boundingSphere);
+    expect(Object.keys(h.attributes)).toEqual(Object.keys(g.attributes));
+    for (const name of Object.keys(g.attributes)) {
+      const x = g.getAttribute(name).array as Float32Array, y = h.getAttribute(name).array as Float32Array;
+      expect(y.constructor).toBe(x.constructor);
+      expect(await digest(y), `${mesh.name} ${name}`).toBe(await digest(x));
+    }
+    expect(h.index?.array.constructor).toBe(g.index?.array.constructor);
+    if (g.index) expect(await digest(h.index!.array as Uint16Array)).toBe(await digest(g.index.array as Uint16Array));
+  }
+  for (const run of [first, head, early]) run.assets.want(null, null);
 });

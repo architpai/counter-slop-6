@@ -1,0 +1,223 @@
+diff --git a/src/engine/render/index.ts b/src/engine/render/index.ts
+index 4640fbf..6569005 100644
+--- a/src/engine/render/index.ts
++++ b/src/engine/render/index.ts
+@@ -325,6 +325,8 @@ export class Renderer {
+   /** No upload before this time (`performance.now()`), and the current stream's slow-down factor (1, 2 or 4). */
+   _uploadAt = 0;
+   _uploadPace = 1;
++  /** Held shader work waited out this frame's upload slot in a live match: the next frame keeps its slot for it (`_heldOff`). */
++  _heldWait = false;
+   /** A compressed upload has warmed the driver (`warmCompressedUploads`). */
+   _uploadsWarm = false;
+   /** The streamer's current sets are on the materials. */
+@@ -379,7 +381,8 @@ export class Renderer {
+    * Shader work kept off a match's frames. `_compiles`: roots whose programs
+    * compile off the frame (`compileAsync`), not in a match's quiet start.
+    * `_warmups`: roots then drawn once where nobody sees it, never in a
+-   * match's quiet start, and in a live match only the weapons' template; on
++   * match's quiet start, and in a live match only the weapons' template (and
++   * the operators' and props'), never on a frame with an upload slot; on
+    * ANGLE Metal a program's first draw can stall its frame even once
+    * compiled (the Blender weapons' about 0.4 s, 10-11 ms once compiled).
+    */
+@@ -1470,13 +1473,34 @@ export class Renderer {
+     };
+   }
+ 
++  /**
++   * Held shader work waits: in a match's quiet start, and in a live match on
++   * a frame that took an upload slot or a sky step (`slotted`). The quiet
++   * start releases the glbs that landed in it (their compiles, then once
++   * linked their warm-up draws) and the sky's landing at the same moment;
++   * a warm-up's first draw (an extra render of the scene, and ANGLE Metal's
++   * pipeline for each new program) on the sky's PMREM or look frame could
++   * make one frame of 120-230 ms (about 1 load in 6). The slots come at
++   * least `UPLOAD_GAP_MS` apart, so
++   * the work goes on the next frame, which no stream's upload or sky step may
++   * take (`_heldWait`), so it never waits longer even where every frame comes
++   * a slot's gap after the last. Not at a menu: nothing is played there.
++   */
++  _heldOff(slotted: boolean): boolean {
++    if (this._match.quiet(performance.now())) return true;
++    if (!slotted || !this._match.live) return false;
++    this._heldWait = true;
++    return true;
++  }
++
+   /**
+    * The held compiles, outside a match's quiet start: for the post target
+    * (linear output), as the world pass draws them, with the scene's lights
+    * and fog. The programs link off the frame; `done` follows once they have.
++   * `slotted`: this frame took an upload slot or a sky step (`render`).
+    */
+-  _runCompiles(): void {
+-    if (this._compiles.length === 0 || this._match.quiet(performance.now())) return;
++  _runCompiles(slotted = false): void {
++    if (this._compiles.length === 0 || this._heldOff(slotted)) return;
+     const target = this.three.getRenderTarget();
+     this.three.setRenderTarget(this.post.target);
+     for (const { root, done, valid, own } of this._compiles.splice(0)) {
+@@ -1505,16 +1529,16 @@ export class Renderer {
+    * below a pixel and never culled; the rig draws with every view model in it
+    * shown. The next frame their callers hear of it (the weapons are announced
+    * ready); a root freed meanwhile (Low, a lost context) is dropped, never
+-   * drawn, even once a new one is wanted.
++   * drawn, even once a new one is wanted. `slotted`: as `_runCompiles`.
+    */
+-  _drawWarmups(): void {
++  _drawWarmups(slotted = false): void {
+     for (const warm of this._warmups.filter(w => w.drawn || !w.valid())) {
+       this._warmups.splice(this._warmups.indexOf(warm), 1);
+       warm.done();
+     }
+     const live = this._match.live;
+     const list = live ? this._warmups.filter(w => w.inMatch).slice(0, 1) : this._warmups;
+-    if (list.length === 0 || this._match.quiet(performance.now())) return;
++    if (list.length === 0 || this._heldOff(slotted)) return;
+     const world = list.filter(w => !w.own);
+     if (world.length > 0) this._drawWorldWarmups(world, live);
+     // Then the ones that draw themselves, with no shadow work (their scenes have no lights): the frame's own
+@@ -1658,11 +1682,12 @@ export class Renderer {
+    * HDR's upload and the prefilter's draws), then the look, uniform writes
+    * only (the dome's `SKY_MAP` program was compiled and drawn at the menu,
+    * `_skyProbe`). A sky for a map or a look no longer in force is dropped,
+-   * and the current map's fetched if still missing.
++   * and the current map's fetched if still missing. True on a frame that
++   * took one of the three steps.
+    */
+-  _landSky(): void {
++  _landSky(): boolean {
+     const landing = this._skyLanding;
+-    if (!landing) return;
++    if (!landing) return false;
+     const { key, source } = landing;
+     if (this._disposed || this._mood.sky !== key || this._quality.look !== 'realistic') {
+       this._skyLanding = null;
+@@ -1670,10 +1695,10 @@ export class Renderer {
+       landing.env?.dispose();
+       disposeSky(source);
+       if (!this._disposed) this._requestSky();
+-      return;
++      return false;
+     }
+     const now = performance.now();
+-    if (now < this._uploadAt || this._match.quiet(now)) return;
++    if (now < this._uploadAt || this._match.quiet(now)) return false;
+     const pace = (image: { width: number; height: number }, texel: number) => {
+       this._uploadAt = now + Math.max(UPLOAD_GAP_MS, image.width * image.height * texel / UPLOAD_BYTES_PER_MS) * this._uploadPace;
+     };
+@@ -1681,20 +1706,21 @@ export class Renderer {
+       this.three.initTexture(source.background);
+       landing.uploaded = true;
+       pace(source.background.image as ImageBitmap, 4);
+-      return;
++      return true;
+     }
+     if (!landing.env) {
+       landing.env = this._generator().fromEquirectangular(source.hdr);
+       source.hdr.dispose();
+       // Half-float RGBA.
+       pace(source.hdr.image, 8);
+-      return;
++      return true;
+     }
+     this._skyLanding = null;
+     if (this._skyLoading === key) this._skyLoading = null;
+     disposeSky(this._skyAssets);
+     this._skyAssets = { key, data: source.data, env: landing.env, background: source.background };
+     this._applyLook();
++    return true;
+   }
+ 
+   _generator(): THREE.PMREMGenerator {
+@@ -1746,7 +1772,12 @@ export class Renderer {
+ 
+   render(time: number, fx: PostFX): void {
+     this._frame++;
+-    this._landSky();
++    const slotAt = this._uploadAt;
++    // Held work that the last frame's slot turned away goes first: no stream and no sky step take this frame's slot.
++    const reserved = this._heldWait && this._match.live;
++    this._heldWait = false;
++    if (reserved) this._uploadAt = Infinity;
++    const landed = this._landSky();
+     if (this._skyLoading === null && this.skyPending) this._requestSky();
+     if (this._quality.look === 'realistic') this._dress();
+     this._streamBake();
+@@ -1755,8 +1786,12 @@ export class Renderer {
+     this._streamWeapons();
+     this._streamOperators();
+     this._streamProps();
++    if (reserved && this._uploadAt === Infinity) this._uploadAt = slotAt;
++    // A stream took this frame's upload slot (it moved the next one on), or the sky one of its steps: in a live
++    // match the held compiles and warm-up draws wait for a frame with neither (`_heldOff`).
++    const slotted = !reserved && (landed || this._uploadAt !== slotAt);
+     this._warmPrograms();
+-    this._runCompiles();
++    this._runCompiles(slotted);
+     // The shadow boxes only move on frames that redraw the maps, so a skipped
+     // frame samples the old map with the matrix it was drawn with.
+     const shadows = this.sun.castShadow && this._frame % this._shadowEvery === 0;
+@@ -1767,7 +1802,7 @@ export class Renderer {
+     }
+     this.three.shadowMap.needsUpdate = shadows;
+     this.sky.position.copy(this.camera.position);
+-    this._drawWarmups();
++    this._drawWarmups(slotted);
+     this._updateFx();
+     // The operators follow their figures' pivots and clips, and figures out of view put theirs on. They read the
+     // camera's matrices only: its children (the rig, every view model in it) wait for `render`'s scene walk, which
+diff --git a/tests/pacing.test.ts b/tests/pacing.test.ts
+index 213075d..3ad338e 100644
+--- a/tests/pacing.test.ts
++++ b/tests/pacing.test.ts
+@@ -206,3 +206,48 @@ test('in a live match past its quiet start, the weapons\' warm-up draws one a fr
+   renderer.dispose();
+   canvas.remove();
+ }, 60_000);
++
++test('in a live match a held warm-up never shares a frame with an upload slot or a sky step: it goes first on the next', async () => {
++  const canvas = document.createElement('canvas');
++  document.body.append(canvas);
++  const renderer = new Renderer(canvas);
++  const fx = { hurt: 0, flash: 0, slow: 0, lowHp: 0 };
++  // A stream that takes every slot open to it, as the level's textures do while they come in.
++  const uploads: number[] = [];
++  vi.spyOn(renderer, '_streamTextures').mockImplementation(() => {
++    const now = performance.now();
++    if (now < renderer._uploadAt || renderer._match.quiet(now)) return;
++    uploads.push(renderer._frame);
++    renderer._uploadAt = now + 24;
++  });
++  const drawn: number[] = [];
++  const template = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshLambertMaterial());
++  template.onBeforeRender = () => { drawn.push(renderer._frame); };
++  // A glb's warm-up, held (its programs linked) while the quiet start ran out.
++  renderer.setLive(true);
++  const warmed = renderer._hold(renderer._warmups, template, () => true, true);
++  renderer.render(0, fx);
++  expect([drawn, uploads], 'nothing in the quiet start').toEqual([[], []]);
++  renderer._match.set(false, 0);
++  renderer._match.set(true, performance.now() - MATCH_QUIET_MS);
++  const first = renderer._frame + 1;
++  for (let i = 0; i < 4; i++) {
++    // The slot open at every frame's start.
++    renderer._uploadAt = 0;
++    renderer.render(0, fx);
++  }
++  // The upload takes the first frame; the next is kept for the warm-up (no upload); then the uploads go on.
++  expect(drawn).toEqual([first + 1]);
++  expect(uploads).toEqual([first, first + 2, first + 3]);
++  await warmed;
++  expect([renderer._heldWait, renderer._uploadAt < Infinity]).toEqual([false, true]);
++  // At a menu nothing waits: the warm-up draws on a frame that uploads too.
++  renderer.setLive(false);
++  drawn.length = uploads.length = 0;
++  void renderer._hold(renderer._warmups, template, () => true, true);
++  renderer._uploadAt = 0;
++  renderer.render(0, fx);
++  expect([drawn, uploads]).toEqual([[renderer._frame], [renderer._frame]]);
++  renderer.dispose();
++  canvas.remove();
++}, 60_000);

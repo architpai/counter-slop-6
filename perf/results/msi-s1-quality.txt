@@ -1,0 +1,149 @@
+# MSI quality reports (perf/results/msi-s1.md section 3). Captures stay on the MSI in $S/repo/perf/shots/msi-*.
+
+## node perf/quality.mjs compare msi-baseline msi-final
+
+## msi-baseline -> msi-final: mean SSIM >= 0.995
+
+| preset/view | SSIM | min tile (col,row of 8x8) | % px changed | % px > 8 | max diff | |
+|---|---|---|---|---|---|---|
+| low/downtown-fp                  | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| low/downtown-low-angle           | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| low/downtown-overview            | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| low/fight-mid                    | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| low/fight-smoke                  | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| low/house-fp                     | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| low/house-overview               | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| low/indoor-downtown-b            | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| low/indoor-house-basement        | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| low/indoor-house-ground          | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| low/mexico-fp                    | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| low/mexico-overview              | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| low/training-fp                  | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| low/training-overview            | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| medium/downtown-fp               | 1.0000 | 1.0000 (2,5) | 0.000 | 0.000 | 1 | ok |
+| medium/downtown-low-angle        | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| medium/downtown-overview         | 1.0000 | 1.0000 (2,3) | 0.000 | 0.000 | 1 | ok |
+| medium/fight-mid                 | 1.0000 | 1.0000 (3,4) | 0.001 | 0.000 | 3 | ok |
+| medium/fight-smoke               | 1.0000 | 1.0000 (1,4) | 0.001 | 0.000 | 2 | ok |
+| medium/house-fp                  | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| medium/house-overview            | 1.0000 | 1.0000 (2,4) | 0.000 | 0.000 | 2 | ok |
+| medium/indoor-downtown-b         | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| medium/indoor-house-basement     | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| medium/indoor-house-ground       | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| medium/mexico-fp                 | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| medium/mexico-overview           | 1.0000 | 1.0000 (6,3) | 0.000 | 0.000 | 2 | ok |
+| medium/training-fp               | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| medium/training-overview         | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| high/downtown-fp                 | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| high/downtown-low-angle          | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| high/downtown-overview           | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| high/fight-mid                   | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| high/fight-smoke                 | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| high/house-fp                    | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| high/house-overview              | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| high/indoor-downtown-b           | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| high/indoor-house-basement       | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| high/indoor-house-ground         | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| high/mexico-fp                   | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| high/mexico-overview             | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| high/training-fp                 | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| high/training-overview           | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| ultra/downtown-fp                | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| ultra/downtown-low-angle         | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| ultra/downtown-overview          | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| ultra/fight-mid                  | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| ultra/fight-smoke                | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| ultra/house-fp                   | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| ultra/house-overview             | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| ultra/indoor-downtown-b          | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| ultra/indoor-house-basement      | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| ultra/indoor-house-ground        | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| ultra/mexico-fp                  | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| ultra/mexico-overview            | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| ultra/training-fp                | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+| ultra/training-overview          | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+
+56 images, 10.5 s. PASS
+
+## changed pixels per image, msi-baseline -> msi-final (max channel difference)
+low/downtown-fp: 0 px, max 0/255, {}
+low/downtown-low-angle: 0 px, max 0/255, {}
+low/downtown-overview: 0 px, max 0/255, {}
+low/fight-mid: 0 px, max 0/255, {}
+low/fight-smoke: 0 px, max 0/255, {}
+low/house-fp: 0 px, max 0/255, {}
+low/house-overview: 0 px, max 0/255, {}
+low/indoor-downtown-b: 0 px, max 0/255, {}
+low/indoor-house-basement: 0 px, max 0/255, {}
+low/indoor-house-ground: 0 px, max 0/255, {}
+low/mexico-fp: 0 px, max 0/255, {}
+low/mexico-overview: 0 px, max 0/255, {}
+low/training-fp: 0 px, max 0/255, {}
+low/training-overview: 0 px, max 0/255, {}
+medium/downtown-fp: 3 px, max 1/255, {"1":3}
+medium/downtown-low-angle: 0 px, max 0/255, {}
+medium/downtown-overview: 2 px, max 1/255, {"1":2}
+medium/fight-mid: 21 px, max 3/255, {"1":18,"2":2,"3":1}
+medium/fight-smoke: 11 px, max 2/255, {"1":10,"2":1}
+medium/house-fp: 0 px, max 0/255, {}
+medium/house-overview: 6 px, max 2/255, {"1":4,"2":2}
+medium/indoor-downtown-b: 0 px, max 0/255, {}
+medium/indoor-house-basement: 0 px, max 0/255, {}
+medium/indoor-house-ground: 0 px, max 0/255, {}
+medium/mexico-fp: 0 px, max 0/255, {}
+medium/mexico-overview: 2 px, max 2/255, {"1":1,"2":1}
+medium/training-fp: 0 px, max 0/255, {}
+medium/training-overview: 0 px, max 0/255, {}
+high/downtown-fp: 0 px, max 0/255, {}
+high/downtown-low-angle: 0 px, max 0/255, {}
+high/downtown-overview: 0 px, max 0/255, {}
+high/fight-mid: 0 px, max 0/255, {}
+high/fight-smoke: 0 px, max 0/255, {}
+high/house-fp: 0 px, max 0/255, {}
+high/house-overview: 0 px, max 0/255, {}
+high/indoor-downtown-b: 0 px, max 0/255, {}
+high/indoor-house-basement: 0 px, max 0/255, {}
+high/indoor-house-ground: 0 px, max 0/255, {}
+high/mexico-fp: 0 px, max 0/255, {}
+high/mexico-overview: 0 px, max 0/255, {}
+high/training-fp: 0 px, max 0/255, {}
+high/training-overview: 0 px, max 0/255, {}
+ultra/downtown-fp: 0 px, max 0/255, {}
+ultra/downtown-low-angle: 0 px, max 0/255, {}
+ultra/downtown-overview: 0 px, max 0/255, {}
+ultra/fight-mid: 0 px, max 0/255, {}
+ultra/fight-smoke: 0 px, max 0/255, {}
+ultra/house-fp: 0 px, max 0/255, {}
+ultra/house-overview: 0 px, max 0/255, {}
+ultra/indoor-downtown-b: 0 px, max 0/255, {}
+ultra/indoor-house-basement: 0 px, max 0/255, {}
+ultra/indoor-house-ground: 0 px, max 0/255, {}
+ultra/mexico-fp: 0 px, max 0/255, {}
+ultra/mexico-overview: 0 px, max 0/255, {}
+ultra/training-fp: 0 px, max 0/255, {}
+ultra/training-overview: 0 px, max 0/255, {}
+total 45 px in 6 of 56 images (50 identical); per preset {"low":0,"medium":45,"high":0,"ultra":0}
+
+## repeat floor: node perf/quality.mjs compare msi-final msi-final-b
+| ultra/training-overview          | 1.0000 | 1.0000 (0,0) | 0.000 | 0.000 | 0 | ok |
+
+56 images, 10.7 s. PASS
+total 0 px in 0 of 56 images (56 identical); per preset {"low":0,"medium":0,"high":0,"ultra":0}
+
+## Medium bisect (msi-baseline -> Round 1 -> 2 -> 4 -> 6 -> final)
+== msi-baseline -> msi-c-221ffb1
+total 0 px in 0 of 14 images (14 identical); per preset {"medium":0}
+== msi-c-221ffb1 -> msi-c-82ee6e1
+total 0 px in 0 of 14 images (14 identical); per preset {"medium":0}
+== msi-c-82ee6e1 -> msi-c-cad1329
+medium/downtown-fp: 3 px, max 1/255, {"1":3}
+medium/downtown-overview: 2 px, max 1/255, {"1":2}
+medium/fight-mid: 21 px, max 3/255, {"1":18,"2":2,"3":1}
+medium/fight-smoke: 11 px, max 2/255, {"1":10,"2":1}
+medium/house-overview: 6 px, max 2/255, {"1":4,"2":2}
+medium/mexico-overview: 2 px, max 2/255, {"1":1,"2":1}
+total 45 px in 6 of 14 images (8 identical); per preset {"medium":45}
+== msi-c-cad1329 -> msi-c-52c96ba
+total 0 px in 0 of 14 images (14 identical); per preset {"medium":0}
+== msi-c-52c96ba -> msi-final
+total 0 px in 0 of 14 images (14 identical); per preset {"medium":0}

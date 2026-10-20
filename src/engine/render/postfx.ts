@@ -106,12 +106,14 @@ const DIRT_STRENGTH = 0.7;
  * in the scene target (opaque materials draw without blending), and the AO
  * lookup scales its darkening by it: a sunlit wall or grunt keeps its
  * brightness, a corner in shade darkens fully. Unlit and transparent materials
- * keep their own alpha, so AO applies to them as before.
+ * keep their own alpha, so AO applies to them as before. With AO off nothing
+ * reads it: the patched lit materials then define `NO_AO_ALPHA` (in their
+ * program keys; render/materials.ts `setAoAlpha`) and skip the write.
  */
 const OPAQUE_CHUNK = THREE.ShaderChunk.opaque_fragment;
 if (!OPAQUE_CHUNK.includes('gl_FragColor = vec4( outgoingLight, diffuseColor.a );')) throw new Error('three changed opaque_fragment: update render/postfx.ts');
 THREE.ShaderChunk.opaque_fragment = OPAQUE_CHUNK + /* glsl */`
-#if defined( OPAQUE ) && ! defined( PREMULTIPLIED_ALPHA ) && ( defined( LAMBERT ) || defined( PHONG ) || defined( STANDARD ) || defined( TOON ) )
+#if defined( OPAQUE ) && ! defined( PREMULTIPLIED_ALPHA ) && ! defined( NO_AO_ALPHA ) && ( defined( LAMBERT ) || defined( PHONG ) || defined( STANDARD ) || defined( TOON ) )
 	gl_FragColor.a = 1.0 - clamp( dot( reflectedLight.directDiffuse + reflectedLight.directSpecular, vec3( 0.2126, 0.7152, 0.0722 ) )
 		/ max( dot( outgoingLight, vec3( 0.2126, 0.7152, 0.0722 ) ), 1e-6 ), 0.0, 1.0 );
 #endif
@@ -238,6 +240,9 @@ const AO_LOOKUP_GLSL = `
   }
 `;
 
+/** The feedback intensities `draw` copies into the uniforms each frame (`hurt` into `hurtIn`). */
+const FX_KEYS = ['hurt', 'lowHp', 'flash', 'slow'] as const;
+
 type U<T> = THREE.IUniform<T>;
 /** Feedback uniforms, one set shared by the Low composite and the realistic final pass. */
 type FeedbackUniforms = {
@@ -345,8 +350,18 @@ export class Composite {
   readonly _shaftBlur: THREE.ShaderMaterial;
   readonly _shaftMaskUniforms: ShaftMaskUniforms;
   readonly _shaftBlurUniforms: ShaftBlurUniforms;
-  /** Light shafts (R8): the mask, then the blur's ping-pong; `[0]` holds the rays the tone pass adds. Allocated while shafts are on. */
-  readonly _shafts = [floatTarget(THREE.RGBAFormat, THREE.LinearFilter), floatTarget(THREE.RGBAFormat, THREE.LinearFilter)] as const;
+  /**
+   * The passes that write every pixel of their viewport with blending off; `_pass` clears their target first
+   * (colour only), so a tiled GPU starts it without loading the old frame. The clear covers the whole target (no
+   * scissor on these): under dynamic resolution the texels it adds beyond the viewport are ones every reader
+   * already clamps away (uvMax, aoLast, bloomMax, shaftMax). Not the additive bloom upsample.
+   */
+  readonly _fills: ReadonlySet<THREE.ShaderMaterial>;
+  /**
+   * Light shafts (R8): the mask, then the blur's ping-pong; `[0]` holds the rays the tone pass adds. Allocated while
+   * shafts are on. Two channels: every pass writes and reads red (rays) and green (open sky) only.
+   */
+  readonly _shafts = [floatTarget(THREE.RGFormat, THREE.LinearFilter), floatTarget(THREE.RGFormat, THREE.LinearFilter)] as const;
   /** The map's shaft strength (`Atmosphere.shafts`), where the sun is (world, towards it) and its hue, from the renderer. */
   _shaftStrength = 0;
   readonly _sunDir = new THREE.Vector3(0, 1, 0);
@@ -381,6 +396,32 @@ export class Composite {
   /** The drawn share of the scene target, for the passes that read it. */
   readonly _sceneRegion = regionUniforms();
   readonly _clear = new THREE.Color();
+  /**
+   * With `_oneRender` (High and Ultra: render/index.ts `_fightCpu`, set at each quality change and read at each
+   * `draw`), the chain runs inside one `render` of `scene` (`_afterChain`, its `onAfterRender` for that render only),
+   * each pass a `renderBufferDirect` there: the draw a render of the lone triangle made, without that render's list,
+   * sort, light and shadow steps. Set by `draw` for that render (`_chainCamera`) and while its passes run
+   * (`_inChain`); `_pass` outside it (the perf harness's calibration pass) renders as before. For the outer render
+   * the triangle wears `_final` switched off (`visible`): not drawn, but its geometry is still uploaded. Not a
+   * material of its own: three's constructor draws a uuid from Math.random, which would shift every random draw after
+   * it (the perf harness seeds it at boot). Off (Low, Medium, custom values), each pass renders itself, as before.
+   */
+  _oneRender = false;
+  _chainCamera: THREE.PerspectiveCamera | null = null;
+  _chainStrength = 0;
+  _inChain = false;
+  readonly _afterChain = (renderer: THREE.WebGLRenderer): void => {
+    const camera = this._chainCamera;
+    if (camera === null) return;
+    this._chainCamera = null;
+    this._final.visible = true;
+    this._inChain = true;
+    try {
+      this._chain(renderer, camera, this._chainStrength);
+    } finally {
+      this._inChain = false;
+    }
+  };
 
   constructor() {
     this.target = new THREE.WebGLRenderTarget(2, 2, {
@@ -821,9 +862,14 @@ export class Composite {
       [this._gtao, 'gtao'], [this._blur, 'ao-blur'], [this._prefilter, 'bloom-prefilter'], [this._down, 'bloom-down'], [this._up, 'bloom-up'],
       [this._shaftMask, 'shaft-mask'], [this._shaftBlur, 'shaft-blur']];
     for (const [material, name] of names) material.name = `post:${name}`;
+    this._fills = new Set([this._low, this._tone, this._gtao, this._blur, this._prefilter, this._down, this._shaftMask, this._shaftBlur]);
     this.triangle = new THREE.Mesh(geometry, this._low);
     this.triangle.frustumCulled = false;
     this.scene.add(this.triangle);
+    // Nothing here moves and VERTEX ignores the matrices: the triangle and the camera keep their identity
+    // matrices, so no pass recomputes them.
+    this.scene.matrixWorldAutoUpdate = this.camera.matrixWorldAutoUpdate = false;
+    this.triangle.matrixAutoUpdate = false;
     this.setGrade(GRADE.neutral);
   }
 
@@ -951,6 +997,9 @@ export class Composite {
       if (!depth) this._depth = null;
       this.target.depthTexture = this._depth;
     }
+    // The MSAA resolve copies depth only for the depth texture: without one (Medium) nothing reads the resolved
+    // depth, and three reads this flag at every resolve.
+    this.target.resolveDepthBuffer = depth;
     this.uniforms.depth.value = this._gtaoUniforms.depth.value = this._shaftMaskUniforms.depth.value = this._depth;
     if (before.ao !== config.ao) {
       this._sizeAo();
@@ -960,6 +1009,19 @@ export class Composite {
       this._smaa = new SMAAPass(this._width, this._height);
       // Its edge pass discards non-edges, so stale edges must be cleared each frame (see `draw`).
       this._smaa.clear = true;
+      // Edges are 0 or 1 in red and green, as the reference keeps them (RG8); three gives them RGBA16F. Set
+      // before the target's first use, and `setSize` keeps the texture's format.
+      const edges = this._smaa.edgesRT.texture;
+      edges.format = THREE.RGFormat;
+      edges.type = THREE.UnsignedByteType;
+      // Before the first compile: every fetch at level 0 (`levelZero`), and no depth state. None of SMAA's targets
+      // has a depth buffer (edges, weights, `_ldr2`, the canvas: `depth: false`), so the test always passed; off,
+      // three no longer toggles the depth state against the other post passes (all off) every frame.
+      const smaa = this._smaa;
+      for (const [material, fetches] of [[smaa.materialEdges, 7], [smaa.materialWeights, 10], [smaa.materialBlend, 6]] as const) {
+        material.fragmentShader = levelZero(material.fragmentShader, fetches);
+        material.depthTest = material.depthWrite = false;
+      }
     }
     if (!config.smaa && this._smaa) {
       this._smaa.dispose();
@@ -1034,6 +1096,43 @@ export class Composite {
     return (1 - t * t * (3 - 2 * t)) * facing;
   }
 
+  /**
+   * The light shafts' programs, compiled as `_pass` draws them (the
+   * triangle in this pass scene: no lights, no fog, into a target), for the
+   * renderer to link at a menu (render/index.ts `_warmPrograms`): the sun
+   * may be out of view all through a load, so a match's first look at it
+   * would link them. Returns the materials, as `three.compile` does.
+   */
+  compileShafts(renderer: THREE.WebGLRenderer): THREE.Material[] {
+    const triangle = this.triangle, material = triangle.material, materials: THREE.Material[] = [];
+    try {
+      for (const pass of [this._shaftMask, this._shaftBlur]) {
+        triangle.material = pass;
+        materials.push(...renderer.compile(this.scene, this.camera));
+      }
+    } finally {
+      triangle.material = material;
+    }
+    return materials;
+  }
+
+  /**
+   * The shafts' passes drawn once where nothing reads them (the blur's spare
+   * target, which every shaft frame clears and writes before it reads it),
+   * so a match's first shaft frame pays no program's first draw either.
+   */
+  warmShafts(renderer: THREE.WebGLRenderer): void {
+    const [rays, spare] = this._shafts, blur = this._shaftBlurUniforms, image = blur.image.value, material = this.triangle.material;
+    try {
+      this._pass(renderer, this._shaftMask, spare);
+      blur.image.value = rays.texture;
+      this._pass(renderer, this._shaftBlur, spare);
+    } finally {
+      blur.image.value = image;
+      this.triangle.material = material;
+    }
+  }
+
   /** The realistic look's exposure (a linear multiplier); Low has none. */
   setExposure(exposure: number): void {
     this._exposure = exposure;
@@ -1064,13 +1163,61 @@ export class Composite {
   _pass(renderer: THREE.WebGLRenderer, material: THREE.ShaderMaterial, target: THREE.WebGLRenderTarget | null): void {
     this.triangle.material = material;
     renderer.setRenderTarget(target);
-    renderer.render(this.scene, this.camera);
+    // The canvas (null) is cleared in `draw`.
+    if (target !== null && this._fills.has(material)) renderer.clear(true, false, false);
+    if (!this._inChain) {
+      renderer.render(this.scene, this.camera);
+      return;
+    }
+    // What that render did around its one draw (the chain's materials are visible, opaque and single-sided; the
+    // triangle's and the camera's matrices stay identity; no pass target has MSAA or mipmaps to resolve): its
+    // background step set the clear colour in the target's colour space (the same on every linear target, so only
+    // the canvas sets it), and its scene step left depth and colour writes on (the next frame's shadow clears
+    // need the depth mask).
+    if (target === null) renderer.setClearColor(renderer.getClearColor(this._clear), renderer.getClearAlpha());
+    const triangle = this.triangle, state = renderer.state;
+    renderer.renderBufferDirect(this.camera, this.scene, triangle.geometry, material, triangle, null);
+    state.buffers.depth.setTest(true);
+    state.buffers.depth.setMask(true);
+    state.buffers.color.setMask(true);
+    state.setPolygonOffset(false);
   }
 
   draw(renderer: THREE.WebGLRenderer, time: number, fx: PostFX, camera: THREE.PerspectiveCamera): void {
-    const config = this.config;
+    const config = this.config, smaa = config.smaa ? this._smaa : null;
     this.uniforms.time.value = time;
-    for (const key of ['hurt', 'lowHp', 'flash', 'slow'] as const) this.uniforms[key === 'hurt' ? 'hurtIn' : key].value = fx[key] ?? 0;
+    for (const key of FX_KEYS) this.uniforms[key === 'hurt' ? 'hurtIn' : key].value = fx[key] ?? 0;
+    const strength = config.shafts && config.look === 'realistic' && this._shaftStrength > 0 ? this._shaftStrength * this._aimShafts(camera) : 0;
+    this._toneUniforms.shaftColor.value.copy(this._sunColor).multiplyScalar(strength * SHAFT_GAIN);
+    // The first pass's target, bound before the outer render: that render then resolves nothing (the MSAA scene
+    // target is still bound after the scene pass) and sets the clear colour as the pass's own render did. Without
+    // `_oneRender` (Low, Medium), Low's lone pass to the canvas, and a renderer that clears in every render
+    // (autoClear), each pass renders itself as before. The hook is on the scene for the one render only.
+    const first = config.ao > 0 ? this._aoRaw : config.bloom ? this._bloom[0]! : strength > 0 ? this._shafts[0]
+      : config.look === 'realistic' || smaa ? this._ldr : null;
+    if (!this._oneRender || first === null || renderer.autoClear) this._chain(renderer, camera, strength);
+    else {
+      const scene = this.scene, after = scene.onAfterRender;
+      renderer.setRenderTarget(first);
+      this.triangle.material = this._final;
+      this._final.visible = false;
+      this._chainCamera = camera;
+      this._chainStrength = strength;
+      scene.onAfterRender = this._afterChain;
+      try {
+        renderer.render(scene, this.camera);
+      } finally {
+        scene.onAfterRender = after;
+        this._chainCamera = null;
+        this._final.visible = true;
+      }
+    }
+    this._softUniforms.softOn.value = 0;
+  }
+
+  /** The passes `draw` runs: inside its one render (`_inChain`), or each in a render of its own. */
+  _chain(renderer: THREE.WebGLRenderer, camera: THREE.PerspectiveCamera, strength: number): void {
+    const config = this.config;
     if (config.ao > 0) {
       const g = this._gtaoUniforms, projection = camera.projectionMatrix.elements;
       g.cameraNear.value = this.uniforms.cameraNear.value = camera.near;
@@ -1100,8 +1247,6 @@ export class Composite {
         this._pass(renderer, this._up, this._bloom[i - 1]!);
       }
     }
-    const strength = config.shafts && config.look === 'realistic' && this._shaftStrength > 0 ? this._shaftStrength * this._aimShafts(camera) : 0;
-    this._toneUniforms.shaftColor.value.copy(this._sunColor).multiplyScalar(strength * SHAFT_GAIN);
     if (strength > 0) {
       const [rays, spare] = this._shafts, source = this.target;
       this._shaftMaskUniforms.texel.value.set(1 / source.width, 1 / source.height);
@@ -1136,7 +1281,6 @@ export class Composite {
       renderer.clear();
       this._pass(renderer, this._low, null);
     }
-    this._softUniforms.softOn.value = 0;
   }
 
   /** SMAA from `_ldr` into `target` (null: the canvas). Its passes clear to transparent black. */
@@ -1154,6 +1298,47 @@ export class Composite {
 function setRegion(region: RegionUniforms, width: number, height: number, source: THREE.WebGLRenderTarget): void {
   region.uvScale.value.set(width / source.width, height / source.height);
   region.uvMax.value.set((width - 0.5) / source.width, (height - 0.5) / source.height);
+}
+
+/**
+ * three r170's SMAA shaders fetch with `texture2D(t, uv, 0.0)` (a bias, a WebGL1 leftover: `texture` after three's
+ * GLSL 3 defines) or with an implicit LOD, also inside the search loops (divergent, with `break`) and after the edge
+ * pass's `discard`. None of the textures they read has mipmaps, and each has min filter == mag filter and anisotropy
+ * 1 (edges and weights targets: linear; the area texture: linear; the search texture: nearest; `_ldr`: linear), so
+ * every one of those fetches reads level 0 with the same filter whatever LOD it gets: `textureLod(t, uv, 0.0)` (GLSL
+ * ES 3.00, which three compiles every ShaderMaterial as) returns the same values without derivatives. Only the fetch
+ * calls change, no arithmetic. `fetches` is how many the shader has; a three update that changes them throws here.
+ */
+function levelZero(source: string, fetches: number): string {
+  const call = /\btexture2D\s*\(/g;
+  let out = '', from = 0, count = 0;
+  for (let match = call.exec(source); match !== null; match = call.exec(source)) {
+    // The call's arguments, split at its own top-level commas.
+    const args: string[] = [];
+    let depth = 0, start = call.lastIndex, end = start;
+    for (; end < source.length; end++) {
+      const c = source[end];
+      if (c === '(') depth++;
+      else if (c === ')' && depth-- === 0) break;
+      else if (c === ',' && depth === 0) {
+        args.push(source.slice(start, end).trim());
+        start = end + 1;
+      }
+    }
+    args.push(source.slice(start, end).trim());
+    if (end >= source.length || !(args.length === 2 || (args.length === 3 && args[2] === '0.0'))) {
+      throw new Error('three changed its SMAA shaders: update levelZero in render/postfx.ts');
+    }
+    out += `${source.slice(from, match.index)}textureLod( ${args[0]}, ${args[1]}, 0.0 )`;
+    from = call.lastIndex = end + 1;
+    count++;
+  }
+  out += source.slice(from);
+  // Every fetch counted, and no other texture call left (one three adds, or an unconverted form).
+  if (count !== fetches || /\btexture\w*\s*\(/.test(out.replace(/\btextureLod\( /g, ''))) {
+    throw new Error('three changed its SMAA shaders: update levelZero in render/postfx.ts');
+  }
+  return out;
 }
 
 /** Set or clear boolean defines; recompiles only when one actually changes. */

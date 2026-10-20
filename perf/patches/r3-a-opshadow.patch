@@ -1,0 +1,388 @@
+diff --git a/src/engine/render/index.ts b/src/engine/render/index.ts
+index 1dbedaf..278d72d 100644
+--- a/src/engine/render/index.ts
++++ b/src/engine/render/index.ts
+@@ -447,11 +447,12 @@ export class Renderer {
+       object.onAfterRender = this._afterRig;
+     };
+     // Between the scene's draw list and its draws: the level's casters and the detail kit's (R6) swap to their shadow
+-    // groups for this pass only. Frames that keep the shadow maps allocate nothing here.
++    // groups for this pass only, and the worn operators to one draw each (`OperatorAssets.shadowSwap`). Frames that
++    // keep the shadow maps allocate nothing here.
+     const shadowMap = this.three.shadowMap, drawShadows = shadowMap.render.bind(shadowMap);
+-    shadowMap.render = (lights, scene, camera) => {
++    const drawCasters: typeof drawShadows = (lights, scene, camera) => {
+       const props = this.props.casters;
+-      if (!shadowMap.needsUpdate || this._casters.length + props.length === 0) return drawShadows(lights, scene, camera);
++      if (this._casters.length + props.length === 0) return drawShadows(lights, scene, camera);
+       const lists = [this._casters, props], own: { material: THREE.Material | THREE.Material[]; groups: THREE.GeometryGroup[] }[] = [];
+       for (const list of lists) {
+         for (const { mesh, material, groups } of list) {
+@@ -472,6 +473,15 @@ export class Renderer {
+         }
+       }
+     };
++    shadowMap.render = (lights, scene, camera) => {
++      if (!shadowMap.needsUpdate) return drawShadows(lights, scene, camera);
++      this.operators.shadowSwap(true);
++      try {
++        drawCasters(lights, scene, camera);
++      } finally {
++        this.operators.shadowSwap(false);
++      }
++    };
+     this.weapons = new WeaponAssets({
+       model: url => new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(url),
+       texture: (url, anisotropy) => (this._ktx2 ??= ktx2Loader(this.three)).load(url, anisotropy),
+diff --git a/src/engine/render/operators.ts b/src/engine/render/operators.ts
+index aaa037e..4632689 100644
+--- a/src/engine/render/operators.ts
++++ b/src/engine/render/operators.ts
+@@ -87,6 +87,12 @@ export interface KindTemplate {
+    * the pose (`restBounds`); three never skins vertices on the CPU for it.
+    */
+   bounds: THREE.Sphere;
++  /**
++   * A worn figure's one draw per shadow cascade (`OperatorAssets.shadowSwap`): every mesh's attributes that the
++   * skinned depth program reads, laid out as the meshes lay them, and their triangles, in mesh order; null for a
++   * kind of one mesh.
++   */
++  shadow: THREE.BufferGeometry | null;
+ }
+ 
+ /** How far the trunk may move inside the figure (the hips sinking and sliding back in a death fall, a lean), metres of figure space. */
+@@ -151,6 +157,11 @@ export class OperatorAssets implements OperatorSource {
+   /** Every figure that can wear an operator, and the ones that do. */
+   readonly #figures = new Set<FigureRig>();
+   readonly #bodies = new Map<FigureRig, OperatorBody>();
++  /**
++   * What `shadowSwap` draws once per cascade: the worn bodies of the kinds with a merged shadow geometry, and those
++   * kinds' template meshes (the warm-up draws them into the shadow maps, so the merged buffers upload there).
++   */
++  readonly #casters: { readonly meshes: readonly THREE.SkinnedMesh[]; readonly template: KindTemplate }[] = [];
+   /**
+    * Figures that go straight to their operator once it is in, in view or not: those in play at a settings
+    * change (another LOD or size, or Low to a realistic tier), which is not a fight's surprise. Only a
+@@ -283,10 +294,14 @@ export class OperatorAssets implements OperatorSource {
+       });
+       const template: KindTemplate = {
+         kind, group: clipGroup(kind, scene), bones, boneInverses: skeleton.boneInverses, meshes, gibs: new Map(), bounds: new THREE.Sphere(),
++        shadow: null,
+       };
+       template.gibs = gibGeometries(template);
+       template.bounds = restBounds(template);
++      // Made off the random draws (three's uuids take four each), as the glb's callback made no such geometry before.
++      template.shadow = quietly(() => shadowGeometry(template));
+       this.#kinds.set(kind, template);
++      if (template.shadow) this.#casters.push({ meshes: skinned, template });
+       // A rigid gib's program (a figure's torn-off limb) is warmed with the template: one per material.
+       const gib = template.gibs.get('head');
+       gib?.forEach((geometry, i) => {
+@@ -415,7 +430,23 @@ export class OperatorAssets implements OperatorSource {
+   #put(rig: FigureRig): void {
+     const template = this.#kinds.get(rig.kind);
+     if (!template || this.#bodies.has(rig)) return;
+-    this.#bodies.set(rig, new OperatorBody(rig, template, rigid => this.#twins(template, rigid)));
++    const body = new OperatorBody(rig, template, rigid => this.#twins(template, rigid));
++    this.#bodies.set(rig, body);
++    if (template.shadow) this.#casters.push(body);
++  }
++
++  /**
++   * Around the shadow pass (render/index.ts): `on`, each worn operator of more than one mesh draws once per cascade,
++   * its first mesh on its kind's merged geometry (`KindTemplate.shadow`), the others out of the pass; off, back. The
++   * meshes are siblings with one skeleton, bind matrix, sphere and depth material, drawn one after another, so the
++   * one draw runs the same program on the same vertices and triangles in the same order. No allocation.
++   */
++  shadowSwap(on: boolean): void {
++    for (let i = 0; i < this.#casters.length; i++) {
++      const { meshes, template } = this.#casters[i]!;
++      meshes[0]!.geometry = on ? template.shadow! : template.meshes[0]!.geometry;
++      for (let k = 1; k < meshes.length; k++) meshes[k]!.castShadow = !on;
++    }
+   }
+ 
+   /**
+@@ -443,8 +474,12 @@ export class OperatorAssets implements OperatorSource {
+   }
+ 
+   #take(rig: FigureRig): void {
+-    this.#bodies.get(rig)?.dispose();
++    const body = this.#bodies.get(rig);
++    if (!body) return;
++    body.dispose();
+     this.#bodies.delete(rig);
++    const at = this.#casters.indexOf(body);
++    if (at >= 0) this.#casters.splice(at, 1);
+   }
+ 
+   /** Every figure back to its stand-in (the glb is going, or another LOD replaces it). */
+@@ -454,6 +489,9 @@ export class OperatorAssets implements OperatorSource {
+     if (this.#template) disposeTree(this.#template);
+     // The gibs share the meshes' attributes (freed with them above); only their index buffers are their own.
+     for (const kind of this.#kinds.values()) for (const gibs of kind.gibs.values()) for (const gib of gibs) gib.dispose();
++    // The merged shadow geometries own their attributes.
++    for (const kind of this.#kinds.values()) kind.shadow?.dispose();
++    this.#casters.length = 0;
+     this.#template = null;
+     this.#kinds.clear();
+     this.#kindTwins.clear();
+@@ -592,6 +630,76 @@ function gibGeometries(template: KindTemplate): Map<string, THREE.BufferGeometry
+   return out;
+ }
+ 
++/**
++ * The attributes the shadow pass's skinned depth program reads (`levelDepthSkinnedMat`, three's depth shader):
++ * the positions and skin, and the uv its map's varying is made from (the map is never sampled).
++ */
++export const SHADOW_ATTRIBUTES = ['position', 'uv', 'skinIndex', 'skinWeight'] as const;
++
++type Attribute = THREE.BufferAttribute | THREE.InterleavedBufferAttribute;
++/** An attribute's elements as stored: the typed array, the elements per vertex in it and the attribute's first. */
++function rawLayout(attribute: Attribute): { array: THREE.TypedArray; stride: number; offset: number } {
++  return attribute instanceof THREE.InterleavedBufferAttribute
++    ? { array: attribute.data.array, stride: attribute.data.stride, offset: attribute.offset }
++    : { array: attribute.array, stride: attribute.itemSize, offset: 0 };
++}
++
++/**
++ * A kind's meshes as one geometry for the shadow pass (`KindTemplate.shadow`): each attribute of
++ * `SHADOW_ATTRIBUTES` as the meshes store it (the glb's quantised, interleaved layout, copied element for element,
++ * never through `getX`, which would denormalise), one after another, and their triangles in order, each mesh's
++ * indices moved past the vertices before it. Null for one mesh, or meshes that do not share a layout.
++ */
++export function shadowGeometry(template: KindTemplate): THREE.BufferGeometry | null {
++  const parts = template.meshes.map(({ geometry }) => geometry);
++  if (parts.length < 2) return null;
++  const counts = parts.map(geometry => geometry.getAttribute('position').count);
++  const fits = parts.every((geometry, i) => geometry.index !== null && geometry.index.count === geometry.index.array.length
++    && Object.keys(geometry.morphAttributes).length === 0 && geometry.drawRange.start === 0 && geometry.drawRange.count === Infinity
++    && SHADOW_ATTRIBUTES.every(name => {
++      const attribute = geometry.getAttribute(name) as Attribute | undefined, first = parts[0]!.getAttribute(name) as Attribute | undefined;
++      if (!attribute || !first || attribute.count !== counts[i]) return false;
++      const own = rawLayout(attribute), base = rawLayout(first);
++      return own.array.length === counts[i]! * own.stride && own.array.constructor === base.array.constructor && own.stride === base.stride
++        && own.offset === base.offset && attribute.itemSize === first.itemSize && attribute.normalized === first.normalized
++        && (attribute instanceof THREE.InterleavedBufferAttribute) === (first instanceof THREE.InterleavedBufferAttribute)
++        && (attribute as THREE.BufferAttribute).gpuType === (first as THREE.BufferAttribute).gpuType;
++    }));
++  if (!fits) return null;
++  const total = counts.reduce((sum, count) => sum + count, 0);
++  const merged = new THREE.BufferGeometry();
++  for (const name of SHADOW_ATTRIBUTES) {
++    const first = parts[0]!.getAttribute(name) as Attribute, { array: base, stride, offset } = rawLayout(first);
++    const array = new (base.constructor as new (length: number) => THREE.TypedArray)(total * stride);
++    let at = 0;
++    for (const geometry of parts) {
++      const own = rawLayout(geometry.getAttribute(name) as Attribute).array;
++      array.set(own, at);
++      at += own.length;
++    }
++    if (first instanceof THREE.InterleavedBufferAttribute) {
++      merged.setAttribute(name, new THREE.InterleavedBufferAttribute(new THREE.InterleavedBuffer(array, stride), first.itemSize, offset, first.normalized));
++    } else {
++      const attribute = new THREE.BufferAttribute(array, first.itemSize, first.normalized);
++      attribute.gpuType = first.gpuType;
++      merged.setAttribute(name, attribute);
++    }
++  }
++  // 32-bit when an index reaches 65535: in 16 bits that is WebGL2's primitive-restart index.
++  const index = new (total > 65535 ? Uint32Array : Uint16Array)(parts.reduce((sum, geometry) => sum + geometry.index!.count, 0));
++  let at = 0, start = 0;
++  parts.forEach((geometry, i) => {
++    const own = geometry.index!.array;
++    for (let k = 0; k < own.length; k++) index[at++] = own[k]! + start;
++    start += counts[i]!;
++  });
++  merged.setIndex(new THREE.BufferAttribute(index, 1));
++  merged.userData.shared = true;
++  // As the meshes' (never read: a worn mesh culls by its kind's sphere, the template by none).
++  merged.boundingSphere = parts[0]!.boundingSphere!.clone();
++  return merged;
++}
++
+ const _q = new THREE.Quaternion();
+ 
+ /**
+diff --git a/tests/operators.test.ts b/tests/operators.test.ts
+index 4ca78ff..cfa55b5 100644
+--- a/tests/operators.test.ts
++++ b/tests/operators.test.ts
+@@ -1,10 +1,10 @@
+ import { expect, test } from 'vitest';
+-import { BufferAttribute, BufferGeometry, DataTexture, Frustum, Group, Material, Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial, PerspectiveCamera, Quaternion, Raycaster, Scene, SkinnedMesh, Vector3 } from 'three';
++import { BufferAttribute, BufferGeometry, DataTexture, DirectionalLight, Frustum, Group, InterleavedBufferAttribute, Material, Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial, PerspectiveCamera, Quaternion, Raycaster, Scene, SkinnedMesh, Vector3, WebGLRenderTarget, WebGLRenderer } from 'three';
+ import type { Intersection, Object3D, Texture } from 'three';
+ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+ import {
+-  BOUNDS_MARGIN, FIST, GIB_BONES, HIT_LAYER, OPERATOR_GLB, OPERATOR_PROP_SCALE, PROP_HOLDS, OPERATOR_MANIFEST, OPERATOR_SETS, OperatorAssets, operatorDownloadBytes, operatorMapUrl, operatorWant,
++  BOUNDS_MARGIN, FIST, GIB_BONES, HIT_LAYER, OPERATOR_GLB, OPERATOR_PROP_SCALE, PROP_HOLDS, OPERATOR_MANIFEST, OPERATOR_SETS, OperatorAssets, SHADOW_ATTRIBUTES, operatorDownloadBytes, operatorMapUrl, operatorWant,
+ } from '@/engine/render/operators';
+ import { LOOPS, OperatorMotion, RUN_FULL, loopWeights } from '@/engine/render/operator-motion';
+ import type { MotionInput } from '@/engine/render/operator-motion';
+@@ -504,6 +504,164 @@ test('worn operators cull by their kind\'s bounds, cast through a map-free depth
+   }
+ });
+ 
++test('a worn operator casts one draw per shadow cascade: its meshes merged as stored, in order, swapped in for the pass', async () => {
++  const assets = new OperatorAssets(loaders);
++  useOperatorSource(assets);
++  const camera = new PerspectiveCamera();
++  const stored = (attribute: BufferAttribute | InterleavedBufferAttribute) => (attribute instanceof InterleavedBufferAttribute ? attribute.data.array : attribute.array);
++  const same = (a: ArrayLike<number>, b: ArrayLike<number>) => {
++    if (a.length !== b.length) return false;
++    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
++    return true;
++  };
++  try {
++    let shadows = 0, freed = 0;
++    for (const lod of [0, 1] as const) {
++      assets.want({ lod, size: lod === 1 ? 512 : 1024 });
++      await stream(assets);
++      for (const kind of KINDS) {
++        const template = assets.kind(kind)!, parts = template.meshes.map(({ geometry }) => geometry), shadow = template.shadow;
++        if (parts.length === 1) {
++          expect(shadow, kind).toBeNull();
++          continue;
++        }
++        expect(shadow, kind).not.toBeNull();
++        shadows++;
++        shadow!.addEventListener('dispose', () => { freed++; });
++        expect(Object.keys(shadow!.attributes).sort(), kind).toEqual([...SHADOW_ATTRIBUTES].sort());
++        for (const name of SHADOW_ATTRIBUTES) {
++          // Element for element as the glb stores them (quantised, the positions interleaved), one mesh after another.
++          const merged = shadow!.getAttribute(name), first = parts[0]!.getAttribute(name);
++          const expected = new (stored(first).constructor as new (n: number) => Int16Array)(stored(merged).length);
++          let at = 0;
++          for (const part of parts) {
++            expected.set(stored(part.getAttribute(name)), at);
++            at += stored(part.getAttribute(name)).length;
++          }
++          expect(at, `${kind} ${name}`).toBe(stored(merged).length);
++          expect(stored(merged).constructor, `${kind} ${name}`).toBe(stored(first).constructor);
++          expect(same(stored(merged), expected), `${kind} ${name}`).toBe(true);
++          expect([merged.itemSize, merged.normalized, merged instanceof InterleavedBufferAttribute], `${kind} ${name}`)
++            .toEqual([first.itemSize, first.normalized, first instanceof InterleavedBufferAttribute]);
++          if (merged instanceof InterleavedBufferAttribute && first instanceof InterleavedBufferAttribute) {
++            expect([merged.data.stride, merged.offset], `${kind} ${name}`).toEqual([first.data.stride, first.offset]);
++          }
++        }
++        // The triangles in mesh order, each mesh's corners past the vertices before it.
++        const corners: number[] = [];
++        let start = 0;
++        for (const part of parts) {
++          for (const corner of part.index!.array) corners.push(corner + start);
++          start += part.getAttribute('position').count;
++        }
++        expect(same(shadow!.index!.array, corners), kind).toBe(true);
++      }
++      // A worn figure of two meshes draws its first on the merged geometry for the pass, the other not, then as before;
++      // one of one mesh, and one taken off, are left alone.
++      const heavy = figureOf('heavy'), grunt = figureOf('grunt'), gone = figureOf('medic');
++      try {
++        assets.frame(camera);
++        const skinned = (figure: Figure) => {
++          const meshes: SkinnedMesh[] = [];
++          figure.root.traverse(node => { if (node instanceof SkinnedMesh) meshes.push(node); });
++          return meshes;
++        };
++        const [body, kit] = skinned(heavy), [solo] = skinned(grunt), left = skinned(gone);
++        gone.dispose();
++        const holder: SkinnedMesh[] = [];
++        assets.template!.getObjectByName('heavy__body')!.traverse(node => { if (node instanceof SkinnedMesh) holder.push(node); });
++        const template = assets.kind('heavy')!;
++        expect(kit, 'two meshes').toBeDefined();
++        assets.shadowSwap(true);
++        expect([body!.geometry, kit!.castShadow, body!.castShadow]).toEqual([template.shadow, false, true]);
++        expect([holder[0]!.geometry, holder[1]!.castShadow], 'the warm-up draws it too').toEqual([template.shadow, false]);
++        expect([solo!.geometry, solo!.castShadow]).toEqual([assets.kind('grunt')!.meshes[0]!.geometry, true]);
++        expect([left[0]!.geometry, left[1]!.castShadow]).toEqual([assets.kind('medic')!.meshes[0]!.geometry, true]);
++        assets.shadowSwap(false);
++        expect([body!.geometry, kit!.castShadow]).toEqual([template.meshes[0]!.geometry, true]);
++        expect([holder[0]!.geometry, holder[1]!.castShadow]).toEqual([template.meshes[0]!.geometry, true]);
++      } finally {
++        heavy.dispose();
++        grunt.dispose();
++      }
++    }
++    // The LOD change and Low free them.
++    assets.want(null);
++    expect(freed).toBe(shadows);
++    expect(shadows).toBeGreaterThan(0);
++  } finally {
++    assets.clear();
++    useOperatorSource(null, assets);
++  }
++});
++
++test('the merged shadow draws give the same shadow map, one draw per worn operator', async () => {
++  const assets = new OperatorAssets(loaders);
++  useOperatorSource(assets);
++  const renderer = new WebGLRenderer({ canvas: document.createElement('canvas') });
++  renderer.shadowMap.enabled = true;
++  renderer.shadowMap.autoUpdate = false;
++  const scene = new Scene(), camera = new PerspectiveCamera(60, 1, 0.1, 100), target = new WebGLRenderTarget(16, 16);
++  camera.position.set(0, 10, 15);
++  camera.lookAt(0, 0, 0);
++  const sun = new DirectionalLight(0xffffff, 2);
++  sun.castShadow = true;
++  sun.position.set(5, 12, 4);
++  sun.shadow.mapSize.set(1024, 1024);
++  Object.assign(sun.shadow.camera, { left: -9, right: 9, top: 9, bottom: -9, near: 0.5, far: 40 });
++  scene.add(sun, sun.target);
++  // The shadow maps are what is compared; the camera's pass needs no lit programs (slow to link on software GL).
++  scene.overrideMaterial = new MeshBasicMaterial();
++  const kinds = KINDS.filter(kind => kind !== 'player'), figures: Figure[] = [];
++  const drawShadows = renderer.shadowMap.render.bind(renderer.shadowMap);
++  let merge = false, calls = 0;
++  renderer.shadowMap.render = (lights, at, from) => {
++    const before = renderer.info.render.calls;
++    if (merge) assets.shadowSwap(true);
++    try { drawShadows(lights, at, from); } finally { if (merge) assets.shadowSwap(false); }
++    calls = renderer.info.render.calls - before;
++  };
++  const shot = (merged: boolean) => {
++    merge = merged;
++    renderer.shadowMap.needsUpdate = true;
++    renderer.setRenderTarget(target);
++    renderer.render(scene, camera);
++    const map = sun.shadow.map!, texels = new Uint8Array(map.width * map.height * 4);
++    renderer.readRenderTargetPixels(map, 0, 0, map.width, map.height, texels);
++    return { texels, calls };
++  };
++  try {
++    assets.want({ lod: 0, size: 1024 });
++    await stream(assets);
++    // Made once the operators are in: each wears its own at once.
++    for (const [i, kind] of kinds.entries()) {
++      const figure = figureOf(kind);
++      figures.push(figure);
++      figure.root.position.set((i % 6) * 2.2 - 6, 0, Math.floor(i / 6) * 2.2 - 4);
++      figure.root.rotation.y = i * 0.7;
++      figure.parts.upperR?.rotation.set(-1.5, 0, 0.4);
++      figure.parts.thighL?.rotation.set(-0.8, 0, 0);
++      scene.add(figure.root);
++    }
++    scene.updateMatrixWorld(true);
++    assets.frame(camera);
++    expect(assets.worn).toBe(kinds.length);
++    const apart = shot(false), merged = shot(true);
++    let cast = 0;
++    for (let i = 0; i < apart.texels.length; i += 4) if (apart.texels[i] !== 255 || apart.texels[i + 3] !== 255) cast++;
++    expect(cast, 'the figures cast').toBeGreaterThan(10000);
++    expect(merged.texels.every((v, i) => v === apart.texels[i]), 'the same shadow map').toBe(true);
++    expect(apart.calls - merged.calls).toBe(kinds.filter(kind => assets.kind(kind)!.shadow).length);
++  } finally {
++    for (const figure of figures) figure.dispose();
++    assets.clear();
++    useOperatorSource(null, assets);
++    (scene.overrideMaterial as Material).dispose();
++    target.dispose();
++    renderer.dispose();
++  }
++});
++
+ test('three Low <-> realistic trips leave no map or operator behind', async () => {
+   const assets = new OperatorAssets(loaders);
+   useOperatorSource(assets);

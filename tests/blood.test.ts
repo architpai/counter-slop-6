@@ -62,17 +62,51 @@ test('a sword cut throws more of it along the swing', () => {
   expect(cut.effects._particles.length).toBeGreaterThan(plain.effects._particles.length + 8);
 });
 
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 test('a pool on a stair keeps to its step instead of hanging over the edge', () => {
-  const scene = new THREE.Scene(), world = new World();
   // A step: the floor at 0 for z > 0, a riser up to 0.3 m for z < 0.
+  const world = new World();
   world.addBox(new THREE.Vector3(-5, -1, 0), new THREE.Vector3(5, 0, 5));
   world.addBox(new THREE.Vector3(-5, -1, -5), new THREE.Vector3(5, 0.3, 0));
   world.finalize();
-  const effects = new Effects(scene, world);
-  effects.bloodPool(new THREE.Vector3(0, 0.5, 0.35), 1.3);
-  expect(effects._growing.length).toBeGreaterThan(0);
-  for (const g of effects._growing) expect(g.pos.z - g.size / 2, 'no pool reaches over the step edge at z = 0').toBeGreaterThanOrEqual(-0.01);
-  const open = new Effects(new THREE.Scene(), world);
-  open.bloodPool(new THREE.Vector3(0, 0.5, 3), 1.3);
-  expect(Math.max(...open._growing.map(g => g.size)), 'on open floor it keeps its size').toBeGreaterThan(0.9);
+  const steps: { top: number; z: [number, number] }[] = [{ top: 0, z: [0, 5] }, { top: 0.3, z: [-5, 0] }];
+  // The satellite pools scatter at random, and about one seed in nine puts one up on the riser's top (it must keep to
+  // that step, not to the lower one). Fixed seeds keep the run the same each time and cover both steps. Seed 2 is
+  // one that failed the old check (which held every pool to the lower step's edge): it puts two pools on the riser.
+  const own = Math.random, onStep = [0, 0];
+  try {
+    for (let seed = 1; seed <= 200; seed++) {
+      Math.random = mulberry32(seed);
+      const effects = new Effects(new THREE.Scene(), world);
+      effects.bloodPool(new THREE.Vector3(0, 0.5, 0.35), 1.3);
+      expect(effects._growing.length, `seed ${seed}: a pool`).toBeGreaterThan(0);
+      const riser = onStep[1]!;
+      for (const g of effects._growing) {
+        // Which step the pool lies on, by its height: 2-4 cm over the step's top, not floating or sunk.
+        const s = steps.findIndex(s => g.pos.y - s.top >= 0.015 && g.pos.y - s.top <= 0.045);
+        expect(s, `seed ${seed}: pool at y = ${g.pos.y.toFixed(3)} lies on a step`).toBeGreaterThanOrEqual(0);
+        onStep[s]!++;
+        const [near, far] = steps[s]!.z, r = g.size / 2, at = `seed ${seed}: pool at z = ${g.pos.z.toFixed(3)}, size ${g.size.toFixed(3)}`;
+        expect(g.pos.z - r, `${at} keeps to its step`).toBeGreaterThanOrEqual(near - 0.01);
+        expect(g.pos.z + r, `${at} keeps to its step`).toBeLessThanOrEqual(far + 0.01);
+        expect(Math.abs(g.pos.x) + r, `${at} keeps to its step`).toBeLessThanOrEqual(5.01);
+      }
+      if (seed === 2) expect(onStep[1]! - riser, 'seed 2 puts pools up on the riser').toBeGreaterThan(0);
+      const open = new Effects(new THREE.Scene(), world);
+      open.bloodPool(new THREE.Vector3(0, 0.5, 3), 1.3);
+      expect(Math.max(...open._growing.map(g => g.size)), `seed ${seed}: on open floor it keeps its size`).toBeGreaterThan(0.9);
+    }
+  } finally { Math.random = own; }
+  expect(onStep[0], 'pools on the lower step').toBeGreaterThan(0);
+  expect(onStep[1], 'pools up on the riser').toBeGreaterThan(0);
 });

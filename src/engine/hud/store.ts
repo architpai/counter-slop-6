@@ -12,8 +12,11 @@
  *
  * 2. **Continuous values never reach React.** Spread, bar fills and the focus
  *    mark change every frame and have no structure worth diffing. They are
- *    written straight to CSS custom properties on the HUD root, which is what
- *    the crosshair already did before the port. Zero renders.
+ *    written straight to CSS custom properties. Zero renders. Each per-frame
+ *    variable goes on the element that reads it (`hostRef`), not on the HUD
+ *    root: custom properties inherit, so a root write restyles the whole HUD
+ *    every frame (~70 elements, 0.2-0.4 ms of main thread in a fight), where a
+ *    host write restyles only the host's own subtree.
  *
  * 3. **Transient entries age in `update(dt)`.** The kill feed and damage
  *    indicators are lists whose identity changes on add and expiry only; the
@@ -105,6 +108,13 @@ export interface HudState {
   qualityPrompt: string | null;
 }
 
+/**
+ * The per-frame variables, written on their readers (`hostRef`) instead of the root. The root keeps their defaults
+ * (`.game-hud` in globals.css) and every other variable (`--scope-*`).
+ */
+const HOSTED = /^--(?:spread|health|breath|focus|boss|exec-\d+|straggler-\d+|mark-\d+)$/;
+export const isHostedVar = (name: string): boolean => HOSTED.test(name);
+
 const KILL_LIFE = 1.7;
 const DAMAGE_LIFE = 1.0;
 const MAX_KILL_LINES = 6;
@@ -119,6 +129,10 @@ export class HudStore implements HudView {
   #breathMeter: HTMLElement | null = null;
   #breathPercent = 100;
   #vars = new Map<string, string>();
+  /** Mounted readers of each hosted variable. */
+  #hosts = new Map<string, Set<HTMLElement>>();
+  /** One stable ref callback per variable, so React does not detach and re-attach it on every render. */
+  #hostRefs = new Map<string, (el: HTMLElement | null) => () => void>();
   #nextId = 1;
   #messageT = 0;
   #tipT = 0;
@@ -165,8 +179,31 @@ export class HudStore implements HudView {
   bindRoot(el: HTMLElement | null): void {
     this.#root = el;
     this.#breathMeter = el?.querySelector<HTMLElement>('[data-hud="breath"]') ?? null;
-    if (el) for (const [name, value] of this.#vars) el.style.setProperty(name, value);
+    if (el) for (const [name, value] of this.#vars) if (!HOSTED.test(name)) el.style.setProperty(name, value);
     this.#breathMeter?.setAttribute('aria-valuenow', String(this.#breathPercent));
+  }
+
+  /**
+   * Registers `el` as a reader of the hosted variable `name` until the returned cleanup runs, and writes the value
+   * remembered for it at once: a host can remount (a bar, a marker) long after the engine wrote, without `bindRoot`.
+   */
+  bindVarHost(name: string, el: HTMLElement): () => void {
+    let set = this.#hosts.get(name);
+    if (!set) this.#hosts.set(name, set = new Set());
+    set.add(el);
+    const value = this.#vars.get(name);
+    if (value !== undefined) el.style.setProperty(name, value);
+    return () => { set.delete(el); };
+  }
+
+  /** A stable React ref callback (React 19: the returned cleanup runs on detach) that hosts the variable `name`. */
+  hostRef(name: string): (el: HTMLElement | null) => () => void {
+    let ref = this.#hostRefs.get(name);
+    if (!ref) {
+      ref = (el: HTMLElement | null) => (el ? this.bindVarHost(name, el) : () => {});
+      this.#hostRefs.set(name, ref);
+    }
+    return ref;
   }
 
   subscribe(key: HudKey, listener: () => void): () => void {
@@ -210,7 +247,9 @@ export class HudStore implements HudView {
   #setVar(name: string, value: string): void {
     if (this.#vars.get(name) === value) return;
     this.#vars.set(name, value);
-    this.#root?.style.setProperty(name, value);
+    if (!HOSTED.test(name)) { this.#root?.style.setProperty(name, value); return; }
+    const hosts = this.#hosts.get(name);
+    if (hosts) for (const el of hosts) el.style.setProperty(name, value);
   }
 
   // ------------------------------------------------------------------ frame

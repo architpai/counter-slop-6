@@ -2,11 +2,12 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { rand } from '../util';
 import { TONE, TONE_HEX, WHITE_HEX } from './palette';
-import { charMat, hitTint, ownMaterial, propMat, tintable, unlitMat, makeLabelMaterial } from './materials';
+import { charMat, hitTint, ownMaterial, propMat, sharedMaterial, tintable, unlitMat, makeLabelMaterial } from './materials';
 import { boxGeo, cylGeo, sphereGeo, coneGeo, torusGeo } from './prims';
 import { tacticalPart, tacticalTemplate, TACTICAL_MODELS, type TacticalKind } from './tactical';
 import { OperatorMotion, type ClipGroup } from './operator-motion';
 import { HIT_LAYER } from './operators';
+import { staleFigure } from './fresh';
 
 const DARK = TONE_HEX[TONE.DARK], ACCENT = TONE_HEX[TONE.ACCENT];
 
@@ -119,13 +120,131 @@ export function flashAmount(left: number, length: number): number {
   return left <= 0 ? 0 : HIT_TINT * Math.min(1, left / length);
 }
 
+/**
+ * A figure's hit surfaces (every node with a `hitPart`, in tree order, found
+ * at its first `boundFigure`: all are made with the figure) and one sphere
+ * round the world spheres three's `Mesh.raycast` tests them by, as they
+ * stood at the last `boundFigure`, with the root's world matrix then.
+ */
+interface FigureBound {
+  meshes: THREE.Mesh[] | null;
+  center: THREE.Vector3;
+  /** Negative: no bound now. */
+  radius: number;
+  world: Float64Array;
+}
+const bounds = new WeakMap<THREE.Object3D, FigureBound>();
+const _sphere = new THREE.Sphere();
+let _spheres = new Float64Array(64);
+const _hits: THREE.Intersection[] = [];
+const ascSort = (a: THREE.Intersection, b: THREE.Intersection) => a.distance - b.distance;
+
+function hitMeshes(root: THREE.Object3D): THREE.Mesh[] | null {
+  const meshes: THREE.Mesh[] = [];
+  let plain = true;
+  root.traverse(node => {
+    if (!node.userData.hitPart) return;
+    // Only three's own mesh test is known to stop at the geometry's sphere.
+    if (isMesh(node) && node.raycast === THREE.Mesh.prototype.raycast) meshes.push(node);
+    else plain = false;
+  });
+  return plain ? meshes : null;
+}
+
+function under(node: THREE.Object3D, root: THREE.Object3D): boolean {
+  for (let at: THREE.Object3D | null = node; at; at = at.parent) if (at === root) return true;
+  return false;
+}
+
+/**
+ * The owner has just brought `root`'s whole tree up to date (enemies/model.ts
+ * `syncModel`): bound its hit surfaces for `raycastFigure`, valid while the
+ * root's world matrix stays as it is now and nothing under it moves (only
+ * `animate` moves a live figure's parts, and `syncModel` follows it).
+ */
+export function boundFigure(root: THREE.Object3D): void {
+  let bound = bounds.get(root);
+  if (!bound) bounds.set(root, bound = { meshes: hitMeshes(root), center: new THREE.Vector3(), radius: -1, world: new Float64Array(16) });
+  bound.radius = -1;
+  const meshes = bound.meshes;
+  if (!meshes) return;
+  if (_spheres.length < meshes.length * 4) _spheres = new Float64Array(meshes.length * 8);
+  let n = 0, x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity;
+  for (const mesh of meshes) {
+    // One torn off (the shield) is no longer tested.
+    if (!under(mesh, root)) continue;
+    const geometry = mesh.geometry;
+    if (geometry.boundingSphere === null) geometry.computeBoundingSphere();
+    // As `Mesh.raycast` places it: the same products on the same matrix.
+    const s = _sphere.copy(geometry.boundingSphere!).applyMatrix4(mesh.matrixWorld), r = s.radius, c = s.center;
+    if (!(r >= 0)) return;
+    _spheres[n++] = c.x; _spheres[n++] = c.y; _spheres[n++] = c.z; _spheres[n++] = r;
+    x0 = Math.min(x0, c.x - r); y0 = Math.min(y0, c.y - r); z0 = Math.min(z0, c.z - r);
+    x1 = Math.max(x1, c.x + r); y1 = Math.max(y1, c.y + r); z1 = Math.max(z1, c.z + r);
+  }
+  if (n === 0) return;
+  const center = bound.center.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+  let radius = 0;
+  for (let i = 0; i < n; i += 4) {
+    radius = Math.max(radius, Math.hypot(_spheres[i]! - center.x, _spheres[i + 1]! - center.y, _spheres[i + 2]! - center.z) + _spheres[i + 3]!);
+  }
+  // Far wider than any rounding in three's sphere tests.
+  radius = radius * (1 + 1e-6) + 1e-6;
+  if (!Number.isFinite(radius)) return;
+  bound.radius = radius;
+  bound.world.set(root.matrixWorld.elements);
+}
+
+/** `root` stops being bounded (a corpse: its death pose moves it without `syncModel`). */
+export function unboundFigure(root: THREE.Object3D): void {
+  bounds.delete(root);
+}
+
+/**
+ * What the bound says of a ray: 0, nothing (no bound, or one no longer
+ * valid, or a ray it cannot judge); 1, it misses every hit surface's sphere
+ * within `max` (each `Mesh.raycast` would stop at its sphere test); 2, the
+ * bound holds and the ray may hit (every surface's world matrix is the one
+ * the full update would compute).
+ */
+function judge(bound: FigureBound, root: THREE.Object3D, o: THREE.Vector3, d: THREE.Vector3, max: number): 0 | 1 | 2 {
+  const r = bound.radius;
+  if (!(r >= 0) || !(Math.abs(d.x * d.x + d.y * d.y + d.z * d.z - 1) <= 1e-10)) return 0;
+  root.updateWorldMatrix(true, false);
+  const m = root.matrixWorld.elements, w = bound.world;
+  for (let i = 0; i < 16; i++) if (m[i] !== w[i]) return 0;
+  const c = bound.center, x = c.x - o.x, y = c.y - o.y, z = c.z - o.z, r2 = r * r;
+  const oc2 = x * x + y * y + z * z;
+  // The origin inside: let the meshes judge (and the whole tree an origin that is not a number).
+  if (!(oc2 > r2)) return oc2 <= r2 ? 2 : 0;
+  const tca = x * d.x + y * d.y + z * d.z;
+  if (tca < 0) return 1;
+  const d2 = oc2 - tca * tca;
+  if (d2 > r2) return 1;
+  return tca - Math.sqrt(r2 - d2) > max ? 1 : 2;
+}
+
 /** Native mesh tests follow clothing, armour and animation without gaps between joints.
- * Weapons and labels are not damage surfaces. Detached shields leave the root automatically. */
+ * Weapons and labels are not damage surfaces. Detached shields leave the root automatically.
+ * A bounded figure (`boundFigure`) skips a ray that misses its bound, and tests only its hit
+ * surfaces otherwise: the same hits in the same order as the whole tree gives. */
 export function raycastFigure(root: THREE.Object3D, origin: THREE.Vector3, direction: THREE.Vector3, max: number) {
   if (!root.visible) return null;
-  root.updateWorldMatrix(true, true);
+  const bound = bounds.get(root);
+  const verdict = bound ? judge(bound, root, origin, direction, max) : 0;
+  if (verdict === 1) return null;
   shotRay.set(origin, direction); shotRay.far = max;
-  for (const hit of shotRay.intersectObject(root, true)) {
+  _hits.length = 0;
+  if (verdict === 2) {
+    for (const mesh of bound!.meshes!) {
+      if (under(mesh, root) && mesh.layers.test(shotRay.layers)) mesh.raycast(shotRay, _hits);
+    }
+    _hits.sort(ascSort);
+  } else {
+    root.updateWorldMatrix(true, true);
+    shotRay.intersectObject(root, true, _hits);
+  }
+  for (const hit of _hits) {
     const part = hit.object.userData.hitPart as FigureAnchorName | undefined;
     if (!part) continue;
     let visible = true;
@@ -153,10 +272,16 @@ export interface FigureRig {
   readonly motion: OperatorMotion;
   /** It wears a realistic operator now (set by render/operators.ts): only then do the clips matter. */
   worn: boolean;
+  /** The worn operator's armature under the root (set by render/operators.ts), posed in the renderer's frame. */
+  armature: THREE.Object3D | null;
   /** The prop mesh in hand (in the weapon group), if any. */
   prop(): THREE.Object3D | null;
-  /** The figure's own copy of a material, bound to its hit tint and mark; freed by `disown` or with the figure. */
-  own(material: THREE.Material): THREE.Material;
+  /**
+   * Put `material` on `mesh` (a shared twin of a set material, render/materials.ts `twinMaterial`) while the hit tint
+   * is off, and the figure's own copy of it, bound to its tint and mark, while it is on (a player's figure always
+   * wears the copy); the copies are freed by `disown` or with the figure.
+   */
+  wear(mesh: THREE.Mesh, material: THREE.Material): void;
   disown(): void;
   /** Pieces lent to the debris and not yet back. */
   readonly lent: ReadonlySet<THREE.Object3D>;
@@ -240,6 +365,19 @@ function oval(parent: THREE.Object3D, color: number, x: number, y: number, z: nu
   return object;
 }
 
+/**
+ * `node` never moves against its parent again: three stops composing its
+ * local matrix at every update and keeps the one composed now from the same
+ * position, rotation and scale (`updateMatrix`), so every world matrix under
+ * it comes out as before, to the bit. Nothing may write its transform after
+ * this, except `lend` (the debris moves a lent piece: it turns the composing
+ * back on first).
+ */
+function freeze(node: THREE.Object3D): void {
+  node.updateMatrix();
+  node.matrixAutoUpdate = false;
+}
+
 /** Shared and never drawn: tactical figures keep the pivots, not the surfaces. */
 const EMPTY_GEO = new THREE.BufferGeometry();
 EMPTY_GEO.userData.shared = true;
@@ -250,6 +388,21 @@ function stub(parent: THREE.Object3D, x = 0, y = 0, z = 0): THREE.Mesh {
   object.position.set(x, y, z);
   parent.add(object);
   return object;
+}
+
+/**
+ * A figure's own copies of shared materials (`ownMaterial`), by the material they copy, and the meshes that wear
+ * one of the two (`makeFigure`'s `wear`).
+ */
+interface Wardrobe {
+  copies: Map<THREE.Material, THREE.Material>;
+  worn: { mesh: THREE.Mesh; material: THREE.Material; copy: THREE.Material }[];
+}
+const wardrobe = (): Wardrobe => ({ copies: new Map(), worn: [] });
+function undress(into: Wardrobe): void {
+  for (const copy of into.copies.values()) copy.dispose();
+  into.copies.clear();
+  into.worn.length = 0;
 }
 
 /** Tactical and template geometry outlives the figure holding it. */
@@ -543,6 +696,9 @@ export function makeFigure(o: FigureOpts): Figure {
   root.scale.setScalar(o.scale ?? 1);
   const parts: FigureParts = {}, anchors: FigureAnchors = {};
   const color = o.color ?? TONE_HEX[TONE.HOSTILE];
+  // An enemy's static nodes stop recomposing (`freeze`): its anchors, eyes, mount, prop and tip. A player's
+  // figure keeps them moving (players.ts sets its anchors after this), all but its surfaces.
+  const still = o.tactical !== undefined && o.tactical !== 'player';
   let eyeSets: FaceSets, weapon: THREE.Group | null = null;
   const low: THREE.Mesh[] = [];
   // Tactical actors release every primitive surface below and replace it with authored
@@ -683,10 +839,13 @@ export function makeFigure(o: FigureOpts): Figure {
       const pivot = built(parts[name], name);
       for (const child of [...pivot.children]) if (isMesh(child)) release(child);
       const surface = tacticalPart(o.tactical, name);
+      // The surface and its meshes sit where the part was merged, for good; its nodes (tactical.ts `TACTICAL_NODES`) move.
+      freeze(surface);
       surface.traverse(object => {
         if (!isMesh(object)) return;
         object.userData.hitPart = o.kind === 'humanoid' || name === 'head' ? HIT_REGIONS[name] ?? 'torso' : 'torso';
         low.push(object);
+        freeze(object);
       });
       // The authored cleaver follows the forearm, but remains a weapon, not armour.
       surface.getObjectByName('heavy-melee')?.traverse(object => { delete object.userData.hitPart; });
@@ -700,21 +859,33 @@ export function makeFigure(o: FigureOpts): Figure {
     eyeSets = { root: eyes, eyes, dead };
     if (o.kind === 'humanoid' && anchors.head) anchors.head.position.y = 0.13;
     root.userData.tactical = o.tactical;
+    // The anchors' last move was the line above; the joints keep moving.
+    if (still) {
+      for (const node of [...Object.values(anchors), eyes, dead, parts.gunMount, parts.tip]) if (node) freeze(node);
+    }
   }
 
   parts.eyes = eyeSets.eyes;
   parts.deadEyes = eyeSets.dead;
-  // A Blender figure wears its own copies of the shared character and prop materials, bound to its hit tint (V15).
+  // A Blender figure has its own copies of the shared character and prop materials, bound to its hit tint (V15), and
+  // wears them while the tint is on; off, it wears their shared twins (`sharedMaterial`, the same uniforms), so the
+  // figures draw one after another with no material switch. A player's figure always wears its copies (its mark).
   // The prop in hand has its own set (`propOwn`), freed with it at each swap: a live preset change swaps every prop.
-  const tint = hitTint(), own = new Map<THREE.Material, THREE.Material>();
-  let propOwn = new Map<THREE.Material, THREE.Material>();
-  const adopt = (node: THREE.Object3D, into: Map<THREE.Material, THREE.Material>) => {
+  const tint = hitTint(), keep = o.tactical === 'player', mark = keep ? color : undefined;
+  let tinted = keep;
+  const own = wardrobe();
+  let propOwn = wardrobe();
+  const wear = (into: Wardrobe, mesh: THREE.Mesh, material: THREE.Material) => {
+    let copy = into.copies.get(material);
+    if (!copy) into.copies.set(material, copy = ownMaterial(material, tint, mark));
+    into.worn.push({ mesh, material, copy });
+    mesh.material = tinted ? copy : material;
+  };
+  const adopt = (node: THREE.Object3D, into: Wardrobe) => {
     if (!o.tactical) return;
     node.traverse(object => {
       if (!isMesh(object) || Array.isArray(object.material) || !tintable(object.material)) return;
-      let copy = into.get(object.material);
-      if (!copy) into.set(object.material, copy = ownMaterial(object.material, tint, o.tactical === 'player' ? color : undefined));
-      object.material = copy;
+      wear(into, object, keep ? object.material : sharedMaterial(object.material));
     });
   };
   adopt(root, own);
@@ -725,25 +896,18 @@ export function makeFigure(o: FigureOpts): Figure {
   let heldProp: THREE.Object3D | null = null;
   const lent = new Set<THREE.Object3D>();
   // Copies of the realistic operators' materials (render/operators.ts), freed when it takes its operator off.
-  const realOwn = new Map<THREE.Material, THREE.Material>();
+  const realOwn = wardrobe();
   const drop = () => {
     if (--holds !== 0) return;
     leave?.();
-    for (const material of [...own.values(), ...propOwn.values(), ...realOwn.values()]) material.dispose();
+    for (const into of [own, propOwn, realOwn]) undress(into);
   };
   const clips: ClipGroup = o.kind === 'humanoid' ? 'humanoid' : o.kind === 'blob' ? 'machine' : 'drone';
   const rig: FigureRig | undefined = o.tactical ? {
-    kind: o.tactical, root, parts, low, motion: new OperatorMotion(clips), worn: false, lent, disposed: false, onWeapon: null, onLend: null,
+    kind: o.tactical, root, parts, low, motion: new OperatorMotion(clips), worn: false, armature: null, lent, disposed: false, onWeapon: null, onLend: null,
     prop: () => heldProp,
-    own(material) {
-      let copy = realOwn.get(material);
-      if (!copy) realOwn.set(material, copy = ownMaterial(material, tint, o.tactical === 'player' ? color : undefined));
-      return copy;
-    },
-    disown() {
-      for (const material of realOwn.values()) material.dispose();
-      realOwn.clear();
-    },
+    wear(mesh, material) { wear(realOwn, mesh, material); },
+    disown() { undress(realOwn); },
   } : undefined;
   const figure: Figure = {
     root, parts, anchors, rig,
@@ -751,11 +915,12 @@ export function makeFigure(o: FigureOpts): Figure {
     setWeapon(kind) {
       const mount = parts.gunMount;
       if (!mount) return;
+      staleFigure(root);
       if (weapon) {
         // Taken out of the tree (a lent arm's too), the old prop is never drawn again.
         release(weapon);
-        for (const material of propOwn.values()) material.dispose();
-        propOwn = new Map();
+        undress(propOwn);
+        propOwn = wardrobe();
       }
       held = kind;
       weapon = propMesh(kind, o.tactical ? 0x333d44 : color);
@@ -766,14 +931,22 @@ export function makeFigure(o: FigureOpts): Figure {
       mount.add(weapon);
       parts.weapon = weapon;
       parts.tip = group(weapon, 'tip', 0, 0.05, kind === 'blade' ? 0.92 : kind === 'knife' || kind === 'pistol' ? 0.31 : kind === 'rifle' ? 0.59 : kind === 'hammer' ? 0.6 : 0.78);
+      // The gun only moves as the debris's (`lend`); a worn operator holds the prop as it is, in its own socket.
+      if (still) for (const node of [weapon, heldProp, parts.tip]) if (node) freeze(node);
       rig?.onWeapon?.();
     },
     setTint(amount, tone) {
-      tint.value.setHex(tone).multiplyScalar(amount);
+      const value = tint.value.setHex(tone).multiplyScalar(amount);
+      // Black is an untinted copy's uniforms, which the shared twins hold.
+      const on = keep || value.r !== 0 || value.g !== 0 || value.b !== 0;
+      if (on === tinted) return;
+      tinted = on;
+      for (const into of [own, propOwn, realOwn]) for (const worn of into.worn) worn.mesh.material = on ? worn.copy : worn.material;
     },
     dropShield() {
       const shield = parts.shield;
       if (!shield) return null;
+      staleFigure(root);
       shield.updateWorldMatrix(true, false);
       const world = shield.matrixWorld.clone();
       shield.removeFromParent();
@@ -783,7 +956,10 @@ export function makeFigure(o: FigureOpts): Figure {
       return shield;
     },
     lend(part) {
+      staleFigure(root);
       if (part === root) rootLent = true;
+      // The debris moves it from now on (effects.ts `debris`, called with this lend's return): it composes again.
+      part.matrixAutoUpdate = true;
       rig?.onLend?.(part);
       lent.add(part);
       holds++;
@@ -798,6 +974,7 @@ export function makeFigure(o: FigureOpts): Figure {
     dispose() {
       if (disposed) return;
       disposed = true;
+      staleFigure(root);
       if (rig) rig.disposed = true;
       unsubscribe?.();
       if (!rootLent) release(root);

@@ -1,0 +1,127 @@
+diff --git a/src/engine/render/index.ts b/src/engine/render/index.ts
+index 3d0ebc5..8d78df9 100644
+--- a/src/engine/render/index.ts
++++ b/src/engine/render/index.ts
+@@ -27,7 +27,7 @@ import type { PostFX } from './postfx';
+ import type { SkyUniforms } from './materials';
+ import type { GfxValues, ShadowBox } from './quality';
+ import type { SkyAssets, SkySource } from './sky';
+-import type { TextureSet } from './surfaces';
++import type { TextureSet, TextureSize } from './surfaces';
+ import type { BakedLight, LoadBake } from './textures';
+ import type { BakeInfo, BakedTriangles, LightmapLayout } from './lightmap';
+ import type { LayoutTicket } from './lightmapJob';
+@@ -116,6 +116,15 @@ const UPLOAD_SLOW_MS = 4;
+  */
+ export const SLOT_BYTES = UPLOAD_GAP_MS * UPLOAD_BYTES_PER_MS;
+ const SLOT_PACK_MS = 2;
++/**
++ * A slot's byte budget at a texture size: `SLOT_BYTES`, doubled (2.88 MB) at
++ * 2K (Ultra), so a slot there holds four 1K maps, or a 2K map (~2.8 MB, which
++ * one slot already sends alone) and what still fits. The gap after a slot
++ * still follows its bytes, so the average rate is the same.
++ */
++export function slotBudget(size: TextureSize): number {
++  return size === 2048 ? 2 * SLOT_BYTES : SLOT_BYTES;
++}
+ /**
+  * The wait after a level load or a look change before the first upload. The
+  * GPU process is still busy with the new level's buffers and programs then,
+@@ -1161,7 +1170,7 @@ export class Renderer {
+   /**
+    * Upload with `pump` in this frame's upload slot: once `_uploadAt` is past,
+    * the first item at any size, then more (from this stream, or from a later
+-   * stream in the same frame) while the slot's items sum to `SLOT_BYTES` at
++   * stream in the same frame) while the slot's items sum to `slotBudget` at
+    * most (`pump(limit)` leaves a bigger one for a slot of its own) and it has
+    * spent under `SLOT_PACK_MS`. The next slot is the slot's bytes at the
+    * average rate (at least `UPLOAD_GAP_MS`) times the pace; an upload slower
+@@ -1179,12 +1188,12 @@ export class Renderer {
+       if (start < this._uploadAt) return;
+       used = 0;
+     }
+-    const before = used;
++    const before = used, budget = slotBudget(TEXTURE_SIZE[this._quality.textures]);
+     let open = true;
+     for (;;) {
+       const t = performance.now();
+-      if (used > 0 && (used >= SLOT_BYTES || t - start >= SLOT_PACK_MS)) break;
+-      const bytes = pump(used > 0 ? SLOT_BYTES - used : Infinity);
++      if (used > 0 && (used >= budget || t - start >= SLOT_PACK_MS)) break;
++      const bytes = pump(used > 0 ? budget - used : Infinity);
+       if (bytes <= 0) break;
+       used += bytes;
+       if (backOff && performance.now() - t > UPLOAD_SLOW_MS) {
+diff --git a/tests/render-chain.test.ts b/tests/render-chain.test.ts
+index 1c6026d..fc95224 100644
+--- a/tests/render-chain.test.ts
++++ b/tests/render-chain.test.ts
+@@ -1,7 +1,7 @@
+ import { afterEach, expect, test, vi } from 'vitest';
+ import * as THREE from 'three';
+ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+-import { CHECK_SHADER_ERRORS, Renderer, SLOT_BYTES, UPLOAD_GAP_MS, roomEnvironment } from '@/engine/render/index';
++import { CHECK_SHADER_ERRORS, Renderer, SLOT_BYTES, UPLOAD_GAP_MS, roomEnvironment, slotBudget } from '@/engine/render/index';
+ import { MATCH_QUIET_MS } from '@/engine/render/pacing';
+ import { spriteGeometry, spriteMaterial } from '@/engine/render/fx';
+ import { bladeBlood } from '@/engine/render/blade-blood';
+@@ -9,6 +9,7 @@ import { weaponMaterial } from '@/engine/render/materials';
+ import { Composite, RIG_DEPTH } from '@/engine/render/postfx';
+ import { PRESETS, PRESET_VALUES } from '@/engine/render/quality';
+ import { aimShadowBox, cascadeCentre, sizeShadowBox } from '@/engine/render/shadows';
++import { TEXTURE_SIZE } from '@/engine/render/surfaces';
+ import { loadSky } from '@/engine/render/sky';
+ import type { PostConfig } from '@/engine/render/postfx';
+ import type { PresetName } from '@/engine/render/quality';
+@@ -712,6 +713,51 @@ test('an upload slot packs small items up to SLOT_BYTES across streams; a big on
+   expect(renderer._uploadAt).toBe(6000 + 2 * UPLOAD_GAP_MS);
+ });
+ 
++test('on 2K textures (Ultra) a slot holds twice SLOT_BYTES; the presets below keep SLOT_BYTES', () => {
++  for (const [name, values] of Object.entries(PRESET_VALUES)) {
++    expect(slotBudget(TEXTURE_SIZE[values.textures])).toBe(name === 'ultra' ? 2 * SLOT_BYTES : SLOT_BYTES);
++  }
++  const renderer = makeRenderer();
++  let clock = 1000;
++  const now = vi.spyOn(performance, 'now').mockImplementation(() => clock);
++  cleanup.push(() => now.mockRestore());
++  const queue = (sizes: number[]) => {
++    const left = [...sizes], sent: number[] = [];
++    const pump = (limit: number) => {
++      const next = left[0];
++      if (next === undefined || next > limit) return 0;
++      left.shift();
++      sent.push(next);
++      return next;
++    };
++    return { sent, pump };
++  };
++  const slot = (frame: number, pump: (limit: number) => number) => {
++    renderer._frame = frame;
++    renderer._upload(pump);
++  };
++  renderer._uploadPace = 1;
++  renderer._uploadAt = 0;
++  // Ultra: four 1K-sized maps share a slot, and the gap after it follows its bytes (48 ms).
++  renderer._quality = PRESET_VALUES.ultra;
++  const half = SLOT_BYTES / 2, a = queue([half, half, half, half, half]);
++  slot(1, a.pump);
++  expect(a.sent.length).toBe(4);
++  expect(renderer._uploadAt).toBeCloseTo(1000 + 2 * UPLOAD_GAP_MS);
++  // A 2K map first in a slot takes in what still fits under the budget, no more.
++  const k2 = 2.8e6, b = queue([k2, 2 * SLOT_BYTES - k2, 1]);
++  clock = 2000;
++  slot(2, b.pump);
++  expect(b.sent).toEqual([k2, 2 * SLOT_BYTES - k2]);
++  // High (1K textures): two of the same maps per slot, as before.
++  renderer._quality = PRESET_VALUES.high;
++  const c = queue([half, half, half]);
++  clock = 3000;
++  slot(3, c.pump);
++  expect(c.sent.length).toBe(2);
++  expect(renderer._uploadAt).toBeCloseTo(3000 + UPLOAD_GAP_MS);
++});
++
+ test('a sky that lands in a match waits out its quiet start, then goes on a step a frame', async () => {
+   const held = holdSkies();
+   const renderer = makeRenderer();

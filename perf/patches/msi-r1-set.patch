@@ -1,0 +1,2141 @@
+diff --git a/src/engine/enemies/index.ts b/src/engine/enemies/index.ts
+index c04cc48..bfbfe9b 100644
+--- a/src/engine/enemies/index.ts
++++ b/src/engine/enemies/index.ts
+@@ -5,6 +5,7 @@ import { Body, seeThrough } from '../physics';
+ import { TONE, unlitMat } from '../render/index';
+ import type { Figure, FigureAnchorName, FigurePartName } from '../render/figure';
+ import { raycastFigure } from '../render/figure';
++import { staleFigure } from '../render/fresh';
+ import type { ToneId } from '../render/palette';
+ import type { NavPath } from '../nav';
+ import type { Ctx, Enemy, EnemyKind, EnemyState, HitInfo, Target } from '../types';
+@@ -207,6 +208,7 @@ export class EnemyManager {
+     badge.name = 'mutation marker'; badge.position.set(0, 1.1, -0.38);
+     if (e.stats.flying) { badge.position.set(0, 0.3, 0.1); e.payload = true; }
+     e.root.add(badge);
++    staleFigure(e.root);
+   }
+ 
+   spawn(type: EnemyKind, position: Vector3, id?: number): EnemyRecord;
+@@ -242,6 +244,7 @@ export class EnemyManager {
+       const arc = e.nodes.arc = new ThreeGroup(); arc.name = 'sentry arc';
+       const mesh = new ThreeMesh(new RingGeometry(3.8, 4, 24, 1, -3 * Math.PI / 4, Math.PI / 2), unlitMat(0xffb020));
+       mesh.rotation.x = -Math.PI / 2; mesh.position.y = 0.04; arc.add(mesh); root.add(arc);
++      staleFigure(root);
+     }
+     if (!this.mirror) this.onSpawn?.(e);
+     if (this.ctx.game.mode !== 'training') {
+diff --git a/src/engine/enemies/model.ts b/src/engine/enemies/model.ts
+index 2aaa79e..c485976 100644
+--- a/src/engine/enemies/model.ts
++++ b/src/engine/enemies/model.ts
+@@ -2,6 +2,7 @@ import { Vector3, Mesh, Quaternion, SphereGeometry } from 'three';
+ import type { Group, Object3D } from 'three';
+ import { makeFigure, TONE_HEX, unlitMat } from '../render/index';
+ import { boundFigure, flashAmount, unboundFigure } from '../render/figure';
++import { freshFigure, staleFigure } from '../render/fresh';
+ import { STILL, type MotionInput } from '../render/operator-motion';
+ import type { Figure, FigureAnchorName, FigureAnchors, FigureParts, WeaponPropKind } from '../render/figure';
+ import { clamp, damp, rand, wrapAngle } from '../util';
+@@ -148,16 +149,19 @@ export function makeModel(stats: EnemyType): { figure: Figure; root: Group; hits
+  * date before it draws (render/operators.ts `frame`, three's scene update),
+  * its own reach does as well, and a ray that tests the whole tree updates it
+  * first (`raycastFigure`); nothing else reads it. Then the hit surfaces are
+- * bounded for `raycastFigure`.
++ * bounded for `raycastFigure`, and the renderer's scene update that follows
++ * leaves the tree as it is (render/fresh.ts), the armature aside.
+  */
+ export function syncModel(e: EnemyRecord): void {
+-  const root = e.root, skip = e.figure.rig?.armature;
++  const root = e.root, rig = e.figure.rig, skip = rig?.armature;
++  staleFigure(root);
+   root.parent?.updateWorldMatrix(true, false);
+   if (skip?.parent === root) updateBut(root, skip);
+   else root.updateMatrixWorld(true);
+   for (const hit of e.hits) worldPosition(hit.obj, root, hit.center);
+   worldPosition((e.figure.anchors as EyeAnchors).torso, root, e.center);
+   boundFigure(root);
++  freshFigure(root, rig);
+ }
+ 
+ /** three's `updateMatrixWorld(true)` on `root` (a plain group), less the subtree `skip`. */
+@@ -403,6 +407,7 @@ export function planDeath(world: DeathRays, e: Pick<EnemyRecord, 'id' | 'yaw' |
+  * left alone.
+  */
+ export function deathPose(e: Pick<EnemyRecord, 'root' | 'figure' | 'stats'>, death: Death, t: number): void {
++  staleFigure(e.root);
+   const { root, stats } = e, scale = stats.scale, side = death.seed < 0.5 ? -1 : 1;
+   const x = clamp(t / DEATH_FALL, 0, 1), knock = easeOut(t / DEATH_KNOCK, 2);
+   const fall = x ** 1.6, limbs = easeOut(x, 2), buckle = Math.sin(Math.PI * x);
+diff --git a/src/engine/render/figure.ts b/src/engine/render/figure.ts
+index c60ac0e..2e88a22 100644
+--- a/src/engine/render/figure.ts
++++ b/src/engine/render/figure.ts
+@@ -7,6 +7,7 @@ import { boxGeo, cylGeo, sphereGeo, coneGeo, torusGeo } from './prims';
+ import { tacticalPart, tacticalTemplate, TACTICAL_MODELS, type TacticalKind } from './tactical';
+ import { OperatorMotion, type ClipGroup } from './operator-motion';
+ import { HIT_LAYER } from './operators';
++import { staleFigure } from './fresh';
+ 
+ const DARK = TONE_HEX[TONE.DARK], ACCENT = TONE_HEX[TONE.ACCENT];
+ 
+@@ -914,6 +915,7 @@ export function makeFigure(o: FigureOpts): Figure {
+     setWeapon(kind) {
+       const mount = parts.gunMount;
+       if (!mount) return;
++      staleFigure(root);
+       if (weapon) {
+         // Taken out of the tree (a lent arm's too), the old prop is never drawn again.
+         release(weapon);
+@@ -944,6 +946,7 @@ export function makeFigure(o: FigureOpts): Figure {
+     dropShield() {
+       const shield = parts.shield;
+       if (!shield) return null;
++      staleFigure(root);
+       shield.updateWorldMatrix(true, false);
+       const world = shield.matrixWorld.clone();
+       shield.removeFromParent();
+@@ -953,6 +956,7 @@ export function makeFigure(o: FigureOpts): Figure {
+       return shield;
+     },
+     lend(part) {
++      staleFigure(root);
+       if (part === root) rootLent = true;
+       // The debris moves it from now on (effects.ts `debris`, called with this lend's return): it composes again.
+       part.matrixAutoUpdate = true;
+@@ -970,6 +974,7 @@ export function makeFigure(o: FigureOpts): Figure {
+     dispose() {
+       if (disposed) return;
+       disposed = true;
++      staleFigure(root);
+       if (rig) rig.disposed = true;
+       unsubscribe?.();
+       if (!rootLent) release(root);
+diff --git a/src/engine/render/flat-shadows.ts b/src/engine/render/flat-shadows.ts
+new file mode 100644
+index 0000000..3b6b9da
+--- /dev/null
++++ b/src/engine/render/flat-shadows.ts
+@@ -0,0 +1,238 @@
++import * as THREE from 'three';
++import { quietly } from './materials';
++import type { FigureRig } from './figure';
++
++/**
++ * Low's flat figures (render/tactical.ts) in one shadow draw each: a figure's
++ * casters (a humanoid's 7, 8 with a shield) are one merged geometry, drawn
++ * where the first one three draws is in its scene walk, each vertex moved by
++ * its own part's matrix (`partMV[part]`). Its positions, triangles and order
++ * are the parts' own, and each part's matrix is the one three would upload
++ * for it (shadow camera inverse x world, rounded to float32), so the map's
++ * texels are the same as seven draws'. A part three would not draw (hidden,
++ * culled by the shadow frustum) gets `OUT_OF_VIEW`: its triangles collapse
++ * to a point behind the camera and are clipped.
++ */
++
++/** The most casters one draw takes: the program's matrix array. */
++export const FLAT_CASTERS = 12;
++
++/** Every vertex to (0, 0, 1e10) in view space: behind the light's camera, so clipped; one point, so no area. */
++const OUT_OF_VIEW: readonly number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1e10, 1];
++
++/** three's `project_vertex`, each vertex by its part's matrix; the rest of the depth program as three's own. */
++function flatDepthShader(this: THREE.Material, shader: THREE.WebGLProgramParametersWithUniforms): void {
++  shader.uniforms.partMV = (this.userData as FlatUserData).partMV;
++  shader.vertexShader = shader.vertexShader
++    .replace('#include <common>', `#include <common>\nuniform mat4 partMV[ ${FLAT_CASTERS} ];\nattribute float part;`)
++    .replace('#include <project_vertex>', THREE.ShaderChunk.project_vertex
++      .replace('mvPosition = modelViewMatrix * mvPosition;', 'mvPosition = partMV[ int( part ) ] * mvPosition;'));
++}
++const flatDepthKey = (): string => 'flat-shadow';
++
++interface FlatUserData { partMV: { value: Float32Array } }
++
++/** A depth material for one figure's draw (three's shadow one, `RGBADepthPacking`); make it `quietly`. */
++function flatDepthMaterial(): THREE.MeshDepthMaterial {
++  const material = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
++  const partMV = { value: new Float32Array(16 * FLAT_CASTERS) };
++  for (let i = 0; i < FLAT_CASTERS; i++) partMV.value.set(OUT_OF_VIEW, 16 * i);
++  (material.userData as FlatUserData).partMV = partMV;
++  material.onBeforeCompile = flatDepthShader;
++  material.customProgramCacheKey = flatDepthKey;
++  return material;
++}
++
++/** `casters`' positions, back to back, a `part` per vertex, and their triangles in order; null for one three draws otherwise. */
++export function mergeCasters(geometries: readonly THREE.BufferGeometry[]): THREE.BufferGeometry | null {
++  let vertices = 0, indices = 0;
++  for (const geometry of geometries) {
++    const position = geometry.getAttribute('position');
++    if (!(position instanceof THREE.BufferAttribute) || !(position.array instanceof Float32Array) || position.itemSize !== 3
++      || !geometry.index || geometry.groups.length > 0 || geometry.drawRange.start !== 0 || geometry.drawRange.count !== Infinity
++      || Object.keys(geometry.morphAttributes).length > 0) return null;
++    vertices += position.count;
++    indices += geometry.index.count;
++  }
++  const position = new Float32Array(3 * vertices), part = new Uint8Array(vertices);
++  const index = vertices > 0xffff ? new Uint32Array(indices) : new Uint16Array(indices);
++  let v = 0, i = 0;
++  geometries.forEach((geometry, k) => {
++    const source = geometry.getAttribute('position') as THREE.BufferAttribute, corners = geometry.index!.array;
++    position.set((source.array as Float32Array).subarray(0, 3 * source.count), 3 * v);
++    part.fill(k, v, v + source.count);
++    for (let c = 0; c < geometry.index!.count; c++) index[i + c] = v + corners[c]!;
++    v += source.count;
++    i += geometry.index!.count;
++  });
++  const geometry = new THREE.BufferGeometry();
++  geometry.setAttribute('position', new THREE.BufferAttribute(position, 3));
++  geometry.setAttribute('part', new THREE.BufferAttribute(part, 1));
++  geometry.setIndex(new THREE.BufferAttribute(index, 1));
++  // Page-level, like the parts it merges: disposers skip it.
++  geometry.userData.shared = true;
++  return geometry;
++}
++
++/** A figure's state between shadow frames. */
++interface Flat {
++  /** Its flat surfaces: a caster that is not one is not merged. */
++  readonly low: ReadonlySet<THREE.Object3D>;
++  /** Its casters in three's walk order and their geometries. */
++  readonly casters: THREE.Mesh[];
++  readonly geometries: THREE.BufferGeometry[];
++  merged: THREE.BufferGeometry | null;
++  /** Which caster carries the draw this pass, and what it had. */
++  carrier: number;
++  own: { geometry: THREE.BufferGeometry; depth: THREE.Material | undefined; culled: boolean } | null;
++}
++
++const _mv = new THREE.Matrix4();
++const isCaster = (node: THREE.Object3D): boolean => node.castShadow
++  && ((node as THREE.Mesh).isMesh === true || (node as THREE.Line).isLine === true || (node as THREE.Points).isPoints === true);
++
++/**
++ * Around Low's shadow pass (render/index.ts): `swap` puts each intact flat
++ * figure with two or more parts in the map on one draw, `restore` puts it
++ * back. Allocates nothing once each figure's merged geometry and the draws'
++ * materials are made (`quietly`).
++ */
++export class FlatShadows {
++  readonly #flats = new WeakMap<FigureRig, Flat>();
++  /** Merged geometries by their casters' geometry ids. */
++  readonly #merged = new Map<string, THREE.BufferGeometry | null>();
++  /** One depth material per figure drawn in a pass: consecutive draws switch material, so three uploads each one's matrices. */
++  readonly #materials: THREE.MeshDepthMaterial[] = [];
++  readonly #swapped: Flat[] = [];
++  readonly #next: THREE.Mesh[] = [];
++  readonly #shown: boolean[] = [];
++
++  /**
++   * Merge `figures` for the pass of `light`'s one map, as `camera` (three's layer test) draws it. The light's shadow
++   * camera and frustum are set here as three sets them again in the pass (`LightShadow.updateMatrices`, same inputs).
++   */
++  swap(figures: Iterable<FigureRig>, light: THREE.DirectionalLight, camera: THREE.Camera): void {
++    const shadow = light.shadow;
++    // A new map's first pass updates the projection first: left to three.
++    if (shadow.map === null) return;
++    shadow.updateMatrices(light);
++    const frustum = shadow.getFrustum();
++    for (const rig of figures) {
++      if (rig.disposed || rig.worn || rig.armature || rig.lent.size > 0 || !rig.root.parent) continue;
++      const flat = this.#flat(rig);
++      const next = this.#next, shown = this.#shown;
++      next.length = shown.length = 0;
++      if (!this.#collect(flat, rig.root, true, camera.layers) || next.length < 2) continue;
++      let same = next.length === flat.casters.length;
++      for (let i = 0; same && i < next.length; i++) same = next[i] === flat.casters[i] && next[i]!.geometry === flat.geometries[i];
++      if (!same) {
++        flat.casters.length = flat.geometries.length = 0;
++        for (const mesh of next) flat.casters.push(mesh), flat.geometries.push(mesh.geometry);
++        const key = flat.geometries.map(geometry => geometry.id).join();
++        if (!this.#merged.has(key)) this.#merged.set(key, quietly(() => mergeCasters(flat.geometries)));
++        flat.merged = this.#merged.get(key)!;
++      }
++      if (!flat.merged) continue;
++      // three's draw test for each, culling included (`renderObject`): drawn, its model-view matrix as three uploads it
++      // for its own draw (the shadow camera's inverse times its world, float32); not, `OUT_OF_VIEW`.
++      const material = this.#materials[this.#swapped.length] ??= quietly(flatDepthMaterial);
++      const out = (material.userData as FlatUserData).partMV.value;
++      let carrier = -1, drawn = 0;
++      for (let i = 0; i < next.length; i++) {
++        const mesh = next[i]!;
++        if (shown[i]! && (!mesh.frustumCulled || frustum.intersectsObject(mesh))) {
++          out.set(_mv.multiplyMatrices(shadow.camera.matrixWorldInverse, mesh.matrixWorld).elements, 16 * i);
++          if (drawn++ === 0) carrier = i;
++        } else out.set(OUT_OF_VIEW, 16 * i);
++      }
++      if (drawn < 2) continue;
++      const mesh = flat.casters[flat.carrier = carrier]!;
++      flat.own = { geometry: mesh.geometry, depth: mesh.customDepthMaterial, culled: mesh.frustumCulled };
++      this.#swapped.push(flat);
++      mesh.geometry = flat.merged;
++      mesh.customDepthMaterial = material;
++      mesh.frustumCulled = false;
++      for (let i = carrier + 1; i < flat.casters.length; i++) flat.casters[i]!.castShadow = false;
++    }
++  }
++
++  /** Every figure `swap` merged back as it was. */
++  restore(): void {
++    for (const flat of this.#swapped) {
++      const mesh = flat.casters[flat.carrier]!, own = flat.own!;
++      mesh.geometry = own.geometry;
++      mesh.customDepthMaterial = own.depth;
++      mesh.frustumCulled = own.culled;
++      for (let i = flat.carrier + 1; i < flat.casters.length; i++) flat.casters[i]!.castShadow = true;
++      flat.own = null;
++    }
++    this.#swapped.length = 0;
++  }
++
++  /** The figures merged this pass (tests). */
++  get swapped(): number { return this.#swapped.length; }
++
++  #flat(rig: FigureRig): Flat {
++    let flat = this.#flats.get(rig);
++    if (!flat) {
++      flat = { low: new Set(rig.low), casters: [], geometries: [], merged: null, carrier: 0, own: null };
++      this.#flats.set(rig, flat);
++    }
++    return flat;
++  }
++
++  /**
++   * Three's walk under `node` (render/WebGLShadowMap `renderObject`): its casters into `#next`, with whether three
++   * would draw each but for the frustum. False if a caster cannot go in the merged draw (not a flat surface, too many,
++   * a depth material of its own, or a material three would draw another way).
++   */
++  #collect(flat: Flat, node: THREE.Object3D, shown: boolean, layers: THREE.Layers): boolean {
++    shown &&= node.visible;
++    if (isCaster(node)) {
++      const mesh = node as THREE.Mesh, material = mesh.material;
++      if (!flat.low.has(mesh) || this.#next.length === FLAT_CASTERS || mesh.customDepthMaterial !== undefined
++        || (mesh as THREE.SkinnedMesh).isSkinnedMesh || (mesh as THREE.InstancedMesh).isInstancedMesh || mesh.morphTargetInfluences !== undefined
++        || Array.isArray(material) || !plain(material)) return false;
++      this.#next.push(mesh);
++      this.#shown.push(shown && mesh.layers.test(layers) && material.visible);
++    }
++    const children = node.children;
++    for (let i = 0; i < children.length; i++) if (!this.#collect(flat, children[i]!, shown, layers)) return false;
++    return true;
++  }
++}
++
++/** A material three's shadow pass draws with its plain depth material, double-sided (one front face for any part's matrix). */
++function plain(material: THREE.Material): boolean {
++  const side = material.shadowSide ?? material.side, maps = material as THREE.MeshStandardMaterial;
++  return side === THREE.DoubleSide && !maps.wireframe && material.alphaTest === 0 && !maps.map && !maps.alphaMap
++    && !maps.displacementMap && !(material.clippingPlanes?.length);
++}
++
++/**
++ * A caster drawn with the flat look's warm-up (render/index.ts `FLAT_PROBE`, `relinkFlatProbe`): the merged draw's
++ * depth program links at the menu. One collapsed triangle, all parts `OUT_OF_VIEW`: no fragment in any pass.
++ */
++export function flatShadowProbe(): THREE.Mesh {
++  return quietly(() => {
++    const geometry = new THREE.BufferGeometry();
++    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(9), 3));
++    geometry.setAttribute('part', new THREE.BufferAttribute(new Uint8Array(3), 1));
++    geometry.setIndex(new THREE.BufferAttribute(new Uint16Array([0, 1, 2]), 1));
++    const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
++    mesh.castShadow = true;
++    mesh.customDepthMaterial = flatDepthMaterial();
++    return mesh;
++  });
++}
++
++/**
++ * `probe` (`flatShadowProbe`) to be drawn at a menu warm-up: its depth material gets its program again there. three keys
++ * every program by the scene's light counts at its first draw and keeps a depth material's program when they change
++ * (`lights` off), while each figure draw's material takes its own at its first draw, in a match: so the probe's key is
++ * made again with the light counts in force at this warm-up, the flat look's, which its match keeps.
++ */
++export function relinkFlatProbe(probe: THREE.Mesh): THREE.Mesh {
++  probe.customDepthMaterial!.needsUpdate = true;
++  return probe;
++}
+diff --git a/src/engine/render/fresh.ts b/src/engine/render/fresh.ts
+new file mode 100644
+index 0000000..ea5f321
+--- /dev/null
++++ b/src/engine/render/fresh.ts
+@@ -0,0 +1,77 @@
++import * as THREE from 'three';
++
++/**
++ * A figure root whose owner has just brought its tree up to date (enemies/model.ts `syncModel`): the renderer's
++ * scene update that follows leaves that tree as it is (perf Round 6).
++ *
++ * three's `updateMatrixWorld` recomposes each node it reaches under a forced parent (the scene composes its own
++ * matrix, so it always forces its children) and multiplies it by its parent's world matrix again. From the same
++ * inputs that is the same products, so the same bits as the owner's update gave. While a root is fresh nothing
++ * under it has changed since that update: no local transform written, no matrix or `matrixAutoUpdate` set, no
++ * node added, moved or taken out. Every writer that can do one of these after the owner's update marks the root
++ * stale first (`staleFigure`): the figure's weapon swap, shield drop, lend and dispose (render/figure.ts), an
++ * operator put on or taken off (render/operators.ts, it moves the prop), a death pose, a badge or an arc added
++ * (enemies). The root's own step stays three's, so a root or parent that moved since is still seen: its tree is
++ * left only while its world matrix is bit-equal to the one the owner left. The worn operator's armature (posed by
++ * the renderer after the step, render/operators.ts `frame`, and left out of the owner's update) is always walked as
++ * three walks it. A root is fresh for one walk only: the next one, without another owner's update, is three's.
++ */
++interface Fresh {
++  on: boolean;
++  /** The root's world matrix as the owner's update left it. */
++  readonly world: Float64Array;
++  /** The figure's operator hooks: its armature, if it wears one. */
++  readonly rig: { readonly armature: THREE.Object3D | null } | undefined;
++}
++
++const fresh = new WeakMap<THREE.Object3D, Fresh>();
++const walk = THREE.Object3D.prototype.updateMatrixWorld;
++
++/** three r170's `Object3D.updateMatrixWorld`, but a fresh root's tree (less its armature) is not walked again. */
++function freshWalk(this: THREE.Object3D, force?: boolean): void {
++  const state = fresh.get(this);
++  if (!state?.on) {
++    walk.call(this, force);
++    return;
++  }
++  state.on = false;
++  if (this.matrixAutoUpdate) this.updateMatrix();
++  if (this.matrixWorldNeedsUpdate || force) {
++    if (this.matrixWorldAutoUpdate) {
++      if (this.parent === null) this.matrixWorld.copy(this.matrix);
++      else this.matrixWorld.multiplyMatrices(this.parent.matrixWorld, this.matrix);
++    }
++    this.matrixWorldNeedsUpdate = false;
++    force = true;
++  }
++  const m = this.matrixWorld.elements, w = state.world;
++  let same = true;
++  for (let i = 0; i < 16; i++) {
++    if (!Object.is(m[i], w[i])) {
++      same = false;
++      break;
++    }
++  }
++  const armature = state.rig?.armature ?? null, children = this.children;
++  for (let i = 0, l = children.length; i < l; i++) {
++    const child = children[i]!;
++    if (!same || child === armature) child.updateMatrixWorld(force);
++  }
++}
++
++/** The owner has just updated `root`'s whole tree, its armature aside: the next scene update can leave it. */
++export function freshFigure(root: THREE.Object3D, rig?: { readonly armature: THREE.Object3D | null }): void {
++  let state = fresh.get(root);
++  if (!state) {
++    fresh.set(root, state = { on: false, world: new Float64Array(16), rig });
++    root.updateMatrixWorld = freshWalk;
++  }
++  state.world.set(root.matrixWorld.elements);
++  state.on = true;
++}
++
++/** Something under `root` changes (or may have) since its owner's update: the next scene update walks it whole. */
++export function staleFigure(root: THREE.Object3D): void {
++  const state = fresh.get(root);
++  if (state) state.on = false;
++}
+diff --git a/src/engine/render/index.ts b/src/engine/render/index.ts
+index d4a6d17..6808a07 100644
+--- a/src/engine/render/index.ts
++++ b/src/engine/render/index.ts
+@@ -22,6 +22,7 @@ import { WeaponAssets, weaponTextureSize } from './weapons';
+ import { FX_UNIFORMS, FxAssets, fxLateTemplate, fxTemplate, fxTextureSize } from './fx';
+ import { useOperatorSource, usePropSource } from './figure';
+ import { OperatorAssets, disposeSkinnedDepthProbe, operatorWant, skinnedDepthProbe } from './operators';
++import { FlatShadows, flatShadowProbe, relinkFlatProbe } from './flat-shadows';
+ import { PropAssets, dressingSets, propTextureSize } from './props';
+ import type { PostFX } from './postfx';
+ import type { SkyUniforms } from './materials';
+@@ -190,6 +191,9 @@ const luminance = (c: THREE.Color): number => 0.2126 * c.r + 0.7152 * c.g + 0.07
+ const SHADOW_PROBE = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());
+ SHADOW_PROBE.castShadow = true;
+ 
++/** The flat look's merged figure draw's depth program (render/flat-shadows.ts), warmed on that look only. */
++const FLAT_PROBE = flatShadowProbe();
++
+ /**
+  * A root whose shader work is held off a match's frames (`Renderer._compiles`,
+  * `_warmups`); `valid` is false once it was freed. `inMatch`: its warm-up draw
+@@ -283,9 +287,9 @@ export class Renderer {
+   _fogFar = FOG_FAR;
+   _quality: Readonly<GfxValues> = PRESET_VALUES.high;
+   /**
+-   * Ultra only (`fightCpuPaths`, set by `applyQuality`): each shadow redraw hides the rig and the worn operators'
+-   * caster-free subtrees (`OperatorAssets.shadowSwap`), and the post chain runs in one render (`Composite._oneRender`).
+-   * Off on Low, Medium, High and custom values: the shadow pass walks every shown node, and each post pass renders
++   * Medium, High and Ultra (`fightCpuPaths`, set by `applyQuality`): each shadow redraw hides the rig and the worn
++   * operators' caster-free subtrees (`OperatorAssets.shadowSwap`), and the post chain runs in one render
++   * (`Composite._oneRender`). Off on Low and custom values: the shadow pass walks every shown node, and each post pass renders
+    * itself.
+    */
+   _fightCpu = false;
+@@ -540,18 +544,23 @@ export class Renderer {
+         if (this._ownMaterials.length > count) this._ownMaterials.length = this._ownGroups.length = count;
+       }
+     };
+-    // Ultra only (`_fightCpu`, read at each redraw): the rig casts nothing (`_prepareRigMesh`), so it is hidden
+-    // for the pass and the cascades' walks skip it (three has listed the main pass's draws before its shadow pass, so
+-    // that pass sees it as it was), and the worn operators' caster-free subtrees are hidden too. Low, Medium and
+-    // High walk every shown node, as before.
++    // Low's one map: each flat figure in one draw (`FlatShadows`).
++    const flats = new FlatShadows();
++    // Medium, High and Ultra (`_fightCpu`, read at each redraw): the rig casts nothing (`_prepareRigMesh`), so it is
++    // hidden for the pass and the cascades' walks skip it (three has listed the main pass's draws before its shadow
++    // pass, so that pass sees it as it was), and the worn operators' caster-free subtrees are hidden too. Low walks
++    // every shown node, as before.
+     shadowMap.render = (lights, scene, camera) => {
+       if (!shadowMap.needsUpdate) return drawShadows(lights, scene, camera);
+       const walk = this._fightCpu, rig = this.rig.visible;
+       if (walk) this.rig.visible = false;
+       this.operators.shadowSwap(true, walk);
+       try {
++        const sun = lights.length === 1 && this._boxes === null && this._quality.look !== 'realistic' ? lights[0] : null;
++        if (sun instanceof THREE.DirectionalLight) flats.swap(this.operators.figures, sun, camera);
+         drawCasters(lights, scene, camera);
+       } finally {
++        flats.restore();
+         this.operators.shadowSwap(false);
+         if (walk) this.rig.visible = rig;
+       }
+@@ -1444,6 +1453,8 @@ export class Renderer {
+     this._programsWarm = true;
+     void this._hold(this._compiles, this.rig, () => true).then(() => this._hold(this._warmups, this.rig, () => true));
+     void this._hold(this._warmups, SHADOW_PROBE, () => true);
++    // Low's one draw per flat figure (`FlatShadows`), its program keyed by this look's lights.
++    if (this._quality.look !== 'realistic') void this._hold(this._warmups, relinkFlatProbe(FLAT_PROBE), () => true);
+     // The worn operators' skinned shadow program, which their glb's compile does not link (realistic tiers).
+     if (operatorWant(this._quality) !== null) void this._hold(this._warmups, this._depthProbe ??= skinnedDepthProbe(), () => true);
+     const probe = this._skyProbe;
+diff --git a/src/engine/render/operator-motion.ts b/src/engine/render/operator-motion.ts
+index 7465d0e..fb2ce5f 100644
+--- a/src/engine/render/operator-motion.ts
++++ b/src/engine/render/operator-motion.ts
+@@ -136,8 +136,8 @@ for (const [key, { duration }] of Object.entries(manifest.clips as Record<string
+ /**
+  * A figure's clip state: every loop's weight and time, the one-shots in
+  * flight, and the rotors' spin. `update` runs with the owner's step (so a
+- * paused game holds the pose); `delta` gives a bone's rotation from all of
+- * them for the frame being drawn.
++ * paused game holds the pose); `playing` and `boneDelta` give a bone's
++ * rotation from all of them for the frame being drawn.
+  */
+ export class OperatorMotion {
+   readonly group: ClipGroup;
+@@ -155,6 +155,11 @@ export class OperatorMotion {
+   #meleeProgress: number | null = null;
+   /** `loopWeights`' output, reused each step. */
+   readonly #target: Record<LoopClip, number> = { idle: 1, walk: 0, run: 0, strafeL: 0, strafeR: 0, crouch: 0, aim: 0 };
++  /** The clips playing this frame (`playing`), the first `#playing`: each one's tracks by bone, its time and its weight. */
++  readonly #tracks: (readonly (THREE.Interpolant | null)[])[] = [];
++  readonly #times: number[] = [];
++  readonly #amounts: number[] = [];
++  #playing = 0;
+ 
+   constructor(group: ClipGroup) {
+     this.group = group;
+@@ -199,34 +204,72 @@ export class OperatorMotion {
+   }
+ 
+   /**
+-   * A bone's rotation from the clips at their weights, into `out`
+-   * (identity when none moves it). Loops at their clocks, each slerped from
+-   * identity by its weight; one-shots on top.
++   * The clips that play this frame, from a kind's clips bound to its bones
++   * (`bindClips`): each one's tracks, time and weight, loops then one-shots,
++   * in the order `boneDelta` applies them. Once per figure per frame, before
++   * `boneDelta` for each of its bones (render/operators.ts `OperatorBody.sync`).
+    */
+-  delta(library: ClipLibrary, bone: string, out: THREE.Quaternion): THREE.Quaternion {
+-    out.identity();
+-    for (const name of LOOPS) {
+-      const weight = this.weights[name];
++  playing(binding: ClipBinding): void {
++    let n = 0;
++    for (let c = 0; c < LOOPS.length; c++) {
++      const name = LOOPS[c]!, weight = this.weights[name];
+       if (weight < 0.01) continue;
+-      const clip = library.get(this.group, name);
+-      const track = clip?.tracks.get(bone);
+-      if (!clip || !track) continue;
+-      const t = name === 'idle' ? this.idleTime % clip.duration : name === 'crouch' || name === 'aim' ? 0 : this.cycle * clip.duration;
+-      out.multiply(sample(track, t, weight));
++      const clip = binding.clips[c];
++      if (!clip) continue;
++      this.#tracks[n] = binding.tracks[c]!;
++      this.#times[n] = name === 'idle' ? this.idleTime % clip.duration : name === 'crouch' || name === 'aim' ? 0 : this.cycle * clip.duration;
++      this.#amounts[n++] = weight;
+     }
+-    for (const name of ONE_SHOTS) {
+-      const shot = this.shots.get(name);
++    for (let s = 0; s < ONE_SHOTS.length; s++) {
++      const name = ONE_SHOTS[s]!, shot = this.shots.get(name);
+       if (!shot) continue;
+-      const clip = library.get(this.group, name);
+-      const track = clip?.tracks.get(bone);
+-      if (!clip || !track) continue;
+-      const t = name === 'melee' ? shot.t * clip.duration : Math.min(shot.t, clip.duration);
+-      out.multiply(sample(track, t, Math.min(1, shot.weight)));
++      const c = LOOPS.length + s, clip = binding.clips[c];
++      if (!clip) continue;
++      this.#tracks[n] = binding.tracks[c]!;
++      this.#times[n] = name === 'melee' ? shot.t * clip.duration : Math.min(shot.t, clip.duration);
++      this.#amounts[n++] = Math.min(1, shot.weight);
++    }
++    this.#playing = n;
++  }
++
++  /**
++   * A bone's rotation from the clips `playing` found, by the bone's index in
++   * that binding, into `out` (identity when none moves it). Loops at their
++   * clocks, each slerped from identity by its weight; one-shots on top.
++   */
++  boneDelta(bone: number, out: THREE.Quaternion): THREE.Quaternion {
++    out.identity();
++    for (let k = 0; k < this.#playing; k++) {
++      const track = this.#tracks[k]![bone];
++      if (!track) continue;
++      out.multiply(sample(track, this.#times[k]!, this.#amounts[k]!));
+     }
+     return out;
+   }
+ }
+ 
++/** Every clip, loops then one-shots: a `ClipBinding`'s order. */
++export const CLIPS: readonly ClipName[] = [...LOOPS, ...ONE_SHOTS];
++
++/**
++ * A kind's clips bound to its bones (`bindClips`), for one library and clip
++ * group: per clip in `CLIPS` order, the clip (null where the library has
++ * none) and each bone's track by the bone's index (null where the clip does
++ * not move it), so a frame's bones look nothing up by name.
++ */
++export interface ClipBinding {
++  readonly library: ClipLibrary;
++  readonly group: ClipGroup;
++  readonly clips: readonly (Clip | null)[];
++  readonly tracks: readonly (readonly (THREE.Interpolant | null)[])[];
++}
++
++/** A kind's clips in a library for a group, bound to its bones (in the kind's bone order, by name). */
++export function bindClips(library: ClipLibrary, group: ClipGroup, bones: readonly { readonly name: string }[]): ClipBinding {
++  const clips = CLIPS.map(name => library.get(group, name));
++  return { library, group, clips, tracks: clips.map(clip => bones.map(({ name }) => clip?.tracks.get(name) ?? null)) };
++}
++
+ const _sample = new THREE.Quaternion();
+ const _identity = new THREE.Quaternion();
+ function sample(track: THREE.Interpolant, t: number, weight: number): THREE.Quaternion {
+diff --git a/src/engine/render/operators.ts b/src/engine/render/operators.ts
+index bb51d29..a81f8c3 100644
+--- a/src/engine/render/operators.ts
++++ b/src/engine/render/operators.ts
+@@ -1,9 +1,10 @@
+ import * as THREE from 'three';
+ import manifest from './operator-assets.json';
+ import { OPERATOR_AO, levelDepthMat, levelDepthSkinnedMat, levelDepthTwin, operatorMaterial, quietly, twinMaterial, wearMaps } from './materials';
+-import { ClipLibrary, LOOPS, ONE_SHOTS, type ClipGroup, type OperatorMotion } from './operator-motion';
++import { ClipLibrary, LOOPS, ONE_SHOTS, bindClips, type ClipBinding, type ClipGroup, type OperatorMotion } from './operator-motion';
+ import { ANISOTROPY, TEXTURE_MAPS, TEXTURE_SIZE } from './surfaces';
+ import { textureBytes } from './textures';
++import { staleFigure } from './fresh';
+ import type { FigureRig, OperatorSource } from './figure';
+ import type { GfxValues } from './quality';
+ import type { TextureMap, TextureSize } from './surfaces';
+@@ -141,6 +142,8 @@ export interface KindTemplate {
+    * kind of one mesh.
+    */
+   shadow: THREE.BufferGeometry | null;
++  /** Its clips bound to its bones, for the library and clip group its figures last played (`OperatorBody.sync`). */
++  clips: ClipBinding | null;
+ }
+ 
+ /** How far the trunk may move inside the figure (the hips sinking and sliding back in a death fall, a lean), metres of figure space. */
+@@ -239,6 +242,8 @@ export class OperatorAssets implements OperatorSource {
+   kind(kind: string): KindTemplate | null { return this.#kinds.get(kind) ?? null; }
+   /** Figures wearing an operator now. */
+   get worn(): number { return this.#bodies.size; }
++  /** Every figure that can wear one, worn or not (Low's flat shadows, render/flat-shadows.ts). */
++  get figures(): ReadonlySet<FigureRig> { return this.#figures; }
+ 
+   /** The baked occlusion's strength (`OPERATOR_AO`, by the AO setting), on the set materials: their twins and the figures' copies read it there. */
+   occlusion(intensity: number): void {
+@@ -346,7 +351,7 @@ export class OperatorAssets implements OperatorSource {
+       });
+       const template: KindTemplate = {
+         kind, group: clipGroup(kind, scene), bones, boneInverses: skeleton.boneInverses, meshes, gibs: new Map(), bounds: new THREE.Sphere(),
+-        shadow: null,
++        shadow: null, clips: null,
+       };
+       template.gibs = gibGeometries(template);
+       template.bounds = restBounds(template);
+@@ -493,7 +498,7 @@ export class OperatorAssets implements OperatorSource {
+    * its first mesh on its kind's merged geometry (`KindTemplate.shadow`), the others out of the pass; off, back. The
+    * meshes are siblings with one skeleton, bind matrix, sphere and depth material, drawn one after another, so the
+    * one draw runs the same program on the same vertices and triangles in the same order. Also, `on` with `walk`
+-   * (Ultra only: render/index.ts `_fightCpu`), every worn figure's subtrees that hold no caster are hidden
++   * (Medium, High and Ultra: render/index.ts `_fightCpu`), every worn figure's subtrees that hold no caster are hidden
+    * (`OperatorBody.bare`): three walks every shown node once per cascade, and a hidden one ends the walk there. Its
+    * casters are drawn as before, in the same order. Off shows again whatever was hidden. No allocation.
+    */
+@@ -815,7 +820,7 @@ export function shadowGeometry(template: KindTemplate): THREE.BufferGeometry | n
+   return merged;
+ }
+ 
+-const _q = new THREE.Quaternion();
++const _q = new THREE.Quaternion(), _b = new THREE.Quaternion();
+ 
+ /**
+  * An operator worn by one figure: its bones (children of the figure's root,
+@@ -841,11 +846,17 @@ export class OperatorBody {
+   #prop: THREE.Object3D | null = null;
+   /** The kind's shared twins of the set materials, per mesh, for the skinned meshes or the rigid gibs (`OperatorAssets.#twins`). */
+   readonly #twins: (rigid: boolean) => readonly THREE.Material[];
++  /** Per bone, how a drone's rotor spins (+1 with the spin, -1 against it), 0 for a bone that is not a rotor. */
++  readonly #rotors: readonly number[];
++  /** The support arm's bones (`#reach`; undefined where the kind has none). */
++  readonly #upperL: THREE.Bone | undefined;
++  readonly #foreL: THREE.Bone | undefined;
+ 
+   constructor(rig: FigureRig, template: KindTemplate, twins: (rigid: boolean) => readonly THREE.Material[]) {
+     this.rig = rig;
+     this.template = template;
+     this.#twins = twins;
++    this.#rotors = template.bones.map(({ name }) => (!name.includes('-rotor') ? 0 : name.endsWith('F') === name.includes('wingL') ? 1 : -1));
+     this.armature.name = 'operator';
+     this.bones = template.bones.map(({ name, position }) => {
+       const bone = new THREE.Bone();
+@@ -855,6 +866,8 @@ export class OperatorBody {
+     });
+     template.bones.forEach(({ parent }, i) => (parent >= 0 ? this.bones[parent]! : this.armature).add(this.bones[i]!));
+     this.sources = template.bones.map(({ name }) => rig.parts[name as keyof typeof rig.parts] ?? rig.root.getObjectByName(name) ?? null);
++    this.#upperL = this.bones[template.bones.findIndex(b => b.name === 'upperL')];
++    this.#foreL = this.bones[template.bones.findIndex(b => b.name === 'foreL')];
+     this.skeleton = new THREE.Skeleton(this.bones, template.boneInverses);
+     const worn = twins(false);
+     this.meshes = template.meshes.map(({ geometry, set }, i) => {
+@@ -872,6 +885,8 @@ export class OperatorBody {
+       this.armature.add(mesh);
+       return mesh;
+     });
++    // The prop leaves the weapon group for the hand (`#holdProp`): the next scene update walks the whole figure.
++    staleFigure(rig.root);
+     rig.root.add(this.armature);
+     rig.worn = true; rig.armature = this.armature;
+     for (const mesh of rig.low) mesh.layers.set(HIT_LAYER);
+@@ -947,26 +962,36 @@ export class OperatorBody {
+   /** Follow the pivots (and nodes), times the clips' deltas; a bone whose source left the figure folds to nothing. */
+   sync(clips: ClipLibrary | null): void {
+     const { rig, template } = this, motion: OperatorMotion = rig.motion;
++    const playing = clips !== null && motion.group !== 'drone';
++    if (playing) {
++      let binding = template.clips;
++      if (!binding || binding.library !== clips || binding.group !== motion.group) binding = template.clips = bindClips(clips, motion.group, template.bones);
++      motion.playing(binding);
++    }
++    // Each bone's rotation is built in `_b` and written once: every write to a bone's quaternion has three compute its
++    // Euler `rotation` again, so one write (of the same final value) leaves it as two did.
+     for (let i = 0; i < template.bones.length; i++) {
+-      const { name, position } = template.bones[i]!, bone = this.bones[i]!, source = this.sources[i];
++      const { position } = template.bones[i]!, bone = this.bones[i]!, source = this.sources[i];
+       if (source) {
+         if (!attached(source, rig.root) || !source.visible) {
+           bone.scale.setScalar(1e-4);
+           continue;
+         }
+         bone.position.copy(source.position);
+-        bone.quaternion.copy(source.quaternion);
++        _b.copy(source.quaternion);
+         bone.scale.copy(source.scale);
+       } else {
+         bone.position.copy(position);
+-        bone.quaternion.identity();
++        _b.identity();
+         bone.scale.setScalar(1);
+       }
+-      if (name.includes('-rotor')) {
+-        bone.quaternion.multiply(_q.setFromAxisAngle(_up, name.endsWith('F') === name.includes('wingL') ? motion.spin : -motion.spin));
+-      } else if (clips && motion.group !== 'drone') {
+-        bone.quaternion.multiply(motion.delta(clips, name, _q));
++      const rotor = this.#rotors[i]!;
++      if (rotor !== 0) {
++        _b.multiply(_q.setFromAxisAngle(_up, rotor > 0 ? motion.spin : -motion.spin));
++      } else if (playing) {
++        _b.multiply(motion.boneDelta(i, _q));
+       }
++      bone.quaternion.copy(_b);
+     }
+     if (motion.group === 'humanoid' && this.#prop && (motion.carry === 'long' || motion.carry === 'pistol') && motion.aim > 0.02) this.#reach(motion);
+   }
+@@ -977,16 +1002,19 @@ export class OperatorBody {
+    * a long gun, or round the grip hand on a pistol, the elbow down and out.
+    */
+   #reach(motion: OperatorMotion): void {
+-    const at = (name: string) => this.bones[this.template.bones.findIndex(b => b.name === name)];
+-    const upper = at('upperL'), fore = at('foreL');
++    const upper = this.#upperL, fore = this.#foreL, root = this.rig.root;
+     if (!upper || !fore || upper.scale.x < 0.5) return;
+-    this.rig.root.updateWorldMatrix(true, false);
+-    this.armature.updateMatrixWorld(true);
+-    const shoulder = upper.getWorldPosition(_s), scale = this.rig.root.matrixWorld.getMaxScaleOnAxis();
++    root.updateWorldMatrix(true, false);
++    // The world matrices read below, each computed once as three's `updateWorldMatrix` would: the shoulder's chain and
++    // the socket's under the root. The rest of the armature waits for the render's scene walk, which computes every
++    // node again from the same inputs (as it did after a whole-armature update here).
++    freshen(upper, root);
++    freshen(this.socket, root);
++    const shoulder = _s.setFromMatrixPosition(upper.matrixWorld), scale = root.matrixWorld.getMaxScaleOnAxis();
+     const a = 0.3 * scale, b = 0.29 * scale;
+     // The handguard where the arm reaches it; with the gun arm straight out (the game's aim pose) it often
+     // does not, and the hand takes the gun as far forward of the grip as it reaches, or cups the grip hand.
+-    const grip = this.socket.localToWorld(_g.copy(this.#grip)), target = this.socket.localToWorld(_t.copy(this.#support));
++    const grip = _g.copy(this.#grip).applyMatrix4(this.socket.matrixWorld), target = _t.copy(this.#support).applyMatrix4(this.socket.matrixWorld);
+     const reach = (a + b) * 0.98;
+     if (target.distanceTo(shoulder) > reach) {
+       const along = _d.subVectors(target, grip), from = _o.subVectors(grip, shoulder);
+@@ -998,15 +1026,16 @@ export class OperatorBody {
+     const d = Math.min(Math.max(toTarget.length(), Math.abs(a - b) + 1e-3), a + b - 1e-3);
+     toTarget.normalize();
+     // The elbow hangs down and out, away from the chest.
+-    const pole = _v.set(-0.5, -1, -0.2).transformDirection(this.rig.root.matrixWorld);
++    const pole = _v.set(-0.5, -1, -0.2).transformDirection(root.matrixWorld);
+     pole.addScaledVector(toTarget, -pole.dot(toTarget)).normalize();
+     const cos = (a * a + d * d - b * b) / (2 * a * d), sin = Math.sqrt(Math.max(0, 1 - cos * cos));
+     const elbow = _e.copy(shoulder).addScaledVector(toTarget, a * cos).addScaledVector(pole, a * sin);
+     const hand = _h.copy(shoulder).addScaledVector(toTarget, d);
+     const weight = Math.min(1, motion.aim);
+     aimBone(upper, _w.subVectors(elbow, shoulder).normalize(), weight);
+-    upper.updateMatrixWorld(true);
+-    aimBone(fore, _w.subVectors(hand, fore.getWorldPosition(_f)).normalize(), weight);
++    upper.updateWorldMatrix(false, false);
++    freshen(fore, upper);
++    aimBone(fore, _w.subVectors(hand, _f.setFromMatrixPosition(fore.matrixWorld)).normalize(), weight);
+   }
+ 
+   /**
+@@ -1037,6 +1066,8 @@ export class OperatorBody {
+ 
+   /** Back to the flat model: its surfaces drawn again, the prop in its weapon group, the operator's pieces gone. */
+   dispose(): void {
++    // The prop goes back to its weapon group, under the figure's pivots.
++    staleFigure(this.rig.root);
+     this.#returnProp();
+     for (const mesh of this.rig.low) mesh.layers.set(0);
+     for (const gib of this.#gibs) gib.removeFromParent();
+@@ -1079,17 +1110,35 @@ const _e = new THREE.Vector3(), _h = new THREE.Vector3(), _w = new THREE.Vector3
+ const _d = new THREE.Vector3(), _o = new THREE.Vector3();
+ const _world = new THREE.Quaternion(), _parent = new THREE.Quaternion(), _turn = new THREE.Quaternion(), _was = new THREE.Quaternion();
+ const _down = new THREE.Vector3(0, -1, 0), _dir = new THREE.Vector3();
++const _at = new THREE.Vector3(), _size = new THREE.Vector3();
++const _chain: (THREE.Object3D | null)[] = [];
++
++/**
++ * `node`'s world matrix and those of its ancestors under `top` (whose own is current), top-down, each as three's
++ * `updateWorldMatrix(false, false)` computes it: what `node.updateWorldMatrix(true, false)` gives once `top`'s chain
++ * is current.
++ */
++function freshen(node: THREE.Object3D, top: THREE.Object3D): void {
++  let n = 0;
++  for (let at: THREE.Object3D | null = node; at && at !== top; at = at.parent) _chain[n++] = at;
++  while (n > 0) {
++    _chain[--n]!.updateWorldMatrix(false, false);
++    _chain[n] = null;
++  }
++}
+ 
+-/** Turn a limb bone so its length (its -y) points along `dir` in the world, by the shortest turn from where it points, `weight` of the way. */
++/**
++ * Turn a limb bone so its length (its -y) points along `dir` in the world, by the shortest turn from where it points,
++ * `weight` of the way. Its world matrix and its parent's are current (`freshen`). The quaternion is written once.
++ */
+ function aimBone(bone: THREE.Bone, dir: THREE.Vector3, weight: number): void {
+-  bone.getWorldQuaternion(_world);
++  bone.matrixWorld.decompose(_at, _world, _size);
+   _dir.copy(_down).applyQuaternion(_world);
+   _turn.setFromUnitVectors(_dir, dir);
+   _world.premultiply(_turn);
+-  bone.parent!.getWorldQuaternion(_parent);
+-  _was.copy(bone.quaternion);
+-  bone.quaternion.copy(_parent.invert().multiply(_world));
+-  if (weight < 1) bone.quaternion.copy(_was.slerp(bone.quaternion, weight));
++  bone.parent!.matrixWorld.decompose(_at, _parent, _size);
++  const aimed = _parent.invert().multiply(_world);
++  bone.quaternion.copy(weight < 1 ? _was.copy(bone.quaternion).slerp(aimed, weight) : aimed);
+ }
+ 
+ /** `node` or a node under it is a mesh, line or points that casts: three's shadow pass may draw it. */
+diff --git a/src/engine/render/postfx.ts b/src/engine/render/postfx.ts
+index a6a0231..109ed01 100644
+--- a/src/engine/render/postfx.ts
++++ b/src/engine/render/postfx.ts
+@@ -397,14 +397,14 @@ export class Composite {
+   readonly _sceneRegion = regionUniforms();
+   readonly _clear = new THREE.Color();
+   /**
+-   * With `_oneRender` (Ultra only: render/index.ts `_fightCpu`, set at each quality change and read at each
+-   * `draw`), the chain runs inside one `render` of `scene` (`_afterChain`, its `onAfterRender` for that render only),
++   * With `_oneRender` (Medium, High and Ultra: render/index.ts `_fightCpu`, set at each quality change and read at
++   * each `draw`), the chain runs inside one `render` of `scene` (`_afterChain`, its `onAfterRender` for that render only),
+    * each pass a `renderBufferDirect` there: the draw a render of the lone triangle made, without that render's list,
+    * sort, light and shadow steps. Set by `draw` for that render (`_chainCamera`) and while its passes run
+    * (`_inChain`); `_pass` outside it (the perf harness's calibration pass) renders as before. For the outer render
+    * the triangle wears `_final` switched off (`visible`): not drawn, but its geometry is still uploaded. Not a
+    * material of its own: three's constructor draws a uuid from Math.random, which would shift every random draw after
+-   * it (the perf harness seeds it at boot). Off (Low, Medium, High, custom values), each pass renders itself, as before.
++   * it (the perf harness seeds it at boot). Off (Low, custom values), each pass renders itself, as before.
+    */
+   _oneRender = false;
+   _chainCamera: THREE.PerspectiveCamera | null = null;
+@@ -1191,7 +1191,7 @@ export class Composite {
+     this._toneUniforms.shaftColor.value.copy(this._sunColor).multiplyScalar(strength * SHAFT_GAIN);
+     // The first pass's target, bound before the outer render: that render then resolves nothing (the MSAA scene
+     // target is still bound after the scene pass) and sets the clear colour as the pass's own render did. Without
+-    // `_oneRender` (Low, Medium, High), Low's lone pass to the canvas, and a renderer that clears in every render
++    // `_oneRender` (Low, custom values), Low's lone pass to the canvas, and a renderer that clears in every render
+     // (autoClear), each pass renders itself as before. The hook is on the scene for the one render only.
+     const first = config.ao > 0 ? this._aoRaw : config.bloom ? this._bloom[0]! : strength > 0 ? this._shafts[0]
+       : config.look === 'realistic' || smaa ? this._ldr : null;
+diff --git a/src/engine/render/quality.ts b/src/engine/render/quality.ts
+index 0ea3017..ed49ee4 100644
+--- a/src/engine/render/quality.ts
++++ b/src/engine/render/quality.ts
+@@ -140,12 +140,12 @@ export function presetOf(values: Readonly<GfxValues>): PresetName | null {
+ }
+ 
+ /**
+- * The fight-CPU paths that were measured as faster on Ultra only (perf/LOG.md, Round 6: the shadow walk's hidden
+- * subtrees and the post chain in one render; High's gain was not validated). Low, Medium, High and custom values keep
+- * the old paths.
++ * The fight-CPU paths (perf/LOG.md, Round 6: the shadow walk's hidden subtrees and the post chain in one render), on
++ * Medium, High and Ultra (Round 9). Low and custom values keep the old paths.
+  */
+ export function fightCpuPaths(values: Readonly<GfxValues>): boolean {
+-  return presetOf(values) === 'ultra';
++  const p = presetOf(values);
++  return p === 'ultra' || p === 'high' || p === 'medium';
+ }
+ 
+ // ------------------------------------------------------------------ storage
+diff --git a/tests/figure-matrix-skip.test.ts b/tests/figure-matrix-skip.test.ts
+new file mode 100644
+index 0000000..5e5d7f8
+--- /dev/null
++++ b/tests/figure-matrix-skip.test.ts
+@@ -0,0 +1,291 @@
++import { afterEach, expect, test } from 'vitest';
++import { BoxGeometry, DataTexture, Matrix4, Mesh, MeshStandardMaterial, PerspectiveCamera, Scene, Vector3 } from 'three';
++import type { Object3D, Texture } from 'three';
++import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
++import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
++import { OperatorAssets } from '@/engine/render/operators';
++import { useOperatorSource, usePropSource } from '@/engine/render/figure';
++import type { WeaponPropKind } from '@/engine/render/figure';
++import { staleFigure } from '@/engine/render/fresh';
++import { EnemyManager } from '@/engine/enemies/index';
++import type { EnemyRecord } from '@/engine/enemies/index';
++import { syncModel } from '@/engine/enemies/model';
++import { TYPES } from '@/engine/enemies/types';
++import { World } from '@/engine/physics';
++import type { Ctx, EnemyKind } from '@/engine/types';
++
++/**
++ * render/fresh.ts: the renderer's scene update leaves a figure that `syncModel` has just updated. A fight driven
++ * through moves, poses, hits, deaths, debris, shields, weapon and look changes; after every step the scene is
++ * updated as the game does it, then again with every figure stale (three r170's whole walk, from the same state):
++ * every node (figures, worn operators' bones, pieces out in the debris) has the same local and world matrices from
++ * both, to the bit. The second walk puts back the flags it cleared, so the game's state goes on as the game left it.
++ */
++
++/** Seeded, so a failure repeats. */
++function mulberry32(seed: number): () => number {
++  return () => {
++    seed = (seed + 0x6d2b79f5) | 0;
++    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
++    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
++    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
++  };
++}
++
++const loaders = {
++  model: (url: string) => new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(url),
++  texture: async (): Promise<Texture> => new DataTexture(new Uint8Array(4), 1, 1),
++  upload: () => {},
++};
++
++async function stream(assets: OperatorAssets): Promise<void> {
++  for (let i = 0; i < 1500 && assets.pending; i++) {
++    assets.pump();
++    await new Promise(resolve => setTimeout(resolve, 10));
++  }
++  if (assets.pending) throw new Error('timed out waiting for the operators');
++}
++
++/** The realistic props as render/weapons.ts serves them, on or off (a look change swaps every prop in hand). */
++function props() {
++  const listeners = new Set<() => void>();
++  const source = {
++    on: false,
++    prop(kind: WeaponPropKind): Object3D | null {
++      if (!source.on || kind === 'none') return null;
++      const mesh = new Mesh(new BoxGeometry(0.08, 0.12, 0.6), new MeshStandardMaterial());
++      mesh.name = `prop__${kind}`;
++      return mesh;
++    },
++    subscribeProps(listener: () => void) {
++      listeners.add(listener);
++      return () => { listeners.delete(listener); };
++    },
++    flip() {
++      source.on = !source.on;
++      for (const listener of [...listeners]) listener();
++    },
++  };
++  return source;
++}
++
++interface Copy {
++  scene: Scene;
++  enemies: EnemyManager;
++  /** effects.ts `debris`: the piece goes to the scene and flies, then leaves. */
++  debris: { mesh: Object3D; vel: Vector3; spin: Vector3; life: number; gone?: () => void }[];
++}
++
++function copy(): Copy {
++  const scene = new Scene();
++  // A parent with a transform of its own: every root's world matrix is a real product.
++  scene.position.set(3, -0.5, 2);
++  scene.rotation.y = 0.4;
++  const world = new World();
++  world.addBox(new Vector3(-200, -1, -200), new Vector3(200, 0, 200));
++  world.finalize();
++  const noop = () => {};
++  const quiet = new Proxy({}, { get: () => noop });
++  const debris: Copy['debris'] = [];
++  const at = new Vector3();
++  const effects = {
++    ...Object.fromEntries(['blood', 'sparks', 'fountain', 'bloodPool', 'explosion', 'strokeBurst', 'particle', 'tracer'].map(name => [name, noop])),
++    debris(mesh: Object3D, pos: Vector3, vel: Vector3, spin: Vector3, o: { life?: number; gone?: () => void } = {}) {
++      // Full, or a piece it already has: it refuses, and the piece stays where it is.
++      if (Math.random() < 0.15 || debris.some(d => d.mesh === mesh)) {
++        o.gone?.();
++        return;
++      }
++      scene.attach(mesh);
++      mesh.position.copy(scene.worldToLocal(at.copy(pos)));
++      debris.push({ mesh, vel: vel.clone(), spin: spin.clone(), life: o.life ?? 8, gone: o.gone });
++    },
++  };
++  const ctx = {
++    scene, world, effects, audio: quiet, hud: quiet, input: quiet, player: null,
++    game: { mode: 'training', targets: () => [], hitstop: noop, addScore: noop },
++  } as unknown as Ctx;
++  const enemies = ctx.enemies = new EnemyManager(ctx);
++  return { scene, enemies, debris };
++}
++
++function stepDebris(c: Copy, dt: number): void {
++  for (let i = c.debris.length - 1; i >= 0; i--) {
++    const d = c.debris[i]!;
++    d.mesh.position.addScaledVector(d.vel, dt);
++    d.vel.y -= 20 * dt;
++    d.mesh.rotation.x += d.spin.x * dt; d.mesh.rotation.y += d.spin.y * dt; d.mesh.rotation.z += d.spin.z * dt;
++    if ((d.life -= dt) > 0) continue;
++    c.debris.splice(i, 1);
++    d.mesh.removeFromParent();
++    d.gone?.();
++  }
++}
++
++function nodes(scene: Scene): Object3D[] {
++  const out: Object3D[] = [];
++  scene.traverse(node => { out.push(node); });
++  return out;
++}
++
++/**
++ * The scene update as the game makes it, then three's whole one from the same state, compared node by node: the
++ * same local and world matrices to the bit. Returns the nodes compared and both walks' matrix products.
++ */
++function check(c: Copy, label: string): { nodes: number; fast: number; whole: number } {
++  const fast = products(() => c.scene.updateMatrixWorld());
++  const list = nodes(c.scene);
++  const local = new Float64Array(list.length * 16), world = new Float64Array(list.length * 16);
++  const flags = list.map(node => node.matrixWorldNeedsUpdate);
++  list.forEach((node, i) => { local.set(node.matrix.elements, i * 16); world.set(node.matrixWorld.elements, i * 16); });
++  for (const e of c.enemies.list) staleFigure(e.root);
++  const whole = products(() => c.scene.updateMatrixWorld());
++  const after = nodes(c.scene);
++  if (after.length !== list.length) throw new Error(`${label}: ${list.length} nodes vs ${after.length}`);
++  list.forEach((node, i) => {
++    const m = node.matrixWorld.elements, l = node.matrix.elements;
++    for (let j = 0; j < 16; j++) {
++      if (!Object.is(world[i * 16 + j], m[j]) || !Object.is(local[i * 16 + j], l[j])) {
++        throw new Error(`${label}: ${node.name || node.type} (parent ${node.parent?.name}) element ${j}: `
++          + `${local[i * 16 + j]}/${world[i * 16 + j]} vs three's ${l[j]}/${m[j]}`);
++      }
++    }
++    node.matrixWorldNeedsUpdate = flags[i]!;
++  });
++  return { nodes: list.length, fast, whole };
++}
++
++/** Matrix products during `run`: one per world matrix three computes. */
++function products(run: () => void): number {
++  const multiply = Matrix4.prototype.multiplyMatrices;
++  let n = 0;
++  Matrix4.prototype.multiplyMatrices = function (this: Matrix4, p: Matrix4, q: Matrix4) {
++    n++;
++    return multiply.call(this, p, q);
++  };
++  try { run(); } finally { Matrix4.prototype.multiplyMatrices = multiply; }
++  return n;
++}
++
++const KINDS = Object.keys(TYPES) as EnemyKind[];
++const SOURCES: string[] = ['melee', 'blast', 'deflect', 'wave', 'r4c', 'fall'];
++const WEAPONS: WeaponPropKind[] = ['pistol', 'shotgun', 'blade', 'sniper', 'rifle', 'hammer', 'none'];
++
++const cleanups: (() => void)[] = [];
++afterEach(() => { for (const clean of cleanups.splice(0)) clean(); });
++
++test('a figure syncModel has updated keeps every matrix three\'s whole scene update gives, to the bit', { timeout: 120_000 }, async () => {
++  const assets = new OperatorAssets(loaders), source = props(), c = copy();
++  // Seeded, so a failure repeats: the fight's own draws and the uuids alike.
++  const own = Math.random;
++  Math.random = mulberry32(0x6d61);
++  useOperatorSource(assets);
++  usePropSource(source);
++  cleanups.push(() => {
++    c.enemies.clear();
++    assets.clear();
++    useOperatorSource(null, assets);
++    usePropSource(null, source);
++    Math.random = own;
++  });
++  const camera = new PerspectiveCamera(70, 1.6, 0.1, 500);
++  const live = () => c.enemies.list.filter(e => e.alive);
++  const pick = <T>(list: readonly T[]) => list[Math.floor(Math.random() * list.length)];
++  // As training.ts places a target: standing at once, then brought up to date; or spawning in (enemies `spawnPose`).
++  const place = (kind: EnemyKind, standing: boolean) => {
++    const e = c.enemies.spawn(kind, new Vector3(Math.random() * 40 - 20, kind === 'flyer' || kind === 'carrier' ? 1.5 : 0, Math.random() * 40 - 20));
++    if (standing) {
++      e.state = 'hunt';
++      e.root.scale.setScalar(e.stats.scale);
++      syncModel(e);
++    }
++    return e;
++  };
++  for (const kind of KINDS) place(kind, true);
++
++  let compared = 0, fast = 0, whole = 0, worn = 0;
++  const FRAMES = 420;
++  for (let frame = 0; frame < FRAMES; frame++) {
++    const dt = 1 / 60;
++    // The step: the targets moved about and posed (what the AI would do), then the manager's update.
++    for (const e of live()) {
++      e.body.vel.x += Math.random() * 6 - 3; e.body.vel.z += Math.random() * 6 - 3;
++      e.yawTo = Math.random() * 6 - 3;
++      e.aimAmt = Math.random() < 0.5 ? Math.random() : 0;
++      e.attackT = Math.random() < 0.2 ? Math.random() * 0.55 : 0;
++      e.weakT = Math.random() < 0.3 ? 1 : 0;
++      e.guardT = Math.random() < 0.3 ? 1 : 0;
++      if (e.type === 'bomber') e.fuseT = Math.random() < 0.3 ? 0.5 : -1;
++      if (Math.random() < 0.05) { e.state = 'stunned'; e.age = 0; e.stunDuration = 0.3; }
++      if (e.body.pos.y < -0.5) e.body.pos.y = 0;
++    }
++    c.enemies.update(dt);
++    stepDebris(c, dt);
++    // Now and then two steps before a frame, the second one standing still (the root where it was) but posed anew.
++    if (Math.random() < 0.1) {
++      for (const e of live()) { e.body.vel.set(0, 0, 0); e.yawTo = e.yaw; e.aimAmt = Math.random(); e.flinch = Math.random(); }
++      c.enemies.update(dt);
++      stepDebris(c, dt);
++    }
++    // Between the step's update and the frame: hits, deaths, a shield broken, a new target, a gun changed, mutations...
++    const r = Math.random(), list = live(), e = pick(list);
++    if (e && r < 0.06) c.enemies.damage(e, 5 + Math.random() * 20, { dir: new Vector3(Math.random() - 0.5, 0, 1).normalize(), part: 'torso', source: 'r4c' });
++    else if (e && r < 0.1) {
++      c.enemies.damage(e, e.hp + Math.random() * e.maxHp, { dir: new Vector3(1, 0.2, Math.random()).normalize(), part: 'torso',
++        source: pick(SOURCES), crit: Math.random() < 0.3 });
++    } else if (e && r < 0.12 && e.shieldHp > 0) c.enemies._breakShield(e);
++    else if (e && r < 0.14) e.figure.setWeapon(pick(WEAPONS)!);
++    else if (r < 0.17 && list.length < 40) place(pick(KINDS)!, Math.random() < 0.5);
++    else if (r < 0.19 && list.length < 40) {
++      // As a boss's summon: spawned, then at full size at once (enemies/boss.ts).
++      const child = c.enemies.spawn(Math.random() < 0.5 ? 'bomber' : 'flyer', new Vector3(Math.random() * 10, 1, Math.random() * 10));
++      child.state = 'hunt'; child.root.scale.setScalar(child.stats.scale);
++    } else if (e && r < 0.21) {
++      // A co-op mirror's snapshot: the root moved after its update.
++      e.root.position.x += 0.01;
++    } else if (e && r < 0.23) c.enemies.damage(e, 1, { part: 'shield', source: 'melee' });
++    if (frame === 30 || frame === 260) c.enemies.setMutations(99);
++    // Rays as the training ground and the weapons cast them (`raycastFigure`: a miss on the bound, or the hit surfaces).
++    for (let i = 0; i < 3; i++) {
++      c.enemies.raycast(new Vector3(Math.random() * 40 - 20, 1.2, -30), new Vector3(Math.random() - 0.5, 0, 1).normalize(), 80);
++    }
++    // The parent moves after the step's update: a root's world matrix is no longer the one its owner left.
++    if (frame === 200) c.scene.position.x += 0.25;
++
++    // The frame (render/index.ts `render`): the look changes (operators on, out of view only at the first load; another
++    // LOD; Low; on again), props on and off, the operators put on and posed, then the scene update.
++    if (frame === 40) { assets.want({ lod: 1, size: 512 }); await stream(assets); }
++    if (frame === 150) { assets.want({ lod: 0, size: 1024 }); await stream(assets); }
++    if (frame === 250) assets.want(null);
++    if (frame === 300) { assets.want({ lod: 1, size: 512 }); await stream(assets); }
++    if (frame % 70 === 20) source.flip();
++    camera.position.set(Math.sin(frame / 40) * 30 + 3, 2, Math.cos(frame / 40) * 30 + 2);
++    camera.lookAt(3, 1, 2);
++    camera.updateMatrixWorld();
++    assets.frame(camera);
++    worn += assets.worn;
++    const result = check(c, `frame ${frame}`);
++    compared += result.nodes; fast += result.fast; whole += result.whole;
++  }
++  // The operators were worn for much of it, and the frames left most figure nodes alone.
++  expect(worn).toBeGreaterThan(FRAMES * 5);
++  expect(compared).toBeGreaterThan(300_000);
++  expect(fast).toBeLessThan(whole * 0.6);
++  console.info(`figure-matrix-skip: ${compared} nodes compared; world-matrix products ${fast} vs ${whole} in three's whole walk`);
++});
++
++test('a write after syncModel that does not mark the figure stale shows (so the check above would catch a missed writer)', () => {
++  const c = copy();
++  cleanups.push(() => { c.enemies.clear(); });
++  const e = c.enemies.spawn('grunt', new Vector3(1, 0, 1));
++  e.state = 'hunt';
++  e.root.scale.setScalar(1);
++  syncModel(e);
++  e.figure.parts.upperR!.rotation.x = -1.4;
++  expect(() => check(c, 'unmarked')).toThrow(/element/);
++  // Marked stale, the same kind of write is walked.
++  syncModel(e);
++  e.figure.parts.upperR!.rotation.x = -0.4;
++  staleFigure(e.root);
++  expect(check(c, 'marked').nodes).toBeGreaterThan(40);
++});
+diff --git a/tests/flat-shadows.test.ts b/tests/flat-shadows.test.ts
+new file mode 100644
+index 0000000..7745431
+--- /dev/null
++++ b/tests/flat-shadows.test.ts
+@@ -0,0 +1,292 @@
++import { afterEach, expect, test, vi } from 'vitest';
++import { BoxGeometry, DirectionalLight, LightProbe, Matrix4, Mesh, MeshBasicMaterial, PerspectiveCamera, PointLight, Scene, WebGLRenderTarget, WebGLRenderer } from 'three';
++import type { BufferGeometry, Material, Object3D } from 'three';
++import { makeFigure } from '@/engine/render/figure';
++import type { Figure, FigureRig } from '@/engine/render/figure';
++import { FLAT_CASTERS, FlatShadows, flatShadowProbe, relinkFlatProbe } from '@/engine/render/flat-shadows';
++import { TACTICAL_MODELS } from '@/engine/render/tactical';
++import { makeModel } from '@/engine/enemies/model';
++import { TYPES } from '@/engine/enemies/types';
++import type { EnemyKind } from '@/engine/types';
++
++const KINDS = Object.keys(TACTICAL_MODELS) as (keyof typeof TACTICAL_MODELS)[];
++const OUT_OF_VIEW = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1e10, 1];
++
++/** A figure of a kind, as the game makes it: enemies through their model, the player as players.ts does. */
++function figureOf(kind: string): Figure {
++  if (kind === 'player') return makeFigure({ kind: 'humanoid', tactical: 'player', color: 0x4c7dff, weapon: 'r4c', bodyWidth: 1, limbR: 0.033, hat: 'cap' });
++  const stats = TYPES[kind as EnemyKind];
++  const { figure } = makeModel(stats);
++  figure.root.scale.setScalar(stats.scale);
++  return figure;
++}
++
++/** The meshes three's shadow walk reaches that cast, in its order (depth first, child order). */
++function casters(root: Object3D): Mesh[] {
++  const out: Mesh[] = [];
++  root.traverse(node => { if (node instanceof Mesh && node.castShadow) out.push(node); });
++  return out;
++}
++
++/** Every mesh's fields the swap touches. */
++function fields(root: Object3D): unknown[] {
++  const out: unknown[] = [];
++  root.traverse(node => {
++    if (node instanceof Mesh) out.push(node, node.geometry, node.castShadow, node.customDepthMaterial, node.frustumCulled, node.material);
++  });
++  return out;
++}
++
++const bits = (array: ArrayLike<number>) => new Uint32Array(Float32Array.from(array).buffer);
++
++function sun(extent: number): DirectionalLight {
++  const light = new DirectionalLight(0xffffff, 2);
++  light.castShadow = true;
++  light.position.set(5, 12, 4);
++  light.shadow.mapSize.set(1024, 1024);
++  Object.assign(light.shadow.camera, { left: -extent, right: extent, top: extent, bottom: -extent, near: 0.5, far: 40 });
++  light.shadow.camera.updateProjectionMatrix();
++  return light;
++}
++
++const made: Figure[] = [];
++afterEach(() => {
++  for (const figure of made.splice(0)) figure.dispose();
++  vi.restoreAllMocks();
++});
++
++test('each flat figure casts in one draw: its casters\' triangles in walk order, each part by three\'s own matrix', () => {
++  const scene = new Scene(), camera = new PerspectiveCamera();
++  // A tight box: some figures are cut by it, so some parts are culled and some drawn.
++  const light = sun(3.2);
++  scene.add(light, light.target);
++  const figures = [...KINDS.map(figureOf), figureOf('shield')];
++  made.push(...figures);
++  figures.at(-1)!.dropShield();
++  for (const [i, figure] of figures.entries()) {
++    figure.root.position.set((i % 6) * 2.2 - 6, 0, Math.floor(i / 6) * 2.2 - 4);
++    figure.root.rotation.y = i * 0.7;
++    figure.parts.thighL?.rotation.set(-0.8, 0, 0);
++    scene.add(figure.root);
++  }
++  scene.updateMatrixWorld(true);
++  light.shadow.updateMatrices(light);
++  const frustum = light.shadow.getFrustum(), shadowCamera = light.shadow.camera;
++  const rigs = figures.map(figure => figure.rig!);
++  const before = figures.map(figure => fields(figure.root));
++  const expected = figures.map(figure => casters(figure.root));
++  // What three would draw of each caster in this pass, before the swap changes any.
++  const culled = expected.map(list => list.map(mesh => !frustum.intersectsObject(mesh)));
++  // Figures with fewer than two parts in the box are left to three (one draw or none either way).
++  const merging = culled.map(list => list.filter(out => !out).length >= 2);
++  light.shadow.map = new WebGLRenderTarget(1, 1);
++  const flats = new FlatShadows(), random = vi.spyOn(Math, 'random');
++  let parts = 0, out = 0;
++  for (let pass = 0; pass < 2; pass++) {
++    flats.swap(rigs, light, camera);
++    try {
++      expect(flats.swapped).toBe(merging.filter(Boolean).length);
++      for (const [f, figure] of figures.entries()) {
++        const list = expected[f]!, kind = figure.rig!.kind;
++        expect(list.length, kind).toBeGreaterThan(1);
++        expect(list.length, kind).toBeLessThanOrEqual(FLAT_CASTERS);
++        if (!merging[f]) {
++          expect(fields(figure.root), kind).toEqual(before[f]);
++          continue;
++        }
++        // The first part three draws carries the draw; the parts after it stop casting.
++        const at = culled[f]!.indexOf(false), carrier = list[at]!;
++        const merged = carrier.geometry, own = before[f]![before[f]!.indexOf(carrier) + 1] as BufferGeometry;
++        expect(merged, kind).not.toBe(own);
++        expect([carrier.castShadow, carrier.frustumCulled, ...list.map((mesh, k) => k === at || mesh.castShadow === k < at)], kind)
++          .toEqual([true, false, ...list.map(() => true)]);
++        // Positions bit for bit, a part index per vertex, triangles in order past the vertices before them.
++        const positions: number[] = [], part: number[] = [], corners: number[] = [];
++        list.forEach((mesh, k) => {
++          const geometry = mesh === carrier ? own : mesh.geometry, count = geometry.getAttribute('position').count;
++          for (const corner of geometry.index!.array) corners.push(corner + part.length);
++          positions.push(...(geometry.getAttribute('position').array as Float32Array).subarray(0, 3 * count));
++          for (let v = 0; v < count; v++) part.push(k);
++        });
++        expect(merged.getAttribute('position').array).toEqual(Float32Array.from(positions));
++        expect(bits(merged.getAttribute('position').array)).toEqual(bits(positions));
++        expect(Array.from(merged.getAttribute('part').array)).toEqual(part);
++        expect(Array.from(merged.index!.array)).toEqual(corners);
++        expect(merged.index!.array.constructor, kind).toBe(part.length > 0xffff ? Uint32Array : Uint16Array);
++        // At the draw: each part's model-view matrix as three uploads it (float32 of the double product), or out of view.
++        const depth = carrier.customDepthMaterial! as Material & { userData: { partMV: { value: Float32Array } } };
++        const uploaded = depth.userData.partMV.value;
++        list.forEach((mesh, k) => {
++          const want = culled[f]![k] ? OUT_OF_VIEW : new Matrix4().multiplyMatrices(shadowCamera.matrixWorldInverse, mesh.matrixWorld).elements;
++          expect(bits(uploaded.subarray(16 * k, 16 * k + 16)), `${kind} part ${k}`).toEqual(bits(want));
++          parts++;
++          if (culled[f]![k]) out++;
++        });
++      }
++    } finally {
++      flats.restore();
++    }
++    for (const [f, figure] of figures.entries()) expect(fields(figure.root), `${figure.rig!.kind} restored`).toEqual(before[f]);
++  }
++  light.shadow.map.dispose();
++  expect(random).not.toHaveBeenCalled();
++  expect(out, 'some parts out of the box').toBeGreaterThan(0);
++  expect(parts - out, 'some parts in it').toBeGreaterThan(0);
++  expect(merging.filter(Boolean).length, 'some figures merged').toBeGreaterThan(3);
++});
++
++test('figures it cannot merge exactly are left to three', () => {
++  const scene = new Scene(), camera = new PerspectiveCamera(), light = sun(9);
++  const [lent, hidden, foreign, shown] = ['grunt', 'grunt', 'heavy', 'medic'].map(figureOf) as [Figure, Figure, Figure, Figure];
++  made.push(lent, hidden, foreign, shown);
++  scene.add(light, light.target, lent.root, hidden.root, foreign.root, shown.root);
++  lent.lend(lent.parts.weapon!);
++  hidden.root.visible = false;
++  // A caster that is not a flat surface (the debris's dropped gun) sits under the figure.
++  const gun = new Mesh(new BoxGeometry(), new MeshBasicMaterial());
++  gun.castShadow = true;
++  foreign.parts.torso!.add(gun);
++  scene.updateMatrixWorld(true);
++  light.shadow.updateMatrices(light);
++  light.shadow.map = new WebGLRenderTarget(1, 1);
++  const flats = new FlatShadows(), rigs: FigureRig[] = [lent.rig!, hidden.rig!, foreign.rig!, shown.rig!];
++  flats.swap(rigs, light, camera);
++  try {
++    expect(flats.swapped).toBe(1);
++    expect(casters(shown.root).filter(mesh => mesh.castShadow)).toHaveLength(1);
++    for (const figure of [lent, hidden, foreign]) expect(casters(figure.root).every(mesh => mesh.customDepthMaterial === undefined)).toBe(true);
++  } finally {
++    flats.restore();
++  }
++});
++
++test('the merged draws give the same shadow map, one draw per flat figure, on the program the warm-up probe links', () => {
++  const renderer = new WebGLRenderer({ canvas: document.createElement('canvas') });
++  renderer.shadowMap.enabled = true;
++  renderer.shadowMap.autoUpdate = false;
++  const scene = new Scene(), camera = new PerspectiveCamera(60, 1, 0.1, 100), target = new WebGLRenderTarget(16, 16);
++  camera.position.set(0, 10, 15);
++  camera.lookAt(0, 0, 0);
++  // Cut through the rows, so culled parts are in it too.
++  const light = sun(7);
++  scene.add(light, light.target);
++  scene.overrideMaterial = new MeshBasicMaterial();
++  // The flat look's menu warm-up caster (render/index.ts FLAT_PROBE), in every pass: it links the merged draws' depth
++  // program before any figure merges, and draws nothing into the map.
++  const probe = flatShadowProbe();
++  probe.frustumCulled = false;
++  scene.add(probe);
++  const figures = [...KINDS.map(figureOf), figureOf('breacher')];
++  made.push(...figures);
++  figures.at(-1)!.dropShield();
++  for (const [i, figure] of figures.entries()) {
++    figure.root.position.set((i % 6) * 2.2 - 6, 0, Math.floor(i / 6) * 2.2 - 4);
++    figure.root.rotation.y = i * 0.7;
++    figure.parts.upperR?.rotation.set(-1.5, 0, 0.4);
++    figure.parts.thighL?.rotation.set(-0.8, 0, 0);
++    scene.add(figure.root);
++  }
++  const flats = new FlatShadows(), rigs = figures.map(figure => figure.rig!);
++  const drawShadows = renderer.shadowMap.render.bind(renderer.shadowMap);
++  let merge = false, calls = 0;
++  renderer.shadowMap.render = (lights, at, from) => {
++    const before = renderer.info.render.calls;
++    if (merge) flats.swap(rigs, light, from);
++    try { drawShadows(lights, at, from); } finally { flats.restore(); }
++    calls = renderer.info.render.calls - before;
++  };
++  const shot = (merged: boolean) => {
++    merge = merged;
++    renderer.shadowMap.needsUpdate = true;
++    renderer.setRenderTarget(target);
++    renderer.render(scene, camera);
++    const map = light.shadow.map!, texels = new Uint8Array(map.width * map.height * 4);
++    renderer.readRenderTargetPixels(map, 0, 0, map.width, map.height, texels);
++    return { texels, calls, programs: renderer.info.programs!.map(program => program.cacheKey) };
++  };
++  try {
++    // As at a menu: frames drawn before the warm-up's shadow pass, so the lights' state is the scene's, which keeps
++    // the same light counts all through a session (render/index.ts); three keys every program by them, depth ones too.
++    renderer.setRenderTarget(target);
++    renderer.render(scene, camera);
++    const apart = shot(false), merged = shot(true), again = shot(false);
++    let cast = 0;
++    for (let i = 0; i < apart.texels.length; i += 4) if (apart.texels[i] !== 255 || apart.texels[i + 3] !== 255) cast++;
++    expect(cast, 'the figures cast').toBeGreaterThan(10000);
++    expect(merged.texels.every((v, i) => v === apart.texels[i]), 'the same shadow map').toBe(true);
++    expect(again.texels.every((v, i) => v === apart.texels[i]), 'and after it').toBe(true);
++    // Every figure's casters that three drew, in one draw; none of those it culled whole.
++    expect(apart.calls - merged.calls).toBeGreaterThan(figures.length * 2);
++    expect(merged.calls, "a draw per figure and the probe's").toBeLessThanOrEqual(figures.length + 1);
++    // No program linked by the merged draws: the probe's (one more than three's own depth program) serves them all.
++    expect(merged.programs, 'no new program').toEqual(apart.programs);
++    expect(again.programs).toEqual(apart.programs);
++    expect(apart.programs.filter(key => key.includes('flat-shadow')), 'the probe linked it').toHaveLength(1);
++  } finally {
++    (scene.overrideMaterial as Material).dispose();
++    probe.geometry.dispose();
++    (probe.material as Material).dispose();
++    probe.customDepthMaterial!.dispose();
++    target.dispose();
++    renderer.dispose();
++  }
++});
++
++test('the warm-up probe links the figure draws\' program on the flat look\'s lights, after a look with more lights', () => {
++  const renderer = new WebGLRenderer({ canvas: document.createElement('canvas') });
++  renderer.shadowMap.enabled = true;
++  renderer.shadowMap.autoUpdate = false;
++  const scene = new Scene(), camera = new PerspectiveCamera(60, 1, 0.1, 100), target = new WebGLRenderTarget(16, 16);
++  camera.position.set(0, 10, 15);
++  camera.lookAt(0, 0, 0);
++  scene.overrideMaterial = new MeshBasicMaterial();
++  const light = sun(7);
++  scene.add(light, light.target);
++  const probe = flatShadowProbe();
++  probe.frustumCulled = false;
++  scene.add(probe);
++  const frame = (shadows: boolean) => {
++    renderer.shadowMap.needsUpdate = shadows;
++    renderer.setRenderTarget(target);
++    renderer.render(scene, camera);
++    return renderer.info.programs!.map(program => program.cacheKey);
++  };
++  // A realistic look's menu first: cascades, effect point lights and the light probe, the probe drawn with them.
++  const extra = [sun(9), sun(11), new PointLight(0xffffff, 0, 6, 2), new LightProbe()];
++  scene.add(...extra);
++  frame(false);
++  frame(true);
++  // Then the flat look's: its lights only, a menu frame, and its warm-up with the probe (render/index.ts `_warmPrograms`).
++  scene.remove(...extra);
++  frame(false);
++  relinkFlatProbe(probe);
++  const warm = frame(true);
++  // The match: figures merged, every one on a figure draw material of its own made then.
++  const figures = [...KINDS.map(figureOf), figureOf('breacher')];
++  made.push(...figures);
++  for (const [i, figure] of figures.entries()) {
++    figure.root.position.set((i % 6) * 2.2 - 6, 0, Math.floor(i / 6) * 2.2 - 4);
++    figure.root.rotation.y = i * 0.7;
++    scene.add(figure.root);
++  }
++  const flats = new FlatShadows(), rigs = figures.map(figure => figure.rig!);
++  const drawShadows = renderer.shadowMap.render.bind(renderer.shadowMap);
++  renderer.shadowMap.render = (lights, at, from) => {
++    flats.swap(rigs, light, from);
++    try { drawShadows(lights, at, from); } finally { flats.restore(); }
++  };
++  try {
++    const match = frame(true);
++    expect(match.filter(key => key.includes('flat-shadow')), 'no figure draw program past the probe\'s').toEqual(warm.filter(key => key.includes('flat-shadow')));
++    // The realistic look's key stays on the probe's material (three keeps a material's programs till it is freed).
++    expect(warm.filter(key => key.includes('flat-shadow'))).toHaveLength(2);
++  } finally {
++    for (const node of extra) node.dispose();
++    (scene.overrideMaterial as Material).dispose();
++    probe.geometry.dispose();
++    (probe.material as Material).dispose();
++    probe.customDepthMaterial!.dispose();
++    target.dispose();
++    renderer.dispose();
++  }
++});
+diff --git a/tests/operator-clips.test.ts b/tests/operator-clips.test.ts
+new file mode 100644
+index 0000000..f0ed30d
+--- /dev/null
++++ b/tests/operator-clips.test.ts
+@@ -0,0 +1,461 @@
++import { expect, test } from 'vitest';
++import { DataTexture, Group, MeshStandardMaterial, Quaternion, Vector3 } from 'three';
++import type { Bone, Interpolant, Object3D, SkinnedMesh, Texture } from 'three';
++import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
++import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
++import { FIST, OPERATOR_GLB, OPERATOR_MANIFEST, OPERATOR_PROP_SCALE, OperatorAssets, OperatorBody, PROP_HOLDS } from '@/engine/render/operators';
++import type { OperatorLod } from '@/engine/render/operators';
++import { CLIPS, ClipLibrary, LOOPS, ONE_SHOTS, STILL } from '@/engine/render/operator-motion';
++import type { Carry, MotionInput, OperatorMotion } from '@/engine/render/operator-motion';
++import { makeFigure } from '@/engine/render/figure';
++import type { Figure } from '@/engine/render/figure';
++import { TACTICAL_MODELS } from '@/engine/render/tactical';
++import { makeModel } from '@/engine/enemies/model';
++import { TYPES } from '@/engine/enemies/types';
++import type { EnemyKind } from '@/engine/types';
++
++/**
++ * `OperatorBody.sync` reads the clips through a kind's bone-indexed binding and a per-figure list of the clips
++ * playing (Round 8 of perf/LOG.md), writes each bone's quaternion once, and the support hand's reach computes only
++ * the world matrices it reads. The reference below is the code it replaced (by-name lookups per bone and clip, the
++ * whole-armature update and `getWorld*` reads of the reach), kept verbatim: both must give every bone the same
++ * position, quaternion, Euler rotation and scale to the bit, from the same interpolant calls with the same times in
++ * the same order, and after three's scene walk every node under the figure the same matrices and every skinned mesh
++ * the same bone matrices.
++ */
++
++const loaders = {
++  model: (url: string) => new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(url),
++  texture: async (url: string): Promise<Texture> => {
++    const texture = new DataTexture(new Uint8Array(4), 1, 1);
++    texture.name = url;
++    return texture;
++  },
++  upload: () => {},
++};
++
++async function stream(assets: OperatorAssets): Promise<void> {
++  for (let i = 0; i < 3000; i++) {
++    assets.pump();
++    if (!assets.pending) return;
++    await new Promise(resolve => setTimeout(resolve, 10));
++  }
++  throw new Error('timed out waiting for the operators to stream');
++}
++
++const LOOP_NAMES = new Set(Object.entries(OPERATOR_MANIFEST.clips).filter(([, clip]) => clip.loop).map(([name]) => name));
++const GROUPS = ['humanoid', 'machine', 'drone'] as const;
++
++// ---- The reference: OperatorMotion.delta and OperatorBody.sync's bone loop as they were at 3763490. ----
++
++const _refSample = new Quaternion(), _refIdentity = new Quaternion(), _refQ = new Quaternion(), _refUp = new Vector3(0, 1, 0);
++function refSample(track: Interpolant, t: number, weight: number): Quaternion {
++  const v = track.evaluate(t);
++  _refSample.set(v[0]!, v[1]!, v[2]!, v[3]!);
++  return weight >= 0.999 ? _refSample : _refSample.slerp(_refIdentity, 1 - weight);
++}
++
++function refDelta(motion: OperatorMotion, library: ClipLibrary, bone: string, out: Quaternion): Quaternion {
++  out.identity();
++  for (const name of LOOPS) {
++    const weight = motion.weights[name];
++    if (weight < 0.01) continue;
++    const clip = library.get(motion.group, name);
++    const track = clip?.tracks.get(bone);
++    if (!clip || !track) continue;
++    const t = name === 'idle' ? motion.idleTime % clip.duration : name === 'crouch' || name === 'aim' ? 0 : motion.cycle * clip.duration;
++    out.multiply(refSample(track, t, weight));
++  }
++  for (const name of ONE_SHOTS) {
++    const shot = motion.shots.get(name);
++    if (!shot) continue;
++    const clip = library.get(motion.group, name);
++    const track = clip?.tracks.get(bone);
++    if (!clip || !track) continue;
++    const t = name === 'melee' ? shot.t * clip.duration : Math.min(shot.t, clip.duration);
++    out.multiply(refSample(track, t, Math.min(1, shot.weight)));
++  }
++  return out;
++}
++
++function attached(part: Object3D, root: Object3D): boolean {
++  for (let node: Object3D | null = part; node; node = node.parent) if (node === root) return true;
++  return false;
++}
++
++/** The old bone loop (the support hand's reach after it: `refReach`). */
++function refSync(body: OperatorBody, clips: ClipLibrary | null): void {
++  const { rig, template } = body, motion = rig.motion;
++  for (let i = 0; i < template.bones.length; i++) {
++    const { name, position } = template.bones[i]!, bone = body.bones[i]!, source = body.sources[i];
++    if (source) {
++      if (!attached(source, rig.root) || !source.visible) {
++        bone.scale.setScalar(1e-4);
++        continue;
++      }
++      bone.position.copy(source.position);
++      bone.quaternion.copy(source.quaternion);
++      bone.scale.copy(source.scale);
++    } else {
++      bone.position.copy(position);
++      bone.quaternion.identity();
++      bone.scale.setScalar(1);
++    }
++    if (name.includes('-rotor')) {
++      bone.quaternion.multiply(_refQ.setFromAxisAngle(_refUp, name.endsWith('F') === name.includes('wingL') ? motion.spin : -motion.spin));
++    } else if (clips && motion.group !== 'drone') {
++      bone.quaternion.multiply(refDelta(motion, clips, name, _refQ));
++    }
++  }
++}
++
++// The support hand's reach as it was at 5423a85 (`OperatorBody.#reach`, `aimBone`), the grip and support points
++// found as `#holdProp` found them, gated as `sync` gates it.
++const FLAT_LONG_SUPPORT = [0, -0.04, 0.36] as const;
++const FLAT_PISTOL_SUPPORT = [-0.035, -0.07, -0.01] as const;
++const _g = new Vector3(), _s = new Vector3(), _t = new Vector3(), _u = new Vector3(), _v = new Vector3();
++const _e = new Vector3(), _h = new Vector3(), _w = new Vector3(), _f = new Vector3();
++const _d = new Vector3(), _o = new Vector3();
++const _world = new Quaternion(), _parent = new Quaternion(), _turn = new Quaternion(), _was = new Quaternion();
++const _down = new Vector3(0, -1, 0), _dir = new Vector3();
++const _grip = new Vector3(), _support = new Vector3(), _socket = new Vector3();
++
++function refAimBone(bone: Bone, dir: Vector3, weight: number): void {
++  bone.getWorldQuaternion(_world);
++  _dir.copy(_down).applyQuaternion(_world);
++  _turn.setFromUnitVectors(_dir, dir);
++  _world.premultiply(_turn);
++  bone.parent!.getWorldQuaternion(_parent);
++  _was.copy(bone.quaternion);
++  bone.quaternion.copy(_parent.invert().multiply(_world));
++  if (weight < 1) bone.quaternion.copy(_was.slerp(bone.quaternion, weight));
++}
++
++/** True when the reach ran. */
++function refReach(body: OperatorBody): boolean {
++  const motion = body.rig.motion;
++  const prop = body.socket.children.find(child => child.userData.operatorHome);
++  if (!(motion.group === 'humanoid' && prop && (motion.carry === 'long' || motion.carry === 'pistol') && motion.aim > 0.02)) return false;
++  const weapon = prop.userData.operatorHome as Object3D;
++  const hold = prop.name.startsWith('prop__') ? PROP_HOLDS[weapon.name] : undefined;
++  _grip.fromArray(hold?.grip ?? [0, 0, 0]);
++  _support.fromArray(hold?.support ?? (weapon.name === 'pistol' ? FLAT_PISTOL_SUPPORT : FLAT_LONG_SUPPORT));
++  // The grip found here is the body's: the socket sits where `#holdProp` put it from that grip.
++  _socket.copy(FIST).sub(_g.copy(_grip).multiplyScalar(hold ? OPERATOR_PROP_SCALE : 1).applyQuaternion(body.socket.quaternion));
++  if (!_socket.equals(body.socket.position)) throw new Error('the reference reach found another grip than the body');
++  const at = (name: string) => body.bones[body.template.bones.findIndex(b => b.name === name)];
++  const upper = at('upperL'), fore = at('foreL');
++  if (!upper || !fore || upper.scale.x < 0.5) return false;
++  body.rig.root.updateWorldMatrix(true, false);
++  body.armature.updateMatrixWorld(true);
++  const shoulder = upper.getWorldPosition(_s), scale = body.rig.root.matrixWorld.getMaxScaleOnAxis();
++  const a = 0.3 * scale, b = 0.29 * scale;
++  const grip = body.socket.localToWorld(_g.copy(_grip)), target = body.socket.localToWorld(_t.copy(_support));
++  const reach = (a + b) * 0.98;
++  if (target.distanceTo(shoulder) > reach) {
++    const along = _d.subVectors(target, grip), from = _o.subVectors(grip, shoulder);
++    const qa = along.lengthSq(), qb = 2 * from.dot(along), qc = from.lengthSq() - reach * reach, disc = qb * qb - 4 * qa * qc;
++    const t = disc < 0 || qa < 1e-8 ? 0 : Math.min(1, Math.max(0, (-qb + Math.sqrt(disc)) / (2 * qa)));
++    target.copy(grip).addScaledVector(along, t);
++  }
++  const toTarget = _u.subVectors(target, shoulder);
++  const d = Math.min(Math.max(toTarget.length(), Math.abs(a - b) + 1e-3), a + b - 1e-3);
++  toTarget.normalize();
++  const pole = _v.set(-0.5, -1, -0.2).transformDirection(body.rig.root.matrixWorld);
++  pole.addScaledVector(toTarget, -pole.dot(toTarget)).normalize();
++  const cos = (a * a + d * d - b * b) / (2 * a * d), sin = Math.sqrt(Math.max(0, 1 - cos * cos));
++  const elbow = _e.copy(shoulder).addScaledVector(toTarget, a * cos).addScaledVector(pole, a * sin);
++  const hand = _h.copy(shoulder).addScaledVector(toTarget, d);
++  const weight = Math.min(1, motion.aim);
++  refAimBone(upper, _w.subVectors(elbow, shoulder).normalize(), weight);
++  upper.updateMatrixWorld(true);
++  refAimBone(fore, _w.subVectors(hand, fore.getWorldPosition(_f)).normalize(), weight);
++  return true;
++}
++
++// ---- Harness. ----
++
++/** Every bone's position, quaternion, Euler rotation (and its order) and scale, as numbers. */
++function pose(body: OperatorBody): number[] {
++  const out: number[] = [];
++  for (const bone of body.bones) {
++    out.push(bone.position.x, bone.position.y, bone.position.z, bone.quaternion.x, bone.quaternion.y, bone.quaternion.z, bone.quaternion.w,
++      bone.rotation.x, bone.rotation.y, bone.rotation.z, bone.rotation.order === 'XYZ' ? 0 : 1, bone.scale.x, bone.scale.y, bone.scale.z);
++  }
++  return out;
++}
++
++/**
++ * After three's scene walk (the figure's root is a scene root here) and the skeleton's update, as the render draws:
++ * every node's local transform and matrices under the root, each skinned mesh's bind inverse, the bone matrices.
++ */
++function drawn(body: OperatorBody): number[] {
++  const root = body.rig.root, out: number[] = [];
++  root.updateMatrixWorld();
++  body.skeleton.update();
++  root.traverse(node => {
++    out.push(node.position.x, node.position.y, node.position.z, node.quaternion.x, node.quaternion.y, node.quaternion.z, node.quaternion.w,
++      node.rotation.x, node.rotation.y, node.rotation.z, node.scale.x, node.scale.y, node.scale.z, node.matrixWorldNeedsUpdate ? 1 : 0,
++      node.visible ? 1 : 0, ...node.matrix.elements, ...node.matrixWorld.elements);
++    if ((node as SkinnedMesh).isSkinnedMesh) out.push(...(node as SkinnedMesh).bindMatrixInverse.elements);
++  });
++  out.push(...body.skeleton.boneMatrices!);
++  return out;
++}
++
++/** Every world matrix under the root (the root's too) to NaN: a read of one the new code did not compute shows. */
++function spoil(body: OperatorBody): void {
++  body.rig.root.traverse(node => node.matrixWorld.elements.fill(NaN));
++}
++
++/** The same numbers to the bit (Object.is: -0 is not +0). */
++function same(a: readonly number[], b: readonly number[], what: () => string): void {
++  if (a.length !== b.length) throw new Error(`${what()}: ${a.length} values vs ${b.length}`);
++  for (let i = 0; i < a.length; i++) {
++    if (!Object.is(a[i], b[i])) throw new Error(`${what()}: value ${i} is ${a[i]} (new) vs ${b[i]} (reference)`);
++  }
++}
++
++/** Log every evaluate of a library's tracks as (track id, time); ids by `<group>.<clip>.<bone>`, shared between libraries. */
++const trackIds = new Map<string, number>();
++function logEvaluates(library: ClipLibrary, log: number[]): void {
++  for (const group of GROUPS) {
++    for (const name of CLIPS) {
++      const clip = library.get(group, name);
++      if (!clip) continue;
++      for (const [bone, track] of clip.tracks) {
++        const key = `${group}.${name}.${bone}`;
++        if (!trackIds.has(key)) trackIds.set(key, trackIds.size);
++        const id = trackIds.get(key)!, evaluate = track.evaluate.bind(track);
++        track.evaluate = (t: number) => {
++          log.push(id, t);
++          return evaluate(t);
++        };
++      }
++    }
++  }
++}
++
++function mulberry32(seed: number): () => number {
++  let a = seed >>> 0;
++  return () => {
++    a = (a + 0x6d2b79f5) >>> 0;
++    let t = a;
++    t = Math.imul(t ^ (t >>> 15), t | 1);
++    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
++    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
++  };
++}
++
++const KINDS = Object.keys(TACTICAL_MODELS) as (keyof typeof TACTICAL_MODELS)[];
++const CARRIES: Carry[] = ['long', 'pistol', 'blade', 'none'];
++
++function figureOf(kind: string): Figure {
++  if (kind === 'player') return makeFigure({ kind: 'humanoid', tactical: 'player', color: 0x4c7dff, weapon: 'r4c', bodyWidth: 1, limbR: 0.033, hat: 'cap' });
++  const stats = TYPES[kind as EnemyKind];
++  const { figure } = makeModel(stats);
++  figure.root.scale.setScalar(stats.scale);
++  return figure;
++}
++
++/** A figure, its operator (made here, not by the assets, so the test holds the body) and its scripted state. */
++interface Subject {
++  kind: string;
++  figure: Figure;
++  body: OperatorBody;
++  rand: () => number;
++  input: MotionInput;
++  dt: number;
++  melee: number | null;
++  /** The frame it dies from (STILL), and the frame a limb is torn off (-1: never). */
++  dies: number;
++  tears: number;
++  torn: string;
++  hidden: Object3D | null;
++  returns: (() => void)[];
++  /** What the run reached, for the coverage checks: frames with the support hand's reach (and at a weight under 1), with a folded bone. */
++  reached: number;
++  partial: number;
++  folded: number;
++}
++
++/** The one-shots seen in flight on a frame a body synced. */
++const shotsSeen = new Set<string>();
++
++const material = new MeshStandardMaterial();
++
++function subject(assets: OperatorAssets, kind: string, seed: number): Subject {
++  const figure = figureOf(kind), rig = figure.rig!, template = assets.kind(rig.kind)!;
++  const body = new OperatorBody(rig, template, () => template.meshes.map(() => material));
++  const rand = mulberry32(seed);
++  const carry = CARRIES[seed % CARRIES.length]!;
++  const limbs = ['head', 'upperL', 'foreR', 'thighL', 'wingL', 'torso'].filter(name => figure.parts[name as keyof typeof figure.parts]);
++  return {
++    kind, figure, body, rand, dt: 1 / 60, melee: null, hidden: null, returns: [], reached: 0, partial: 0, folded: 0,
++    input: { speed: 0, phase: 0, lateral: 0, aim: 0, carry, onGround: true, crouch: false, flinch: 0, melee: null },
++    dies: seed % 3 === 0 ? 200 + (seed % 50) : -1,
++    tears: seed % 4 === 1 ? 100 + (seed % 70) : -1,
++    torn: limbs[seed % limbs.length] ?? 'head',
++  };
++}
++
++/** One step of a figure's owner: speeds, sideways motion, crouch, aim, carry, jumps, shots, reloads, hits, throws, melee, death. */
++function drive(s: Subject, frame: number): void {
++  const { rand, input, figure } = s, motion = s.figure.rig!.motion;
++  if (frame % 60 === 0) s.dt = [1 / 60, 1 / 60, 1 / 30, 1 / 144, 1 / 20][Math.floor(rand() * 5)]!;
++  if (rand() < 0.02) input.speed = [0, 0, 0.1, 0.8, 1.2, 3, 4.2, 5, 6.2, 8][Math.floor(rand() * 10)]!;
++  if (rand() < 0.02) input.lateral = [0, 0, 0.3, -0.3, 1, -1, rand() * 2 - 1][Math.floor(rand() * 7)]!;
++  if (rand() < 0.01) input.crouch = !input.crouch;
++  if (rand() < 0.02) input.aim = [0, 1, 1, 0.5, rand()][Math.floor(rand() * 5)]!;
++  if (rand() < 0.003) input.carry = CARRIES[Math.floor(rand() * 4)]!;
++  input.onGround = !(rand() < 0.01) && (input.onGround || rand() < 0.1);
++  input.phase += input.speed * s.dt * 4;
++  input.flinch = Math.max(0, input.flinch - s.dt * 3);
++  if (rand() < 0.04) motion.trigger('fire');
++  if (rand() < 0.006) motion.trigger('reload');
++  if (rand() < 0.01) { motion.trigger('hit'); input.flinch = 1; }
++  if (rand() < 0.005) motion.trigger('throw');
++  if (s.melee === null && rand() < 0.006) s.melee = 0;
++  if (s.melee !== null) {
++    s.melee += s.dt / 0.55;
++    if (s.melee > 1) s.melee = null;
++  }
++  input.melee = s.melee;
++  const dead = s.dies >= 0 && frame >= s.dies;
++  motion.update(s.dt, dead ? STILL : input);
++  // Weights and shots at the edges of the skip and slerp tests.
++  if (frame % 37 === 5) {
++    const name = LOOPS[Math.floor(rand() * LOOPS.length)]!;
++    motion.weights[name] = [0.01, 0.0099999, 1, 0.999, 0.9989, 0, -0.001, 1.2][Math.floor(rand() * 8)]!;
++    const shot = motion.shots.get(ONE_SHOTS[Math.floor(rand() * ONE_SHOTS.length)]!);
++    if (shot) shot.weight = [1.5, 1, 0.999, 0.9989, 0.5, 0.001][Math.floor(rand() * 6)]!;
++  }
++  // The pivots, as the owner turns them; one hidden for a while; a limb torn off.
++  for (const source of s.body.sources) {
++    if (!source || rand() < 0.3) continue;
++    source.rotation.set((rand() - 0.5) * 1.2, (rand() - 0.5) * 1.2, (rand() - 0.5) * 0.6);
++    if (rand() < 0.05) source.scale.setScalar(0.5 + rand());
++  }
++  if (frame % 150 === 40 && !s.hidden) {
++    const sources = s.body.sources.filter((source): source is Object3D => source !== null);
++    s.hidden = sources[Math.floor(rand() * sources.length)] ?? null;
++    if (s.hidden) s.hidden.visible = false;
++  } else if (frame % 150 === 90 && s.hidden) {
++    s.hidden.visible = true;
++    s.hidden = null;
++  }
++  if (frame === s.tears) {
++    const part = figure.parts[s.torn as keyof typeof figure.parts];
++    if (part && part.parent) {
++      new Group().attach(part);
++      s.returns.push(figure.lend(part));
++    }
++  }
++}
++
++/**
++ * Drive every subject `frames` frames; each frame, figure by figure as `OperatorAssets.frame` does, the reference
++ * syncs it on `ref(frame)`'s library (and reaches), then the new code on `next(frame)`'s with every world matrix under
++ * the figure spoilt first. Every bone must match after the bone loop (before the support hand's reach) and after the
++ * reach, every node and bone matrix after the walk, and the libraries' interpolants must see the same calls.
++ */
++function run(subjects: Subject[], frames: number, next: (frame: number) => ClipLibrary, ref: (frame: number) => ClipLibrary,
++  logs: { next: number[]; ref: number[] }, label: string): void {
++  const random = Math.random;
++  let draws = 0;
++  for (let frame = 0; frame < frames; frame++) {
++    for (const s of subjects) drive(s, frame);
++    subjects.forEach((s, f) => {
++      // Both start from the bones as the last frame left them (a folded bone keeps its pose, the reach may turn it).
++      const before = s.body.bones.map(bone => [bone.position.clone(), bone.quaternion.clone(), bone.scale.clone()] as const);
++      refSync(s.body, ref(frame));
++      const expected = pose(s.body);
++      if (refReach(s.body) && s.figure.rig!.motion.aim < 1) s.partial++;
++      const reached = pose(s.body), walked = drawn(s.body);
++      s.body.bones.forEach((bone, i) => {
++        const [position, quaternion, scale] = before[i]!;
++        bone.position.copy(position);
++        bone.quaternion.copy(quaternion);
++        bone.scale.copy(scale);
++      });
++      spoil(s.body);
++      const root = s.figure.root, update = root.updateWorldMatrix;
++      const hook: { loop: number[] | null } = { loop: null };
++      // The reach starts by updating the root's world matrix: the bone loop's output is the pose then.
++      root.updateWorldMatrix = function (this: Object3D, parents: boolean, children: boolean) {
++        hook.loop ??= pose(s.body);
++        update.call(this, parents, children);
++      };
++      Math.random = () => { draws++; return random(); };
++      try {
++        s.body.sync(next(frame));
++      } finally {
++        Math.random = random;
++        root.updateWorldMatrix = update;
++      }
++      if (hook.loop) s.reached++;
++      if (s.body.bones.some(bone => bone.scale.x < 1e-3)) s.folded++;
++      for (const name of s.figure.rig!.motion.shots.keys()) shotsSeen.add(`${s.figure.rig!.motion.group}.${name}`);
++      same(hook.loop ?? pose(s.body), expected, () => `${label} frame ${frame}, ${s.kind} #${f}`);
++      same(pose(s.body), reached, () => `${label} frame ${frame}, ${s.kind} #${f} after the reach`);
++      same(drawn(s.body), walked, () => `${label} frame ${frame}, ${s.kind} #${f} drawn`);
++    });
++    same(logs.next, logs.ref, () => `${label} frame ${frame}: interpolant calls`);
++    logs.next.length = logs.ref.length = 0;
++  }
++  expect(draws, 'sync draws no random numbers (makes no three object)').toBe(0);
++}
++
++async function scenario(lod: OperatorLod, frames: number): Promise<void> {
++  const assets = new OperatorAssets(loaders);
++  const subjects: Subject[] = [];
++  try {
++    assets.want({ lod, size: lod === 0 ? 1024 : 512 });
++    await stream(assets);
++    const next = assets.clips!;
++    // The reference's own library from the same glb: its interpolants (their cached keys) see only its calls.
++    const gltf = await loaders.model(OPERATOR_GLB[lod]);
++    const ref = new ClipLibrary(gltf.animations, LOOP_NAMES), next2 = new ClipLibrary(gltf.animations, LOOP_NAMES);
++    const ref2 = new ClipLibrary(gltf.animations, LOOP_NAMES);
++    const logs = { next: [] as number[], ref: [] as number[] };
++    logEvaluates(next, logs.next);
++    logEvaluates(next2, logs.next);
++    logEvaluates(ref, logs.ref);
++    logEvaluates(ref2, logs.ref);
++    // Two figures of every kind (they share their kind's binding), each on its own script.
++    KINDS.forEach((kind, k) => { subjects.push(subject(assets, kind, 2 * k + 1), subject(assets, kind, 2 * k + 2)); });
++    // A sync without clips (the body's first, and any before the glb's clips are in) leaves the clips out.
++    for (const s of subjects) {
++      refSync(s.body, null);
++      const expected = pose(s.body);
++      s.body.sync(null);
++      same(pose(s.body), expected, () => `LOD${lod} no clips, ${s.kind}`);
++    }
++    run(subjects, frames, () => next, () => ref, logs, `LOD${lod}`);
++    // A body synced with another library (the binding is per library: made again) matches as well.
++    run(subjects, 40, frame => (frame % 2 ? next2 : next), frame => (frame % 2 ? ref2 : ref), logs, `LOD${lod} two libraries`);
++    // Coverage: every clip group, every one-shot (and the machines' shots that have no clip), the reach, folded limbs.
++    for (const group of GROUPS) expect(subjects.some(s => s.figure.rig!.motion.group === group), group).toBe(true);
++    for (const name of ONE_SHOTS) expect(shotsSeen.has(`humanoid.${name}`), `humanoid.${name} played`).toBe(true);
++    expect(shotsSeen.has('machine.fire'), 'a machine shot with no clip').toBe(true);
++    expect(subjects.filter(s => s.reached > 0).length, 'figures whose support hand reached').toBeGreaterThan(5);
++    expect(subjects.some(s => s.partial > 0), 'a reach at a weight under 1').toBe(true);
++    expect(subjects.filter(s => s.folded > 0).length, 'figures with a torn or hidden limb').toBeGreaterThan(5);
++  } finally {
++    for (const s of subjects) {
++      s.body.dispose();
++      for (const back of s.returns) back();
++      s.figure.dispose();
++    }
++    assets.clear();
++  }
++}
++
++test('the clips through bone-indexed bindings and the trimmed reach pose and draw every operator bone as before, to the bit', async () => {
++  await scenario(1, 700);
++  await scenario(0, 300);
++}, 240_000);
++
++test('a binding lists the loops, then the one-shots, in the order the clips apply', () => {
++  expect([...CLIPS]).toEqual([...LOOPS, ...ONE_SHOTS]);
++});
+diff --git a/tests/render-chain.test.ts b/tests/render-chain.test.ts
+index ecb0b08..0210755 100644
+--- a/tests/render-chain.test.ts
++++ b/tests/render-chain.test.ts
+@@ -46,8 +46,8 @@ function passes(renderer: Renderer): string[] {
+ }
+ 
+ /**
+- * One frame's renders of the post scene, and its passes (SMAA's render their own quad). Ultra runs the chain inside
+- * one render (`Composite._oneRender`); Low, Medium and High render each pass. No hook stays on the scene.
++ * One frame's renders of the post scene, and its passes (SMAA's render their own quad). Medium, High and Ultra run the
++ * chain inside one render (`Composite._oneRender`); Low and custom values render each pass. No hook stays on the scene.
+  */
+ function postRenders(renderer: Renderer): { renders: number; passes: number } {
+   const post = renderer.post, render = vi.spyOn(renderer.three, 'render'), pass = vi.spyOn(post, '_pass');
+@@ -92,8 +92,8 @@ test('each preset reaches the renderer: passes, tone mapping, MSAA, AO depth, ca
+     // The pass chain, which also names the tone mapper: the soft shoulder lives in the
+     // composite (Low), AgX in its own pass (realistic).
+     expect(passes(renderer), name).toEqual(want.chain);
+-    // The post chain in one render on Ultra only; Low, Medium and High render each pass, as before Round 6.
+-    const fast = name === 'ultra';
++    // The post chain in one render on Medium, High and Ultra; Low renders its pass as before Round 6.
++    const fast = name !== 'low';
+     expect([renderer._fightCpu, renderer.post._oneRender], name).toEqual([fast, fast]);
+     const { renders, passes: count } = postRenders(renderer);
+     expect(count, name).toBe(want.chain.filter(pass => pass !== 'smaa').length);
+@@ -113,23 +113,27 @@ test('each preset reaches the renderer: passes, tone mapping, MSAA, AO depth, ca
+     const failed = programs.filter(program => program.diagnostics && !program.diagnostics.runnable);
+     expect(failed.map(program => program.name), name).toEqual([]);
+   }
+-  // Ultra to Medium and Ultra to High mid-session: back to a render per pass at the next frame, nothing left set; and
+-  // back to one render on Ultra each time.
++  // Ultra to Medium, High and Low mid-session: one render on Medium and High, back to a render per pass on Low at the
++  // next frame with nothing left set; and back to one render on Ultra each time.
+   const perPass = (preset: PresetName) => expected[preset].chain.filter(pass => pass !== 'smaa').length;
+-  for (const name of ['medium', 'high'] as const) {
++  for (const name of ['medium', 'high', 'low'] as const) {
+     renderer.applyQuality(PRESET_VALUES[name]);
+-    expect([renderer._fightCpu, renderer.post._oneRender], name).toEqual([false, false]);
+-    expect(postRenders(renderer), name).toEqual({ renders: perPass(name), passes: perPass(name) });
++    const fast = name !== 'low';
++    expect([renderer._fightCpu, renderer.post._oneRender], name).toEqual([fast, fast]);
++    expect(postRenders(renderer), name).toEqual({ renders: fast ? 1 : perPass(name), passes: perPass(name) });
+     renderer.applyQuality(PRESET_VALUES.ultra);
+     expect([renderer._fightCpu, renderer.post._oneRender], name).toEqual([true, true]);
+     expect(postRenders(renderer), name).toEqual({ renders: 1, passes: perPass('ultra') });
+   }
+-  // A custom set with Ultra's values is Ultra; any other custom set keeps the old paths.
+-  renderer.applyQuality({ ...PRESET_VALUES.ultra });
+-  expect(renderer._fightCpu).toBe(true);
+-  renderer.applyQuality({ ...PRESET_VALUES.ultra, fpsTarget: 60 });
+-  expect([renderer._fightCpu, renderer.post._oneRender]).toEqual([false, false]);
+-  expect(postRenders(renderer).renders).toBeGreaterThan(1);
++  // A custom set with a preset's values is that preset; any other custom set keeps the old paths (a render per pass,
++  // nothing left set from the preset before).
++  for (const name of ['medium', 'high', 'ultra'] as const) {
++    renderer.applyQuality({ ...PRESET_VALUES[name] });
++    expect([renderer._fightCpu, renderer.post._oneRender], name).toEqual([true, true]);
++    renderer.applyQuality({ ...PRESET_VALUES[name], fpsTarget: 60 });
++    expect([renderer._fightCpu, renderer.post._oneRender], name).toEqual([false, false]);
++    expect(postRenders(renderer), name).toEqual({ renders: perPass(name), passes: perPass(name) });
++  }
+   // Off frees every shadow light but the sun, which stops casting.
+   renderer.applyQuality({ ...PRESET_VALUES.ultra, shadows: 'off' });
+   expect(renderer.cascades).toHaveLength(0);
+@@ -388,7 +392,8 @@ test('the chain inside one render draws exactly what a render per pass did', ()
+     three.clear();
+     three.render(scene, camera);
+     three.info.reset();
+-    // `draw` with every pass rendering itself (Low, Medium, High: the path before Round 6), or in one render (Ultra).
++    // `draw` with every pass rendering itself (Low, custom values: the path before Round 6), or in one render (Medium,
++    // High, Ultra).
+     post._oneRender = !perPass;
+     post.draw(three, 0.5, fx, camera);
+     expect(post.scene.onAfterRender).toBe(THREE.Object3D.prototype.onAfterRender);
+diff --git a/tests/shadow-walk.test.ts b/tests/shadow-walk.test.ts
+index 7bba03a..6610b6f 100644
+--- a/tests/shadow-walk.test.ts
++++ b/tests/shadow-walk.test.ts
+@@ -93,7 +93,7 @@ function walk(node: Object3D, layers: THREE.Layers, shown: (node: Object3D) => b
+ }
+ 
+ /**
+- * Around `shadowSwap` without the walk (Low, Medium, High): nothing hidden. With it (Ultra): the same casters in the same order with the hidden subtrees as without, none of them under a
++ * Around `shadowSwap` without the walk (Low): nothing hidden. With it (Medium, High, Ultra): the same casters in the same order with the hidden subtrees as without, none of them under a
+  * hidden node, and every node shown or not as before once it is over. Returns the nodes hidden and the visits saved.
+  */
+ function check(assets: OperatorAssets, scene: Object3D, camera: THREE.Camera, what: string): { hidden: Object3D[]; saved: number } {
+@@ -101,7 +101,7 @@ function check(assets: OperatorAssets, scene: Object3D, camera: THREE.Camera, wh
+   scene.traverse(node => before.set(node, node.visible));
+   const reference = { casters: [] as Object3D[], visits: 0 }, drawn = { casters: [] as Object3D[], visits: 0 };
+   const hidden: Object3D[] = [];
+-  // Low, Medium and High (no walk): the merged draws only, every node shown as it was.
++  // Low (no walk): the merged draws only, every node shown as it was.
+   assets.shadowSwap(true, false);
+   try {
+     scene.traverse(node => expect(node.visible, `${what}, no walk: ${node.name}`).toBe(before.get(node)));
+@@ -109,7 +109,7 @@ function check(assets: OperatorAssets, scene: Object3D, camera: THREE.Camera, wh
+     assets.shadowSwap(false);
+   }
+   scene.traverse(node => expect(node.visible, `${what}, no walk: ${node.name} after`).toBe(before.get(node)));
+-  // Ultra.
++  // Medium, High and Ultra.
+   assets.shadowSwap(true, true);
+   try {
+     walk(scene, camera.layers, node => before.get(node)!, reference);
+@@ -261,13 +261,13 @@ test('the merged and walked shadow draws give the same shadow map as the full wa
+     renderer.dispose();
+   });
+   const drawShadows = renderer.shadowMap.render.bind(renderer.shadowMap);
+-  let walked: 'full' | 'walked' | 'medium' = 'full', calls = 0;
++  let walked: 'full' | 'walked' | 'low' = 'full', calls = 0;
+   renderer.shadowMap.render = (lights, at, from) => {
+     const before = renderer.info.render.calls, shown = new Map<Object3D, boolean>();
+     at.traverse(node => shown.set(node, node.visible));
+-    // Low, Medium and High: the merged draws without the walk, nothing hidden.
+-    assets.shadowSwap(true, walked !== 'medium');
+-    if (walked === 'medium') at.traverse(node => expect(node.visible).toBe(shown.get(node)));
++    // Low: the merged draws without the walk, nothing hidden.
++    assets.shadowSwap(true, walked !== 'low');
++    if (walked === 'low') at.traverse(node => expect(node.visible).toBe(shown.get(node)));
+     // The full walk: the merged draws, every node shown as it was.
+     if (walked === 'full') at.traverse(node => { node.visible = shown.get(node)!; });
+     try { drawShadows(lights, at, from); } finally { assets.shadowSwap(false); }
+@@ -295,14 +295,14 @@ test('the merged and walked shadow draws give the same shadow map as the full wa
+   }
+   scene.updateMatrixWorld(true);
+   assets.frame(camera);
+-  const full = shot('full'), skipped = shot('walked'), medium = shot('medium');
++  const full = shot('full'), skipped = shot('walked'), low = shot('low');
+   let cast = 0;
+   for (let i = 0; i < full.texels.length; i += 4) if (full.texels[i] !== 255 || full.texels[i + 3] !== 255) cast++;
+   expect(cast, 'the figures cast').toBeGreaterThan(10000);
+   expect(skipped.texels.every((v, i) => v === full.texels[i]), 'the same shadow map').toBe(true);
+   expect(skipped.calls).toBe(full.calls);
+-  expect(medium.texels.every((v, i) => v === full.texels[i]), 'the same shadow map without the walk').toBe(true);
+-  expect(medium.calls).toBe(full.calls);
++  expect(low.texels.every((v, i) => v === full.texels[i]), 'the same shadow map without the walk').toBe(true);
++  expect(low.calls).toBe(full.calls);
+ }, 60_000);
+ 
+ test('nothing in the view-model rig casts, and the shadow pass walks past it while the main pass draws it', async () => {
+@@ -366,11 +366,11 @@ test('nothing in the view-model rig casts, and the shadow pass walks past it whi
+   probe.onBeforeRender = (...args) => { drawn++; rigDepth.apply(probe, args); };
+   const fx = { hurt: 0, flash: 0, slow: 0, lowHp: 0 };
+   const swaps = vi.spyOn(renderer.operators, 'shadowSwap');
+-  // Ultra hides the rig for each shadow redraw; Low, Medium and High walk it as before (nothing hidden), also after a
+-  // change mid-session (Ultra to High, and back to Ultra): no state stays from the preset before.
++  // Medium, High and Ultra hide the rig for each shadow redraw; Low walks it as before (nothing hidden), also after a
++  // change mid-session (Ultra to High to Medium to Low, and back to Ultra): no state stays from the preset before.
+   for (const preset of ['ultra', 'high', 'medium', 'low', 'ultra'] as PresetName[]) {
+     renderer.applyQuality(PRESET_VALUES[preset]);
+-    const walk = preset === 'ultra';
++    const walk = preset !== 'low';
+     expect(renderer._fightCpu, preset).toBe(walk);
+     // Past the first frames' compiles and warm-up draws (which show the whole rig once).
+     for (let i = 0; i < 100 && (i < 2 || renderer._compiles.length + renderer._warmups.length > 0); i++) {

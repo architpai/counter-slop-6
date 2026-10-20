@@ -1,0 +1,254 @@
+diff --git a/src/engine/render/index.ts b/src/engine/render/index.ts
+index 3d0ebc5..f5fe855 100644
+--- a/src/engine/render/index.ts
++++ b/src/engine/render/index.ts
+@@ -283,9 +283,9 @@ export class Renderer {
+   _fogFar = FOG_FAR;
+   _quality: Readonly<GfxValues> = PRESET_VALUES.high;
+   /**
+-   * Ultra only (`fightCpuPaths`, set by `applyQuality`): each shadow redraw hides the rig and the worn operators'
+-   * caster-free subtrees (`OperatorAssets.shadowSwap`), and the post chain runs in one render (`Composite._oneRender`).
+-   * Off on Low, Medium, High and custom values: the shadow pass walks every shown node, and each post pass renders
++   * Medium, High and Ultra (`fightCpuPaths`, set by `applyQuality`): each shadow redraw hides the rig and the worn
++   * operators' caster-free subtrees (`OperatorAssets.shadowSwap`), and the post chain runs in one render
++   * (`Composite._oneRender`). Off on Low and custom values: the shadow pass walks every shown node, and each post pass renders
+    * itself.
+    */
+   _fightCpu = false;
+@@ -537,10 +537,10 @@ export class Renderer {
+         if (this._ownMaterials.length > count) this._ownMaterials.length = this._ownGroups.length = count;
+       }
+     };
+-    // Ultra only (`_fightCpu`, read at each redraw): the rig casts nothing (`_prepareRigMesh`), so it is hidden
+-    // for the pass and the cascades' walks skip it (three has listed the main pass's draws before its shadow pass, so
+-    // that pass sees it as it was), and the worn operators' caster-free subtrees are hidden too. Low, Medium and
+-    // High walk every shown node, as before.
++    // Medium, High and Ultra (`_fightCpu`, read at each redraw): the rig casts nothing (`_prepareRigMesh`), so it is
++    // hidden for the pass and the cascades' walks skip it (three has listed the main pass's draws before its shadow
++    // pass, so that pass sees it as it was), and the worn operators' caster-free subtrees are hidden too. Low walks
++    // every shown node, as before.
+     shadowMap.render = (lights, scene, camera) => {
+       if (!shadowMap.needsUpdate) return drawShadows(lights, scene, camera);
+       const walk = this._fightCpu, rig = this.rig.visible;
+diff --git a/src/engine/render/operators.ts b/src/engine/render/operators.ts
+index d33d425..520dff9 100644
+--- a/src/engine/render/operators.ts
++++ b/src/engine/render/operators.ts
+@@ -445,7 +445,7 @@ export class OperatorAssets implements OperatorSource {
+    * its first mesh on its kind's merged geometry (`KindTemplate.shadow`), the others out of the pass; off, back. The
+    * meshes are siblings with one skeleton, bind matrix, sphere and depth material, drawn one after another, so the
+    * one draw runs the same program on the same vertices and triangles in the same order. Also, `on` with `walk`
+-   * (Ultra only: render/index.ts `_fightCpu`), every worn figure's subtrees that hold no caster are hidden
++   * (Medium, High and Ultra: render/index.ts `_fightCpu`), every worn figure's subtrees that hold no caster are hidden
+    * (`OperatorBody.bare`): three walks every shown node once per cascade, and a hidden one ends the walk there. Its
+    * casters are drawn as before, in the same order. Off shows again whatever was hidden. No allocation.
+    */
+diff --git a/src/engine/render/postfx.ts b/src/engine/render/postfx.ts
+index a6a0231..109ed01 100644
+--- a/src/engine/render/postfx.ts
++++ b/src/engine/render/postfx.ts
+@@ -397,14 +397,14 @@ export class Composite {
+   readonly _sceneRegion = regionUniforms();
+   readonly _clear = new THREE.Color();
+   /**
+-   * With `_oneRender` (Ultra only: render/index.ts `_fightCpu`, set at each quality change and read at each
+-   * `draw`), the chain runs inside one `render` of `scene` (`_afterChain`, its `onAfterRender` for that render only),
++   * With `_oneRender` (Medium, High and Ultra: render/index.ts `_fightCpu`, set at each quality change and read at
++   * each `draw`), the chain runs inside one `render` of `scene` (`_afterChain`, its `onAfterRender` for that render only),
+    * each pass a `renderBufferDirect` there: the draw a render of the lone triangle made, without that render's list,
+    * sort, light and shadow steps. Set by `draw` for that render (`_chainCamera`) and while its passes run
+    * (`_inChain`); `_pass` outside it (the perf harness's calibration pass) renders as before. For the outer render
+    * the triangle wears `_final` switched off (`visible`): not drawn, but its geometry is still uploaded. Not a
+    * material of its own: three's constructor draws a uuid from Math.random, which would shift every random draw after
+-   * it (the perf harness seeds it at boot). Off (Low, Medium, High, custom values), each pass renders itself, as before.
++   * it (the perf harness seeds it at boot). Off (Low, custom values), each pass renders itself, as before.
+    */
+   _oneRender = false;
+   _chainCamera: THREE.PerspectiveCamera | null = null;
+@@ -1191,7 +1191,7 @@ export class Composite {
+     this._toneUniforms.shaftColor.value.copy(this._sunColor).multiplyScalar(strength * SHAFT_GAIN);
+     // The first pass's target, bound before the outer render: that render then resolves nothing (the MSAA scene
+     // target is still bound after the scene pass) and sets the clear colour as the pass's own render did. Without
+-    // `_oneRender` (Low, Medium, High), Low's lone pass to the canvas, and a renderer that clears in every render
++    // `_oneRender` (Low, custom values), Low's lone pass to the canvas, and a renderer that clears in every render
+     // (autoClear), each pass renders itself as before. The hook is on the scene for the one render only.
+     const first = config.ao > 0 ? this._aoRaw : config.bloom ? this._bloom[0]! : strength > 0 ? this._shafts[0]
+       : config.look === 'realistic' || smaa ? this._ldr : null;
+diff --git a/src/engine/render/quality.ts b/src/engine/render/quality.ts
+index 0ea3017..ed49ee4 100644
+--- a/src/engine/render/quality.ts
++++ b/src/engine/render/quality.ts
+@@ -140,12 +140,12 @@ export function presetOf(values: Readonly<GfxValues>): PresetName | null {
+ }
+ 
+ /**
+- * The fight-CPU paths that were measured as faster on Ultra only (perf/LOG.md, Round 6: the shadow walk's hidden
+- * subtrees and the post chain in one render; High's gain was not validated). Low, Medium, High and custom values keep
+- * the old paths.
++ * The fight-CPU paths (perf/LOG.md, Round 6: the shadow walk's hidden subtrees and the post chain in one render), on
++ * Medium, High and Ultra (Round 9). Low and custom values keep the old paths.
+  */
+ export function fightCpuPaths(values: Readonly<GfxValues>): boolean {
+-  return presetOf(values) === 'ultra';
++  const p = presetOf(values);
++  return p === 'ultra' || p === 'high' || p === 'medium';
+ }
+ 
+ // ------------------------------------------------------------------ storage
+diff --git a/tests/render-chain.test.ts b/tests/render-chain.test.ts
+index 1c6026d..24c72bf 100644
+--- a/tests/render-chain.test.ts
++++ b/tests/render-chain.test.ts
+@@ -46,8 +46,8 @@ function passes(renderer: Renderer): string[] {
+ }
+ 
+ /**
+- * One frame's renders of the post scene, and its passes (SMAA's render their own quad). Ultra runs the chain inside
+- * one render (`Composite._oneRender`); Low, Medium and High render each pass. No hook stays on the scene.
++ * One frame's renders of the post scene, and its passes (SMAA's render their own quad). Medium, High and Ultra run the
++ * chain inside one render (`Composite._oneRender`); Low and custom values render each pass. No hook stays on the scene.
+  */
+ function postRenders(renderer: Renderer): { renders: number; passes: number } {
+   const post = renderer.post, render = vi.spyOn(renderer.three, 'render'), pass = vi.spyOn(post, '_pass');
+@@ -92,8 +92,8 @@ test('each preset reaches the renderer: passes, tone mapping, MSAA, AO depth, ca
+     // The pass chain, which also names the tone mapper: the soft shoulder lives in the
+     // composite (Low), AgX in its own pass (realistic).
+     expect(passes(renderer), name).toEqual(want.chain);
+-    // The post chain in one render on Ultra only; Low, Medium and High render each pass, as before Round 6.
+-    const fast = name === 'ultra';
++    // The post chain in one render on Medium, High and Ultra; Low renders its pass as before Round 6.
++    const fast = name !== 'low';
+     expect([renderer._fightCpu, renderer.post._oneRender], name).toEqual([fast, fast]);
+     const { renders, passes: count } = postRenders(renderer);
+     expect(count, name).toBe(want.chain.filter(pass => pass !== 'smaa').length);
+@@ -113,23 +113,27 @@ test('each preset reaches the renderer: passes, tone mapping, MSAA, AO depth, ca
+     const failed = programs.filter(program => program.diagnostics && !program.diagnostics.runnable);
+     expect(failed.map(program => program.name), name).toEqual([]);
+   }
+-  // Ultra to Medium and Ultra to High mid-session: back to a render per pass at the next frame, nothing left set; and
+-  // back to one render on Ultra each time.
++  // Ultra to Medium, High and Low mid-session: one render on Medium and High, back to a render per pass on Low at the
++  // next frame with nothing left set; and back to one render on Ultra each time.
+   const perPass = (preset: PresetName) => expected[preset].chain.filter(pass => pass !== 'smaa').length;
+-  for (const name of ['medium', 'high'] as const) {
++  for (const name of ['medium', 'high', 'low'] as const) {
+     renderer.applyQuality(PRESET_VALUES[name]);
+-    expect([renderer._fightCpu, renderer.post._oneRender], name).toEqual([false, false]);
+-    expect(postRenders(renderer), name).toEqual({ renders: perPass(name), passes: perPass(name) });
++    const fast = name !== 'low';
++    expect([renderer._fightCpu, renderer.post._oneRender], name).toEqual([fast, fast]);
++    expect(postRenders(renderer), name).toEqual({ renders: fast ? 1 : perPass(name), passes: perPass(name) });
+     renderer.applyQuality(PRESET_VALUES.ultra);
+     expect([renderer._fightCpu, renderer.post._oneRender], name).toEqual([true, true]);
+     expect(postRenders(renderer), name).toEqual({ renders: 1, passes: perPass('ultra') });
+   }
+-  // A custom set with Ultra's values is Ultra; any other custom set keeps the old paths.
+-  renderer.applyQuality({ ...PRESET_VALUES.ultra });
+-  expect(renderer._fightCpu).toBe(true);
+-  renderer.applyQuality({ ...PRESET_VALUES.ultra, fpsTarget: 60 });
+-  expect([renderer._fightCpu, renderer.post._oneRender]).toEqual([false, false]);
+-  expect(postRenders(renderer).renders).toBeGreaterThan(1);
++  // A custom set with a preset's values is that preset; any other custom set keeps the old paths (a render per pass,
++  // nothing left set from the preset before).
++  for (const name of ['medium', 'high', 'ultra'] as const) {
++    renderer.applyQuality({ ...PRESET_VALUES[name] });
++    expect([renderer._fightCpu, renderer.post._oneRender], name).toEqual([true, true]);
++    renderer.applyQuality({ ...PRESET_VALUES[name], fpsTarget: 60 });
++    expect([renderer._fightCpu, renderer.post._oneRender], name).toEqual([false, false]);
++    expect(postRenders(renderer), name).toEqual({ renders: perPass(name), passes: perPass(name) });
++  }
+   // Off frees every shadow light but the sun, which stops casting.
+   renderer.applyQuality({ ...PRESET_VALUES.ultra, shadows: 'off' });
+   expect(renderer.cascades).toHaveLength(0);
+@@ -388,7 +392,8 @@ test('the chain inside one render draws exactly what a render per pass did', ()
+     three.clear();
+     three.render(scene, camera);
+     three.info.reset();
+-    // `draw` with every pass rendering itself (Low, Medium, High: the path before Round 6), or in one render (Ultra).
++    // `draw` with every pass rendering itself (Low, custom values: the path before Round 6), or in one render (Medium,
++    // High, Ultra).
+     post._oneRender = !perPass;
+     post.draw(three, 0.5, fx, camera);
+     expect(post.scene.onAfterRender).toBe(THREE.Object3D.prototype.onAfterRender);
+diff --git a/tests/shadow-walk.test.ts b/tests/shadow-walk.test.ts
+index 7bba03a..6610b6f 100644
+--- a/tests/shadow-walk.test.ts
++++ b/tests/shadow-walk.test.ts
+@@ -93,7 +93,7 @@ function walk(node: Object3D, layers: THREE.Layers, shown: (node: Object3D) => b
+ }
+ 
+ /**
+- * Around `shadowSwap` without the walk (Low, Medium, High): nothing hidden. With it (Ultra): the same casters in the same order with the hidden subtrees as without, none of them under a
++ * Around `shadowSwap` without the walk (Low): nothing hidden. With it (Medium, High, Ultra): the same casters in the same order with the hidden subtrees as without, none of them under a
+  * hidden node, and every node shown or not as before once it is over. Returns the nodes hidden and the visits saved.
+  */
+ function check(assets: OperatorAssets, scene: Object3D, camera: THREE.Camera, what: string): { hidden: Object3D[]; saved: number } {
+@@ -101,7 +101,7 @@ function check(assets: OperatorAssets, scene: Object3D, camera: THREE.Camera, wh
+   scene.traverse(node => before.set(node, node.visible));
+   const reference = { casters: [] as Object3D[], visits: 0 }, drawn = { casters: [] as Object3D[], visits: 0 };
+   const hidden: Object3D[] = [];
+-  // Low, Medium and High (no walk): the merged draws only, every node shown as it was.
++  // Low (no walk): the merged draws only, every node shown as it was.
+   assets.shadowSwap(true, false);
+   try {
+     scene.traverse(node => expect(node.visible, `${what}, no walk: ${node.name}`).toBe(before.get(node)));
+@@ -109,7 +109,7 @@ function check(assets: OperatorAssets, scene: Object3D, camera: THREE.Camera, wh
+     assets.shadowSwap(false);
+   }
+   scene.traverse(node => expect(node.visible, `${what}, no walk: ${node.name} after`).toBe(before.get(node)));
+-  // Ultra.
++  // Medium, High and Ultra.
+   assets.shadowSwap(true, true);
+   try {
+     walk(scene, camera.layers, node => before.get(node)!, reference);
+@@ -261,13 +261,13 @@ test('the merged and walked shadow draws give the same shadow map as the full wa
+     renderer.dispose();
+   });
+   const drawShadows = renderer.shadowMap.render.bind(renderer.shadowMap);
+-  let walked: 'full' | 'walked' | 'medium' = 'full', calls = 0;
++  let walked: 'full' | 'walked' | 'low' = 'full', calls = 0;
+   renderer.shadowMap.render = (lights, at, from) => {
+     const before = renderer.info.render.calls, shown = new Map<Object3D, boolean>();
+     at.traverse(node => shown.set(node, node.visible));
+-    // Low, Medium and High: the merged draws without the walk, nothing hidden.
+-    assets.shadowSwap(true, walked !== 'medium');
+-    if (walked === 'medium') at.traverse(node => expect(node.visible).toBe(shown.get(node)));
++    // Low: the merged draws without the walk, nothing hidden.
++    assets.shadowSwap(true, walked !== 'low');
++    if (walked === 'low') at.traverse(node => expect(node.visible).toBe(shown.get(node)));
+     // The full walk: the merged draws, every node shown as it was.
+     if (walked === 'full') at.traverse(node => { node.visible = shown.get(node)!; });
+     try { drawShadows(lights, at, from); } finally { assets.shadowSwap(false); }
+@@ -295,14 +295,14 @@ test('the merged and walked shadow draws give the same shadow map as the full wa
+   }
+   scene.updateMatrixWorld(true);
+   assets.frame(camera);
+-  const full = shot('full'), skipped = shot('walked'), medium = shot('medium');
++  const full = shot('full'), skipped = shot('walked'), low = shot('low');
+   let cast = 0;
+   for (let i = 0; i < full.texels.length; i += 4) if (full.texels[i] !== 255 || full.texels[i + 3] !== 255) cast++;
+   expect(cast, 'the figures cast').toBeGreaterThan(10000);
+   expect(skipped.texels.every((v, i) => v === full.texels[i]), 'the same shadow map').toBe(true);
+   expect(skipped.calls).toBe(full.calls);
+-  expect(medium.texels.every((v, i) => v === full.texels[i]), 'the same shadow map without the walk').toBe(true);
+-  expect(medium.calls).toBe(full.calls);
++  expect(low.texels.every((v, i) => v === full.texels[i]), 'the same shadow map without the walk').toBe(true);
++  expect(low.calls).toBe(full.calls);
+ }, 60_000);
+ 
+ test('nothing in the view-model rig casts, and the shadow pass walks past it while the main pass draws it', async () => {
+@@ -366,11 +366,11 @@ test('nothing in the view-model rig casts, and the shadow pass walks past it whi
+   probe.onBeforeRender = (...args) => { drawn++; rigDepth.apply(probe, args); };
+   const fx = { hurt: 0, flash: 0, slow: 0, lowHp: 0 };
+   const swaps = vi.spyOn(renderer.operators, 'shadowSwap');
+-  // Ultra hides the rig for each shadow redraw; Low, Medium and High walk it as before (nothing hidden), also after a
+-  // change mid-session (Ultra to High, and back to Ultra): no state stays from the preset before.
++  // Medium, High and Ultra hide the rig for each shadow redraw; Low walks it as before (nothing hidden), also after a
++  // change mid-session (Ultra to High to Medium to Low, and back to Ultra): no state stays from the preset before.
+   for (const preset of ['ultra', 'high', 'medium', 'low', 'ultra'] as PresetName[]) {
+     renderer.applyQuality(PRESET_VALUES[preset]);
+-    const walk = preset === 'ultra';
++    const walk = preset !== 'low';
+     expect(renderer._fightCpu, preset).toBe(walk);
+     // Past the first frames' compiles and warm-up draws (which show the whole rig once).
+     for (let i = 0; i < 100 && (i < 2 || renderer._compiles.length + renderer._warmups.length > 0); i++) {

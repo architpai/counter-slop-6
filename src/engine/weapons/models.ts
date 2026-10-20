@@ -5,8 +5,8 @@ import type { GunKind, ScopeKind, Triple } from './stats';
 import { tacticalPart } from '../render/tactical';
 import { OPTIC_COLOR } from '../render/palette';
 import type { WeaponAssets } from '../render/weapons';
-import { bladeBlood } from './blade-blood';
-import type { BladeBlood } from './blade-blood';
+import { bladeBlood } from '../render/blade-blood';
+import type { BladeBlood } from '../render/blade-blood';
 
 const PRIMARY = TONE.PRIMARY, DARK = TONE.DARK, SIGHT = TONE.HOSTILE;
 /** The flat models are built in their own units at this scale; the Blender models are in metres. */
@@ -58,7 +58,7 @@ export interface WeaponModel {
   parts: ModelParts;
   /** Gun: the barrel end. Sword: the blade tip. */
   muzzle: THREE.Object3D;
-  /** The sword's blade blood (weapons/blade-blood.ts); absent on the guns. */
+  /** The sword's blade blood (render/blade-blood.ts); absent on the guns. */
   blood?: BladeBlood | null;
   /** Scales the procedural part offsets: 1 on the flat models (their own units), `LOW_SCALE` on the Blender models (metres). */
   unit: number;

@@ -1,0 +1,57 @@
+diff --git a/tests/render-chain.test.ts b/tests/render-chain.test.ts
+index 1c6026d..c524041 100644
+--- a/tests/render-chain.test.ts
++++ b/tests/render-chain.test.ts
+@@ -523,10 +523,14 @@ function fakeSky(key: string): { sky: SkySource; freed: () => boolean } {
+ }
+ 
+ const settle = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 0));
+-/** Render until a landed sky is on: it goes on a step a frame, in the upload slots (`_landSky`). */
++/**
++ * Render until a landed sky is on: it goes on a step a frame, in the upload slots (`_landSky`). The caps only stop a
++ * hang: beside the suite's other GPU tests one 10 ms timer after a first render has taken 4.2 s, so a short wall cap
++ * ran out before the first step.
++ */
+ async function land(renderer: Renderer): Promise<number> {
+   let frames = 0;
+-  for (const start = performance.now(); renderer._skyLanding && performance.now() - start < 5000; frames++) {
++  for (const start = performance.now(); renderer._skyLanding && frames < 3000 && performance.now() - start < 60_000; frames++) {
+     renderer.render(0, fx);
+     await new Promise(resolve => setTimeout(resolve, 10));
+   }
+@@ -606,7 +610,7 @@ test('a streamed sky swaps in with uniform writes only, and Low puts the mood ba
+   expect('SKY_MAP' in dome.defines).toBe(false);
+   renderer.render(0, fx);
+   expect(held).toHaveLength(0);
+-});
++}, 90_000);
+ 
+ test('a sky that lands after the map, the look or the renderer changed is freed', async () => {
+   const held = holdSkies();
+@@ -718,12 +722,16 @@ test('a sky that lands in a match waits out its quiet start, then goes on a step
+   renderer.applyQuality(PRESET_VALUES.medium);
+   renderer.setMood(moods.house);
+   renderer.render(0, fx);
+-  renderer.setLive(true);
+   const house = fakeSky('house');
+   held.shift()!.resolve(house.sky);
+   await settle();
++  expect(renderer._skyLanding?.key).toBe('house');
+   const uploads = vi.spyOn(renderer.three, 'initTexture');
++  // Each frame in a quiet start, however long the frames before took (a first frame's timer has taken 4.2 s beside
++  // the suite's other GPU tests, past MATCH_QUIET_MS): the match goes live again just before it.
+   for (let i = 0; i < 5; i++) {
++    renderer.setLive(false);
++    renderer.setLive(true);
+     renderer._uploadAt = 0;
+     renderer.render(0, fx);
+   }
+@@ -755,7 +763,7 @@ test('a sky that lands in a match waits out its quiet start, then goes on a step
+   const envFreed = vi.spyOn(env, 'dispose');
+   renderer.applyQuality(PRESET_VALUES.low);
+   expect([mexico.freed(), envFreed.mock.calls.length > 0, renderer._skyLanding]).toEqual([true, true, null]);
+-});
++}, 60_000);
+ 
+ test('opaque lit materials write the share of their light that AO may darken into alpha', () => {
+   const three = new THREE.WebGLRenderer({ canvas: document.createElement('canvas') });

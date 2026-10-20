@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { FOG_UNIFORMS } from './atmosphere';
+import { patchBladeBlood } from './blade-blood';
 import { OPTIC_COLOR, SURF, TONE, TONE_HEX, TOON_STEPS } from './palette';
 import type { SurfKey } from './palette';
 import type { MaterialTag, RealMaterial, SetInfo, TextureSet } from './surfaces';
@@ -173,6 +174,7 @@ export function standInLightmap(): THREE.DataTexture {
   if (standInLight === undefined) {
     standInLight = pixel(1, 1, 1, THREE.NoColorSpace);
     standInLight.channel = 1;
+    fixUv(standInLight);
   }
   return standInLight;
 }
@@ -255,7 +257,15 @@ vGridPos = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;
 }
 
 const gridded = new WeakSet<THREE.Material>();
-const gridKey = (): string => 'probe-grid';
+function gridKey(this: THREE.Material): string {
+  return `probe-grid${ormKey(this)}${aoKey()}`;
+}
+/** `gridLit`'s hook: the probe grid, and the Blender weapons' packed ORM map read once (`packedOrm`). */
+function gridShader(this: THREE.Material, shader: THREE.WebGLProgramParametersWithUniforms): void {
+  withGrid(shader);
+  packedOrm(this, shader);
+  noAoAlpha(shader);
+}
 /**
  * Light a moving thing's material from the probe grid (R3): the view model
  * and figures (\`charMat\`); the characters' own materials below add it too. One patch for
@@ -266,7 +276,7 @@ export function gridLit<T extends THREE.Material>(material: T, viewModel = false
   if (gridded.has(material)) return material;
   gridded.add(material);
   if (viewModel) material.defines = { ...material.defines, GRID_VIEW_MODEL: '' };
-  material.onBeforeCompile = withGrid;
+  material.onBeforeCompile = gridShader;
   material.customProgramCacheKey = gridKey;
   return material;
 }
@@ -286,8 +296,11 @@ const NO_TINT: HitTint = { value: new THREE.Color(0, 0, 0) };
 /** player-mark in tactical.glb: the remote players' parts that wear their team tone (`ownMaterial`). */
 const MARK = new THREE.Color(0.075, 0.24, 0.65);
 const owned = new WeakMap<THREE.Material, Owned>();
-/** The maps a figure's copy of a material reads from the original (`ownMaterial`). */
-const TEXTURE_SLOTS = ['map', 'normalMap', 'aoMap', 'roughnessMap', 'metalnessMap'] as const;
+/**
+ * What a figure's copy of a material reads from the original (`twinMaterial`): the maps, and the occlusion
+ * strength the operators' set materials take from the AO setting (render/operators.ts `occlusion`).
+ */
+const SHARED_SLOTS = ['map', 'normalMap', 'aoMap', 'roughnessMap', 'metalnessMap', 'aoMapIntensity'] as const;
 const baseOwned = (): Owned => ({ tint: NO_TINT, mark: { value: MARK } });
 /** An emission at `vPbr.z` of this much of the surface's colour is the GLB's brightest glow (the bomber's arming light, at 2). */
 export const CHARACTER_GLOW = 4;
@@ -321,8 +334,9 @@ function characterShader(this: THREE.Material, shader: THREE.WebGLProgramParamet
     .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = vPbr.x;')
     .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = vPbr.y;')
     .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * vPbr.z * ${CHARACTER_GLOW.toFixed(1)};`);
+  noAoAlpha(shader);
 }
-const characterKey = (): string => 'character';
+const characterKey = (): string => `character${aoKey()}`;
 
 let character: THREE.MeshStandardMaterial | undefined;
 /** The characters' shared material (see `characterShader`); figures that flash wear their own copy (`ownMaterial`). */
@@ -341,8 +355,12 @@ export function characterMat(): THREE.MeshStandardMaterial {
 function propShader(this: THREE.Material, shader: THREE.WebGLProgramParametersWithUniforms): void {
   withGrid(shader);
   tintShader(shader, owned.get(this) ?? baseOwned());
+  packedOrm(this, shader);
+  noAoAlpha(shader);
 }
-const propKey = (): string => 'prop';
+function propKey(this: THREE.Material): string {
+  return `prop${ormKey(this)}${aoKey()}`;
+}
 
 let prop: THREE.MeshToonMaterial | undefined;
 /**
@@ -360,22 +378,76 @@ export function propMat(): THREE.MeshToonMaterial {
 }
 
 /**
- * A figure's own copy of a character or prop material, bound to its `tint`
- * (and `mark`, the player's colour, on the character material). It shares
- * the original's program: the patch and its key are the same, only the
- * uniforms differ. The owner frees it; the original must stay alive, as it
- * holds the program between figures (render/tactical.ts keeps them).
+ * A copy of a character, operator or prop material that shares the
+ * original's program (the patch and its key are the same) and reads its
+ * maps and occlusion strength from it (`SHARED_SLOTS`): a realistic set
+ * swaps its maps there (render/weapons.ts `#wear`, render/operators.ts) and
+ * frees the old ones. The original must stay alive, as it holds the program
+ * between figures (render/tactical.ts keeps them). Unbound (`ownMaterial`
+ * binds one), it draws as the original does: no tint, the default mark.
  */
-export function ownMaterial<T extends THREE.Material>(material: T, tint: HitTint, mark?: number): T {
+export function twinMaterial<T extends THREE.Material>(material: T): T {
   const copy = material.clone() as T;
   copy.onBeforeCompile = material.onBeforeCompile;
   copy.customProgramCacheKey = material.customProgramCacheKey;
-  // The maps stay the original's: a realistic prop's set swaps them there (render/weapons.ts `#wear`) and frees the old ones.
-  for (const slot of TEXTURE_SLOTS) {
+  for (const slot of SHARED_SLOTS) {
     if (slot in material) Object.defineProperty(copy, slot, { get: () => (material as Record<string, unknown>)[slot], set: () => {}, configurable: true });
   }
+  return copy;
+}
+
+/**
+ * A figure's own copy of a character or prop material (`twinMaterial`),
+ * bound to its `tint` (and `mark`, the player's colour, on the character
+ * material). The owner frees it.
+ */
+export function ownMaterial<T extends THREE.Material>(material: T, tint: HitTint, mark?: number): T {
+  const copy = twinMaterial(material);
   owned.set(copy, { tint, mark: { value: mark === undefined ? MARK : new THREE.Color(mark) } });
   return copy;
+}
+
+const shared = new WeakMap<THREE.Material, THREE.Material>();
+/**
+ * The one unbound twin (`twinMaterial`) of a character or prop material that
+ * every enemy figure wears while its tint is off (render/figure.ts): its
+ * uniforms are an untinted copy's, so the figures draw one after another
+ * with no material switch. Made as the first figure's copies were (three
+ * draws opaque meshes by material id: it keeps their place after the
+ * level's), and freed with the original.
+ */
+export function sharedMaterial<T extends THREE.Material>(material: T): T {
+  let twin = shared.get(material);
+  if (!twin) {
+    const made = twin = quietly(() => twinMaterial(material));
+    shared.set(material, made);
+    material.addEventListener('dispose', () => made.dispose());
+  }
+  return twin as T;
+}
+
+let uuidState = 0x2f6b9d31;
+/** mulberry32: the uuids of what `quietly` makes. */
+function uuidRandom(): number {
+  let t = uuidState = (uuidState + 0x6d2b79f5) | 0;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+/**
+ * Make three objects without drawing from `Math.random` (three's uuids do).
+ * The figures' shared twins and their gibs' copies are made in the middle
+ * of a step (a spawn, a torn-off limb): the step's own random draws, which
+ * the simulation runs on, must stay the ones it had without them.
+ */
+export function quietly<T>(make: () => T): T {
+  const random = Math.random;
+  Math.random = uuidRandom;
+  try {
+    return make();
+  } finally {
+    Math.random = random;
+  }
 }
 
 /**
@@ -417,8 +489,12 @@ irradiance *= fill;
 iblIrradiance *= fill;
 reflectedLight.directDiffuse *= ${OPERATOR_LIGHT.key.toFixed(2)};
 #include <lights_fragment_end>`);
+  packedOrm(this, shader);
+  noAoAlpha(shader);
 }
-const operatorKey = (): string => 'operator';
+function operatorKey(this: THREE.Material): string {
+  return `operator${ormKey(this)}${aoKey()}`;
+}
 /**
  * How far the remote player's team carrier is lightened from its team's tone (`operatorShader`): a saturated
  * blue or red reads dark (their luma is low) and sank into dark floors. It is lightened mostly through green,
@@ -500,11 +576,148 @@ export function standInMaps(set: TextureSet, info: SetInfo): SetMaps {
   return maps;
 }
 
-/** Put a set's maps on a realistic material: albedo, normal, and ORM as occlusion, roughness and metalness. */
+/**
+ * Put a set's maps on a realistic material: albedo, normal, and ORM as occlusion, roughness and metalness. The
+ * only writer of those three slots on the patched materials below, so they always hold one texture (`packedOrm`),
+ * and it fixes their uv transforms (`fixUv`). Should new maps ever change the material's program key part
+ * (`ormKey`), the material is marked for a new program; with today's maps it never is.
+ */
 export function wearMaps(material: THREE.MeshStandardMaterial, maps: SetMaps): void {
+  const worn = material.map !== null, key = ormKey(material);
+  fixUv(maps.albedo);
+  fixUv(maps.normal);
+  fixUv(maps.orm);
   material.map = maps.albedo;
   material.normalMap = maps.normal;
   material.aoMap = material.roughnessMap = material.metalnessMap = maps.orm;
+  if (worn && ormKey(material) !== key) material.needsUpdate = true;
+}
+
+/**
+ * The packed ORM map read once: with `ORM_PACKED` defined, three's metalness and occlusion chunks reuse the
+ * roughness chunk's texel (`texelRoughness`, in scope for the rest of `main`) instead of fetching the same
+ * texture twice more. One texture in all three slots means one channel, one uv transform (each slot's transform
+ * uniform is that texture's matrix) and one sampler, so the three uvs and texels are the same values: every pixel
+ * is as before. Without the define the chunks are three's, word for word.
+ */
+const ORM_METALNESS = THREE.ShaderChunk.metalnessmap_fragment.replace('vec4 texelMetalness = texture2D( metalnessMap, vMetalnessMapUv );',
+  '#ifdef ORM_PACKED\n\tvec4 texelMetalness = texelRoughness;\n\t#else\n\tvec4 texelMetalness = texture2D( metalnessMap, vMetalnessMapUv );\n\t#endif');
+const ORM_AO = THREE.ShaderChunk.aomap_fragment.replace('float ambientOcclusion = ( texture2D( aoMap, vAoMapUv ).r - 1.0 ) * aoMapIntensity + 1.0;',
+  '#ifdef ORM_PACKED\n\tfloat ambientOcclusion = ( texelRoughness.r - 1.0 ) * aoMapIntensity + 1.0;\n\t#else\n\tfloat ambientOcclusion = ( texture2D( aoMap, vAoMapUv ).r - 1.0 ) * aoMapIntensity + 1.0;\n\t#endif');
+if (ORM_METALNESS === THREE.ShaderChunk.metalnessmap_fragment || ORM_AO === THREE.ShaderChunk.aomap_fragment
+  || !THREE.ShaderChunk.roughnessmap_fragment.includes('vec4 texelRoughness = texture2D( roughnessMap, vRoughnessMapUv );')) {
+  throw new Error('three changed its ORM chunks: update render/materials.ts');
+}
+THREE.ShaderChunk.metalnessmap_fragment = ORM_METALNESS;
+THREE.ShaderChunk.aomap_fragment = ORM_AO;
+
+/**
+ * Fewer uv varyings on the packed programs (`packedOrm`). With `ORM_PACKED` (defined in both stages) the fragment
+ * never reads `vAoMapUv` or `vMetalnessMapUv`, so neither is declared or written. With `UV_SHARED` too (`uvShared`:
+ * the albedo, normal and ORM maps on one uv channel with bit-equal transforms) the vertex shader would compute
+ * `vNormalMapUv` and `vRoughnessMapUv` by `vMapUv`'s expression on the same values, so the fragment reads `vMapUv`
+ * in their place (names mapped by the preprocessor: normal map, tangent frame, roughness texel). Every value read is
+ * as before. Without the defines the preprocessed chunks are three's, word for word.
+ */
+function guardLine(chunk: string, line: string, define: string): string {
+  const out = chunk.replace(line, `#ifndef ${define}\n\t${line}\n\t#endif`);
+  if (out === chunk) throw new Error('three changed its uv chunks: update render/materials.ts');
+  return out;
+}
+const UV_GUARDS = [['vAoMapUv', 'ORM_PACKED'], ['vMetalnessMapUv', 'ORM_PACKED'], ['vNormalMapUv', 'UV_SHARED'], ['vRoughnessMapUv', 'UV_SHARED']] as const;
+const UV_WRITES = { vAoMapUv: 'aoMap', vMetalnessMapUv: 'metalnessMap', vNormalMapUv: 'normalMap', vRoughnessMapUv: 'roughnessMap' } as const;
+let uvParsVertex = THREE.ShaderChunk.uv_pars_vertex, uvVertex = THREE.ShaderChunk.uv_vertex, uvParsFragment = THREE.ShaderChunk.uv_pars_fragment;
+for (const [varying, define] of UV_GUARDS) {
+  const map = UV_WRITES[varying];
+  uvParsVertex = guardLine(uvParsVertex, `varying vec2 ${varying};`, define);
+  uvVertex = guardLine(uvVertex, `${varying} = ( ${map}Transform * vec3( ${map.toUpperCase()}_UV, 1 ) ).xy;`, define);
+  uvParsFragment = guardLine(uvParsFragment, `varying vec2 ${varying};`, define);
+}
+THREE.ShaderChunk.uv_pars_vertex = uvParsVertex;
+THREE.ShaderChunk.uv_vertex = uvVertex;
+THREE.ShaderChunk.uv_pars_fragment = `${uvParsFragment}
+#ifdef UV_SHARED
+	#define vNormalMapUv vMapUv
+	#define vRoughnessMapUv vMapUv
+#endif
+`;
+
+/**
+ * Textures whose uv transform is fixed (`fixUv`): built from three's defaults (no offset, rotation or centre,
+ * repeat 1) by three's own `updateMatrix`, then left as it is, so three stops recomputing it (a cosine and a sine
+ * per map, per material switch) and uploads the same bits it computed before.
+ */
+const fixedUv = new WeakSet<THREE.Texture>();
+/**
+ * Fix a texture's uv transform (`fixedUv`) if it is three's default and nothing set it otherwise. Nothing in the
+ * game writes a texture's offset, repeat, rotation or centre: the maps that pass here (sets, stand-ins, bakes)
+ * keep the defaults for good.
+ */
+export function fixUv(texture: THREE.Texture): void {
+  if (fixedUv.has(texture) || !texture.matrixAutoUpdate) return;
+  const { offset, repeat, center } = texture;
+  if (!Object.is(offset.x, 0) || !Object.is(offset.y, 0) || repeat.x !== 1 || repeat.y !== 1
+    || !Object.is(texture.rotation, 0) || !Object.is(center.x, 0) || !Object.is(center.y, 0)) return;
+  texture.updateMatrix();
+  texture.matrixAutoUpdate = false;
+  fixedUv.add(texture);
+}
+
+/** One texture fills a material's occlusion, roughness and metalness slots (`wearMaps`): its ORM map can be read once. */
+function ormPacked(material: THREE.Material): boolean {
+  const { aoMap, roughnessMap, metalnessMap } = material as THREE.MeshStandardMaterial;
+  return !!aoMap && aoMap === roughnessMap && aoMap === metalnessMap;
+}
+/**
+ * A packed material's albedo, normal and ORM maps share one uv (`UV_SHARED` above): one channel and fixed,
+ * bit-equal transforms (`fixUv`), so the three transform uniforms hold the same bits for as long as the maps do.
+ */
+function uvShared(material: THREE.Material): boolean {
+  const { map, normalMap, roughnessMap } = material as THREE.MeshStandardMaterial;
+  if (!map || !normalMap || !roughnessMap || !ormPacked(material)) return false;
+  const maps = [map, normalMap, roughnessMap];
+  if (!maps.every(texture => fixedUv.has(texture) && texture.channel === map.channel)) return false;
+  return maps.every(texture => texture.matrix.elements.every((value, i) => Object.is(value, map.matrix.elements[i])));
+}
+/**
+ * Read a material's ORM texture once (above), from its own hook: only when one texture fills all three slots
+ * (`ormPacked`), and drop the uv varyings the program then never reads (`UV_SHARED` when `uvShared`). three's
+ * program key holds which slots are filled but not with what, so the hooks' keys add `ormKey`: a material with
+ * three different textures never takes a packed program, which would read the roughness map for all three, nor
+ * one with different transforms a shared-uv one. Both read the same tests, so the defines and the key always agree.
+ * `wearMaps` is the only writer of the slots on these materials and keeps them packed and fixed, so a key never
+ * changes under a program (and if one did, `wearMaps` marks the material for a new one).
+ */
+function packedOrm(material: THREE.Material, shader: THREE.WebGLProgramParametersWithUniforms): void {
+  if (!ormPacked(material)) return;
+  const defines = uvShared(material) ? '#define ORM_PACKED\n#define UV_SHARED\n' : '#define ORM_PACKED\n';
+  shader.vertexShader = `${defines}${shader.vertexShader}`;
+  shader.fragmentShader = `${defines}${shader.fragmentShader}`;
+}
+/** The program key's part for `packedOrm`: `|orm` on a packed material (`|orm|uv` with a shared uv), else nothing. */
+function ormKey(material: THREE.Material): string {
+  return ormPacked(material) ? uvShared(material) ? '|orm|uv' : '|orm' : '';
+}
+
+/**
+ * The scene alpha GTAO reads (render/postfx.ts `OPAQUE_CHUNK`): written while the AO setting is on, which
+ * `Renderer.applyQuality` sets (`setAoAlpha`). With AO off nothing reads the scene's alpha, so the patched lit
+ * materials' programs leave its computation out (`NO_AO_ALPHA`, in their keys through `aoKey`); every other lit
+ * material keeps it.
+ */
+let aoAlpha = true;
+/** Turn the scene-alpha write on or off for the next compiles; true when it changed (the materials need new programs). */
+export function setAoAlpha(on: boolean): boolean {
+  if (on === aoAlpha) return false;
+  aoAlpha = on;
+  return true;
+}
+function noAoAlpha(shader: THREE.WebGLProgramParametersWithUniforms): void {
+  if (!aoAlpha) shader.fragmentShader = `#define NO_AO_ALPHA\n${shader.fragmentShader}`;
+}
+/** The program key's part for `noAoAlpha`. */
+function aoKey(): string {
+  return aoAlpha ? '' : '|no-ao-alpha';
 }
 
 /** Every realistic level material made so far (they are cached like the flat ones). */
@@ -554,12 +767,19 @@ const SHADE_LIFT: Partial<Record<TextureSet, readonly [number, number, number]>>
  */
 function macroVariation(this: THREE.MeshStandardMaterial, shader: THREE.WebGLProgramParametersWithUniforms): void {
   shader.uniforms.macro = this.userData.macro as THREE.IUniform<number>;
-  shader.vertexShader = shader.vertexShader
-    .replace('#include <common>', '#include <common>\nvarying vec3 vMacroPos;')
-    .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMacroPos = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
+  // The probe grid's `vGridPos` (`withGrid`, after `project_vertex`) is this one's expression on the same
+  // `transformed` when nothing moves the vertex between `begin_vertex` and there, and no instance matrix joins it:
+  // then the noise reads it, one varying fewer, the same values.
+  const gridPos = !this.userData.baked && !this.userData.far && !shader.instancing && !shader.batching && !shader.skinning
+    && !shader.morphTargets && !shader.displacementMap;
+  if (!gridPos) {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vMacroPos;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMacroPos = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
+  }
   shader.fragmentShader = shader.fragmentShader
     .replace('#include <common>', `#include <common>
-varying vec3 vMacroPos;
+${gridPos ? '#define vMacroPos vGridPos' : 'varying vec3 vMacroPos;'}
 uniform float macro;
 float macroHash( vec3 p ) {
 	p = fract( p * 0.3183099 + 0.1 ) * 17.0;
@@ -606,11 +826,20 @@ iblIrradiance = vec3( 0.0 );`);
   } else {
     // Backdrops beyond the play space keep the sky probe: the grid would lend them its edge cells' light.
     if (!this.userData.far) withGrid(shader);
-    shader.fragmentShader = shader.fragmentShader.replace('#include <lights_fragment_maps>', '#include <lights_fragment_maps>\niblIrradiance = vec3( 0.0 );');
+    // three's chunk without the PMREM's diffuse, which the next line threw away.
+    shader.fragmentShader = shader.fragmentShader.replace('#include <lights_fragment_maps>', `${lightsMapsNoIbl()}\niblIrradiance = vec3( 0.0 );`);
   }
+  packedOrm(this, shader);
+  noAoAlpha(shader);
 }
 function macroKey(this: THREE.Material): string {
-  return this.userData.baked ? 'level-pbr-baked' : this.userData.far ? 'level-pbr-far' : 'level-pbr';
+  return `${this.userData.baked ? 'level-pbr-baked' : this.userData.far ? 'level-pbr-far' : 'level-pbr'}${ormKey(this)}${aoKey()}`;
+}
+/** three's `lights_fragment_maps` without the environment's irradiance (`iblIrradiance`), for `macroVariation`'s unbaked kinds. */
+function lightsMapsNoIbl(): string {
+  const chunk = THREE.ShaderChunk.lights_fragment_maps, out = chunk.replace('iblIrradiance += getIBLIrradiance( geometryNormal );', '');
+  if (out === chunk) throw new Error('three changed lights_fragment_maps: update render/materials.ts');
+  return out;
 }
 
 /**
@@ -673,6 +902,8 @@ export function kitMat(set: TextureSet, info: SetInfo, far = false): THREE.MeshS
     material.userData.macro = { value: MACRO[set] ?? MACRO_DEFAULT };
     material.userData.baked = false;
     material.userData.far = far;
+    // Only the backdrops wear it, and they receive no shadow (render/props.ts): their lighting skips the cascades.
+    if (far) material.defines = { ...material.defines, BACKDROP: '' };
     material.onBeforeCompile = macroVariation;
     material.customProgramCacheKey = macroKey;
     wearMaps(material, standInMaps(set, info));
@@ -786,6 +1017,9 @@ export function weaponMaterial(name: string): { material: THREE.Material; set: s
   const material = gridLit(new THREE.MeshStandardMaterial({ color: tint ?? 0xffffff, roughness: 1, metalness: 1 }), true);
   material.name = name;
   wearMaps(material, weaponStandIns());
+  // The sword's blade, guard and grip draw its blood in this material (weapons/models.ts `makeRealSwordModel`):
+  // patched from the start, so the template's compile links that program, not the sword's first draw in a match.
+  if (name === 'sword') patchBladeBlood(material, true);
   return { material, set: tint !== undefined ? 'optics' : name };
 }
 
@@ -810,6 +1044,17 @@ export function weaponPropMaterial(set: string): THREE.MeshStandardMaterial {
 }
 
 let levelDepth: THREE.MeshDepthMaterial | undefined;
+let levelDepthSkinned: THREE.MeshDepthMaterial | undefined;
+function levelDepthShader(shader: THREE.WebGLProgramParametersWithUniforms): void {
+  shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>', '');
+}
+const levelDepthKey = (): string => 'level-depth';
+const makeLevelDepth = (): THREE.MeshDepthMaterial => {
+  const material = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+  material.onBeforeCompile = levelDepthShader;
+  material.customProgramCacheKey = levelDepthKey;
+  return material;
+};
 /**
  * The shadow pass of the textured level and of the realistic operators
  * (render/operators.ts). three's shared depth material takes each caster's
@@ -819,14 +1064,24 @@ let levelDepth: THREE.MeshDepthMaterial | undefined;
  * (neither has cut-outs), so no streamed texture reaches the shadow pass.
  */
 export function levelDepthMat(): THREE.MeshDepthMaterial {
-  if (levelDepth === undefined) {
-    levelDepth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
-    levelDepth.onBeforeCompile = shader => {
-      shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>', '');
-    };
-    levelDepth.customProgramCacheKey = () => 'level-depth';
-  }
-  return levelDepth;
+  return levelDepth ??= makeLevelDepth();
+}
+
+/**
+ * `levelDepthMat`'s twin for skinned casters (the realistic operators' bodies): the same material, patch and key,
+ * so the same program. three binds a mesh's depth material as it is, and one material drawn skinned, then not,
+ * looks its program up again (parameters, key and uniforms) at every switch between them in a shadow pass.
+ */
+export function levelDepthSkinnedMat(): THREE.MeshDepthMaterial {
+  return levelDepthSkinned ??= makeLevelDepth();
+}
+
+/**
+ * A new material as `levelDepthMat` (the same patch and key, so the same programs), for a probe that links one of
+ * its programs ahead of its casters (render/operators.ts `skinnedDepthProbe`). Make it under `quietly`.
+ */
+export function levelDepthTwin(): THREE.MeshDepthMaterial {
+  return makeLevelDepth();
 }
 
 /**

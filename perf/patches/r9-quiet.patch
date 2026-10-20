@@ -1,0 +1,127 @@
+diff --git a/src/engine/render/operators.ts b/src/engine/render/operators.ts
+index d33d425..b5fdd9b 100644
+--- a/src/engine/render/operators.ts
++++ b/src/engine/render/operators.ts
+@@ -583,18 +583,21 @@ function restBounds(template: KindTemplate): THREE.Sphere {
+     mesh.bind(skeleton, new THREE.Matrix4());
+     return mesh;
+   });
++  // Each mesh skinned once (`skinnedPositions`, three's own arithmetic), for both the box and the reach.
++  const positions = meshes.map(skinnedPositions);
+   const box = new THREE.Box3();
+-  for (const mesh of meshes) {
+-    mesh.computeBoundingBox();
+-    box.union(mesh.boundingBox!);
+-  }
++  meshes.forEach((mesh, m) => {
++    const own = new THREE.Box3(), points = positions[m]!;
++    for (let v = 0; v < points.length; v += 3) own.expandByPoint(_skinned.set(points[v]!, points[v + 1]!, points[v + 2]!));
++    box.union(own);
++  });
+   const sphere = box.getBoundingSphere(new THREE.Sphere());
+   let radius = 0;
+   const vertex = new THREE.Vector3();
+-  for (const mesh of meshes) {
+-    const joints = mesh.geometry.getAttribute('skinIndex'), weights = mesh.geometry.getAttribute('skinWeight');
++  meshes.forEach((mesh, m) => {
++    const joints = mesh.geometry.getAttribute('skinIndex'), weights = mesh.geometry.getAttribute('skinWeight'), points = positions[m]!;
+     for (let v = 0; v < joints.count; v++) {
+-      mesh.getVertexPosition(v, vertex);
++      vertex.set(points[v * 3]!, points[v * 3 + 1]!, points[v * 3 + 2]!);
+       let reach = vertex.distanceTo(sphere.center);
+       for (let k = 0; k < 4; k++) {
+         const at = weights.getComponent(v, k) > 0 ? joint[joints.getComponent(v, k)] : null;
+@@ -603,11 +606,48 @@ function restBounds(template: KindTemplate): THREE.Sphere {
+       radius = Math.max(radius, reach);
+     }
+     (mesh.material as THREE.Material).dispose();
+-  }
++  });
+   sphere.radius = radius + BOUNDS_MARGIN;
+   return sphere;
+ }
+ 
++const _skinned = new THREE.Vector3();
++const _base = new THREE.Vector3();
++const _bone = new THREE.Vector3();
++const _skinIndex = new THREE.Vector4();
++const _skinWeight = new THREE.Vector4();
++
++/**
++ * Every vertex of a skinned mesh as `SkinnedMesh.getVertexPosition` gives it (x, y, z per vertex, as doubles), with each
++ * bone's skinning matrix made once, not once per vertex weight: the same products of the same matrices in the same
++ * order (three r170 `applyBoneTransform`), so the same numbers.
++ */
++function skinnedPositions(mesh: THREE.SkinnedMesh): Float64Array {
++  const { skeleton, geometry } = mesh;
++  const count = geometry.getAttribute('position').count;
++  const matrices: (THREE.Matrix4 | undefined)[] = [];
++  const out = new Float64Array(count * 3);
++  for (let v = 0; v < count; v++) {
++    THREE.Mesh.prototype.getVertexPosition.call(mesh, v, _skinned);
++    _skinIndex.fromBufferAttribute(geometry.attributes.skinIndex as THREE.BufferAttribute, v);
++    _skinWeight.fromBufferAttribute(geometry.attributes.skinWeight as THREE.BufferAttribute, v);
++    _base.copy(_skinned).applyMatrix4(mesh.bindMatrix);
++    _skinned.set(0, 0, 0);
++    for (let k = 0; k < 4; k++) {
++      const weight = _skinWeight.getComponent(k);
++      if (weight === 0) continue;
++      const bone = _skinIndex.getComponent(k);
++      const matrix = matrices[bone] ??= new THREE.Matrix4().multiplyMatrices(skeleton.bones[bone]!.matrixWorld, skeleton.boneInverses[bone]!);
++      _skinned.addScaledVector(_bone.copy(_base).applyMatrix4(matrix), weight);
++    }
++    _skinned.applyMatrix4(mesh.bindMatrixInverse);
++    out[v * 3] = _skinned.x;
++    out[v * 3 + 1] = _skinned.y;
++    out[v * 3 + 2] = _skinned.z;
++  }
++  return out;
++}
++
+ /**
+  * Each gib bone's triangles, per mesh: those whose first corner's heaviest
+  * bone is in the bone's subtree. They share the mesh's attributes, so a
+@@ -619,22 +659,32 @@ function gibGeometries(template: KindTemplate): Map<string, THREE.BufferGeometry
+     for (let b = bone; b >= 0; b = template.bones[b]!.parent) if (b === root) return true;
+     return false;
+   };
++  // Each mesh's triangles by the heaviest bone of their first corner, found once (at the first gib bone) for all of them.
++  let firsts: Int32Array[] | null = null;
++  const heaviestFirsts = () => template.meshes.map(({ geometry }) => {
++    const joints = geometry.getAttribute('skinIndex'), weights = geometry.getAttribute('skinWeight'), index = geometry.index!;
++    const heaviest = (v: number) => {
++      let best = 0, bone = 0;
++      for (let k = 0; k < 4; k++) {
++        const w = weights.getComponent(v, k);
++        if (w > best) { best = w; bone = joints.getComponent(v, k); }
++      }
++      return bone;
++    };
++    const bones = new Int32Array(index.count / 3);
++    for (let i = 0; i < index.count; i += 3) bones[i / 3] = heaviest(index.getX(i));
++    return bones;
++  });
+   for (const name of GIB_BONES) {
+     const root = template.bones.findIndex(b => b.name === name);
+     if (root < 0) continue;
+-    out.set(name, template.meshes.map(({ geometry }) => {
+-      const joints = geometry.getAttribute('skinIndex'), weights = geometry.getAttribute('skinWeight'), index = geometry.index!;
+-      const heaviest = (v: number) => {
+-        let best = 0, bone = 0;
+-        for (let k = 0; k < 4; k++) {
+-          const w = weights.getComponent(v, k);
+-          if (w > best) { best = w; bone = joints.getComponent(v, k); }
+-        }
+-        return bone;
+-      };
++    firsts ??= heaviestFirsts();
++    const inside = template.bones.map((_, bone) => under(bone, root));
++    out.set(name, template.meshes.map(({ geometry }, m) => {
++      const index = geometry.index!, first = firsts![m]!;
+       const kept: number[] = [];
+       for (let i = 0; i < index.count; i += 3) {
+-        if (under(heaviest(index.getX(i)), root)) kept.push(index.getX(i), index.getX(i + 1), index.getX(i + 2));
++        if (inside[first[i / 3]!] ?? under(first[i / 3]!, root)) kept.push(index.getX(i), index.getX(i + 1), index.getX(i + 2));
+       }
+       const gib = new THREE.BufferGeometry();
+       for (const [key, attribute] of Object.entries(geometry.attributes)) gib.setAttribute(key, attribute);

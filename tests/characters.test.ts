@@ -297,6 +297,8 @@ test('a death falls aside of a wall behind the body, or slumps against it (V15)'
 
 test('a figure frees its own materials once it and every piece it lent are gone', () => {
   const { figure } = makeModel(TYPES.grunt);
+  // Its copies are worn while it flashes (untinted, it wears the shared twins).
+  figure.setTint(HIT_TINT, 0xff4757);
   const owned = new Set<Material>();
   figure.root.traverse(node => { if (node instanceof Mesh && tintable(node.material as Material) && node.material !== characterMat()) owned.add(node.material as Material); });
   expect(owned.size).toBeGreaterThan(0);

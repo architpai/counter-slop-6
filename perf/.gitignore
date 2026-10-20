@@ -1,0 +1,5 @@
+# Screenshot sets of perf/quality.mjs (large, per machine).
+shots/
+# Iteration runs and per-frame dumps; round results (rN-*.json) and the baselines are committed.
+results/scratch-*
+results/*-raw*.json

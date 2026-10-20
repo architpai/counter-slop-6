@@ -1,0 +1,113 @@
+diff --git a/src/engine/render/index.ts b/src/engine/render/index.ts
+index 1dbedaf..c6899f5 100644
+--- a/src/engine/render/index.ts
++++ b/src/engine/render/index.ts
+@@ -449,7 +449,7 @@ export class Renderer {
+     // Between the scene's draw list and its draws: the level's casters and the detail kit's (R6) swap to their shadow
+     // groups for this pass only. Frames that keep the shadow maps allocate nothing here.
+     const shadowMap = this.three.shadowMap, drawShadows = shadowMap.render.bind(shadowMap);
+-    shadowMap.render = (lights, scene, camera) => {
++    const drawCasters: typeof drawShadows = (lights, scene, camera) => {
+       const props = this.props.casters;
+       if (!shadowMap.needsUpdate || this._casters.length + props.length === 0) return drawShadows(lights, scene, camera);
+       const lists = [this._casters, props], own: { material: THREE.Material | THREE.Material[]; groups: THREE.GeometryGroup[] }[] = [];
+@@ -472,6 +472,17 @@ export class Renderer {
+         }
+       }
+     };
++    // Every render of the scene comes here once, after three has listed it and before its first pass, shadow maps
++    // or not: the worn operators' bone textures go up here, outside any pass (render/operators.ts `send`).
++    shadowMap.render = (lights, scene, camera) => {
++      if (scene !== this.scene) return drawCasters(lights, scene, camera);
++      this.operators.send();
++      try {
++        drawCasters(lights, scene, camera);
++      } finally {
++        this.operators.release();
++      }
++    };
+     this.weapons = new WeaponAssets({
+       model: url => new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(url),
+       texture: (url, anisotropy) => (this._ktx2 ??= ktx2Loader(this.three)).load(url, anisotropy),
+diff --git a/src/engine/render/operators.ts b/src/engine/render/operators.ts
+index aaa037e..e4df66e 100644
+--- a/src/engine/render/operators.ts
++++ b/src/engine/render/operators.ts
+@@ -412,6 +412,20 @@ export class OperatorAssets implements OperatorSource {
+     for (const body of this.#bodies.values()) body.sync(this.#clips);
+   }
+ 
++  /**
++   * Inside a render, after three has listed the scene and before its first pass (the shadow maps, render/index.ts):
++   * every worn operator's bone texture goes up now, and holds until `release`. Uploaded at its first bind instead,
++   * inside the first cascade's pass, it rewrote a texture the GPU may still be reading, in the middle of a pass.
++   */
++  send(): void {
++    for (const body of this.#bodies.values()) body.skeleton.send(this.#loaders);
++  }
++
++  /** After the shadow maps: the bones update again in the next render. */
++  release(): void {
++    for (const body of this.#bodies.values()) body.skeleton.release();
++  }
++
+   #put(rig: FigureRig): void {
+     const template = this.#kinds.get(rig.kind);
+     if (!template || this.#bodies.has(rig)) return;
+@@ -594,6 +608,38 @@ function gibGeometries(template: KindTemplate): Map<string, THREE.BufferGeometry
+ 
+ const _q = new THREE.Quaternion();
+ 
++/**
++ * A worn operator's skeleton, whose bone texture `OperatorAssets.send` uploads before a render's first pass. three
++ * updates a skinned mesh's bones once per render frame, but its frame count steps between listing the scene and the
++ * shadow maps, so the bones update again in the first cascade and their texture is uploaded there, at its first bind.
++ * While held, those updates are skipped: the bones' world matrices do not change inside a render, so the texture
++ * holds what they would have written. A skeleton without its texture yet (three makes it at the first bind) is not held.
++ */
++class OperatorSkeleton extends THREE.Skeleton {
++  /** Updated (by three's scene listing) since the last `release`. */
++  #fresh = false;
++  #held = false;
++
++  override update(): void {
++    if (this.#held) return;
++    super.update();
++    this.#fresh = true;
++  }
++
++  send(loaders: Pick<WeaponLoaders, 'upload'>): void {
++    const texture = this.boneTexture;
++    if (!texture) return;
++    // Culled from the camera this render: three would update it in a cascade that draws it.
++    if (!this.#fresh) super.update();
++    loaders.upload(texture);
++    this.#held = true;
++  }
++
++  release(): void {
++    this.#held = this.#fresh = false;
++  }
++}
++
+ /**
+  * An operator worn by one figure: its bones (children of the figure's root,
+  * mirroring the pivots), the skinned meshes on the figure's own tinted
+@@ -606,7 +652,7 @@ export class OperatorBody {
+   readonly bones: THREE.Bone[];
+   /** Per bone, the pivot or node it mirrors, or null for a bone of its own (the chest, the feet, the rotors). */
+   readonly sources: (THREE.Object3D | null)[];
+-  readonly skeleton: THREE.Skeleton;
++  readonly skeleton: OperatorSkeleton;
+   readonly meshes: THREE.SkinnedMesh[];
+   readonly armature = new THREE.Group();
+   /** Where the prop sits in the hand: its grip in the gun glove's fist (`FIST`), laid as the weapon group lays it, under the forearm's bone. */
+@@ -632,7 +678,7 @@ export class OperatorBody {
+     });
+     template.bones.forEach(({ parent }, i) => (parent >= 0 ? this.bones[parent]! : this.armature).add(this.bones[i]!));
+     this.sources = template.bones.map(({ name }) => rig.parts[name as keyof typeof rig.parts] ?? rig.root.getObjectByName(name) ?? null);
+-    this.skeleton = new THREE.Skeleton(this.bones, template.boneInverses);
++    this.skeleton = new OperatorSkeleton(this.bones, template.boneInverses);
+     const worn = twins(false);
+     this.meshes = template.meshes.map(({ geometry, set }, i) => {
+       const mesh = new THREE.SkinnedMesh(geometry, worn[i]!);

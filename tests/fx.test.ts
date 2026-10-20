@@ -5,7 +5,7 @@ import { DECAL_GREY, REAL_CAPACITY, RealEffects, holeTint } from '@/engine/effec
 import { World } from '@/engine/physics';
 import { LevelBuilder } from '@/engine/level/build';
 import {
-  FX_ATLASES, FX_MANIFEST, FxAssets, cells, decalMaterial, flatDecalMaterial, flipbookFrame, fxDownloadBytes, fxTemplate,
+  FX_ATLASES, FX_MANIFEST, FxAssets, cells, decalMaterial, flatDecalMaterial, flipbookFrame, fxDownloadBytes, fxLateTemplate, fxTemplate,
   fxTextureSize, fxUrl, flashMaterial, hazardSmokeMaterial, lowFlashMaterial, spriteMaterial, splatMaterial, tracerMaterial,
 } from '@/engine/render/fx';
 import { SURFACE_FAMILY, impactFor, surfaceAt, surfaceOf } from '@/engine/render/impacts';
@@ -209,8 +209,14 @@ test('decals are lit, offset in depth and never write it; the flat look\'s too a
   for (const material of [decal, splat, flashMaterial(), spriteMaterial('dither'), spriteMaterial('fire')]) {
     expect(materials('realistic').has(material), material.name).toBe(true);
   }
-  for (const material of [spriteMaterial('soft'), spriteMaterial('fire-soft')]) expect(materials('realistic', true).has(material), material.name).toBe(true);
+  // The soft sprites draw in the soft layer's scene (no lights: programs of their own), so they warm up there, apart.
+  const late = new Set<THREE.Material>();
+  fxLateTemplate('realistic', true)!.traverse(node => { if (node instanceof THREE.Mesh) late.add(node.material as THREE.Material); });
+  expect([...late]).toEqual([spriteMaterial('fire-soft'), spriteMaterial('soft')]);
+  for (const material of late) expect(materials('realistic', true).has(material), material.name).toBe(false);
   expect(materials('realistic', true).has(spriteMaterial('dither'))).toBe(false);
+  expect(materials('realistic', true).has(decal)).toBe(true);
+  expect([fxLateTemplate('realistic'), fxLateTemplate('lowpoly', true), fxLateTemplate('lowpoly')]).toEqual([null, null, null]);
   // A fight's first grenade and unlit mesh link nothing either: their programs warm at the menu on both looks.
   for (const look of ['lowpoly', 'realistic'] as const) {
     expect(materials(look).has(unlitMat(TONE_HEX[TONE.PRIMARY])), look).toBe(true);
@@ -221,7 +227,9 @@ test('decals are lit, offset in depth and never write it; the flat look\'s too a
   // A blended two-sided effect draws once a frame: three draws such a material twice (back, then front) unless told not to.
   const all = new Set([...materials('lowpoly'), ...materials('realistic'), ...materials('realistic', true), lowFlashMaterial()]);
   for (const material of all) {
-    if (material.transparent && material.side === THREE.DoubleSide) expect(material.forceSinglePass, material.name).toBe(true);
+    // But the holder of the slash wave's and ban ring's programs: those draw twice, so it links both (back, front).
+    if (material.name === 'fx:see-through') expect([material.transparent, material.side, material.forceSinglePass]).toEqual([true, THREE.DoubleSide, false]);
+    else if (material.transparent && material.side === THREE.DoubleSide) expect(material.forceSinglePass, material.name).toBe(true);
   }
   expect([flashMaterial().forceSinglePass, lowFlashMaterial().forceSinglePass, tracerMaterial().forceSinglePass]).toEqual([true, true, true]);
 });

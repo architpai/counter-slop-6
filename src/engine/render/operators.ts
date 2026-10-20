@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import manifest from './operator-assets.json';
-import { OPERATOR_AO, levelDepthMat, operatorMaterial, wearMaps } from './materials';
+import { OPERATOR_AO, levelDepthMat, levelDepthSkinnedMat, levelDepthTwin, operatorMaterial, quietly, twinMaterial, wearMaps } from './materials';
 import { ClipLibrary, LOOPS, ONE_SHOTS, type ClipGroup, type OperatorMotion } from './operator-motion';
 import { ANISOTROPY, TEXTURE_MAPS, TEXTURE_SIZE } from './surfaces';
 import { textureBytes } from './textures';
+import { staleFigure } from './fresh';
 import type { FigureRig, OperatorSource } from './figure';
 import type { GfxValues } from './quality';
 import type { TextureMap, TextureSize } from './surfaces';
@@ -60,6 +61,54 @@ export function operatorWant(values: Pick<GfxValues, 'look' | 'textures'>): { lo
   return { lod: size <= 512 ? 1 : 0, size };
 }
 
+/**
+ * A caster for the menu's warm-up draw (render/index.ts `_warmPrograms`, realistic tiers) that links the worn
+ * operators' shadow-pass program there: no glb's compile links a shadow program, so a glb that lands in a match
+ * (after Start) linked it at its warm-up's (or a body's) first shadow draw, in a match frame. It draws as a body's
+ * mesh does in the shadow pass (`levelDepthSkinnedMat`'s program: skinned, on a map, back faces, no other
+ * attribute that keys a program), with a twin of that material (`levelDepthTwin`: the same patch and key) as its
+ * depth and its own material, so the warm-up's main pass draws it on that program too. It draws nothing: its one
+ * triangle's skin weights are zero, so every vertex skins to its origin and the triangle has no area (no fragment in
+ * the shadow maps or the frame). A new one each call (each renderer owns one: `Renderer._depthProbe`), without a uuid
+ * draw (`quietly`), its bone texture too.
+ */
+export function skinnedDepthProbe(): THREE.SkinnedMesh {
+  return quietly(() => {
+    // The glb's quantised layout (KHR_mesh_quantization, as its loader gives it): positions normalised int16 in
+    // 8-byte strides, uv normalised uint16, joints uint8, weights normalised uint8, so the pass's draw takes the
+    // same vertex formats as a body's (ANGLE Metal keys its pipelines on them too).
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.InterleavedBufferAttribute(new THREE.InterleavedBuffer(new Int16Array(12), 4), 3, 0, true));
+    geometry.setAttribute('uv', new THREE.BufferAttribute(new Uint16Array(6), 2, true));
+    geometry.setAttribute('skinIndex', new THREE.BufferAttribute(new Uint8Array(12), 4));
+    geometry.setAttribute('skinWeight', new THREE.BufferAttribute(new Uint8Array(12), 4, true));
+    const material = levelDepthTwin();
+    // A map on channel 0 (a body's set albedo; the patched shader never samples it), and back faces as the pass
+    // gives a front-faced body (`shadowSide` keeps it so: the pass takes this material's side from itself).
+    const map = new THREE.DataTexture(new Uint8Array(4), 1, 1);
+    map.needsUpdate = true;
+    material.map = map;
+    material.side = material.shadowSide = THREE.BackSide;
+    const mesh = new THREE.SkinnedMesh(geometry, material);
+    mesh.name = 'skinned-depth-probe';
+    mesh.customDepthMaterial = material;
+    mesh.castShadow = mesh.receiveShadow = true;
+    mesh.bind(new THREE.Skeleton([new THREE.Bone()]));
+    mesh.skeleton.computeBoneTexture();
+    return mesh;
+  });
+}
+
+/** Frees a probe (render/index.ts `Renderer.dispose`, for the renderer's own probe): its geometry, material, map and
+ * bone texture. */
+export function disposeSkinnedDepthProbe(probe: THREE.SkinnedMesh): void {
+  const material = probe.material as THREE.MeshDepthMaterial;
+  probe.geometry.dispose();
+  material.map?.dispose();
+  material.dispose();
+  probe.skeleton.dispose();
+}
+
 /** What a tier downloads for its characters: its glb and every set's maps at its size. */
 export function operatorDownloadBytes(lod: OperatorLod, size: TextureSize): number {
   return OPERATOR_SETS.reduce((sum, set) => sum + OPERATOR_MANIFEST.sets[set]!.bytes[`${size}`]!.reduce((a, b) => a + b, 0), OPERATOR_MANIFEST.glb[lod]);
@@ -87,6 +136,12 @@ export interface KindTemplate {
    * the pose (`restBounds`); three never skins vertices on the CPU for it.
    */
   bounds: THREE.Sphere;
+  /**
+   * A worn figure's one draw per shadow cascade (`OperatorAssets.shadowSwap`): every mesh's attributes that the
+   * skinned depth program reads, laid out as the meshes lay them, and their triangles, in mesh order; null for a
+   * kind of one mesh.
+   */
+  shadow: THREE.BufferGeometry | null;
 }
 
 /** How far the trunk may move inside the figure (the hips sinking and sliding back in a death fall, a lean), metres of figure space. */
@@ -129,6 +184,17 @@ export class OperatorAssets implements OperatorSource {
   #clips: ClipLibrary | null = null;
   #loading: OperatorLod | null = null;
   #materials = new Map<OperatorSet, THREE.MeshStandardMaterial>();
+  /**
+   * The set materials' shared twins (`twinMaterial`) that the figures' meshes wear while their tint is off
+   * (`FigureRig.wear`), skinned and the gibs' rigid ones apart (a material that switches between the two looks its
+   * program up again), each in the order made: three draws opaque meshes by material id, so a kind takes twins
+   * whose order is its meshes', the order its own copies had (`#twins`). Made on first use, after the level's
+   * materials, as the copies were.
+   */
+  readonly #skinned: THREE.MeshStandardMaterial[] = [];
+  readonly #rigid: THREE.MeshStandardMaterial[] = [];
+  /** Each kind's twins, per mesh, skinned and rigid. */
+  readonly #kindTwins = new Map<string, readonly THREE.Material[]>();
   #maps: Maps[] = [];
   #worn: Maps | null = null;
   #failed = false;
@@ -140,6 +206,15 @@ export class OperatorAssets implements OperatorSource {
   /** Every figure that can wear an operator, and the ones that do. */
   readonly #figures = new Set<FigureRig>();
   readonly #bodies = new Map<FigureRig, OperatorBody>();
+  /**
+   * What `shadowSwap` draws once per cascade: the worn bodies of the kinds with a merged shadow geometry, and those
+   * kinds' template meshes (the warm-up draws them into the shadow maps, so the merged buffers upload there).
+   */
+  readonly #casters: { readonly meshes: readonly THREE.SkinnedMesh[]; readonly template: KindTemplate }[] = [];
+  /** The subtrees `shadowSwap` hid for the pass (`OperatorBody.bare`), the first `#hiddenCount`, shown again after it. */
+  readonly #hidden: (THREE.Object3D | null)[] = [];
+  #hiddenCount = 0;
+  readonly #bare = (body: OperatorBody): void => { this.#hiddenCount = body.bare(this.#hidden, this.#hiddenCount); };
   /**
    * Figures that go straight to their operator once it is in, in view or not: those in play at a settings
    * change (another LOD or size, or Low to a realistic tier), which is not a fight's surprise. Only a
@@ -166,13 +241,10 @@ export class OperatorAssets implements OperatorSource {
   /** Figures wearing an operator now. */
   get worn(): number { return this.#bodies.size; }
 
-  /** The baked occlusion's strength (`OPERATOR_AO`, by the AO setting), on the set materials and every figure's copies. */
+  /** The baked occlusion's strength (`OPERATOR_AO`, by the AO setting), on the set materials: their twins and the figures' copies read it there. */
   occlusion(intensity: number): void {
     this.#occlusion = intensity;
     for (const material of this.#materials.values()) material.aoMapIntensity = intensity;
-    for (const body of this.#bodies.values()) {
-      for (const mesh of body.meshes) (mesh.material as THREE.MeshStandardMaterial).aoMapIntensity = intensity;
-    }
   }
 
   want(spec: { lod: OperatorLod; size: TextureSize } | null): void {
@@ -270,15 +342,19 @@ export class OperatorAssets implements OperatorSource {
         mesh.frustumCulled = false;
         // Warmed as the figures draw it: into the shadow maps too, with their depth material.
         mesh.castShadow = mesh.receiveShadow = true;
-        mesh.customDepthMaterial = levelDepthMat();
+        mesh.customDepthMaterial = levelDepthSkinnedMat();
         return { geometry, set };
       });
       const template: KindTemplate = {
         kind, group: clipGroup(kind, scene), bones, boneInverses: skeleton.boneInverses, meshes, gibs: new Map(), bounds: new THREE.Sphere(),
+        shadow: null,
       };
       template.gibs = gibGeometries(template);
       template.bounds = restBounds(template);
+      // Made off the random draws (three's uuids take four each), as the glb's callback made no such geometry before.
+      template.shadow = quietly(() => shadowGeometry(template));
       this.#kinds.set(kind, template);
+      if (template.shadow) this.#casters.push({ meshes: skinned, template });
       // A rigid gib's program (a figure's torn-off limb) is warmed with the template: one per material.
       const gib = template.gibs.get('head');
       gib?.forEach((geometry, i) => {
@@ -320,8 +396,8 @@ export class OperatorAssets implements OperatorSource {
     return this.#maps.find(maps => maps.size === this.#want?.size && maps !== this.#worn && maps.sets !== null) ?? null;
   }
 
-  /** Upload the next downloaded map; once all are up and the glb is in, put them on. Returns the map's GPU bytes, or 0. */
-  pump(): number {
+  /** Upload the next downloaded map; once all are up and the glb is in, put them on. Returns the map's GPU bytes, or 0 (none, or over `limit` bytes). */
+  pump(limit = Infinity): number {
     const maps = this.#next();
     if (!maps?.sets) return 0;
     const total = OPERATOR_SETS.length * TEXTURE_MAPS.length;
@@ -332,6 +408,7 @@ export class OperatorAssets implements OperatorSource {
     const set = OPERATOR_SETS[Math.floor(maps.uploaded / TEXTURE_MAPS.length)]!;
     const texture = maps.sets.get(set)![TEXTURE_MAPS[maps.uploaded % TEXTURE_MAPS.length]!];
     const bytes = textureBytes(texture);
+    if (bytes > limit) return 0;
     this.#loaders.upload(texture);
     if (texture instanceof THREE.CompressedTexture) texture.mipmaps = [];
     maps.bytes += bytes;
@@ -407,12 +484,68 @@ export class OperatorAssets implements OperatorSource {
   #put(rig: FigureRig): void {
     const template = this.#kinds.get(rig.kind);
     if (!template || this.#bodies.has(rig)) return;
-    this.#bodies.set(rig, new OperatorBody(rig, template, set => this.#materials.get(set)!));
+    const body = new OperatorBody(rig, template, rigid => this.#twins(template, rigid));
+    this.#bodies.set(rig, body);
+    if (template.shadow) this.#casters.push(body);
+  }
+
+  /**
+   * Around the shadow pass (render/index.ts): `on`, each worn operator of more than one mesh draws once per cascade,
+   * its first mesh on its kind's merged geometry (`KindTemplate.shadow`), the others out of the pass; off, back. The
+   * meshes are siblings with one skeleton, bind matrix, sphere and depth material, drawn one after another, so the
+   * one draw runs the same program on the same vertices and triangles in the same order. Also, `on` with `walk`
+   * (High and Ultra: render/index.ts `_fightCpu`), every worn figure's subtrees that hold no caster are hidden
+   * (`OperatorBody.bare`): three walks every shown node once per cascade, and a hidden one ends the walk there. Its
+   * casters are drawn as before, in the same order. Off shows again whatever was hidden. No allocation.
+   */
+  shadowSwap(on: boolean, walk = false): void {
+    for (let i = 0; i < this.#casters.length; i++) {
+      const { meshes, template } = this.#casters[i]!;
+      meshes[0]!.geometry = on ? template.shadow! : template.meshes[0]!.geometry;
+      for (let k = 1; k < meshes.length; k++) meshes[k]!.castShadow = !on;
+    }
+    if (on) {
+      if (walk) this.#bodies.forEach(this.#bare);
+    } else {
+      for (let i = 0; i < this.#hiddenCount; i++) {
+        this.#hidden[i]!.visible = true;
+        this.#hidden[i] = null;
+      }
+      this.#hiddenCount = 0;
+    }
+  }
+
+  /**
+   * A kind's shared twins, one per mesh, from the chain (`#skinned` or `#rigid`): for each mesh in turn the first
+   * twin of its set made after the previous mesh's, or a new one. Their ids then rise in its meshes' order, so a
+   * figure's meshes draw in the order its copies gave them (the operator's glb puts `kit` before `operator` on one
+   * kind and after it on others).
+   */
+  #twins(template: KindTemplate, rigid: boolean): readonly THREE.Material[] {
+    const key = `${template.kind}${rigid ? '|rigid' : ''}`;
+    let twins = this.#kindTwins.get(key);
+    if (!twins) {
+      const chain = rigid ? this.#rigid : this.#skinned;
+      let at = -1;
+      twins = template.meshes.map(({ set }) => {
+        let i = chain.findIndex((twin, k) => k > at && twin.name === set);
+        // Made at a spawn, inside the step: off its random draws.
+        if (i < 0) i = chain.push(quietly(() => twinMaterial(this.#materials.get(set)!))) - 1;
+        at = i;
+        return chain[i]!;
+      });
+      this.#kindTwins.set(key, twins);
+    }
+    return twins;
   }
 
   #take(rig: FigureRig): void {
-    this.#bodies.get(rig)?.dispose();
+    const body = this.#bodies.get(rig);
+    if (!body) return;
+    body.dispose();
     this.#bodies.delete(rig);
+    const at = this.#casters.indexOf(body);
+    if (at >= 0) this.#casters.splice(at, 1);
   }
 
   /** Every figure back to its stand-in (the glb is going, or another LOD replaces it). */
@@ -422,8 +555,12 @@ export class OperatorAssets implements OperatorSource {
     if (this.#template) disposeTree(this.#template);
     // The gibs share the meshes' attributes (freed with them above); only their index buffers are their own.
     for (const kind of this.#kinds.values()) for (const gibs of kind.gibs.values()) for (const gib of gibs) gib.dispose();
+    // The merged shadow geometries own their attributes.
+    for (const kind of this.#kinds.values()) kind.shadow?.dispose();
+    this.#casters.length = 0;
     this.#template = null;
     this.#kinds.clear();
+    this.#kindTwins.clear();
     this.#clips = null;
     this.#lod = null;
   }
@@ -439,8 +576,9 @@ export class OperatorAssets implements OperatorSource {
     for (const maps of this.#maps) this.#free(maps);
     this.#maps = [];
     this.#worn = null;
-    for (const material of this.#materials.values()) material.dispose();
+    for (const material of [...this.#materials.values(), ...this.#skinned, ...this.#rigid]) material.dispose();
     this.#materials.clear();
+    this.#skinned.length = this.#rigid.length = 0;
   }
 
   get stats(): { textures: number; residentBytes: number; model: boolean; worn: number } {
@@ -494,18 +632,21 @@ function restBounds(template: KindTemplate): THREE.Sphere {
     mesh.bind(skeleton, new THREE.Matrix4());
     return mesh;
   });
+  // Each mesh skinned once (`skinnedPositions`, three's own arithmetic), for both the box and the reach.
+  const positions = meshes.map(skinnedPositions);
   const box = new THREE.Box3();
-  for (const mesh of meshes) {
-    mesh.computeBoundingBox();
-    box.union(mesh.boundingBox!);
-  }
+  meshes.forEach((mesh, m) => {
+    const own = new THREE.Box3(), points = positions[m]!;
+    for (let v = 0; v < points.length; v += 3) own.expandByPoint(_skinned.set(points[v]!, points[v + 1]!, points[v + 2]!));
+    box.union(own);
+  });
   const sphere = box.getBoundingSphere(new THREE.Sphere());
   let radius = 0;
   const vertex = new THREE.Vector3();
-  for (const mesh of meshes) {
-    const joints = mesh.geometry.getAttribute('skinIndex'), weights = mesh.geometry.getAttribute('skinWeight');
+  meshes.forEach((mesh, m) => {
+    const joints = mesh.geometry.getAttribute('skinIndex'), weights = mesh.geometry.getAttribute('skinWeight'), points = positions[m]!;
     for (let v = 0; v < joints.count; v++) {
-      mesh.getVertexPosition(v, vertex);
+      vertex.set(points[v * 3]!, points[v * 3 + 1]!, points[v * 3 + 2]!);
       let reach = vertex.distanceTo(sphere.center);
       for (let k = 0; k < 4; k++) {
         const at = weights.getComponent(v, k) > 0 ? joint[joints.getComponent(v, k)] : null;
@@ -514,9 +655,46 @@ function restBounds(template: KindTemplate): THREE.Sphere {
       radius = Math.max(radius, reach);
     }
     (mesh.material as THREE.Material).dispose();
-  }
+  });
   sphere.radius = radius + BOUNDS_MARGIN;
   return sphere;
+}
+
+const _skinned = new THREE.Vector3();
+const _base = new THREE.Vector3();
+const _bone = new THREE.Vector3();
+const _skinIndex = new THREE.Vector4();
+const _skinWeight = new THREE.Vector4();
+
+/**
+ * Every vertex of a skinned mesh as `SkinnedMesh.getVertexPosition` gives it (x, y, z per vertex, as doubles), with each
+ * bone's skinning matrix made once, not once per vertex weight: the same products of the same matrices in the same
+ * order (three r170 `applyBoneTransform`), so the same numbers.
+ */
+function skinnedPositions(mesh: THREE.SkinnedMesh): Float64Array {
+  const { skeleton, geometry } = mesh;
+  const count = geometry.getAttribute('position').count;
+  const matrices: (THREE.Matrix4 | undefined)[] = [];
+  const out = new Float64Array(count * 3);
+  for (let v = 0; v < count; v++) {
+    THREE.Mesh.prototype.getVertexPosition.call(mesh, v, _skinned);
+    _skinIndex.fromBufferAttribute(geometry.attributes.skinIndex as THREE.BufferAttribute, v);
+    _skinWeight.fromBufferAttribute(geometry.attributes.skinWeight as THREE.BufferAttribute, v);
+    _base.copy(_skinned).applyMatrix4(mesh.bindMatrix);
+    _skinned.set(0, 0, 0);
+    for (let k = 0; k < 4; k++) {
+      const weight = _skinWeight.getComponent(k);
+      if (weight === 0) continue;
+      const bone = _skinIndex.getComponent(k);
+      const matrix = matrices[bone] ??= new THREE.Matrix4().multiplyMatrices(skeleton.bones[bone]!.matrixWorld, skeleton.boneInverses[bone]!);
+      _skinned.addScaledVector(_bone.copy(_base).applyMatrix4(matrix), weight);
+    }
+    _skinned.applyMatrix4(mesh.bindMatrixInverse);
+    out[v * 3] = _skinned.x;
+    out[v * 3 + 1] = _skinned.y;
+    out[v * 3 + 2] = _skinned.z;
+  }
+  return out;
 }
 
 /**
@@ -530,22 +708,32 @@ function gibGeometries(template: KindTemplate): Map<string, THREE.BufferGeometry
     for (let b = bone; b >= 0; b = template.bones[b]!.parent) if (b === root) return true;
     return false;
   };
+  // Each mesh's triangles by the heaviest bone of their first corner, found once (at the first gib bone) for all of them.
+  let firsts: Int32Array[] | null = null;
+  const heaviestFirsts = () => template.meshes.map(({ geometry }) => {
+    const joints = geometry.getAttribute('skinIndex'), weights = geometry.getAttribute('skinWeight'), index = geometry.index!;
+    const heaviest = (v: number) => {
+      let best = 0, bone = 0;
+      for (let k = 0; k < 4; k++) {
+        const w = weights.getComponent(v, k);
+        if (w > best) { best = w; bone = joints.getComponent(v, k); }
+      }
+      return bone;
+    };
+    const bones = new Int32Array(index.count / 3);
+    for (let i = 0; i < index.count; i += 3) bones[i / 3] = heaviest(index.getX(i));
+    return bones;
+  });
   for (const name of GIB_BONES) {
     const root = template.bones.findIndex(b => b.name === name);
     if (root < 0) continue;
-    out.set(name, template.meshes.map(({ geometry }) => {
-      const joints = geometry.getAttribute('skinIndex'), weights = geometry.getAttribute('skinWeight'), index = geometry.index!;
-      const heaviest = (v: number) => {
-        let best = 0, bone = 0;
-        for (let k = 0; k < 4; k++) {
-          const w = weights.getComponent(v, k);
-          if (w > best) { best = w; bone = joints.getComponent(v, k); }
-        }
-        return bone;
-      };
+    firsts ??= heaviestFirsts();
+    const inside = template.bones.map((_, bone) => under(bone, root));
+    out.set(name, template.meshes.map(({ geometry }, m) => {
+      const index = geometry.index!, first = firsts![m]!;
       const kept: number[] = [];
       for (let i = 0; i < index.count; i += 3) {
-        if (under(heaviest(index.getX(i)), root)) kept.push(index.getX(i), index.getX(i + 1), index.getX(i + 2));
+        if (inside[first[i / 3]!] ?? under(first[i / 3]!, root)) kept.push(index.getX(i), index.getX(i + 1), index.getX(i + 2));
       }
       const gib = new THREE.BufferGeometry();
       for (const [key, attribute] of Object.entries(geometry.attributes)) gib.setAttribute(key, attribute);
@@ -556,6 +744,76 @@ function gibGeometries(template: KindTemplate): Map<string, THREE.BufferGeometry
     }));
   }
   return out;
+}
+
+/**
+ * The attributes the shadow pass's skinned depth program reads (`levelDepthSkinnedMat`, three's depth shader):
+ * the positions and skin, and the uv its map's varying is made from (the map is never sampled).
+ */
+export const SHADOW_ATTRIBUTES = ['position', 'uv', 'skinIndex', 'skinWeight'] as const;
+
+type Attribute = THREE.BufferAttribute | THREE.InterleavedBufferAttribute;
+/** An attribute's elements as stored: the typed array, the elements per vertex in it and the attribute's first. */
+function rawLayout(attribute: Attribute): { array: THREE.TypedArray; stride: number; offset: number } {
+  return attribute instanceof THREE.InterleavedBufferAttribute
+    ? { array: attribute.data.array, stride: attribute.data.stride, offset: attribute.offset }
+    : { array: attribute.array, stride: attribute.itemSize, offset: 0 };
+}
+
+/**
+ * A kind's meshes as one geometry for the shadow pass (`KindTemplate.shadow`): each attribute of
+ * `SHADOW_ATTRIBUTES` as the meshes store it (the glb's quantised, interleaved layout, copied element for element,
+ * never through `getX`, which would denormalise), one after another, and their triangles in order, each mesh's
+ * indices moved past the vertices before it. Null for one mesh, or meshes that do not share a layout.
+ */
+export function shadowGeometry(template: KindTemplate): THREE.BufferGeometry | null {
+  const parts = template.meshes.map(({ geometry }) => geometry);
+  if (parts.length < 2) return null;
+  const counts = parts.map(geometry => geometry.getAttribute('position').count);
+  const fits = parts.every((geometry, i) => geometry.index !== null && geometry.index.count === geometry.index.array.length
+    && Object.keys(geometry.morphAttributes).length === 0 && geometry.drawRange.start === 0 && geometry.drawRange.count === Infinity
+    && SHADOW_ATTRIBUTES.every(name => {
+      const attribute = geometry.getAttribute(name) as Attribute | undefined, first = parts[0]!.getAttribute(name) as Attribute | undefined;
+      if (!attribute || !first || attribute.count !== counts[i]) return false;
+      const own = rawLayout(attribute), base = rawLayout(first);
+      return own.array.length === counts[i]! * own.stride && own.array.constructor === base.array.constructor && own.stride === base.stride
+        && own.offset === base.offset && attribute.itemSize === first.itemSize && attribute.normalized === first.normalized
+        && (attribute instanceof THREE.InterleavedBufferAttribute) === (first instanceof THREE.InterleavedBufferAttribute)
+        && (attribute as THREE.BufferAttribute).gpuType === (first as THREE.BufferAttribute).gpuType;
+    }));
+  if (!fits) return null;
+  const total = counts.reduce((sum, count) => sum + count, 0);
+  const merged = new THREE.BufferGeometry();
+  for (const name of SHADOW_ATTRIBUTES) {
+    const first = parts[0]!.getAttribute(name) as Attribute, { array: base, stride, offset } = rawLayout(first);
+    const array = new (base.constructor as new (length: number) => THREE.TypedArray)(total * stride);
+    let at = 0;
+    for (const geometry of parts) {
+      const own = rawLayout(geometry.getAttribute(name) as Attribute).array;
+      array.set(own, at);
+      at += own.length;
+    }
+    if (first instanceof THREE.InterleavedBufferAttribute) {
+      merged.setAttribute(name, new THREE.InterleavedBufferAttribute(new THREE.InterleavedBuffer(array, stride), first.itemSize, offset, first.normalized));
+    } else {
+      const attribute = new THREE.BufferAttribute(array, first.itemSize, first.normalized);
+      attribute.gpuType = first.gpuType;
+      merged.setAttribute(name, attribute);
+    }
+  }
+  // 32-bit when an index reaches 65535: in 16 bits that is WebGL2's primitive-restart index.
+  const index = new (total > 65535 ? Uint32Array : Uint16Array)(parts.reduce((sum, geometry) => sum + geometry.index!.count, 0));
+  let at = 0, start = 0;
+  parts.forEach((geometry, i) => {
+    const own = geometry.index!.array;
+    for (let k = 0; k < own.length; k++) index[at++] = own[k]! + start;
+    start += counts[i]!;
+  });
+  merged.setIndex(new THREE.BufferAttribute(index, 1));
+  merged.userData.shared = true;
+  // As the meshes' (never read: a worn mesh culls by its kind's sphere, the template by none).
+  merged.boundingSphere = parts[0]!.boundingSphere!.clone();
+  return merged;
 }
 
 const _q = new THREE.Quaternion();
@@ -582,12 +840,13 @@ export class OperatorBody {
   readonly #support = new THREE.Vector3();
   readonly #gibs: THREE.Mesh[] = [];
   #prop: THREE.Object3D | null = null;
-  readonly #materials: (set: OperatorSet) => THREE.Material;
+  /** The kind's shared twins of the set materials, per mesh, for the skinned meshes or the rigid gibs (`OperatorAssets.#twins`). */
+  readonly #twins: (rigid: boolean) => readonly THREE.Material[];
 
-  constructor(rig: FigureRig, template: KindTemplate, materials: (set: OperatorSet) => THREE.Material) {
+  constructor(rig: FigureRig, template: KindTemplate, twins: (rigid: boolean) => readonly THREE.Material[]) {
     this.rig = rig;
     this.template = template;
-    this.#materials = materials;
+    this.#twins = twins;
     this.armature.name = 'operator';
     this.bones = template.bones.map(({ name, position }) => {
       const bone = new THREE.Bone();
@@ -598,21 +857,26 @@ export class OperatorBody {
     template.bones.forEach(({ parent }, i) => (parent >= 0 ? this.bones[parent]! : this.armature).add(this.bones[i]!));
     this.sources = template.bones.map(({ name }) => rig.parts[name as keyof typeof rig.parts] ?? rig.root.getObjectByName(name) ?? null);
     this.skeleton = new THREE.Skeleton(this.bones, template.boneInverses);
-    this.meshes = template.meshes.map(({ geometry, set }) => {
-      const mesh = new THREE.SkinnedMesh(geometry, rig.own(materials(set)));
+    const worn = twins(false);
+    this.meshes = template.meshes.map(({ geometry, set }, i) => {
+      const mesh = new THREE.SkinnedMesh(geometry, worn[i]!);
+      // The figure's tinted copy while it flashes.
+      rig.wear(mesh, worn[i]!);
       mesh.name = `operator ${set}`;
       mesh.bind(this.skeleton, new THREE.Matrix4());
       // Culled per camera and per shadow cascade by the kind's sphere, never by its skinned vertices.
       mesh.boundingSphere = template.bounds;
       mesh.castShadow = mesh.receiveShadow = true;
-      mesh.customDepthMaterial = levelDepthMat();
+      mesh.customDepthMaterial = levelDepthSkinnedMat();
       // Rays test the flat model; a skinned mesh's own test would skin every vertex on the CPU.
       mesh.raycast = () => {};
       this.armature.add(mesh);
       return mesh;
     });
+    // The prop leaves the weapon group for the hand (`#holdProp`): the next scene update walks the whole figure.
+    staleFigure(rig.root);
     rig.root.add(this.armature);
-    rig.worn = true;
+    rig.worn = true; rig.armature = this.armature;
     for (const mesh of rig.low) mesh.layers.set(HIT_LAYER);
     const fore = this.bones[template.bones.findIndex(b => b.name === 'foreR')];
     if (fore && rig.parts.gunMount) fore.add(this.socket);
@@ -664,8 +928,13 @@ export class OperatorBody {
     const name = this.template.bones[at]?.name;
     const gibs = name ? this.template.gibs.get(name) : undefined;
     if (!gibs) return;
+    // Rigid twins and copies of their own: on the skinned meshes' materials, every switch between a body and a gib in
+    // the draw list looked the program up again (three keys it on skinning).
+    const rigid = this.#twins(true);
     gibs.forEach((geometry, i) => {
-      const gib = new THREE.Mesh(geometry, this.meshes[i]!.material);
+      const gib = new THREE.Mesh(geometry, rigid[i]!);
+      // A limb is torn off inside the step: its copies are made off the step's random draws (`quietly`).
+      quietly(() => this.rig.wear(gib, rigid[i]!));
       gib.name = `operator gib ${name}`;
       // The geometry's (quantised) space to the bone's: its inverse bind matrix.
       gib.matrixAutoUpdate = false;
@@ -743,8 +1012,36 @@ export class OperatorBody {
     aimBone(fore, _w.subVectors(hand, fore.getWorldPosition(_f)).normalize(), weight);
   }
 
+  /**
+   * For one shadow pass (`OperatorAssets.shadowSwap`), hide what casts nothing, into `hidden` from slot `at` (returns
+   * the next free one): the flat model's pivots (its surfaces on `HIT_LAYER`, stubs, anchors, the weapon group) and
+   * the bones (the socket, the prop: render/figure.ts `propMesh`); the skinned meshes stay. Not while a piece is lent
+   * (the debris casts all its meshes, a prop's too) or a gib rides a pivot (a lend the debris refused leaves it on the
+   * figure); the bones not while the socket holds a caster (a prop back from the debris, put in the hand of the next
+   * LOD's body).
+   */
+  bare(hidden: (THREE.Object3D | null)[], at: number): number {
+    const { rig } = this, pivots = rig.parts.hips ?? rig.parts.torso;
+    if (rig.disposed || rig.lent.size > 0 || this.#gibs.length > 0 || !pivots || pivots.parent !== rig.root) return at;
+    if (pivots.visible) {
+      pivots.visible = false;
+      hidden[at++] = pivots;
+    }
+    if (casts(this.socket)) return at;
+    const nodes = this.armature.children;
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i]!;
+      if (!(node as THREE.Bone).isBone || !node.visible) continue;
+      node.visible = false;
+      hidden[at++] = node;
+    }
+    return at;
+  }
+
   /** Back to the flat model: its surfaces drawn again, the prop in its weapon group, the operator's pieces gone. */
   dispose(): void {
+    // The prop goes back to its weapon group, under the figure's pivots.
+    staleFigure(this.rig.root);
     this.#returnProp();
     for (const mesh of this.rig.low) mesh.layers.set(0);
     for (const gib of this.#gibs) gib.removeFromParent();
@@ -752,7 +1049,7 @@ export class OperatorBody {
     this.armature.removeFromParent();
     this.skeleton.dispose();
     this.rig.onWeapon = this.rig.onLend = null;
-    this.rig.worn = false;
+    this.rig.worn = false; this.rig.armature = null;
     this.rig.disown();
   }
 }
@@ -798,6 +1095,14 @@ function aimBone(bone: THREE.Bone, dir: THREE.Vector3, weight: number): void {
   _was.copy(bone.quaternion);
   bone.quaternion.copy(_parent.invert().multiply(_world));
   if (weight < 1) bone.quaternion.copy(_was.slerp(bone.quaternion, weight));
+}
+
+/** `node` or a node under it is a mesh, line or points that casts: three's shadow pass may draw it. */
+function casts(node: THREE.Object3D): boolean {
+  if (node.castShadow && ((node as THREE.Mesh).isMesh || (node as THREE.Line).isLine || (node as THREE.Points).isPoints)) return true;
+  const children = node.children;
+  for (let i = 0; i < children.length; i++) if (casts(children[i]!)) return true;
+  return false;
 }
 
 function attached(part: THREE.Object3D, root: THREE.Object3D): boolean {

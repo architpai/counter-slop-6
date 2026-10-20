@@ -1,0 +1,47 @@
+diff --git a/src/engine/render/postfx.ts b/src/engine/render/postfx.ts
+index 2141847..7d1e56d 100644
+--- a/src/engine/render/postfx.ts
++++ b/src/engine/render/postfx.ts
+@@ -648,14 +651,14 @@ export class Composite {
+         float d = texture2D(depth, uv).x;
+         vec3 P = viewAt(uv, d);
+         if (d < RIG || d >= 1.0) { gl_FragColor = vec4(1.0, -P.z, 0.0, 1.0); return; }
++        // The radius in AO pixels; a few pixels means too far away to matter (before the normal: it needs only P).
++        float pixels = min(RADIUS * radiusScale / -P.z, radiusMax);
++        if (pixels < 2.0) { gl_FragColor = vec4(1.0, -P.z, 0.0, 1.0); return; }
+         // The normal from the flatter neighbour on each axis, so silhouettes do not bend it.
+         vec3 l = P - viewPos(uv - vec2(texel.x, 0.0)), r = viewPos(uv + vec2(texel.x, 0.0)) - P;
+         vec3 b = P - viewPos(uv - vec2(0.0, texel.y)), t = viewPos(uv + vec2(0.0, texel.y)) - P;
+         vec3 N = normalize(cross(abs(l.z) < abs(r.z) ? l : r, abs(b.z) < abs(t.z) ? b : t));
+         vec3 V = normalize(-P);
+-        // The radius in AO pixels; a few pixels means too far away to matter.
+-        float pixels = min(RADIUS * radiusScale / -P.z, radiusMax);
+-        if (pixels < 2.0) { gl_FragColor = vec4(1.0, -P.z, 0.0, 1.0); return; }
+         float falloffMul = -1.0 / (0.615 * RADIUS), falloffAdd = (1.0 - 0.615) / 0.615 + 1.0;
+         vec2 cell = floor(gl_FragCoord.xy);
+         float sliceNoise = bayer4(cell), stepNoise = bayer4(cell.yx + vec2(1.0, 2.0));
+@@ -702,18 +705,20 @@ export class Composite {
+       uniform vec2 texel;
+       varying vec2 vUv;
+       ${REGION_GLSL}
+-      // One period of the 4 x 4 noise, weighted by depth so edges stay sharp.
++      // One period of the 4 x 4 noise, weighted by depth so edges stay sharp. The centre is the (0, 0) tap, read
++      // once: uv is this texel's centre, at most an ulp past uvMax, so with nearest filtering both read one texel.
++      // Its own weight is 1 (its depth, -P.z, is at least the near plane), so the weights never sum to 0.
+       void main() {
+         vec2 uv = vUv * uvScale;
+-        vec2 centre = texture2D(image, uv).rg;
++        vec2 centre = texture2D(image, min(uv, uvMax)).rg;
+         float sum = 0.0, weight = 0.0;
+         for (int y = -2; y < 2; y++) for (int x = -2; x < 2; x++) {
+-          vec2 s = texture2D(image, min(uv + vec2(float(x), float(y)) * texel, uvMax)).rg;
++          vec2 s = x == 0 && y == 0 ? centre : texture2D(image, min(uv + vec2(float(x), float(y)) * texel, uvMax)).rg;
+           float w = max(0.0, 1.0 - abs(s.g - centre.g) / (0.05 * centre.g + 0.02));
+           sum += s.r * w;
+           weight += w;
+         }
+-        gl_FragColor = vec4(weight > 0.0 ? sum / weight : centre.r, centre.g, 0.0, 1.0);
++        gl_FragColor = vec4(sum / weight, centre.g, 0.0, 1.0);
+       }
+     `);
+ 

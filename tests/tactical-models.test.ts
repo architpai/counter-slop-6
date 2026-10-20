@@ -47,19 +47,24 @@ test('tactical assets preserve joints, head targets, materials and shared geomet
         expect(Math.abs(foot.min.y), `${type} feet meet the floor`).toBeLessThan(.06 * stats.scale);
       }
       expect(bounds.max.y).toBeGreaterThan((stats.kind === 'humanoid' ? 1.8 : .7) * stats.scale);
-      // The mask is merged into the head's part (V12); each figure wears its own copy of the one material (V15).
+      // The mask is merged into the head's part (V12); untinted, the figures share one twin of the one material, and
+      // each wears its own copy while it flashes (V15).
       const face = TACTICAL_MODELS[type].some(part => part === 'head') ? 'head-surface' : 'torso-surface';
       const shell = mesh(figure.root, face);
       const otherShell = mesh(other.root, face);
       expect(shell.geometry).toBe(otherShell.geometry);
       expect(shell.geometry.userData.shared).toBe(true);
-      expect(shell.material).not.toBe(otherShell.material);
+      expect(shell.material).toBe(otherShell.material);
       expect(shell.material).toBeInstanceOf(MeshStandardMaterial);
-      expect((shell.material as MeshStandardMaterial).customProgramCacheKey()).toBe((otherShell.material as MeshStandardMaterial).customProgramCacheKey());
       const original = shell.material;
       figure.setTint(1, 0xff4757);
-      expect(shell.material).toBe(original);
+      expect(shell.material).not.toBe(original);
+      expect((shell.material as MeshStandardMaterial).customProgramCacheKey()).toBe((otherShell.material as MeshStandardMaterial).customProgramCacheKey());
+      const copy = shell.material;
+      figure.setTint(0.5, 0xff4757);
+      expect(shell.material).toBe(copy);
       figure.setTint(0, 0xff4757);
+      expect(shell.material).toBe(original);
       let releases = 0;
       shell.geometry.addEventListener('dispose', () => releases++);
       figure.dispose(); figure.dispose();

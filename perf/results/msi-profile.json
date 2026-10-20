@@ -1,0 +1,7024 @@
+{
+ "meta": {
+  "label": "msi-profile",
+  "mode": "profile",
+  "date": "2026-10-20T16:28:03.053Z",
+  "git": {
+   "sha": "36cc1aa7ca30eb2695ee02801d835add3aa46664",
+   "branch": "perf/loop",
+   "dirty": false
+  },
+  "chrome": "153.0.8010.12",
+  "gpu": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090 Laptop GPU/PCIe/SSE2, OpenGL ES 3.2)",
+  "viewport": {
+   "width": 1920,
+   "height": 1080,
+   "deviceScaleFactor": 1
+  },
+  "chromeArgs": [
+   "--use-gl=angle",
+   "--use-angle=gl-egl",
+   "--ignore-gpu-blocklist",
+   "--disable-gpu-vsync",
+   "--disable-frame-rate-limit",
+   "--enable-precise-memory-info"
+  ],
+  "platform": "linux",
+  "gpuEnv": {
+   "PERF_GPU_ARGS": "--use-gl=angle --use-angle=gl-egl",
+   "PERF_GPU_EXPECT": "NVIDIA GeForce RTX 4090",
+   "__EGL_VENDOR_LIBRARY_FILENAMES": "/usr/share/glvnd/egl_vendor.d/10_nvidia.json",
+   "__GL_SHADER_DISK_CACHE_PATH": "/home/fleet/perf-scratch-shooter/nv-cache"
+  },
+  "node": "v22.23.3",
+  "args": [
+   "--profile",
+   "--label",
+   "msi-profile",
+   "--maps",
+   "downtown,training"
+  ],
+  "config": {
+   "label": "msi-profile",
+   "maps": [
+    "downtown",
+    "training"
+   ],
+   "presets": [
+    "low",
+    "medium",
+    "high",
+    "ultra"
+   ],
+   "repeat": 1,
+   "frames": 900,
+   "warmup": 240,
+   "fightWarmup": 240,
+   "ablateFrames": 240,
+   "idle": 120,
+   "seed": 20261018,
+   "profile": true,
+   "trace": true,
+   "gpuTimer": false,
+   "headed": false,
+   "raw": false,
+   "build": false,
+   "quick": false,
+   "scenarios": [
+    "path",
+    "fight"
+   ],
+   "loadOnly": false
+  },
+  "timer": {
+   "downtown/low#0": {
+    "supported": true,
+    "reason": "0/120 results, 289 zero, 0 disjoint; query undefined ms over the 0.4 ms frame interval; the extra pass moved the frame interval by -0.1 ms only; the query grew nullx what the extra pass added to the frame interval",
+    "read": 1811,
+    "zero": 289,
+    "disjoint": 0,
+    "base": {
+     "queryMedMs": null,
+     "frameMedMs": 0.4,
+     "results": 0
+    },
+    "calibrated": {
+     "queryMedMs": null,
+     "frameMedMs": 0.3,
+     "results": 0
+    },
+    "slope": null,
+    "working": false
+   },
+   "downtown/medium#0": {
+    "supported": true,
+    "reason": "0/120 results, 1508 zero, 0 disjoint; query undefined ms over the 0.6 ms frame interval; the extra pass moved the frame interval by -0.1 ms only; the query grew nullx what the extra pass added to the frame interval",
+    "read": 8130,
+    "zero": 1508,
+    "disjoint": 0,
+    "base": {
+     "queryMedMs": null,
+     "frameMedMs": 0.6,
+     "results": 0
+    },
+    "calibrated": {
+     "queryMedMs": null,
+     "frameMedMs": 0.5,
+     "results": 0
+    },
+    "slope": null,
+    "working": false
+   },
+   "downtown/high#0": {
+    "supported": true,
+    "reason": "0/120 results, 1588 zero, 0 disjoint; query undefined ms over the 0.7 ms frame interval; the extra pass moved the frame interval by -0.1 ms only; the query grew nullx what the extra pass added to the frame interval",
+    "read": 9210,
+    "zero": 1588,
+    "disjoint": 0,
+    "base": {
+     "queryMedMs": null,
+     "frameMedMs": 0.7,
+     "results": 0
+    },
+    "calibrated": {
+     "queryMedMs": null,
+     "frameMedMs": 0.6,
+     "results": 0
+    },
+    "slope": null,
+    "working": false
+   },
+   "downtown/ultra#0": {
+    "supported": true,
+    "reason": "0/120 results, 2019 zero, 0 disjoint; query undefined ms over the 0.7 ms frame interval; the extra pass moved the frame interval by 0 ms only; the query grew nullx what the extra pass added to the frame interval",
+    "read": 10830,
+    "zero": 2019,
+    "disjoint": 0,
+    "base": {
+     "queryMedMs": null,
+     "frameMedMs": 0.7,
+     "results": 0
+    },
+    "calibrated": {
+     "queryMedMs": null,
+     "frameMedMs": 0.7,
+     "results": 0
+    },
+    "slope": null,
+    "working": false
+   },
+   "training/low#0": {
+    "supported": true,
+    "reason": "0/120 results, 364 zero, 0 disjoint; query undefined ms over the 1.2 ms frame interval; the extra pass moved the frame interval by 0 ms only; the query grew nullx what the extra pass added to the frame interval",
+    "read": 1920,
+    "zero": 364,
+    "disjoint": 0,
+    "base": {
+     "queryMedMs": null,
+     "frameMedMs": 1.2,
+     "results": 0
+    },
+    "calibrated": {
+     "queryMedMs": null,
+     "frameMedMs": 1.2,
+     "results": 0
+    },
+    "slope": null,
+    "working": false
+   },
+   "training/medium#0": {
+    "supported": true,
+    "reason": "0/120 results, 1481 zero, 0 disjoint; query undefined ms over the 1.3 ms frame interval; the extra pass moved the frame interval by 0 ms only; the query grew nullx what the extra pass added to the frame interval",
+    "read": 8130,
+    "zero": 1481,
+    "disjoint": 0,
+    "base": {
+     "queryMedMs": null,
+     "frameMedMs": 1.3,
+     "results": 0
+    },
+    "calibrated": {
+     "queryMedMs": null,
+     "frameMedMs": 1.3,
+     "results": 0
+    },
+    "slope": null,
+    "working": false
+   },
+   "training/high#0": {
+    "supported": true,
+    "reason": "0/120 results, 1717 zero, 0 disjoint; query undefined ms over the 1.3 ms frame interval; the extra pass moved the frame interval by 0 ms only; the query grew nullx what the extra pass added to the frame interval",
+    "read": 9210,
+    "zero": 1717,
+    "disjoint": 0,
+    "base": {
+     "queryMedMs": null,
+     "frameMedMs": 1.3,
+     "results": 0
+    },
+    "calibrated": {
+     "queryMedMs": null,
+     "frameMedMs": 1.3,
+     "results": 0
+    },
+    "slope": null,
+    "working": false
+   },
+   "training/ultra#0": {
+    "supported": true,
+    "reason": "0/120 results, 1686 zero, 0 disjoint; query undefined ms over the 1.3 ms frame interval; the extra pass moved the frame interval by 0 ms only; the query grew nullx what the extra pass added to the frame interval",
+    "read": 9210,
+    "zero": 1686,
+    "disjoint": 0,
+    "base": {
+     "queryMedMs": null,
+     "frameMedMs": 1.3,
+     "results": 0
+    },
+    "calibrated": {
+     "queryMedMs": null,
+     "frameMedMs": 1.3,
+     "results": 0
+    },
+    "slope": null,
+    "working": false
+   }
+  },
+  "timerNote": "EXT_disjoint_timer_query_webgl2 on ANGLE Metal returns non-zero, non-disjoint results that scale with GPU work, but they are spans of 2-2.5x the GPU-bound frame interval (e.g. Ultra downtown idle: query 8.4 ms at a 3.5 ms frame; one injected fullscreen pass: query 20.7 ms at an 8.1 ms frame), so not GPU busy time. gpuMs is null where the per-cell check fails (query median > 1.1x frame median); frameMs is the GPU-bound measure (trace.waitMsPerFrame shows the main thread waiting on the GPU side).",
+  "parityNote": "P.reset zeroes the renderer's _frame at each run's start, so recorded callback k renders with _frame = k + 1, and a preset that redraws its shadow map every 2nd frame (Low, facts.shadowEvery 2) draws it in callbacks k = 1, 3, 5, ... cpuParity indexes callbacks (cpu[k] is callback k): the shadow callbacks are the ODD ones. frameParity indexes intervals (frame[i] runs from callback i-1's rAF to callback i's, so it holds callback i-1's work): the shadow callbacks fall in the EVEN intervals; interval 0 holds a callback from before the reset and is left out. The GPU may finish a frame after its interval ends (frames in flight), so GPU cost can show an interval later: read the gap between the sides. Means over finite values; N is the count per side.",
+  "durationMs": 193375,
+  "errors": []
+ },
+ "cells": [
+  {
+   "map": "downtown",
+   "preset": "low",
+   "runs": [
+    {
+     "map": "downtown",
+     "preset": "low",
+     "chrome": "153.0.8010.12",
+     "load": {
+      "firstPlayableMs": 542.4,
+      "readyMs": 559.8,
+      "liveMs": 425.1,
+      "enteredMs": 529.5,
+      "phases": {
+       "flags": {
+        "sky": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "skyLanding": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "bakeLayout": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "bake": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "bakeFading": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "textures": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "fx": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "weapons": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "operators": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "props": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "streaming": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "compiles": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "warmups": {
+         "on": 526,
+         "off": 542.4,
+         "frames": 1
+        },
+        "programsCold": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "effects": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "weaponsReady": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        }
+       },
+       "pace": [
+        [
+         526,
+         1
+        ]
+       ],
+       "matchMs": 541.8,
+       "quietEndMs": null,
+       "renders": 3,
+       "deferredWarmupsAtReady": 4,
+       "window": {
+        "frames": 1,
+        "skipped": 0,
+        "maxMs": 34.2,
+        "over33": 1,
+        "over50": 0,
+        "renderMs": 1.6,
+        "renderMaxMs": 1
+       }
+      }
+     },
+     "facts": {
+      "preset": "low",
+      "look": "lowpoly",
+      "fpsTarget": 0,
+      "dynamicRes": true,
+      "renderScale": 0.75,
+      "pixelRatio": 1,
+      "devicePixelRatio": 1,
+      "drawingBuffer": [
+       1920,
+       1080
+      ],
+      "sceneTarget": [
+       1440,
+       810
+      ],
+      "msaa": 0,
+      "shadowEvery": 2,
+      "deferredWarmups": 4,
+      "level": "downtown",
+      "mode": "solo",
+      "state": "play",
+      "gpu": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090 Laptop GPU/PCIe/SSE2, OpenGL ES 3.2)",
+      "timer": {
+       "supported": true,
+       "reason": null
+      },
+      "crossOriginIsolated": false,
+      "dynamicScale": 1,
+      "idle": {
+       "frameMedMs": 0.5,
+       "fps": 2000,
+       "cpuMedMs": 0.3
+      }
+     },
+     "timer": {
+      "supported": true,
+      "reason": "0/120 results, 289 zero, 0 disjoint; query undefined ms over the 0.4 ms frame interval; the extra pass moved the frame interval by -0.1 ms only; the query grew nullx what the extra pass added to the frame interval",
+      "read": 1811,
+      "zero": 289,
+      "disjoint": 0,
+      "base": {
+       "queryMedMs": null,
+       "frameMedMs": 0.4,
+       "results": 0
+      },
+      "calibrated": {
+       "queryMedMs": null,
+       "frameMedMs": 0.3,
+       "results": 0
+      },
+      "slope": null,
+      "working": false
+     },
+     "route": {
+      "points": 1307,
+      "length": 301.6,
+      "warnings": []
+     },
+     "path": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 0.2172,
+        "render.total": 0.1778,
+        "render.main": 0.1669,
+        "player.update": 0.0216,
+        "render.shadows": 0.014,
+        "render.post": 0.0064,
+        "render.pre": 0.0033,
+        "effects.update": 0.0009,
+        "enemies.update": 0.0008,
+        "hud.update": 0.0001,
+        "other(step)": 0.016
+       },
+       "passesPerFrame": {
+        "post:composite": 1,
+        "shadows": 0.5
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 0.25,
+        "noiseMs": 0.1,
+        "ms": {
+         "post:composite": 0.05,
+         "shadows": 0.05
+        },
+        "baseMeanMs": 0.26,
+        "noiseMeanMs": 0,
+        "meanMs": {
+         "shadows": 0.02,
+         "post:composite": 0
+        },
+        "parity": {
+         "baseMs": {
+          "even": 0.24,
+          "odd": 0.27
+         },
+         "noiseMs": {
+          "even": 0.01,
+          "odd": 0.01
+         },
+         "ms": {
+          "shadows": {
+           "even": -0.02,
+           "odd": 0.05
+          },
+          "post:composite": {
+           "even": 0,
+           "odd": 0.01
+          }
+         }
+        }
+       }
+      },
+      "summary": {
+       "kills": 0,
+       "score": 0,
+       "alive": 0,
+       "listed": 0,
+       "particles": 0,
+       "debris": 0,
+       "tracers": 0,
+       "gibs": 0,
+       "pickups": 0,
+       "hash": "cb963c47"
+      },
+      "frameMs": {
+       "med": 0.3,
+       "p95": 0.6,
+       "p99": 0.8,
+       "mean": 0.33,
+       "max": 1.8,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 0.2,
+       "p95": 0.3,
+       "p99": 0.3,
+       "mean": 0.217,
+       "max": 0.4,
+       "n": 900
+      },
+      "frameParity": {
+       "evenMs": 0.312,
+       "oddMs": 0.349,
+       "evenN": 449,
+       "oddN": 450
+      },
+      "cpuParity": {
+       "evenMs": 0.204,
+       "oddMs": 0.23,
+       "evenN": 450,
+       "oddN": 450
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 330.8,
+       "jsMs": {
+        "med": 0.234,
+        "p95": 0.277,
+        "p99": 0.322,
+        "mean": 0.249,
+        "max": 11.824,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 0.24,
+        "p95": 0.284,
+        "p99": 0.33,
+        "mean": 0.241,
+        "max": 0.588,
+        "n": 898
+       },
+       "waitMsPerFrame": 0,
+       "rendererMainCpuPerFrame": 0.349,
+       "gpuMainCpuPerFrame": 0.137,
+       "vizCpuPerFrame": 0.049,
+       "gc": {
+        "minor": 1,
+        "major": 0,
+        "ms": 0.83,
+        "maxMs": 0.83
+       },
+       "outside": {
+        "tasksCpuMs": 0.1003,
+        "tasksWallMs": 0.1149,
+        "tasks": 7.702,
+        "byName": {
+         "FunctionCall": {
+          "n": 0.977,
+          "ms": 0.0029,
+          "cpuMs": 0.0023
+         },
+         "UpdateLayoutTree": {
+          "n": 0.527,
+          "ms": 0.0185,
+          "cpuMs": 0.0183,
+          "elements": 1.854
+         },
+         "Layout": {
+          "n": 0.403,
+          "ms": 0.0109,
+          "cpuMs": 0.0108
+         },
+         "PrePaint": {
+          "n": 1.404,
+          "ms": 0.0121,
+          "cpuMs": 0.0115
+         },
+         "Paint": {
+          "n": 0.019,
+          "ms": 0.0007,
+          "cpuMs": 0.0006
+         },
+         "Layerize": {
+          "n": 0.675,
+          "ms": 0.0025,
+          "cpuMs": 0.0018
+         },
+         "HitTest": {
+          "n": 0.405,
+          "ms": 0.0062,
+          "cpuMs": 0.006
+         },
+         "EventDispatch": {
+          "n": 0.477,
+          "ms": 0.0036,
+          "cpuMs": 0.0021
+         },
+         "TimerFire": {
+          "n": 0.001,
+          "ms": 0,
+          "cpuMs": 0
+         }
+        },
+        "topSelf": {
+         "ThreadControllerImpl::RunTask": 0.0554,
+         "UpdateLayoutTree": 0.0185,
+         "PrePaint": 0.0121,
+         "Layout": 0.0109,
+         "HitTest": 0.0062,
+         "FunctionCall": 0.0029,
+         "Layerize": 0.0025,
+         "BlinkScheduler_PerformMicrotaskCheckpoint": 0.0022,
+         "EventDispatch": 0.0012,
+         "CommandBufferProxyImpl::OrderingBarrier": 0.0009,
+         "Paint": 0.0007,
+         "WidgetBase::WillBeginMainFrame": 0.0005
+        }
+       }
+      },
+      "heapEndMB": 65.4
+     },
+     "fight": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 0.7502,
+        "render.total": 0.514,
+        "render.main": 0.4923,
+        "enemies.update": 0.0898,
+        "player.update": 0.0847,
+        "render.shadows": 0.0696,
+        "effects.update": 0.0326,
+        "render.post": 0.014,
+        "render.pre": 0.0066,
+        "hud.update": 0.0003,
+        "other(step)": 0.0288
+       },
+       "passesPerFrame": {
+        "post:composite": 1,
+        "shadows": 0.5
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 1.05,
+        "noiseMs": 0.1,
+        "ms": {
+         "post:composite": -0.15,
+         "shadows": -0.15
+        },
+        "baseMeanMs": 1.21,
+        "noiseMeanMs": 0.03,
+        "meanMs": {
+         "post:composite": -0.01,
+         "shadows": -0.04
+        },
+        "parity": {
+         "baseMs": {
+          "even": 1.12,
+          "odd": 1.3
+         },
+         "noiseMs": {
+          "even": 0.04,
+          "odd": 0.11
+         },
+         "ms": {
+          "post:composite": {
+           "even": -0.07,
+           "odd": 0.04
+          },
+          "shadows": {
+           "even": -0.14,
+           "odd": 0.05
+          }
+         }
+        }
+       }
+      },
+      "summary": {
+       "kills": 14,
+       "score": 6178,
+       "alive": 10,
+       "listed": 13,
+       "particles": 27,
+       "debris": 8,
+       "tracers": 5,
+       "gibs": 8,
+       "pickups": 11,
+       "hash": "5b59981d"
+      },
+      "frameMs": {
+       "med": 1.1,
+       "p95": 2.1,
+       "p99": 3,
+       "mean": 1.192,
+       "max": 13.7,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 0.7,
+       "p95": 1.1,
+       "p99": 1.4,
+       "mean": 0.75,
+       "max": 12.6,
+       "n": 900
+      },
+      "frameParity": {
+       "evenMs": 1.155,
+       "oddMs": 1.231,
+       "evenN": 449,
+       "oddN": 450
+      },
+      "cpuParity": {
+       "evenMs": 0.701,
+       "oddMs": 0.8,
+       "evenN": 450,
+       "oddN": 450
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 1338.8,
+       "jsMs": {
+        "med": 0.781,
+        "p95": 1.416,
+        "p99": 2.67,
+        "mean": 0.904,
+        "max": 21.99,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 0.787,
+        "p95": 1.419,
+        "p99": 2.322,
+        "mean": 0.872,
+        "max": 14.217,
+        "n": 898
+       },
+       "waitMsPerFrame": 0,
+       "rendererMainCpuPerFrame": 1.475,
+       "gpuMainCpuPerFrame": 0.602,
+       "vizCpuPerFrame": 0.123,
+       "gc": {
+        "minor": 6,
+        "major": 0,
+        "ms": 4.396,
+        "maxMs": 0.895
+       },
+       "outside": {
+        "tasksCpuMs": 0.5685,
+        "tasksWallMs": 0.5961,
+        "tasks": 10.036,
+        "byName": {
+         "FunctionCall": {
+          "n": 15.601,
+          "ms": 0.035,
+          "cpuMs": 0.0265
+         },
+         "UpdateLayoutTree": {
+          "n": 1.001,
+          "ms": 0.1456,
+          "cpuMs": 0.1454,
+          "elements": 6.953
+         },
+         "Layout": {
+          "n": 0.772,
+          "ms": 0.0315,
+          "cpuMs": 0.0312
+         },
+         "PrePaint": {
+          "n": 1.773,
+          "ms": 0.0325,
+          "cpuMs": 0.0318
+         },
+         "Paint": {
+          "n": 0.741,
+          "ms": 0.0278,
+          "cpuMs": 0.0237
+         },
+         "Layerize": {
+          "n": 0.945,
+          "ms": 0.0402,
+          "cpuMs": 0.0595
+         },
+         "HitTest": {
+          "n": 0.774,
+          "ms": 0.0155,
+          "cpuMs": 0.0151
+         },
+         "TimerFire": {
+          "n": 0.007,
+          "ms": 0.0001,
+          "cpuMs": 0.0001
+         },
+         "EventDispatch": {
+          "n": 7.243,
+          "ms": 0.0477,
+          "cpuMs": 0.026
+         }
+        },
+        "topSelf": {
+         "ThreadControllerImpl::RunTask": 0.2404,
+         "UpdateLayoutTree": 0.1456,
+         "Layerize": 0.0402,
+         "FunctionCall": 0.035,
+         "PrePaint": 0.0325,
+         "Layout": 0.0315,
+         "Paint": 0.0278,
+         "EventDispatch": 0.0177,
+         "HitTest": 0.0155,
+         "BlinkScheduler_PerformMicrotaskCheckpoint": 0.0029,
+         "CommandBufferProxyImpl::OrderingBarrier": 0.0014,
+         "SimpleWatcher::OnHandleReady": 0.0011
+        }
+       }
+      },
+      "heapEndMB": 37.82
+     },
+     "errors": [],
+     "cellMs": 9619,
+     "repeat": 0
+    }
+   ],
+   "median": null
+  },
+  {
+   "map": "downtown",
+   "preset": "medium",
+   "runs": [
+    {
+     "map": "downtown",
+     "preset": "medium",
+     "chrome": "153.0.8010.12",
+     "load": {
+      "firstPlayableMs": 684.6,
+      "readyMs": 5431.8,
+      "liveMs": 429.1,
+      "enteredMs": 670.8,
+      "phases": {
+       "flags": {
+        "sky": {
+         "on": 661.2,
+         "off": 3896.7,
+         "frames": 2289
+        },
+        "skyLanding": {
+         "on": 867.3,
+         "off": 3896.7,
+         "frames": 2280
+        },
+        "bakeLayout": {
+         "on": 661.2,
+         "off": 3896.7,
+         "frames": 2289
+        },
+        "bake": {
+         "on": 661.2,
+         "off": 3926.9,
+         "frames": 2306
+        },
+        "bakeFading": {
+         "on": 3926.9,
+         "off": 5431.8,
+         "frames": 1880
+        },
+        "textures": {
+         "on": 661.2,
+         "off": 4166.6,
+         "frames": 2486
+        },
+        "fx": {
+         "on": 661.2,
+         "off": 4166.6,
+         "frames": 2486
+        },
+        "weapons": {
+         "on": 661.2,
+         "off": 4284,
+         "frames": 2575
+        },
+        "operators": {
+         "on": 661.2,
+         "off": 4315.8,
+         "frames": 2598
+        },
+        "props": {
+         "on": 661.2,
+         "off": 4418.8,
+         "frames": 2637
+        },
+        "streaming": {
+         "on": 661.2,
+         "off": 4418.8,
+         "frames": 2637
+        },
+        "compiles": {
+         "on": 775.2,
+         "off": 3706.3,
+         "frames": 2217
+        },
+        "warmups": {
+         "on": 661.2,
+         "off": 3789.4,
+         "frames": 2
+        },
+        "programsCold": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "effects": {
+         "on": 661.2,
+         "off": 4166.6,
+         "frames": 2486
+        },
+        "weaponsReady": {
+         "on": 661.2,
+         "off": 4284,
+         "frames": 2575
+        }
+       },
+       "pace": [
+        [
+         661.2,
+         1
+        ],
+        [
+         4372.8,
+         2
+        ]
+       ],
+       "matchMs": 682.3,
+       "quietEndMs": 3683.8,
+       "renders": 4187,
+       "deferredWarmupsAtReady": 5,
+       "window": {
+        "frames": 4184,
+        "skipped": 111,
+        "maxMs": 78.5,
+        "over33": 4,
+        "over50": 2,
+        "renderMs": 2150.7,
+        "renderMaxMs": 33.9
+       }
+      }
+     },
+     "facts": {
+      "preset": "medium",
+      "look": "realistic",
+      "fpsTarget": 0,
+      "dynamicRes": true,
+      "renderScale": 1,
+      "pixelRatio": 1,
+      "devicePixelRatio": 1,
+      "drawingBuffer": [
+       1920,
+       1080
+      ],
+      "sceneTarget": [
+       1920,
+       1080
+      ],
+      "msaa": 2,
+      "shadowEvery": 1,
+      "deferredWarmups": 5,
+      "level": "downtown",
+      "mode": "solo",
+      "state": "play",
+      "gpu": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090 Laptop GPU/PCIe/SSE2, OpenGL ES 3.2)",
+      "timer": {
+       "supported": true,
+       "reason": null
+      },
+      "crossOriginIsolated": false,
+      "dynamicScale": 1,
+      "idle": {
+       "frameMedMs": 0.7,
+       "fps": 1428.6,
+       "cpuMedMs": 0.4
+      }
+     },
+     "timer": {
+      "supported": true,
+      "reason": "0/120 results, 1508 zero, 0 disjoint; query undefined ms over the 0.6 ms frame interval; the extra pass moved the frame interval by -0.1 ms only; the query grew nullx what the extra pass added to the frame interval",
+      "read": 8130,
+      "zero": 1508,
+      "disjoint": 0,
+      "base": {
+       "queryMedMs": null,
+       "frameMedMs": 0.6,
+       "results": 0
+      },
+      "calibrated": {
+       "queryMedMs": null,
+       "frameMedMs": 0.5,
+       "results": 0
+      },
+      "slope": null,
+      "working": false
+     },
+     "route": {
+      "points": 1307,
+      "length": 301.6,
+      "warnings": []
+     },
+     "path": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 0.5064,
+        "render.total": 0.4639,
+        "render.main": 0.4,
+        "render.post": 0.0463,
+        "render.shadows": 0.0394,
+        "player.update": 0.0182,
+        "render.pre": 0.0081,
+        "effects.update": 0.0021,
+        "enemies.update": 0.0011,
+        "hud.update": 0,
+        "other(step)": 0.0211
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 0.5,
+        "noiseMs": 0,
+        "ms": {
+         "shadows": 0.1,
+         "post:bloom-down": 0.1,
+         "smaa": 0.1,
+         "post:final": 0.1,
+         "post:bloom-prefilter": 0,
+         "post:bloom-up": 0,
+         "post:agx": 0
+        },
+        "baseMeanMs": 0.62,
+        "noiseMeanMs": 0.03,
+        "meanMs": {
+         "post:final": 0.04,
+         "smaa": 0.01,
+         "post:agx": 0,
+         "post:bloom-down": -0.01,
+         "post:bloom-prefilter": -0.02,
+         "shadows": -0.03,
+         "post:bloom-up": -0.03
+        },
+        "parity": {
+         "baseMs": {
+          "even": 0.64,
+          "odd": 0.6
+         },
+         "noiseMs": {
+          "even": 0.04,
+          "odd": 0.1
+         },
+         "ms": {
+          "post:final": {
+           "even": -0.04,
+           "odd": 0.11
+          },
+          "smaa": {
+           "even": 0.14,
+           "odd": -0.11
+          },
+          "post:agx": {
+           "even": -0.13,
+           "odd": 0.12
+          },
+          "post:bloom-down": {
+           "even": -0.07,
+           "odd": 0.04
+          },
+          "post:bloom-prefilter": {
+           "even": 0.07,
+           "odd": -0.11
+          },
+          "shadows": {
+           "even": 0.09,
+           "odd": -0.15
+          },
+          "post:bloom-up": {
+           "even": -0.02,
+           "odd": -0.04
+          }
+         }
+        }
+       }
+      },
+      "summary": {
+       "kills": 0,
+       "score": 0,
+       "alive": 0,
+       "listed": 0,
+       "particles": 0,
+       "debris": 0,
+       "tracers": 0,
+       "gibs": 0,
+       "pickups": 0,
+       "hash": "cb963c47"
+      },
+      "frameMs": {
+       "med": 0.5,
+       "p95": 0.9,
+       "p99": 3.4,
+       "mean": 0.638,
+       "max": 15.2,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 0.4,
+       "p95": 0.5,
+       "p99": 2.8,
+       "mean": 0.506,
+       "max": 14.9,
+       "n": 900
+      },
+      "frameParity": {
+       "evenMs": 0.652,
+       "oddMs": 0.625,
+       "evenN": 449,
+       "oddN": 450
+      },
+      "cpuParity": {
+       "evenMs": 0.518,
+       "oddMs": 0.495,
+       "evenN": 450,
+       "oddN": 450
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 638,
+       "jsMs": {
+        "med": 0.513,
+        "p95": 0.603,
+        "p99": 0.668,
+        "mean": 0.519,
+        "max": 0.971,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 0.52,
+        "p95": 0.61,
+        "p99": 0.687,
+        "mean": 0.54,
+        "max": 10.747,
+        "n": 898
+       },
+       "waitMsPerFrame": 0.014,
+       "rendererMainCpuPerFrame": 0.651,
+       "gpuMainCpuPerFrame": 0.585,
+       "vizCpuPerFrame": 0.051,
+       "gc": {
+        "minor": 2,
+        "major": 0,
+        "ms": 1.422,
+        "maxMs": 0.848
+       },
+       "outside": {
+        "tasksCpuMs": 0.1322,
+        "tasksWallMs": 0.1502,
+        "tasks": 9.83,
+        "byName": {
+         "FunctionCall": {
+          "n": 1.016,
+          "ms": 0.0037,
+          "cpuMs": 0.0032
+         },
+         "UpdateLayoutTree": {
+          "n": 0.434,
+          "ms": 0.0204,
+          "cpuMs": 0.0202,
+          "elements": 1.481
+         },
+         "Layout": {
+          "n": 0.308,
+          "ms": 0.0112,
+          "cpuMs": 0.0111
+         },
+         "PrePaint": {
+          "n": 1.31,
+          "ms": 0.0175,
+          "cpuMs": 0.0169
+         },
+         "Paint": {
+          "n": 0.032,
+          "ms": 0.0013,
+          "cpuMs": 0.0012
+         },
+         "Layerize": {
+          "n": 0.855,
+          "ms": 0.004,
+          "cpuMs": 0.0032
+         },
+         "HitTest": {
+          "n": 0.311,
+          "ms": 0.0065,
+          "cpuMs": 0.0063
+         },
+         "TimerFire": {
+          "n": 0.003,
+          "ms": 0.0001,
+          "cpuMs": 0.0001
+         },
+         "EventDispatch": {
+          "n": 0.494,
+          "ms": 0.0046,
+          "cpuMs": 0.0033
+         }
+        },
+        "topSelf": {
+         "ThreadControllerImpl::RunTask": 0.0768,
+         "UpdateLayoutTree": 0.0204,
+         "PrePaint": 0.0175,
+         "Layout": 0.0112,
+         "HitTest": 0.0065,
+         "Layerize": 0.004,
+         "FunctionCall": 0.0037,
+         "BlinkScheduler_PerformMicrotaskCheckpoint": 0.0034,
+         "EventDispatch": 0.0017,
+         "Paint": 0.0013,
+         "CommandBufferProxyImpl::OrderingBarrier": 0.0012,
+         "WidgetBase::WillBeginMainFrame": 0.0007
+        }
+       }
+      },
+      "heapEndMB": 53.29
+     },
+     "fight": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 1.1304,
+        "render.total": 0.8351,
+        "render.main": 0.6733,
+        "render.shadows": 0.1376,
+        "enemies.update": 0.121,
+        "render.pre": 0.1081,
+        "player.update": 0.0899,
+        "effects.update": 0.0508,
+        "render.post": 0.0466,
+        "hud.update": 0.0004,
+        "other(step)": 0.0332
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 1.65,
+        "noiseMs": 0.7,
+        "ms": {
+         "shadows": 0.25,
+         "post:bloom-prefilter": 0.15,
+         "post:bloom-down": 0.15,
+         "post:bloom-up": 0.05,
+         "post:agx": -0.05,
+         "smaa": -0.25,
+         "post:final": -0.35
+        },
+        "baseMeanMs": 1.75,
+        "noiseMeanMs": 0.69,
+        "meanMs": {
+         "shadows": 0.26,
+         "post:bloom-prefilter": 0.24,
+         "post:bloom-down": 0.16,
+         "post:bloom-up": 0.05,
+         "post:agx": -0.05,
+         "smaa": -0.13,
+         "post:final": -0.23
+        },
+        "parity": {
+         "baseMs": {
+          "even": 1.75,
+          "odd": 1.75
+         },
+         "noiseMs": {
+          "even": 0.67,
+          "odd": 0.71
+         },
+         "ms": {
+          "shadows": {
+           "even": 0.25,
+           "odd": 0.27
+          },
+          "post:bloom-prefilter": {
+           "even": 0.22,
+           "odd": 0.25
+          },
+          "post:bloom-down": {
+           "even": 0.16,
+           "odd": 0.16
+          },
+          "post:bloom-up": {
+           "even": 0.04,
+           "odd": 0.07
+          },
+          "post:agx": {
+           "even": -0.03,
+           "odd": -0.07
+          },
+          "smaa": {
+           "even": -0.14,
+           "odd": -0.12
+          },
+          "post:final": {
+           "even": -0.22,
+           "odd": -0.24
+          }
+         }
+        }
+       }
+      },
+      "summary": {
+       "kills": 13,
+       "score": 4098,
+       "alive": 11,
+       "listed": 14,
+       "particles": 80,
+       "debris": 8,
+       "tracers": 1,
+       "gibs": 7,
+       "pickups": 5,
+       "hash": "52ff35f6"
+      },
+      "frameMs": {
+       "med": 1.5,
+       "p95": 2.6,
+       "p99": 3.9,
+       "mean": 1.632,
+       "max": 14.8,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 1.1,
+       "p95": 1.6,
+       "p99": 1.8,
+       "mean": 1.13,
+       "max": 13.8,
+       "n": 900
+      },
+      "frameParity": {
+       "evenMs": 1.655,
+       "oddMs": 1.609,
+       "evenN": 449,
+       "oddN": 450
+      },
+      "cpuParity": {
+       "evenMs": 1.145,
+       "oddMs": 1.116,
+       "evenN": 450,
+       "oddN": 450
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 1616,
+       "jsMs": {
+        "med": 1.175,
+        "p95": 1.987,
+        "p99": 3.599,
+        "mean": 1.299,
+        "max": 19.208,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 1.185,
+        "p95": 1.973,
+        "p99": 3.411,
+        "mean": 1.271,
+        "max": 15.475,
+        "n": 898
+       },
+       "waitMsPerFrame": 0,
+       "rendererMainCpuPerFrame": 1.772,
+       "gpuMainCpuPerFrame": 0.84,
+       "vizCpuPerFrame": 0.122,
+       "gc": {
+        "minor": 8,
+        "major": 1,
+        "ms": 9.107,
+        "maxMs": 3.86
+       },
+       "outside": {
+        "tasksCpuMs": 0.4707,
+        "tasksWallMs": 0.5027,
+        "tasks": 11.108,
+        "byName": {
+         "FunctionCall": {
+          "n": 16.227,
+          "ms": 0.0352,
+          "cpuMs": 0.0274
+         },
+         "UpdateLayoutTree": {
+          "n": 1,
+          "ms": 0.1045,
+          "cpuMs": 0.1041,
+          "elements": 6.598
+         },
+         "Layout": {
+          "n": 0.743,
+          "ms": 0.0311,
+          "cpuMs": 0.0308
+         },
+         "PrePaint": {
+          "n": 1.744,
+          "ms": 0.0315,
+          "cpuMs": 0.0469
+         },
+         "Paint": {
+          "n": 0.714,
+          "ms": 0.0267,
+          "cpuMs": 0.0228
+         },
+         "Layerize": {
+          "n": 0.945,
+          "ms": 0.0382,
+          "cpuMs": 0.0376
+         },
+         "HitTest": {
+          "n": 0.747,
+          "ms": 0.0149,
+          "cpuMs": 0.0145
+         },
+         "EventDispatch": {
+          "n": 7.577,
+          "ms": 0.0484,
+          "cpuMs": 0.0271
+         },
+         "TimerFire": {
+          "n": 0.007,
+          "ms": 0.0001,
+          "cpuMs": 0
+         }
+        },
+        "topSelf": {
+         "ThreadControllerImpl::RunTask": 0.192,
+         "UpdateLayoutTree": 0.1044,
+         "Layerize": 0.0382,
+         "FunctionCall": 0.0351,
+         "PrePaint": 0.0315,
+         "Layout": 0.0311,
+         "Paint": 0.0267,
+         "EventDispatch": 0.0182,
+         "HitTest": 0.0149,
+         "BlinkScheduler_PerformMicrotaskCheckpoint": 0.0032,
+         "SimpleWatcher::OnHandleReady": 0.0012,
+         "CommandBufferProxyImpl::OrderingBarrier": 0.0011
+        }
+       }
+      },
+      "heapEndMB": 70
+     },
+     "errors": [],
+     "cellMs": 21281,
+     "repeat": 0
+    }
+   ],
+   "median": null
+  },
+  {
+   "map": "downtown",
+   "preset": "high",
+   "runs": [
+    {
+     "map": "downtown",
+     "preset": "high",
+     "chrome": "153.0.8010.12",
+     "load": {
+      "firstPlayableMs": 721.4,
+      "readyMs": 5790.4,
+      "liveMs": 411.5,
+      "enteredMs": 706.8,
+      "phases": {
+       "flags": {
+        "sky": {
+         "on": 697.8,
+         "off": 3959.9,
+         "frames": 1850
+        },
+        "skyLanding": {
+         "on": 960.7,
+         "off": 3959.9,
+         "frames": 1842
+        },
+        "bakeLayout": {
+         "on": 697.8,
+         "off": 3959.9,
+         "frames": 1850
+        },
+        "bake": {
+         "on": 697.8,
+         "off": 4014.1,
+         "frames": 1892
+        },
+        "bakeFading": {
+         "on": 4014.1,
+         "off": 5524.1,
+         "frames": 921
+        },
+        "textures": {
+         "on": 697.8,
+         "off": 4967.9,
+         "frames": 2493
+        },
+        "fx": {
+         "on": 697.8,
+         "off": 5043.7,
+         "frames": 2528
+        },
+        "weapons": {
+         "on": 697.8,
+         "off": 5524.1,
+         "frames": 2813
+        },
+        "operators": {
+         "on": 697.8,
+         "off": 5687.5,
+         "frames": 2906
+        },
+        "props": {
+         "on": 697.8,
+         "off": 5790.4,
+         "frames": 2942
+        },
+        "streaming": {
+         "on": 697.8,
+         "off": 5790.4,
+         "frames": 2942
+        },
+        "compiles": {
+         "on": 825,
+         "off": 3756,
+         "frames": 1788
+        },
+        "warmups": {
+         "on": 697.8,
+         "off": 3854.5,
+         "frames": 2
+        },
+        "programsCold": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "effects": {
+         "on": 697.8,
+         "off": 5043.7,
+         "frames": 2528
+        },
+        "weaponsReady": {
+         "on": 697.8,
+         "off": 5524.1,
+         "frames": 2813
+        }
+       },
+       "pace": [
+        [
+         697.8,
+         1
+        ],
+        [
+         5745.5,
+         2
+        ]
+       ],
+       "matchMs": 718.9,
+       "quietEndMs": 3735.5,
+       "renders": 2943,
+       "deferredWarmupsAtReady": 6,
+       "window": {
+        "frames": 2941,
+        "skipped": 155,
+        "maxMs": 108.2,
+        "over33": 5,
+        "over50": 2,
+        "renderMs": 1725.3,
+        "renderMaxMs": 37.8
+       }
+      }
+     },
+     "facts": {
+      "preset": "high",
+      "look": "realistic",
+      "fpsTarget": 0,
+      "dynamicRes": true,
+      "renderScale": 1,
+      "pixelRatio": 1,
+      "devicePixelRatio": 1,
+      "drawingBuffer": [
+       1920,
+       1080
+      ],
+      "sceneTarget": [
+       1920,
+       1080
+      ],
+      "msaa": 2,
+      "shadowEvery": 1,
+      "deferredWarmups": 6,
+      "level": "downtown",
+      "mode": "solo",
+      "state": "play",
+      "gpu": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090 Laptop GPU/PCIe/SSE2, OpenGL ES 3.2)",
+      "timer": {
+       "supported": true,
+       "reason": null
+      },
+      "crossOriginIsolated": false,
+      "dynamicScale": 1,
+      "idle": {
+       "frameMedMs": 0.8,
+       "fps": 1250,
+       "cpuMedMs": 0.6
+      }
+     },
+     "timer": {
+      "supported": true,
+      "reason": "0/120 results, 1588 zero, 0 disjoint; query undefined ms over the 0.7 ms frame interval; the extra pass moved the frame interval by -0.1 ms only; the query grew nullx what the extra pass added to the frame interval",
+      "read": 9210,
+      "zero": 1588,
+      "disjoint": 0,
+      "base": {
+       "queryMedMs": null,
+       "frameMedMs": 0.7,
+       "results": 0
+      },
+      "calibrated": {
+       "queryMedMs": null,
+       "frameMedMs": 0.6,
+       "results": 0
+      },
+      "slope": null,
+      "working": false
+     },
+     "route": {
+      "points": 1307,
+      "length": 301.6,
+      "warnings": []
+     },
+     "path": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 0.7166,
+        "render.total": 0.6764,
+        "render.main": 0.597,
+        "render.shadows": 0.1232,
+        "render.post": 0.0494,
+        "render.pre": 0.0253,
+        "player.update": 0.017,
+        "effects.update": 0.0019,
+        "enemies.update": 0.0013,
+        "hud.update": 0.0002,
+        "other(step)": 0.0198
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:gtao": 1,
+        "post:ao-blur": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 0.5,
+        "noiseMs": 0,
+        "ms": {
+         "shadows": 0,
+         "post:gtao": 0,
+         "post:ao-blur": 0,
+         "post:bloom-prefilter": 0,
+         "post:bloom-down": 0,
+         "post:bloom-up": 0,
+         "post:agx": 0,
+         "smaa": 0,
+         "post:final": 0
+        },
+        "baseMeanMs": 0.8,
+        "noiseMeanMs": 0.02,
+        "meanMs": {
+         "post:bloom-prefilter": 0.08,
+         "post:agx": 0.08,
+         "post:gtao": 0.01,
+         "shadows": 0,
+         "post:final": 0,
+         "post:bloom-down": -0.01,
+         "smaa": -0.02,
+         "post:ao-blur": -0.04,
+         "post:bloom-up": -0.04
+        },
+        "parity": {
+         "baseMs": {
+          "even": 0.62,
+          "odd": 0.97
+         },
+         "noiseMs": {
+          "even": 0.02,
+          "odd": 0.06
+         },
+         "ms": {
+          "post:bloom-prefilter": {
+           "even": -0.14,
+           "odd": 0.3
+          },
+          "post:agx": {
+           "even": -0.13,
+           "odd": 0.3
+          },
+          "post:gtao": {
+           "even": -0.31,
+           "odd": 0.32
+          },
+          "shadows": {
+           "even": -0.33,
+           "odd": 0.33
+          },
+          "post:final": {
+           "even": -0.38,
+           "odd": 0.36
+          },
+          "post:bloom-down": {
+           "even": -0.14,
+           "odd": 0.11
+          },
+          "smaa": {
+           "even": -0.23,
+           "odd": 0.18
+          },
+          "post:ao-blur": {
+           "even": -0.09,
+           "odd": 0.01
+          },
+          "post:bloom-up": {
+           "even": -0.11,
+           "odd": 0.03
+          }
+         }
+        }
+       }
+      },
+      "summary": {
+       "kills": 0,
+       "score": 0,
+       "alive": 0,
+       "listed": 0,
+       "particles": 0,
+       "debris": 0,
+       "tracers": 0,
+       "gibs": 0,
+       "pickups": 0,
+       "hash": "cb963c47"
+      },
+      "frameMs": {
+       "med": 0.6,
+       "p95": 1,
+       "p99": 13.2,
+       "mean": 0.843,
+       "max": 19.8,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 0.5,
+       "p95": 0.6,
+       "p99": 8.1,
+       "mean": 0.717,
+       "max": 30.4,
+       "n": 900
+      },
+      "frameParity": {
+       "evenMs": 0.866,
+       "oddMs": 0.821,
+       "evenN": 449,
+       "oddN": 450
+      },
+      "cpuParity": {
+       "evenMs": 0.767,
+       "oddMs": 0.666,
+       "evenN": 450,
+       "oddN": 450
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 732.2,
+       "jsMs": {
+        "med": 0.506,
+        "p95": 0.648,
+        "p99": 0.865,
+        "mean": 0.536,
+        "max": 17.79,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 0.512,
+        "p95": 0.82,
+        "p99": 5.639,
+        "mean": 0.667,
+        "max": 19.764,
+        "n": 898
+       },
+       "waitMsPerFrame": 0.145,
+       "rendererMainCpuPerFrame": 0.643,
+       "gpuMainCpuPerFrame": 0.788,
+       "vizCpuPerFrame": 0.022,
+       "gc": {
+        "minor": 1,
+        "major": 0,
+        "ms": 0.582,
+        "maxMs": 0.582
+       },
+       "outside": {
+        "tasksCpuMs": 0.1068,
+        "tasksWallMs": 0.1228,
+        "tasks": 8.649,
+        "byName": {
+         "FunctionCall": {
+          "n": 0.957,
+          "ms": 0.0028,
+          "cpuMs": 0.0023
+         },
+         "UpdateLayoutTree": {
+          "n": 0.464,
+          "ms": 0.0172,
+          "cpuMs": 0.017,
+          "elements": 1.511
+         },
+         "Layout": {
+          "n": 0.308,
+          "ms": 0.0093,
+          "cpuMs": 0.0091
+         },
+         "PrePaint": {
+          "n": 1.31,
+          "ms": 0.0145,
+          "cpuMs": 0.0139
+         },
+         "Paint": {
+          "n": 0.029,
+          "ms": 0.001,
+          "cpuMs": 0.0009
+         },
+         "Layerize": {
+          "n": 0.727,
+          "ms": 0.0029,
+          "cpuMs": 0.0022
+         },
+         "HitTest": {
+          "n": 0.308,
+          "ms": 0.0052,
+          "cpuMs": 0.0051
+         },
+         "EventDispatch": {
+          "n": 0.468,
+          "ms": 0.0036,
+          "cpuMs": 0.0021
+         },
+         "TimerFire": {
+          "n": 0.003,
+          "ms": 0,
+          "cpuMs": 0
+         }
+        },
+        "topSelf": {
+         "ThreadControllerImpl::RunTask": 0.0636,
+         "UpdateLayoutTree": 0.0172,
+         "PrePaint": 0.0145,
+         "Layout": 0.0093,
+         "HitTest": 0.0052,
+         "Layerize": 0.0029,
+         "FunctionCall": 0.0028,
+         "BlinkScheduler_PerformMicrotaskCheckpoint": 0.0026,
+         "EventDispatch": 0.0013,
+         "CommandBufferProxyImpl::OrderingBarrier": 0.001,
+         "Paint": 0.001,
+         "WidgetBase::WillBeginMainFrame": 0.0006
+        }
+       }
+      },
+      "heapEndMB": 49.47
+     },
+     "fight": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 1.3418,
+        "render.total": 1.039,
+        "render.main": 0.8491,
+        "render.shadows": 0.2266,
+        "enemies.update": 0.1183,
+        "render.pre": 0.1126,
+        "player.update": 0.0913,
+        "render.post": 0.0698,
+        "effects.update": 0.0588,
+        "hud.update": 0.0006,
+        "other(step)": 0.0338
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:gtao": 1,
+        "post:ao-blur": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1,
+        "soft": 0.98
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 1.85,
+        "noiseMs": 0.3,
+        "ms": {
+         "post:ao-blur": 0.35,
+         "post:gtao": 0.25,
+         "post:final": 0.25,
+         "post:bloom-prefilter": 0.15,
+         "soft": 0.15,
+         "post:bloom-down": 0.05,
+         "post:bloom-up": -0.05,
+         "post:agx": -0.05,
+         "shadows": -0.15,
+         "smaa": -0.15
+        },
+        "baseMeanMs": 1.97,
+        "noiseMeanMs": 0.32,
+        "meanMs": {
+         "post:ao-blur": 0.39,
+         "post:final": 0.27,
+         "post:bloom-prefilter": 0.21,
+         "soft": 0.21,
+         "post:bloom-down": 0.17,
+         "post:bloom-up": 0.06,
+         "post:agx": 0.01,
+         "post:gtao": 0,
+         "shadows": -0.06,
+         "smaa": -0.16
+        },
+        "parity": {
+         "baseMs": {
+          "even": 1.97,
+          "odd": 1.97
+         },
+         "noiseMs": {
+          "even": 0.3,
+          "odd": 0.32
+         },
+         "ms": {
+          "post:ao-blur": {
+           "even": 0.37,
+           "odd": 0.4
+          },
+          "post:final": {
+           "even": 0.26,
+           "odd": 0.28
+          },
+          "post:bloom-prefilter": {
+           "even": 0.21,
+           "odd": 0.21
+          },
+          "soft": {
+           "even": 0.21,
+           "odd": 0.21
+          },
+          "post:bloom-down": {
+           "even": 0.16,
+           "odd": 0.18
+          },
+          "post:bloom-up": {
+           "even": 0.05,
+           "odd": 0.07
+          },
+          "post:agx": {
+           "even": 0,
+           "odd": 0.01
+          },
+          "post:gtao": {
+           "even": 0.05,
+           "odd": -0.06
+          },
+          "shadows": {
+           "even": -0.06,
+           "odd": -0.06
+          },
+          "smaa": {
+           "even": -0.13,
+           "odd": -0.19
+          }
+         }
+        }
+       }
+      },
+      "summary": {
+       "kills": 13,
+       "score": 4098,
+       "alive": 11,
+       "listed": 14,
+       "particles": 80,
+       "debris": 8,
+       "tracers": 1,
+       "gibs": 7,
+       "pickups": 5,
+       "hash": "52ff35f6"
+      },
+      "frameMs": {
+       "med": 1.9,
+       "p95": 3.2,
+       "p99": 4.2,
+       "mean": 2.037,
+       "max": 15.9,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 1.3,
+       "p95": 1.8,
+       "p99": 2.1,
+       "mean": 1.342,
+       "max": 14,
+       "n": 900
+      },
+      "frameParity": {
+       "evenMs": 2.078,
+       "oddMs": 1.998,
+       "evenN": 449,
+       "oddN": 450
+      },
+      "cpuParity": {
+       "evenMs": 1.352,
+       "oddMs": 1.331,
+       "evenN": 450,
+       "oddN": 450
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 1723.3,
+       "jsMs": {
+        "med": 1.312,
+        "p95": 2.151,
+        "p99": 3.958,
+        "mean": 1.47,
+        "max": 20.714,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 1.321,
+        "p95": 2.131,
+        "p99": 3.202,
+        "mean": 1.419,
+        "max": 15.787,
+        "n": 898
+       },
+       "waitMsPerFrame": 0,
+       "rendererMainCpuPerFrame": 1.895,
+       "gpuMainCpuPerFrame": 0.942,
+       "vizCpuPerFrame": 0.141,
+       "gc": {
+        "minor": 9,
+        "major": 0,
+        "ms": 5.69,
+        "maxMs": 0.752
+       },
+       "outside": {
+        "tasksCpuMs": 0.4224,
+        "tasksWallMs": 0.4712,
+        "tasks": 11.147,
+        "byName": {
+         "FunctionCall": {
+          "n": 16.253,
+          "ms": 0.0357,
+          "cpuMs": 0.0271
+         },
+         "UpdateLayoutTree": {
+          "n": 1,
+          "ms": 0.0985,
+          "cpuMs": 0.0981,
+          "elements": 6.51
+         },
+         "Layout": {
+          "n": 0.729,
+          "ms": 0.0303,
+          "cpuMs": 0.0299
+         },
+         "PrePaint": {
+          "n": 1.731,
+          "ms": 0.0316,
+          "cpuMs": 0.0307
+         },
+         "Paint": {
+          "n": 0.698,
+          "ms": 0.0268,
+          "cpuMs": 0.0229
+         },
+         "Layerize": {
+          "n": 0.933,
+          "ms": 0.0377,
+          "cpuMs": 0.0372
+         },
+         "HitTest": {
+          "n": 0.732,
+          "ms": 0.0147,
+          "cpuMs": 0.0143
+         },
+         "TimerFire": {
+          "n": 0.008,
+          "ms": 0.0001,
+          "cpuMs": 0.0001
+         },
+         "EventDispatch": {
+          "n": 7.59,
+          "ms": 0.0487,
+          "cpuMs": 0.0263
+         }
+        },
+        "topSelf": {
+         "ThreadControllerImpl::RunTask": 0.1702,
+         "UpdateLayoutTree": 0.0985,
+         "Layerize": 0.0377,
+         "FunctionCall": 0.0357,
+         "PrePaint": 0.0316,
+         "Layout": 0.0303,
+         "Paint": 0.0268,
+         "EventDispatch": 0.0179,
+         "HitTest": 0.0147,
+         "BlinkScheduler_PerformMicrotaskCheckpoint": 0.0032,
+         "SimpleWatcher::OnHandleReady": 0.0012,
+         "CommandBufferProxyImpl::OrderingBarrier": 0.0012
+        }
+       }
+      },
+      "heapEndMB": 67.32
+     },
+     "errors": [],
+     "cellMs": 27931,
+     "repeat": 0
+    }
+   ],
+   "median": null
+  },
+  {
+   "map": "downtown",
+   "preset": "ultra",
+   "runs": [
+    {
+     "map": "downtown",
+     "preset": "ultra",
+     "chrome": "153.0.8010.12",
+     "load": {
+      "firstPlayableMs": 818.9,
+      "readyMs": 9085.7,
+      "liveMs": 467.1,
+      "enteredMs": 805,
+      "phases": {
+       "flags": {
+        "sky": {
+         "on": 795.3,
+         "off": 4034.9,
+         "frames": 1491
+        },
+        "skyLanding": {
+         "on": 1118.8,
+         "off": 4034.9,
+         "frames": 1483
+        },
+        "bakeLayout": {
+         "on": 795.3,
+         "off": 4034.9,
+         "frames": 1491
+        },
+        "bake": {
+         "on": 795.3,
+         "off": 4155.5,
+         "frames": 1551
+        },
+        "bakeFading": {
+         "on": 4155.5,
+         "off": 5664.2,
+         "frames": 724
+        },
+        "textures": {
+         "on": 795.3,
+         "off": 7248.7,
+         "frames": 2987
+        },
+        "fx": {
+         "on": 795.3,
+         "off": 7437.3,
+         "frames": 3074
+        },
+        "weapons": {
+         "on": 795.3,
+         "off": 8436.6,
+         "frames": 3557
+        },
+        "operators": {
+         "on": 795.3,
+         "off": 8875.7,
+         "frames": 3744
+        },
+        "props": {
+         "on": 795.3,
+         "off": 9085.7,
+         "frames": 3817
+        },
+        "streaming": {
+         "on": 795.3,
+         "off": 9085.7,
+         "frames": 3817
+        },
+        "compiles": {
+         "on": 964.7,
+         "off": 3840.2,
+         "frames": 1445
+        },
+        "warmups": {
+         "on": 795.3,
+         "off": 3957.8,
+         "frames": 2
+        },
+        "programsCold": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "effects": {
+         "on": 795.3,
+         "off": 7437.3,
+         "frames": 3074
+        },
+        "weaponsReady": {
+         "on": 795.3,
+         "off": 8436.6,
+         "frames": 3557
+        }
+       },
+       "pace": [
+        [
+         795.3,
+         1
+        ]
+       ],
+       "matchMs": 816.4,
+       "quietEndMs": 3821.8,
+       "renders": 3818,
+       "deferredWarmupsAtReady": 7,
+       "window": {
+        "frames": 3816,
+        "skipped": 233,
+        "maxMs": 124.8,
+        "over33": 7,
+        "over50": 4,
+        "renderMs": 2731.5,
+        "renderMaxMs": 40.3
+       }
+      }
+     },
+     "facts": {
+      "preset": "ultra",
+      "look": "realistic",
+      "fpsTarget": 0,
+      "dynamicRes": false,
+      "renderScale": 1,
+      "pixelRatio": 1,
+      "devicePixelRatio": 1,
+      "drawingBuffer": [
+       1920,
+       1080
+      ],
+      "sceneTarget": [
+       1920,
+       1080
+      ],
+      "msaa": 4,
+      "shadowEvery": 1,
+      "deferredWarmups": 7,
+      "level": "downtown",
+      "mode": "solo",
+      "state": "play",
+      "gpu": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090 Laptop GPU/PCIe/SSE2, OpenGL ES 3.2)",
+      "timer": {
+       "supported": true,
+       "reason": null
+      },
+      "crossOriginIsolated": false,
+      "dynamicScale": 1,
+      "idle": {
+       "frameMedMs": 0.8,
+       "fps": 1250,
+       "cpuMedMs": 0.6
+      }
+     },
+     "timer": {
+      "supported": true,
+      "reason": "0/120 results, 2019 zero, 0 disjoint; query undefined ms over the 0.7 ms frame interval; the extra pass moved the frame interval by 0 ms only; the query grew nullx what the extra pass added to the frame interval",
+      "read": 10830,
+      "zero": 2019,
+      "disjoint": 0,
+      "base": {
+       "queryMedMs": null,
+       "frameMedMs": 0.7,
+       "results": 0
+      },
+      "calibrated": {
+       "queryMedMs": null,
+       "frameMedMs": 0.7,
+       "results": 0
+      },
+      "slope": null,
+      "working": false
+     },
+     "route": {
+      "points": 1307,
+      "length": 301.6,
+      "warnings": []
+     },
+     "path": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 1.0208,
+        "render.total": 0.977,
+        "render.main": 0.9211,
+        "render.shadows": 0.1692,
+        "render.post": 0.0403,
+        "player.update": 0.0192,
+        "render.pre": 0.009,
+        "effects.update": 0.0026,
+        "enemies.update": 0.001,
+        "hud.update": 0.0002,
+        "other(step)": 0.0208
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:gtao": 1,
+        "post:ao-blur": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1,
+        "post:shaft-mask": 0.33,
+        "post:shaft-blur": 0.65
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 0.5,
+        "noiseMs": 0,
+        "ms": {
+         "shadows": 0.1,
+         "post:gtao": 0,
+         "post:ao-blur": 0,
+         "post:bloom-prefilter": 0,
+         "post:bloom-down": 0,
+         "post:bloom-up": 0,
+         "post:agx": 0,
+         "smaa": 0,
+         "post:final": 0,
+         "post:shaft-mask": 0,
+         "post:shaft-blur": 0
+        },
+        "baseMeanMs": 1.14,
+        "noiseMeanMs": 0.1,
+        "meanMs": {
+         "post:bloom-up": 0.1,
+         "post:gtao": 0.09,
+         "smaa": 0.08,
+         "post:ao-blur": 0.05,
+         "post:shaft-blur": 0.04,
+         "shadows": 0.03,
+         "post:bloom-down": -0.01,
+         "post:bloom-prefilter": -0.07,
+         "post:agx": -0.1,
+         "post:final": -0.1,
+         "post:shaft-mask": -0.1
+        },
+        "parity": {
+         "baseMs": {
+          "even": 1.1,
+          "odd": 1.18
+         },
+         "noiseMs": {
+          "even": 0.16,
+          "odd": 0.04
+         },
+         "ms": {
+          "post:bloom-up": {
+           "even": -0.06,
+           "odd": 0.27
+          },
+          "post:gtao": {
+           "even": 0.07,
+           "odd": 0.25
+          },
+          "smaa": {
+           "even": 0.04,
+           "odd": 0.13
+          },
+          "post:ao-blur": {
+           "even": -0.3,
+           "odd": 0.39
+          },
+          "post:shaft-blur": {
+           "even": -0.39,
+           "odd": 0.48
+          },
+          "shadows": {
+           "even": 0.28,
+           "odd": -0.22
+          },
+          "post:bloom-down": {
+           "even": -0.2,
+           "odd": 0.17
+          },
+          "post:bloom-prefilter": {
+           "even": -0.01,
+           "odd": -0.14
+          },
+          "post:agx": {
+           "even": -0.18,
+           "odd": -0.02
+          },
+          "post:final": {
+           "even": 0.24,
+           "odd": -0.44
+          },
+          "post:shaft-mask": {
+           "even": -0.49,
+           "odd": 0.28
+          }
+         }
+        }
+       }
+      },
+      "summary": {
+       "kills": 0,
+       "score": 0,
+       "alive": 0,
+       "listed": 0,
+       "particles": 0,
+       "debris": 0,
+       "tracers": 0,
+       "gibs": 0,
+       "pickups": 0,
+       "hash": "cb963c47"
+      },
+      "frameMs": {
+       "med": 0.6,
+       "p95": 1.2,
+       "p99": 17.7,
+       "mean": 1.128,
+       "max": 36,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 0.5,
+       "p95": 0.6,
+       "p99": 23.8,
+       "mean": 1.021,
+       "max": 49.7,
+       "n": 900
+      },
+      "frameParity": {
+       "evenMs": 1.263,
+       "oddMs": 0.994,
+       "evenN": 449,
+       "oddN": 450
+      },
+      "cpuParity": {
+       "evenMs": 0.703,
+       "oddMs": 1.338,
+       "evenN": 450,
+       "oddN": 450
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 1023.3,
+       "jsMs": {
+        "med": 0.503,
+        "p95": 0.642,
+        "p99": 0.881,
+        "mean": 0.53,
+        "max": 14.124,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 0.511,
+        "p95": 0.807,
+        "p99": 22.017,
+        "mean": 0.987,
+        "max": 51.218,
+        "n": 898
+       },
+       "waitMsPerFrame": 0.471,
+       "rendererMainCpuPerFrame": 0.643,
+       "gpuMainCpuPerFrame": 1.077,
+       "vizCpuPerFrame": 0.27,
+       "gc": {
+        "minor": 1,
+        "major": 1,
+        "ms": 3.344,
+        "maxMs": 2.818
+       },
+       "outside": {
+        "tasksCpuMs": 0.1122,
+        "tasksWallMs": 0.1286,
+        "tasks": 8.429,
+        "byName": {
+         "FunctionCall": {
+          "n": 0.986,
+          "ms": 0.003,
+          "cpuMs": 0.0024
+         },
+         "UpdateLayoutTree": {
+          "n": 0.488,
+          "ms": 0.0129,
+          "cpuMs": 0.0126,
+          "elements": 1.437
+         },
+         "Layout": {
+          "n": 0.272,
+          "ms": 0.0076,
+          "cpuMs": 0.0075
+         },
+         "PrePaint": {
+          "n": 1.273,
+          "ms": 0.0139,
+          "cpuMs": 0.0133
+         },
+         "Paint": {
+          "n": 0.033,
+          "ms": 0.0011,
+          "cpuMs": 0.001
+         },
+         "Layerize": {
+          "n": 0.706,
+          "ms": 0.0034,
+          "cpuMs": 0.0027
+         },
+         "HitTest": {
+          "n": 0.274,
+          "ms": 0.0045,
+          "cpuMs": 0.0043
+         },
+         "EventDispatch": {
+          "n": 0.481,
+          "ms": 0.0037,
+          "cpuMs": 0.0022
+         },
+         "TimerFire": {
+          "n": 0.004,
+          "ms": 0.0001,
+          "cpuMs": 0
+         }
+        },
+        "topSelf": {
+         "ThreadControllerImpl::RunTask": 0.0721,
+         "PrePaint": 0.0139,
+         "UpdateLayoutTree": 0.0129,
+         "Layout": 0.0076,
+         "HitTest": 0.0045,
+         "Layerize": 0.0034,
+         "FunctionCall": 0.003,
+         "BlinkScheduler_PerformMicrotaskCheckpoint": 0.0025,
+         "EventDispatch": 0.0012,
+         "Paint": 0.0011,
+         "CommandBufferProxyImpl::OrderingBarrier": 0.001,
+         "V8.GC_MC_CLEAR_JOIN_JOB": 0.0007
+        }
+       }
+      },
+      "heapEndMB": 44.59
+     },
+     "fight": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 1.3978,
+        "render.total": 1.0857,
+        "render.main": 0.8954,
+        "render.shadows": 0.2503,
+        "enemies.update": 0.1249,
+        "render.pre": 0.1133,
+        "player.update": 0.0944,
+        "render.post": 0.0687,
+        "effects.update": 0.0602,
+        "hud.update": 0.0004,
+        "other(step)": 0.0322
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:gtao": 1,
+        "post:ao-blur": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:shaft-mask": 0.94,
+        "post:shaft-blur": 1.89,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1,
+        "soft": 0.98
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 1.7,
+        "noiseMs": 0.2,
+        "ms": {
+         "shadows": 0,
+         "post:shaft-mask": 0,
+         "post:shaft-blur": 0,
+         "post:gtao": -0.1,
+         "post:agx": -0.1,
+         "post:ao-blur": -0.2,
+         "smaa": -0.2,
+         "post:bloom-prefilter": -0.3,
+         "post:final": -0.3,
+         "soft": -0.3,
+         "post:bloom-down": -0.4,
+         "post:bloom-up": -0.5
+        },
+        "baseMeanMs": 1.86,
+        "noiseMeanMs": 0.39,
+        "meanMs": {
+         "shadows": 0.14,
+         "post:shaft-blur": 0.08,
+         "post:gtao": -0.01,
+         "post:agx": -0.05,
+         "post:shaft-mask": -0.08,
+         "post:ao-blur": -0.1,
+         "smaa": -0.13,
+         "post:final": -0.16,
+         "post:bloom-prefilter": -0.17,
+         "soft": -0.21,
+         "post:bloom-down": -0.24,
+         "post:bloom-up": -0.38
+        },
+        "parity": {
+         "baseMs": {
+          "even": 1.85,
+          "odd": 1.86
+         },
+         "noiseMs": {
+          "even": 0.39,
+          "odd": 0.39
+         },
+         "ms": {
+          "shadows": {
+           "even": 0.12,
+           "odd": 0.16
+          },
+          "post:shaft-blur": {
+           "even": 0.04,
+           "odd": 0.12
+          },
+          "post:gtao": {
+           "even": -0.04,
+           "odd": 0.03
+          },
+          "post:agx": {
+           "even": -0.06,
+           "odd": -0.04
+          },
+          "post:shaft-mask": {
+           "even": 0.01,
+           "odd": -0.17
+          },
+          "post:ao-blur": {
+           "even": -0.08,
+           "odd": -0.12
+          },
+          "smaa": {
+           "even": -0.16,
+           "odd": -0.11
+          },
+          "post:final": {
+           "even": -0.16,
+           "odd": -0.16
+          },
+          "post:bloom-prefilter": {
+           "even": -0.19,
+           "odd": -0.14
+          },
+          "soft": {
+           "even": -0.23,
+           "odd": -0.2
+          },
+          "post:bloom-down": {
+           "even": -0.25,
+           "odd": -0.24
+          },
+          "post:bloom-up": {
+           "even": -0.41,
+           "odd": -0.35
+          }
+         }
+        }
+       }
+      },
+      "summary": {
+       "kills": 13,
+       "score": 4098,
+       "alive": 11,
+       "listed": 14,
+       "particles": 80,
+       "debris": 8,
+       "tracers": 1,
+       "gibs": 7,
+       "pickups": 5,
+       "hash": "52ff35f6"
+      },
+      "frameMs": {
+       "med": 1.8,
+       "p95": 3,
+       "p99": 4.5,
+       "mean": 1.965,
+       "max": 15.2,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 1.3,
+       "p95": 1.9,
+       "p99": 2.2,
+       "mean": 1.398,
+       "max": 14.5,
+       "n": 900
+      },
+      "frameParity": {
+       "evenMs": 1.99,
+       "oddMs": 1.942,
+       "evenN": 449,
+       "oddN": 450
+      },
+      "cpuParity": {
+       "evenMs": 1.41,
+       "oddMs": 1.385,
+       "evenN": 450,
+       "oddN": 450
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 1826.3,
+       "jsMs": {
+        "med": 1.419,
+        "p95": 2.293,
+        "p99": 3.993,
+        "mean": 1.577,
+        "max": 19.094,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 1.43,
+        "p95": 2.288,
+        "p99": 3.368,
+        "mean": 1.529,
+        "max": 16.704,
+        "n": 898
+       },
+       "waitMsPerFrame": 0,
+       "rendererMainCpuPerFrame": 2.007,
+       "gpuMainCpuPerFrame": 1.022,
+       "vizCpuPerFrame": 0.141,
+       "gc": {
+        "minor": 8,
+        "major": 1,
+        "ms": 8.846,
+        "maxMs": 3.562
+       },
+       "outside": {
+        "tasksCpuMs": 0.4275,
+        "tasksWallMs": 0.4783,
+        "tasks": 11.356,
+        "byName": {
+         "FunctionCall": {
+          "n": 16.242,
+          "ms": 0.0371,
+          "cpuMs": 0.0284
+         },
+         "UpdateLayoutTree": {
+          "n": 0.997,
+          "ms": 0.0923,
+          "cpuMs": 0.0919,
+          "elements": 6.45
+         },
+         "Layout": {
+          "n": 0.722,
+          "ms": 0.0311,
+          "cpuMs": 0.0307
+         },
+         "PrePaint": {
+          "n": 1.723,
+          "ms": 0.033,
+          "cpuMs": 0.0321
+         },
+         "Paint": {
+          "n": 0.698,
+          "ms": 0.0278,
+          "cpuMs": 0.0239
+         },
+         "Layerize": {
+          "n": 0.929,
+          "ms": 0.0384,
+          "cpuMs": 0.0379
+         },
+         "HitTest": {
+          "n": 0.726,
+          "ms": 0.0148,
+          "cpuMs": 0.0145
+         },
+         "EventDispatch": {
+          "n": 7.586,
+          "ms": 0.0512,
+          "cpuMs": 0.0288
+         },
+         "TimerFire": {
+          "n": 0.008,
+          "ms": 0.0001,
+          "cpuMs": 0.0001
+         }
+        },
+        "topSelf": {
+         "ThreadControllerImpl::RunTask": 0.1725,
+         "UpdateLayoutTree": 0.0923,
+         "Layerize": 0.0384,
+         "FunctionCall": 0.0371,
+         "PrePaint": 0.033,
+         "Layout": 0.0311,
+         "Paint": 0.0278,
+         "EventDispatch": 0.0187,
+         "HitTest": 0.0148,
+         "BlinkScheduler_PerformMicrotaskCheckpoint": 0.0034,
+         "SimpleWatcher::OnHandleReady": 0.0013,
+         "CommandBufferProxyImpl::OrderingBarrier": 0.0012
+        }
+       }
+      },
+      "heapEndMB": 47.73
+     },
+     "errors": [],
+     "cellMs": 36764,
+     "repeat": 0
+    }
+   ],
+   "median": null
+  },
+  {
+   "map": "training",
+   "preset": "low",
+   "runs": [
+    {
+     "map": "training",
+     "preset": "low",
+     "chrome": "153.0.8010.12",
+     "load": {
+      "firstPlayableMs": 630.2,
+      "readyMs": 658,
+      "liveMs": 450.7,
+      "enteredMs": 563.3,
+      "phases": {
+       "flags": {
+        "sky": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "skyLanding": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "bakeLayout": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "bake": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "bakeFading": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "textures": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "fx": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "weapons": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "operators": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "props": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "streaming": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "compiles": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "warmups": {
+         "on": 559.8,
+         "off": 630.2,
+         "frames": 1
+        },
+        "programsCold": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "effects": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "weaponsReady": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        }
+       },
+       "pace": [
+        [
+         559.8,
+         1
+        ]
+       ],
+       "matchMs": 614.2,
+       "quietEndMs": null,
+       "renders": 3,
+       "deferredWarmupsAtReady": 4,
+       "window": {
+        "frames": 1,
+        "skipped": 0,
+        "maxMs": 95.4,
+        "over33": 1,
+        "over50": 1,
+        "renderMs": 18.6,
+        "renderMaxMs": 16
+       }
+      }
+     },
+     "facts": {
+      "preset": "low",
+      "look": "lowpoly",
+      "fpsTarget": 0,
+      "dynamicRes": true,
+      "renderScale": 0.75,
+      "pixelRatio": 1,
+      "devicePixelRatio": 1,
+      "drawingBuffer": [
+       1920,
+       1080
+      ],
+      "sceneTarget": [
+       1440,
+       810
+      ],
+      "msaa": 0,
+      "shadowEvery": 2,
+      "deferredWarmups": 4,
+      "level": "training",
+      "mode": "training",
+      "state": "play",
+      "gpu": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090 Laptop GPU/PCIe/SSE2, OpenGL ES 3.2)",
+      "timer": {
+       "supported": true,
+       "reason": null
+      },
+      "crossOriginIsolated": false,
+      "dynamicScale": 1,
+      "idle": {
+       "frameMedMs": 1.3,
+       "fps": 769.2,
+       "cpuMedMs": 1.2
+      }
+     },
+     "timer": {
+      "supported": true,
+      "reason": "0/120 results, 364 zero, 0 disjoint; query undefined ms over the 1.2 ms frame interval; the extra pass moved the frame interval by 0 ms only; the query grew nullx what the extra pass added to the frame interval",
+      "read": 1920,
+      "zero": 364,
+      "disjoint": 0,
+      "base": {
+       "queryMedMs": null,
+       "frameMedMs": 1.2,
+       "results": 0
+      },
+      "calibrated": {
+       "queryMedMs": null,
+       "frameMedMs": 1.2,
+       "results": 0
+      },
+      "slope": null,
+      "working": false
+     },
+     "route": {
+      "points": 337,
+      "length": 79,
+      "warnings": []
+     },
+     "path": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 0.7458,
+        "render.total": 0.5491,
+        "render.main": 0.5321,
+        "enemies.update": 0.1296,
+        "render.shadows": 0.1136,
+        "player.update": 0.0251,
+        "render.post": 0.0106,
+        "render.pre": 0.0059,
+        "effects.update": 0.0009,
+        "hud.update": 0.0003,
+        "other(step)": 0.0408
+       },
+       "passesPerFrame": {
+        "post:composite": 1,
+        "shadows": 0.5
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 0.9,
+        "noiseMs": 0,
+        "ms": {
+         "shadows": 0.2,
+         "post:composite": 0
+        },
+        "baseMeanMs": 0.95,
+        "noiseMeanMs": 0.01,
+        "meanMs": {
+         "shadows": 0.09,
+         "post:composite": 0.03
+        },
+        "parity": {
+         "baseMs": {
+          "even": 0.84,
+          "odd": 1.06
+         },
+         "noiseMs": {
+          "even": 0.01,
+          "odd": 0
+         },
+         "ms": {
+          "shadows": {
+           "even": -0.01,
+           "odd": 0.18
+          },
+          "post:composite": {
+           "even": 0.05,
+           "odd": 0.01
+          }
+         }
+        }
+       }
+      },
+      "summary": {
+       "kills": 0,
+       "score": 0,
+       "alive": 22,
+       "listed": 22,
+       "particles": 0,
+       "debris": 0,
+       "tracers": 0,
+       "gibs": 0,
+       "pickups": 0,
+       "hash": "eabfb9a8"
+      },
+      "frameMs": {
+       "med": 0.8,
+       "p95": 1.3,
+       "p99": 1.6,
+       "mean": 0.854,
+       "max": 8.3,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 0.7,
+       "p95": 1,
+       "p99": 1.2,
+       "mean": 0.746,
+       "max": 1.6,
+       "n": 900
+      },
+      "frameParity": {
+       "evenMs": 0.74,
+       "oddMs": 0.968,
+       "evenN": 449,
+       "oddN": 450
+      },
+      "cpuParity": {
+       "evenMs": 0.637,
+       "oddMs": 0.855,
+       "evenN": 450,
+       "oddN": 450
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 936.9,
+       "jsMs": {
+        "med": 0.876,
+        "p95": 1.257,
+        "p99": 1.449,
+        "mean": 0.919,
+        "max": 13.497,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 0.882,
+        "p95": 1.26,
+        "p99": 1.453,
+        "mean": 0.902,
+        "max": 1.885,
+        "n": 898
+       },
+       "waitMsPerFrame": 0,
+       "rendererMainCpuPerFrame": 1.028,
+       "gpuMainCpuPerFrame": 0.337,
+       "vizCpuPerFrame": 0.088,
+       "gc": {
+        "minor": 4,
+        "major": 0,
+        "ms": 2.116,
+        "maxMs": 0.799
+       },
+       "outside": {
+        "tasksCpuMs": 0.1072,
+        "tasksWallMs": 0.121,
+        "tasks": 8.267,
+        "byName": {
+         "FunctionCall": {
+          "n": 0.133,
+          "ms": 0.0013,
+          "cpuMs": 0.0013
+         },
+         "UpdateLayoutTree": {
+          "n": 0.248,
+          "ms": 0.0055,
+          "cpuMs": 0.0054,
+          "elements": 0.361
+         },
+         "Layout": {
+          "n": 0.182,
+          "ms": 0.0094,
+          "cpuMs": 0.0093
+         },
+         "PrePaint": {
+          "n": 1.183,
+          "ms": 0.0161,
+          "cpuMs": 0.0154
+         },
+         "Paint": {
+          "n": 0.18,
+          "ms": 0.0056,
+          "cpuMs": 0.0052
+         },
+         "Layerize": {
+          "n": 0.81,
+          "ms": 0.0095,
+          "cpuMs": 0.0088
+         },
+         "HitTest": {
+          "n": 0.184,
+          "ms": 0.0036,
+          "cpuMs": 0.0035
+         },
+         "EventDispatch": {
+          "n": 0.021,
+          "ms": 0.0003,
+          "cpuMs": 0.0002
+         },
+         "TimerFire": {
+          "n": 0.004,
+          "ms": 0.0001,
+          "cpuMs": 0.0001
+         }
+        },
+        "topSelf": {
+         "ThreadControllerImpl::RunTask": 0.0628,
+         "PrePaint": 0.0161,
+         "Layerize": 0.0095,
+         "Layout": 0.0094,
+         "Paint": 0.0056,
+         "UpdateLayoutTree": 0.0055,
+         "HitTest": 0.0036,
+         "BlinkScheduler_PerformMicrotaskCheckpoint": 0.0026,
+         "FunctionCall": 0.0013,
+         "CommandBufferProxyImpl::OrderingBarrier": 0.0011,
+         "V8.GC_SCAVENGER_SCAVENGE_PARALLEL": 0.001,
+         "SimpleWatcher::OnHandleReady": 0.0008
+        }
+       }
+      },
+      "heapEndMB": 58.49
+     },
+     "fight": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 1.5723,
+        "render.total": 1.1102,
+        "render.main": 1.0926,
+        "enemies.update": 0.2056,
+        "render.shadows": 0.1804,
+        "player.update": 0.0902,
+        "effects.update": 0.0233,
+        "render.post": 0.0107,
+        "render.pre": 0.0058,
+        "hud.update": 0.0003,
+        "other(step)": 0.1427
+       },
+       "passesPerFrame": {
+        "post:composite": 1,
+        "shadows": 0.5
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 1.85,
+        "noiseMs": 0.1,
+        "ms": {
+         "shadows": 0.15,
+         "post:composite": -0.05
+        },
+        "baseMeanMs": 1.95,
+        "noiseMeanMs": 0.08,
+        "meanMs": {
+         "shadows": 0.1,
+         "post:composite": -0.07
+        },
+        "parity": {
+         "baseMs": {
+          "even": 1.83,
+          "odd": 2.06
+         },
+         "noiseMs": {
+          "even": 0.08,
+          "odd": 0.05
+         },
+         "ms": {
+          "shadows": {
+           "even": 0,
+           "odd": 0.21
+          },
+          "post:composite": {
+           "even": -0.06,
+           "odd": -0.07
+          }
+         }
+        }
+       }
+      },
+      "summary": {
+       "kills": 12,
+       "score": 5516,
+       "alive": 38,
+       "listed": 40,
+       "particles": 103,
+       "debris": 7,
+       "tracers": 1,
+       "gibs": 7,
+       "pickups": 10,
+       "hash": "9b83280c"
+      },
+      "frameMs": {
+       "med": 2,
+       "p95": 3.2,
+       "p99": 4.2,
+       "mean": 2.155,
+       "max": 9.6,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 1.5,
+       "p95": 2.1,
+       "p99": 2.5,
+       "mean": 1.572,
+       "max": 2.8,
+       "n": 900
+      },
+      "frameParity": {
+       "evenMs": 1.994,
+       "oddMs": 2.316,
+       "evenN": 449,
+       "oddN": 450
+      },
+      "cpuParity": {
+       "evenMs": 1.398,
+       "oddMs": 1.746,
+       "evenN": 450,
+       "oddN": 450
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 1984.8,
+       "jsMs": {
+        "med": 1.616,
+        "p95": 2.329,
+        "p99": 3.11,
+        "mean": 1.691,
+        "max": 17.059,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 1.627,
+        "p95": 2.301,
+        "p99": 2.919,
+        "mean": 1.665,
+        "max": 3.337,
+        "n": 898
+       },
+       "waitMsPerFrame": 0,
+       "rendererMainCpuPerFrame": 2.177,
+       "gpuMainCpuPerFrame": 0.897,
+       "vizCpuPerFrame": 0.138,
+       "gc": {
+        "minor": 11,
+        "major": 1,
+        "ms": 9.422,
+        "maxMs": 3.173
+       },
+       "outside": {
+        "tasksCpuMs": 0.4826,
+        "tasksWallMs": 0.5148,
+        "tasks": 9.862,
+        "byName": {
+         "FunctionCall": {
+          "n": 16.243,
+          "ms": 0.0347,
+          "cpuMs": 0.0262
+         },
+         "UpdateLayoutTree": {
+          "n": 1.001,
+          "ms": 0.0966,
+          "cpuMs": 0.1153,
+          "elements": 7.727
+         },
+         "Layout": {
+          "n": 0.855,
+          "ms": 0.0423,
+          "cpuMs": 0.0409
+         },
+         "PrePaint": {
+          "n": 1.856,
+          "ms": 0.0372,
+          "cpuMs": 0.0361
+         },
+         "Paint": {
+          "n": 0.842,
+          "ms": 0.0344,
+          "cpuMs": 0.0295
+         },
+         "Layerize": {
+          "n": 0.957,
+          "ms": 0.0467,
+          "cpuMs": 0.0462
+         },
+         "HitTest": {
+          "n": 0.86,
+          "ms": 0.0164,
+          "cpuMs": 0.016
+         },
+         "EventDispatch": {
+          "n": 7.649,
+          "ms": 0.0484,
+          "cpuMs": 0.0258
+         },
+         "TimerFire": {
+          "n": 0.009,
+          "ms": 0.0001,
+          "cpuMs": 0.0001
+         }
+        },
+        "topSelf": {
+         "ThreadControllerImpl::RunTask": 0.1709,
+         "UpdateLayoutTree": 0.0965,
+         "Layerize": 0.0467,
+         "Layout": 0.0423,
+         "PrePaint": 0.0372,
+         "FunctionCall": 0.0347,
+         "Paint": 0.0344,
+         "EventDispatch": 0.0179,
+         "HitTest": 0.0164,
+         "V8.GC_SCAVENGER_SCAVENGE_PARALLEL": 0.003,
+         "BlinkScheduler_PerformMicrotaskCheckpoint": 0.0028,
+         "SimpleWatcher::OnHandleReady": 0.0021
+        }
+       }
+      },
+      "heapEndMB": 50.48
+     },
+     "errors": [],
+     "cellMs": 13981,
+     "repeat": 0
+    }
+   ],
+   "median": null
+  },
+  {
+   "map": "training",
+   "preset": "medium",
+   "runs": [
+    {
+     "map": "training",
+     "preset": "medium",
+     "chrome": "153.0.8010.12",
+     "load": {
+      "firstPlayableMs": 760.8,
+      "readyMs": 5482.8,
+      "liveMs": 439.8,
+      "enteredMs": 695,
+      "phases": {
+       "flags": {
+        "sky": {
+         "on": 685.9,
+         "off": 3956.9,
+         "frames": 2213
+        },
+        "skyLanding": {
+         "on": 1019.7,
+         "off": 3956.9,
+         "frames": 2198
+        },
+        "bakeLayout": {
+         "on": 685.9,
+         "off": 3956.9,
+         "frames": 2213
+        },
+        "bake": {
+         "on": 685.9,
+         "off": 3982.9,
+         "frames": 2232
+        },
+        "bakeFading": {
+         "on": 3982.9,
+         "off": 5482.8,
+         "frames": 1128
+        },
+        "textures": {
+         "on": 685.9,
+         "off": 4031,
+         "frames": 2266
+        },
+        "fx": {
+         "on": 685.9,
+         "off": 4031,
+         "frames": 2266
+        },
+        "weapons": {
+         "on": 685.9,
+         "off": 4128.4,
+         "frames": 2334
+        },
+        "operators": {
+         "on": 685.9,
+         "off": 4151.5,
+         "frames": 2350
+        },
+        "props": {
+         "on": 685.9,
+         "off": 760.8,
+         "frames": 1
+        },
+        "streaming": {
+         "on": 685.9,
+         "off": 4151.5,
+         "frames": 2350
+        },
+        "compiles": {
+         "on": 849.2,
+         "off": 3758,
+         "frames": 2121
+        },
+        "warmups": {
+         "on": 685.9,
+         "off": 760.8,
+         "frames": 1
+        },
+        "programsCold": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "effects": {
+         "on": 685.9,
+         "off": 4031,
+         "frames": 2266
+        },
+        "weaponsReady": {
+         "on": 685.9,
+         "off": 4128.4,
+         "frames": 2334
+        }
+       },
+       "pace": [
+        [
+         685.9,
+         1
+        ]
+       ],
+       "matchMs": 744.3,
+       "quietEndMs": 3744.3,
+       "renders": 3361,
+       "deferredWarmupsAtReady": 5,
+       "window": {
+        "frames": 3359,
+        "skipped": 4,
+        "maxMs": 75.1,
+        "over33": 5,
+        "over50": 4,
+        "renderMs": 3583.4,
+        "renderMaxMs": 24.5
+       }
+      }
+     },
+     "facts": {
+      "preset": "medium",
+      "look": "realistic",
+      "fpsTarget": 0,
+      "dynamicRes": true,
+      "renderScale": 1,
+      "pixelRatio": 1,
+      "devicePixelRatio": 1,
+      "drawingBuffer": [
+       1920,
+       1080
+      ],
+      "sceneTarget": [
+       1920,
+       1080
+      ],
+      "msaa": 2,
+      "shadowEvery": 1,
+      "deferredWarmups": 5,
+      "level": "training",
+      "mode": "training",
+      "state": "play",
+      "gpu": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090 Laptop GPU/PCIe/SSE2, OpenGL ES 3.2)",
+      "timer": {
+       "supported": true,
+       "reason": null
+      },
+      "crossOriginIsolated": false,
+      "dynamicScale": 1,
+      "idle": {
+       "frameMedMs": 1.4,
+       "fps": 714.3,
+       "cpuMedMs": 1.3
+      }
+     },
+     "timer": {
+      "supported": true,
+      "reason": "0/120 results, 1481 zero, 0 disjoint; query undefined ms over the 1.3 ms frame interval; the extra pass moved the frame interval by 0 ms only; the query grew nullx what the extra pass added to the frame interval",
+      "read": 8130,
+      "zero": 1481,
+      "disjoint": 0,
+      "base": {
+       "queryMedMs": null,
+       "frameMedMs": 1.3,
+       "results": 0
+      },
+      "calibrated": {
+       "queryMedMs": null,
+       "frameMedMs": 1.3,
+       "results": 0
+      },
+      "slope": null,
+      "working": false
+     },
+     "route": {
+      "points": 337,
+      "length": 79,
+      "warnings": []
+     },
+     "path": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 1.0407,
+        "render.total": 0.8012,
+        "render.main": 0.6509,
+        "render.shadows": 0.212,
+        "enemies.update": 0.1569,
+        "render.pre": 0.0979,
+        "render.post": 0.0467,
+        "player.update": 0.0248,
+        "effects.update": 0.0027,
+        "hud.update": 0.0003,
+        "other(step)": 0.0548
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 1.15,
+        "noiseMs": 0.1,
+        "ms": {
+         "shadows": 0.15,
+         "post:bloom-down": 0.05,
+         "post:bloom-up": 0.05,
+         "post:agx": 0.05,
+         "smaa": 0.05,
+         "post:final": 0.05,
+         "post:bloom-prefilter": -0.05
+        },
+        "baseMeanMs": 1.28,
+        "noiseMeanMs": 0.09,
+        "meanMs": {
+         "shadows": 0.17,
+         "post:agx": 0.05,
+         "post:bloom-up": 0.04,
+         "smaa": 0.04,
+         "post:final": 0.04,
+         "post:bloom-down": 0.03,
+         "post:bloom-prefilter": -0.08
+        },
+        "parity": {
+         "baseMs": {
+          "even": 1.3,
+          "odd": 1.26
+         },
+         "noiseMs": {
+          "even": 0.04,
+          "odd": 0.13
+         },
+         "ms": {
+          "shadows": {
+           "even": 0.13,
+           "odd": 0.2
+          },
+          "post:agx": {
+           "even": 0.03,
+           "odd": 0.08
+          },
+          "post:bloom-up": {
+           "even": 0.02,
+           "odd": 0.06
+          },
+          "smaa": {
+           "even": 0.01,
+           "odd": 0.06
+          },
+          "post:final": {
+           "even": 0.01,
+           "odd": 0.07
+          },
+          "post:bloom-down": {
+           "even": 0.01,
+           "odd": 0.05
+          },
+          "post:bloom-prefilter": {
+           "even": -0.1,
+           "odd": -0.05
+          }
+         }
+        }
+       }
+      },
+      "summary": {
+       "kills": 0,
+       "score": 0,
+       "alive": 22,
+       "listed": 22,
+       "particles": 0,
+       "debris": 0,
+       "tracers": 0,
+       "gibs": 0,
+       "pickups": 0,
+       "hash": "eabfb9a8"
+      },
+      "frameMs": {
+       "med": 1.1,
+       "p95": 1.6,
+       "p99": 2,
+       "mean": 1.161,
+       "max": 11.8,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 1,
+       "p95": 1.3,
+       "p99": 1.5,
+       "mean": 1.041,
+       "max": 1.9,
+       "n": 900
+      },
+      "frameParity": {
+       "evenMs": 1.172,
+       "oddMs": 1.149,
+       "evenN": 449,
+       "oddN": 450
+      },
+      "cpuParity": {
+       "evenMs": 1.039,
+       "oddMs": 1.042,
+       "evenN": 450,
+       "oddN": 450
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 1120,
+       "jsMs": {
+        "med": 1.097,
+        "p95": 1.394,
+        "p99": 1.632,
+        "mean": 1.136,
+        "max": 12.18,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 1.103,
+        "p95": 1.398,
+        "p99": 1.608,
+        "mean": 1.12,
+        "max": 2.325,
+        "n": 898
+       },
+       "waitMsPerFrame": 0,
+       "rendererMainCpuPerFrame": 1.227,
+       "gpuMainCpuPerFrame": 0.501,
+       "vizCpuPerFrame": 0.104,
+       "gc": {
+        "minor": 4,
+        "major": 0,
+        "ms": 2.763,
+        "maxMs": 1.061
+       },
+       "outside": {
+        "tasksCpuMs": 0.0897,
+        "tasksWallMs": 0.1041,
+        "tasks": 9.55,
+        "byName": {
+         "FunctionCall": {
+          "n": 0.126,
+          "ms": 0.0012,
+          "cpuMs": 0.0012
+         },
+         "UpdateLayoutTree": {
+          "n": 0.159,
+          "ms": 0.0043,
+          "cpuMs": 0.0042,
+          "elements": 0.258
+         },
+         "Layout": {
+          "n": 0.08,
+          "ms": 0.0057,
+          "cpuMs": 0.0057
+         },
+         "PrePaint": {
+          "n": 1.081,
+          "ms": 0.0166,
+          "cpuMs": 0.0161
+         },
+         "Paint": {
+          "n": 0.08,
+          "ms": 0.0032,
+          "cpuMs": 0.003
+         },
+         "Layerize": {
+          "n": 0.853,
+          "ms": 0.006,
+          "cpuMs": 0.0052
+         },
+         "HitTest": {
+          "n": 0.085,
+          "ms": 0.0019,
+          "cpuMs": 0.0019
+         },
+         "TimerFire": {
+          "n": 0.004,
+          "ms": 0.0001,
+          "cpuMs": 0
+         },
+         "EventDispatch": {
+          "n": 0.018,
+          "ms": 0.0002,
+          "cpuMs": 0.0001
+         }
+        },
+        "topSelf": {
+         "ThreadControllerImpl::RunTask": 0.0579,
+         "PrePaint": 0.0166,
+         "Layerize": 0.006,
+         "Layout": 0.0057,
+         "UpdateLayoutTree": 0.0043,
+         "Paint": 0.0032,
+         "BlinkScheduler_PerformMicrotaskCheckpoint": 0.0029,
+         "HitTest": 0.0019,
+         "FunctionCall": 0.0012,
+         "CommandBufferProxyImpl::OrderingBarrier": 0.0012,
+         "V8.GC_SCAVENGER_SCAVENGE_PARALLEL": 0.0009,
+         "SimpleWatcher::OnHandleReady": 0.0008
+        }
+       }
+      },
+      "heapEndMB": 96.07
+     },
+     "fight": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 1.8354,
+        "render.total": 1.318,
+        "render.main": 1.1193,
+        "render.shadows": 0.3181,
+        "enemies.update": 0.2272,
+        "render.pre": 0.1392,
+        "player.update": 0.0933,
+        "render.post": 0.0519,
+        "effects.update": 0.0466,
+        "hud.update": 0.0006,
+        "other(step)": 0.1497
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 2.1,
+        "noiseMs": 0.2,
+        "ms": {
+         "shadows": 0.3,
+         "post:bloom-down": 0.1,
+         "post:bloom-up": 0.1,
+         "post:bloom-prefilter": 0,
+         "post:agx": 0,
+         "post:final": 0,
+         "smaa": -0.1
+        },
+        "baseMeanMs": 2.34,
+        "noiseMeanMs": 0.37,
+        "meanMs": {
+         "shadows": 0.42,
+         "post:bloom-down": 0.22,
+         "post:bloom-up": 0.21,
+         "post:agx": 0.13,
+         "post:bloom-prefilter": 0.11,
+         "smaa": 0.04,
+         "post:final": -0.04
+        },
+        "parity": {
+         "baseMs": {
+          "even": 2.36,
+          "odd": 2.31
+         },
+         "noiseMs": {
+          "even": 0.37,
+          "odd": 0.36
+         },
+         "ms": {
+          "shadows": {
+           "even": 0.43,
+           "odd": 0.42
+          },
+          "post:bloom-down": {
+           "even": 0.22,
+           "odd": 0.21
+          },
+          "post:bloom-up": {
+           "even": 0.2,
+           "odd": 0.21
+          },
+          "post:agx": {
+           "even": 0.12,
+           "odd": 0.13
+          },
+          "post:bloom-prefilter": {
+           "even": 0.17,
+           "odd": 0.05
+          },
+          "smaa": {
+           "even": 0.04,
+           "odd": 0.04
+          },
+          "post:final": {
+           "even": -0.04,
+           "odd": -0.05
+          }
+         }
+        }
+       }
+      },
+      "summary": {
+       "kills": 15,
+       "score": 8119,
+       "alive": 35,
+       "listed": 39,
+       "particles": 164,
+       "debris": 12,
+       "tracers": 0,
+       "gibs": 12,
+       "pickups": 11,
+       "hash": "15e08bb6"
+      },
+      "frameMs": {
+       "med": 2.5,
+       "p95": 3.9,
+       "p99": 4.8,
+       "mean": 2.629,
+       "max": 11.8,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 1.8,
+       "p95": 2.3,
+       "p99": 2.8,
+       "mean": 1.835,
+       "max": 3.6,
+       "n": 900
+      },
+      "frameParity": {
+       "evenMs": 2.646,
+       "oddMs": 2.615,
+       "evenN": 449,
+       "oddN": 450
+      },
+      "cpuParity": {
+       "evenMs": 1.831,
+       "oddMs": 1.84,
+       "evenN": 450,
+       "oddN": 450
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 2549.4,
+       "jsMs": {
+        "med": 2.127,
+        "p95": 2.944,
+        "p99": 3.876,
+        "mean": 2.2,
+        "max": 18.209,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 2.139,
+        "p95": 2.933,
+        "p99": 3.763,
+        "mean": 2.177,
+        "max": 4.081,
+        "n": 898
+       },
+       "waitMsPerFrame": 0,
+       "rendererMainCpuPerFrame": 2.805,
+       "gpuMainCpuPerFrame": 1.134,
+       "vizCpuPerFrame": 0.143,
+       "gc": {
+        "minor": 10,
+        "major": 0,
+        "ms": 6.871,
+        "maxMs": 0.968
+       },
+       "outside": {
+        "tasksCpuMs": 0.6012,
+        "tasksWallMs": 0.627,
+        "tasks": 11.698,
+        "byName": {
+         "FunctionCall": {
+          "n": 15.939,
+          "ms": 0.0374,
+          "cpuMs": 0.0546
+         },
+         "UpdateLayoutTree": {
+          "n": 0.984,
+          "ms": 0.1339,
+          "cpuMs": 0.1336,
+          "elements": 7.465
+         },
+         "Layout": {
+          "n": 0.832,
+          "ms": 0.0497,
+          "cpuMs": 0.0493
+         },
+         "PrePaint": {
+          "n": 1.833,
+          "ms": 0.043,
+          "cpuMs": 0.0423
+         },
+         "Paint": {
+          "n": 0.829,
+          "ms": 0.0381,
+          "cpuMs": 0.0335
+         },
+         "Layerize": {
+          "n": 0.981,
+          "ms": 0.0522,
+          "cpuMs": 0.0517
+         },
+         "HitTest": {
+          "n": 0.839,
+          "ms": 0.0188,
+          "cpuMs": 0.0184
+         },
+         "TimerFire": {
+          "n": 0.012,
+          "ms": 0.0001,
+          "cpuMs": 0.0001
+         },
+         "EventDispatch": {
+          "n": 7.478,
+          "ms": 0.0526,
+          "cpuMs": 0.0551
+         }
+        },
+        "topSelf": {
+         "ThreadControllerImpl::RunTask": 0.2237,
+         "UpdateLayoutTree": 0.1339,
+         "Layerize": 0.0522,
+         "Layout": 0.0497,
+         "PrePaint": 0.043,
+         "Paint": 0.0381,
+         "FunctionCall": 0.0374,
+         "EventDispatch": 0.0196,
+         "HitTest": 0.0188,
+         "BlinkScheduler_PerformMicrotaskCheckpoint": 0.0035,
+         "SimpleWatcher::OnHandleReady": 0.0025,
+         "CommandBufferProxyImpl::OrderingBarrier": 0.0013
+        }
+       }
+      },
+      "heapEndMB": 40.48
+     },
+     "errors": [],
+     "cellMs": 25612,
+     "repeat": 0
+    }
+   ],
+   "median": null
+  },
+  {
+   "map": "training",
+   "preset": "high",
+   "runs": [
+    {
+     "map": "training",
+     "preset": "high",
+     "chrome": "153.0.8010.12",
+     "load": {
+      "firstPlayableMs": 769.1,
+      "readyMs": 5508.5,
+      "liveMs": 410.3,
+      "enteredMs": 696.8,
+      "phases": {
+       "flags": {
+        "sky": {
+         "on": 687.6,
+         "off": 3958,
+         "frames": 1987
+        },
+        "skyLanding": {
+         "on": 1083.1,
+         "off": 3958,
+         "frames": 1970
+        },
+        "bakeLayout": {
+         "on": 687.6,
+         "off": 3958,
+         "frames": 1987
+        },
+        "bake": {
+         "on": 687.6,
+         "off": 4008.6,
+         "frames": 2023
+        },
+        "bakeFading": {
+         "on": 4008.6,
+         "off": 5508.6,
+         "frames": 1041
+        },
+        "textures": {
+         "on": 687.6,
+         "off": 4180.2,
+         "frames": 2150
+        },
+        "fx": {
+         "on": 687.6,
+         "off": 4255.8,
+         "frames": 2205
+        },
+        "weapons": {
+         "on": 687.6,
+         "off": 4576.9,
+         "frames": 2425
+        },
+        "operators": {
+         "on": 687.6,
+         "off": 4701.3,
+         "frames": 2507
+        },
+        "props": {
+         "on": 687.6,
+         "off": 769.1,
+         "frames": 1
+        },
+        "streaming": {
+         "on": 687.6,
+         "off": 4701.3,
+         "frames": 2507
+        },
+        "compiles": {
+         "on": 872.6,
+         "off": 3758.4,
+         "frames": 1909
+        },
+        "warmups": {
+         "on": 687.6,
+         "off": 769.1,
+         "frames": 1
+        },
+        "programsCold": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "effects": {
+         "on": 687.6,
+         "off": 4255.8,
+         "frames": 2205
+        },
+        "weaponsReady": {
+         "on": 687.6,
+         "off": 4576.9,
+         "frames": 2425
+        }
+       },
+       "pace": [
+        [
+         687.6,
+         1
+        ]
+       ],
+       "matchMs": 744,
+       "quietEndMs": 3744.4,
+       "renders": 3065,
+       "deferredWarmupsAtReady": 6,
+       "window": {
+        "frames": 3062,
+        "skipped": 6,
+        "maxMs": 125.6,
+        "over33": 5,
+        "over50": 4,
+        "renderMs": 3542,
+        "renderMaxMs": 39.1
+       }
+      }
+     },
+     "facts": {
+      "preset": "high",
+      "look": "realistic",
+      "fpsTarget": 0,
+      "dynamicRes": true,
+      "renderScale": 1,
+      "pixelRatio": 1,
+      "devicePixelRatio": 1,
+      "drawingBuffer": [
+       1920,
+       1080
+      ],
+      "sceneTarget": [
+       1920,
+       1080
+      ],
+      "msaa": 2,
+      "shadowEvery": 1,
+      "deferredWarmups": 6,
+      "level": "training",
+      "mode": "training",
+      "state": "play",
+      "gpu": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090 Laptop GPU/PCIe/SSE2, OpenGL ES 3.2)",
+      "timer": {
+       "supported": true,
+       "reason": null
+      },
+      "crossOriginIsolated": false,
+      "dynamicScale": 1,
+      "idle": {
+       "frameMedMs": 1.3,
+       "fps": 769.2,
+       "cpuMedMs": 1.2
+      }
+     },
+     "timer": {
+      "supported": true,
+      "reason": "0/120 results, 1717 zero, 0 disjoint; query undefined ms over the 1.3 ms frame interval; the extra pass moved the frame interval by 0 ms only; the query grew nullx what the extra pass added to the frame interval",
+      "read": 9210,
+      "zero": 1717,
+      "disjoint": 0,
+      "base": {
+       "queryMedMs": null,
+       "frameMedMs": 1.3,
+       "results": 0
+      },
+      "calibrated": {
+       "queryMedMs": null,
+       "frameMedMs": 1.3,
+       "results": 0
+      },
+      "slope": null,
+      "working": false
+     },
+     "route": {
+      "points": 337,
+      "length": 79,
+      "warnings": []
+     },
+     "path": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 1.0374,
+        "render.total": 0.8141,
+        "render.main": 0.6714,
+        "render.shadows": 0.272,
+        "enemies.update": 0.1482,
+        "render.pre": 0.0876,
+        "render.post": 0.0489,
+        "player.update": 0.0249,
+        "effects.update": 0.0027,
+        "hud.update": 0.0002,
+        "other(step)": 0.0473
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:gtao": 1,
+        "post:ao-blur": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 1.1,
+        "noiseMs": 0,
+        "ms": {
+         "shadows": 0.2,
+         "post:gtao": 0,
+         "post:ao-blur": 0,
+         "post:bloom-prefilter": 0,
+         "post:bloom-down": 0,
+         "post:bloom-up": 0,
+         "smaa": 0,
+         "post:final": 0,
+         "post:agx": -0.1
+        },
+        "baseMeanMs": 1.23,
+        "noiseMeanMs": 0.01,
+        "meanMs": {
+         "shadows": 0.25,
+         "smaa": 0.03,
+         "post:final": 0.01,
+         "post:ao-blur": 0,
+         "post:bloom-up": 0,
+         "post:agx": 0,
+         "post:bloom-prefilter": -0.01,
+         "post:bloom-down": -0.01,
+         "post:gtao": -0.02
+        },
+        "parity": {
+         "baseMs": {
+          "even": 1.27,
+          "odd": 1.2
+         },
+         "noiseMs": {
+          "even": 0,
+          "odd": 0.01
+         },
+         "ms": {
+          "shadows": {
+           "even": 0.25,
+           "odd": 0.24
+          },
+          "smaa": {
+           "even": 0.03,
+           "odd": 0.03
+          },
+          "post:final": {
+           "even": 0.01,
+           "odd": 0.01
+          },
+          "post:ao-blur": {
+           "even": 0,
+           "odd": 0.01
+          },
+          "post:bloom-up": {
+           "even": 0.02,
+           "odd": -0.01
+          },
+          "post:agx": {
+           "even": -0.01,
+           "odd": 0
+          },
+          "post:bloom-prefilter": {
+           "even": -0.02,
+           "odd": 0
+          },
+          "post:bloom-down": {
+           "even": -0.03,
+           "odd": 0.02
+          },
+          "post:gtao": {
+           "even": 0.03,
+           "odd": -0.06
+          }
+         }
+        }
+       }
+      },
+      "summary": {
+       "kills": 0,
+       "score": 0,
+       "alive": 22,
+       "listed": 22,
+       "particles": 0,
+       "debris": 0,
+       "tracers": 0,
+       "gibs": 0,
+       "pickups": 0,
+       "hash": "eabfb9a8"
+      },
+      "frameMs": {
+       "med": 1.1,
+       "p95": 1.6,
+       "p99": 1.9,
+       "mean": 1.147,
+       "max": 9.8,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 1,
+       "p95": 1.3,
+       "p99": 1.4,
+       "mean": 1.037,
+       "max": 1.8,
+       "n": 900
+      },
+      "frameParity": {
+       "evenMs": 1.158,
+       "oddMs": 1.136,
+       "evenN": 449,
+       "oddN": 450
+      },
+      "cpuParity": {
+       "evenMs": 1.039,
+       "oddMs": 1.036,
+       "evenN": 450,
+       "oddN": 450
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 1093.4,
+       "jsMs": {
+        "med": 1.08,
+        "p95": 1.354,
+        "p99": 1.52,
+        "mean": 1.102,
+        "max": 7.976,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 1.089,
+        "p95": 1.365,
+        "p99": 1.531,
+        "mean": 1.104,
+        "max": 2.266,
+        "n": 898
+       },
+       "waitMsPerFrame": 0,
+       "rendererMainCpuPerFrame": 1.18,
+       "gpuMainCpuPerFrame": 0.504,
+       "vizCpuPerFrame": 0.101,
+       "gc": {
+        "minor": 4,
+        "major": 0,
+        "ms": 2.333,
+        "maxMs": 1.023
+       },
+       "outside": {
+        "tasksCpuMs": 0.0763,
+        "tasksWallMs": 0.0901,
+        "tasks": 8.983,
+        "byName": {
+         "FunctionCall": {
+          "n": 0.126,
+          "ms": 0.0013,
+          "cpuMs": 0.0013
+         },
+         "UpdateLayoutTree": {
+          "n": 0.156,
+          "ms": 0.0037,
+          "cpuMs": 0.0036,
+          "elements": 0.255
+         },
+         "Layout": {
+          "n": 0.08,
+          "ms": 0.0052,
+          "cpuMs": 0.0052
+         },
+         "PrePaint": {
+          "n": 1.081,
+          "ms": 0.0146,
+          "cpuMs": 0.014
+         },
+         "Paint": {
+          "n": 0.08,
+          "ms": 0.0028,
+          "cpuMs": 0.0026
+         },
+         "Layerize": {
+          "n": 0.777,
+          "ms": 0.0053,
+          "cpuMs": 0.0046
+         },
+         "HitTest": {
+          "n": 0.085,
+          "ms": 0.0017,
+          "cpuMs": 0.0016
+         },
+         "TimerFire": {
+          "n": 0.004,
+          "ms": 0,
+          "cpuMs": 0
+         },
+         "EventDispatch": {
+          "n": 0.018,
+          "ms": 0.0002,
+          "cpuMs": 0.0002
+         }
+        },
+        "topSelf": {
+         "ThreadControllerImpl::RunTask": 0.0479,
+         "PrePaint": 0.0146,
+         "Layerize": 0.0053,
+         "Layout": 0.0052,
+         "UpdateLayoutTree": 0.0037,
+         "Paint": 0.0028,
+         "BlinkScheduler_PerformMicrotaskCheckpoint": 0.0026,
+         "HitTest": 0.0017,
+         "FunctionCall": 0.0013,
+         "V8.GC_SCAVENGER_SCAVENGE_PARALLEL": 0.0012,
+         "CommandBufferProxyImpl::OrderingBarrier": 0.0009,
+         "SimpleWatcher::OnHandleReady": 0.0007
+        }
+       }
+      },
+      "heapEndMB": 86.18
+     },
+     "fight": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 2.1676,
+        "render.total": 1.6097,
+        "render.main": 1.3773,
+        "render.shadows": 0.5103,
+        "enemies.update": 0.2482,
+        "render.pre": 0.1521,
+        "player.update": 0.0943,
+        "render.post": 0.0711,
+        "effects.update": 0.0502,
+        "hud.update": 0.0003,
+        "other(step)": 0.1649
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:gtao": 1,
+        "post:ao-blur": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1,
+        "soft": 0.98
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 2.3,
+        "noiseMs": 0,
+        "ms": {
+         "shadows": 0.2,
+         "soft": 0.2,
+         "post:final": 0,
+         "post:gtao": -0.1,
+         "post:ao-blur": -0.1,
+         "post:bloom-prefilter": -0.1,
+         "post:bloom-up": -0.1,
+         "post:agx": -0.2,
+         "post:bloom-down": -0.3,
+         "smaa": -0.3
+        },
+        "baseMeanMs": 2.45,
+        "noiseMeanMs": 0.14,
+        "meanMs": {
+         "shadows": 0.22,
+         "soft": 0.15,
+         "post:ao-blur": -0.08,
+         "post:final": -0.11,
+         "post:bloom-prefilter": -0.12,
+         "post:bloom-up": -0.12,
+         "post:gtao": -0.14,
+         "post:agx": -0.17,
+         "smaa": -0.2,
+         "post:bloom-down": -0.31
+        },
+        "parity": {
+         "baseMs": {
+          "even": 2.47,
+          "odd": 2.42
+         },
+         "noiseMs": {
+          "even": 0.15,
+          "odd": 0.12
+         },
+         "ms": {
+          "shadows": {
+           "even": 0.23,
+           "odd": 0.21
+          },
+          "soft": {
+           "even": 0.15,
+           "odd": 0.14
+          },
+          "post:ao-blur": {
+           "even": -0.11,
+           "odd": -0.07
+          },
+          "post:final": {
+           "even": -0.07,
+           "odd": -0.16
+          },
+          "post:bloom-prefilter": {
+           "even": -0.11,
+           "odd": -0.14
+          },
+          "post:bloom-up": {
+           "even": -0.14,
+           "odd": -0.1
+          },
+          "post:gtao": {
+           "even": -0.16,
+           "odd": -0.12
+          },
+          "post:agx": {
+           "even": -0.13,
+           "odd": -0.22
+          },
+          "smaa": {
+           "even": -0.2,
+           "odd": -0.21
+          },
+          "post:bloom-down": {
+           "even": -0.32,
+           "odd": -0.32
+          }
+         }
+        }
+       }
+      },
+      "summary": {
+       "kills": 15,
+       "score": 8119,
+       "alive": 35,
+       "listed": 39,
+       "particles": 164,
+       "debris": 12,
+       "tracers": 0,
+       "gibs": 12,
+       "pickups": 11,
+       "hash": "15e08bb6"
+      },
+      "frameMs": {
+       "med": 2.7,
+       "p95": 3.9,
+       "p99": 4.8,
+       "mean": 2.746,
+       "max": 12.3,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 2.2,
+       "p95": 2.8,
+       "p99": 3.1,
+       "mean": 2.168,
+       "max": 4,
+       "n": 900
+      },
+      "frameParity": {
+       "evenMs": 2.764,
+       "oddMs": 2.73,
+       "evenN": 449,
+       "oddN": 450
+      },
+      "cpuParity": {
+       "evenMs": 2.166,
+       "oddMs": 2.169,
+       "evenN": 450,
+       "oddN": 450
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 2583.3,
+       "jsMs": {
+        "med": 2.182,
+        "p95": 3.045,
+        "p99": 4.075,
+        "mean": 2.259,
+        "max": 14.885,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 2.193,
+        "p95": 3.063,
+        "p99": 3.955,
+        "mean": 2.244,
+        "max": 8.988,
+        "n": 898
+       },
+       "waitMsPerFrame": 0,
+       "rendererMainCpuPerFrame": 2.846,
+       "gpuMainCpuPerFrame": 1.126,
+       "vizCpuPerFrame": 0.139,
+       "gc": {
+        "minor": 10,
+        "major": 1,
+        "ms": 11.904,
+        "maxMs": 4.807
+       },
+       "outside": {
+        "tasksCpuMs": 0.5827,
+        "tasksWallMs": 0.6012,
+        "tasks": 11.275,
+        "byName": {
+         "FunctionCall": {
+          "n": 15.945,
+          "ms": 0.0357,
+          "cpuMs": 0.0277
+         },
+         "UpdateLayoutTree": {
+          "n": 0.982,
+          "ms": 0.1272,
+          "cpuMs": 0.1269,
+          "elements": 7.473
+         },
+         "Layout": {
+          "n": 0.833,
+          "ms": 0.0461,
+          "cpuMs": 0.0603
+         },
+         "PrePaint": {
+          "n": 1.834,
+          "ms": 0.0402,
+          "cpuMs": 0.055
+         },
+         "Paint": {
+          "n": 0.831,
+          "ms": 0.0355,
+          "cpuMs": 0.0309
+         },
+         "Layerize": {
+          "n": 0.973,
+          "ms": 0.049,
+          "cpuMs": 0.0485
+         },
+         "HitTest": {
+          "n": 0.837,
+          "ms": 0.0177,
+          "cpuMs": 0.0173
+         },
+         "EventDispatch": {
+          "n": 7.478,
+          "ms": 0.0497,
+          "cpuMs": 0.0281
+         },
+         "TimerFire": {
+          "n": 0.011,
+          "ms": 0.0001,
+          "cpuMs": 0.0001
+         }
+        },
+        "topSelf": {
+         "ThreadControllerImpl::RunTask": 0.2207,
+         "UpdateLayoutTree": 0.1272,
+         "Layerize": 0.049,
+         "Layout": 0.0461,
+         "PrePaint": 0.0402,
+         "FunctionCall": 0.0357,
+         "Paint": 0.0355,
+         "EventDispatch": 0.0183,
+         "HitTest": 0.0177,
+         "BlinkScheduler_PerformMicrotaskCheckpoint": 0.0032,
+         "SimpleWatcher::OnHandleReady": 0.0023,
+         "V8.GC_SCAVENGER_SCAVENGE_PARALLEL": 0.0013
+        }
+       }
+      },
+      "heapEndMB": 54.67
+     },
+     "errors": [],
+     "cellMs": 28451,
+     "repeat": 0
+    }
+   ],
+   "median": null
+  },
+  {
+   "map": "training",
+   "preset": "ultra",
+   "runs": [
+    {
+     "map": "training",
+     "preset": "ultra",
+     "chrome": "153.0.8010.12",
+     "load": {
+      "firstPlayableMs": 808.6,
+      "readyMs": 6287.9,
+      "liveMs": 448,
+      "enteredMs": 748.4,
+      "phases": {
+       "flags": {
+        "sky": {
+         "on": 738.5,
+         "off": 4005.6,
+         "frames": 1816
+        },
+        "skyLanding": {
+         "on": 1150.7,
+         "off": 4005.6,
+         "frames": 1802
+        },
+        "bakeLayout": {
+         "on": 738.5,
+         "off": 4005.6,
+         "frames": 1816
+        },
+        "bake": {
+         "on": 738.5,
+         "off": 4123.6,
+         "frames": 1893
+        },
+        "bakeFading": {
+         "on": 4123.6,
+         "off": 5624.7,
+         "frames": 1021
+        },
+        "textures": {
+         "on": 738.5,
+         "off": 4809.1,
+         "frames": 2358
+        },
+        "fx": {
+         "on": 738.5,
+         "off": 5000,
+         "frames": 2490
+        },
+        "weapons": {
+         "on": 738.5,
+         "off": 5886.5,
+         "frames": 3094
+        },
+        "operators": {
+         "on": 738.5,
+         "off": 6287.9,
+         "frames": 3377
+        },
+        "props": {
+         "on": 738.5,
+         "off": 808.6,
+         "frames": 1
+        },
+        "streaming": {
+         "on": 738.5,
+         "off": 6287.9,
+         "frames": 3377
+        },
+        "compiles": {
+         "on": 943.8,
+         "off": 3806.5,
+         "frames": 1748
+        },
+        "warmups": {
+         "on": 738.5,
+         "off": 3915,
+         "frames": 2
+        },
+        "programsCold": {
+         "on": null,
+         "off": null,
+         "frames": 0
+        },
+        "effects": {
+         "on": 738.5,
+         "off": 5000,
+         "frames": 2490
+        },
+        "weaponsReady": {
+         "on": 738.5,
+         "off": 5886.5,
+         "frames": 3094
+        }
+       },
+       "pace": [
+        [
+         738.5,
+         1
+        ]
+       ],
+       "matchMs": 792.2,
+       "quietEndMs": 3792.8,
+       "renders": 3378,
+       "deferredWarmupsAtReady": 7,
+       "window": {
+        "frames": 3376,
+        "skipped": 4,
+        "maxMs": 109.2,
+        "over33": 6,
+        "over50": 5,
+        "renderMs": 4247.9,
+        "renderMaxMs": 41.7
+       }
+      }
+     },
+     "facts": {
+      "preset": "ultra",
+      "look": "realistic",
+      "fpsTarget": 0,
+      "dynamicRes": false,
+      "renderScale": 1,
+      "pixelRatio": 1,
+      "devicePixelRatio": 1,
+      "drawingBuffer": [
+       1920,
+       1080
+      ],
+      "sceneTarget": [
+       1920,
+       1080
+      ],
+      "msaa": 4,
+      "shadowEvery": 1,
+      "deferredWarmups": 7,
+      "level": "training",
+      "mode": "training",
+      "state": "play",
+      "gpu": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 4090 Laptop GPU/PCIe/SSE2, OpenGL ES 3.2)",
+      "timer": {
+       "supported": true,
+       "reason": null
+      },
+      "crossOriginIsolated": false,
+      "dynamicScale": 1,
+      "idle": {
+       "frameMedMs": 1.3,
+       "fps": 769.2,
+       "cpuMedMs": 1.1
+      }
+     },
+     "timer": {
+      "supported": true,
+      "reason": "0/120 results, 1686 zero, 0 disjoint; query undefined ms over the 1.3 ms frame interval; the extra pass moved the frame interval by 0 ms only; the query grew nullx what the extra pass added to the frame interval",
+      "read": 9210,
+      "zero": 1686,
+      "disjoint": 0,
+      "base": {
+       "queryMedMs": null,
+       "frameMedMs": 1.3,
+       "results": 0
+      },
+      "calibrated": {
+       "queryMedMs": null,
+       "frameMedMs": 1.3,
+       "results": 0
+      },
+      "slope": null,
+      "working": false
+     },
+     "route": {
+      "points": 337,
+      "length": 79,
+      "warnings": []
+     },
+     "path": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 1.0224,
+        "render.total": 0.7963,
+        "render.main": 0.6569,
+        "render.shadows": 0.243,
+        "enemies.update": 0.1453,
+        "render.pre": 0.0854,
+        "render.post": 0.0476,
+        "player.update": 0.0276,
+        "effects.update": 0.0042,
+        "hud.update": 0.0004,
+        "other(step)": 0.0486
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:gtao": 1,
+        "post:ao-blur": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1,
+        "post:shaft-mask": 0.1,
+        "post:shaft-blur": 0.2
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 1.15,
+        "noiseMs": 0.1,
+        "ms": {
+         "shadows": 0.25,
+         "post:gtao": 0.05,
+         "post:ao-blur": 0.05,
+         "post:bloom-prefilter": 0.05,
+         "post:bloom-down": 0.05,
+         "post:bloom-up": 0.05,
+         "post:agx": 0.05,
+         "smaa": 0.05,
+         "post:final": 0.05,
+         "post:shaft-mask": 0.05,
+         "post:shaft-blur": -0.05
+        },
+        "baseMeanMs": 1.23,
+        "noiseMeanMs": 0.04,
+        "meanMs": {
+         "shadows": 0.22,
+         "post:bloom-down": 0.06,
+         "post:agx": 0.05,
+         "smaa": 0.04,
+         "post:final": 0.04,
+         "post:shaft-mask": 0.04,
+         "post:bloom-up": 0.03,
+         "post:gtao": 0.01,
+         "post:ao-blur": 0.01,
+         "post:bloom-prefilter": 0,
+         "post:shaft-blur": -0.05
+        },
+        "parity": {
+         "baseMs": {
+          "even": 1.27,
+          "odd": 1.19
+         },
+         "noiseMs": {
+          "even": 0.03,
+          "odd": 0.04
+         },
+         "ms": {
+          "shadows": {
+           "even": 0.22,
+           "odd": 0.23
+          },
+          "post:bloom-down": {
+           "even": 0.03,
+           "odd": 0.09
+          },
+          "post:agx": {
+           "even": 0.05,
+           "odd": 0.05
+          },
+          "smaa": {
+           "even": 0.05,
+           "odd": 0.03
+          },
+          "post:final": {
+           "even": 0.04,
+           "odd": 0.04
+          },
+          "post:shaft-mask": {
+           "even": 0.03,
+           "odd": 0.04
+          },
+          "post:bloom-up": {
+           "even": 0.04,
+           "odd": 0.03
+          },
+          "post:gtao": {
+           "even": 0.01,
+           "odd": 0.01
+          },
+          "post:ao-blur": {
+           "even": 0.01,
+           "odd": 0.01
+          },
+          "post:bloom-prefilter": {
+           "even": -0.01,
+           "odd": 0.01
+          },
+          "post:shaft-blur": {
+           "even": -0.06,
+           "odd": -0.04
+          }
+         }
+        }
+       }
+      },
+      "summary": {
+       "kills": 0,
+       "score": 0,
+       "alive": 22,
+       "listed": 22,
+       "particles": 0,
+       "debris": 0,
+       "tracers": 0,
+       "gibs": 0,
+       "pickups": 0,
+       "hash": "eabfb9a8"
+      },
+      "frameMs": {
+       "med": 1.1,
+       "p95": 1.6,
+       "p99": 1.8,
+       "mean": 1.133,
+       "max": 11,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 1,
+       "p95": 1.2,
+       "p99": 1.4,
+       "mean": 1.022,
+       "max": 2.6,
+       "n": 900
+      },
+      "frameParity": {
+       "evenMs": 1.145,
+       "oddMs": 1.12,
+       "evenN": 449,
+       "oddN": 450
+      },
+      "cpuParity": {
+       "evenMs": 1.025,
+       "oddMs": 1.02,
+       "evenN": 450,
+       "oddN": 450
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 1065.7,
+       "jsMs": {
+        "med": 1.041,
+        "p95": 1.315,
+        "p99": 1.591,
+        "mean": 1.091,
+        "max": 12.216,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 1.047,
+        "p95": 1.315,
+        "p99": 1.559,
+        "mean": 1.073,
+        "max": 2.303,
+        "n": 898
+       },
+       "waitMsPerFrame": 0,
+       "rendererMainCpuPerFrame": 1.17,
+       "gpuMainCpuPerFrame": 0.592,
+       "vizCpuPerFrame": 0.135,
+       "gc": {
+        "minor": 5,
+        "major": 0,
+        "ms": 3.786,
+        "maxMs": 1.574
+       },
+       "outside": {
+        "tasksCpuMs": 0.0784,
+        "tasksWallMs": 0.0921,
+        "tasks": 9.175,
+        "byName": {
+         "FunctionCall": {
+          "n": 0.126,
+          "ms": 0.0015,
+          "cpuMs": 0.0014
+         },
+         "UpdateLayoutTree": {
+          "n": 0.141,
+          "ms": 0.0037,
+          "cpuMs": 0.0036,
+          "elements": 0.241
+         },
+         "Layout": {
+          "n": 0.08,
+          "ms": 0.0055,
+          "cpuMs": 0.0055
+         },
+         "PrePaint": {
+          "n": 1.081,
+          "ms": 0.0149,
+          "cpuMs": 0.0143
+         },
+         "Paint": {
+          "n": 0.08,
+          "ms": 0.0028,
+          "cpuMs": 0.0027
+         },
+         "Layerize": {
+          "n": 0.788,
+          "ms": 0.0055,
+          "cpuMs": 0.0048
+         },
+         "HitTest": {
+          "n": 0.082,
+          "ms": 0.0016,
+          "cpuMs": 0.0016
+         },
+         "TimerFire": {
+          "n": 0.004,
+          "ms": 0,
+          "cpuMs": 0
+         },
+         "EventDispatch": {
+          "n": 0.018,
+          "ms": 0.0003,
+          "cpuMs": 0.0002
+         }
+        },
+        "topSelf": {
+         "ThreadControllerImpl::RunTask": 0.0493,
+         "PrePaint": 0.0149,
+         "Layerize": 0.0055,
+         "Layout": 0.0055,
+         "UpdateLayoutTree": 0.0037,
+         "Paint": 0.0028,
+         "BlinkScheduler_PerformMicrotaskCheckpoint": 0.0027,
+         "HitTest": 0.0016,
+         "FunctionCall": 0.0015,
+         "V8.GC_SCAVENGER_SCAVENGE_PARALLEL": 0.0013,
+         "CommandBufferProxyImpl::OrderingBarrier": 0.001,
+         "SimpleWatcher::OnHandleReady": 0.0007
+        }
+       }
+      },
+      "heapEndMB": 98.91
+     },
+     "fight": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 1.9498,
+        "render.total": 1.4236,
+        "render.main": 1.1973,
+        "render.shadows": 0.385,
+        "enemies.update": 0.2281,
+        "render.pre": 0.1512,
+        "player.update": 0.097,
+        "render.post": 0.0663,
+        "effects.update": 0.0507,
+        "hud.update": 0.001,
+        "other(step)": 0.1494
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:gtao": 1,
+        "post:ao-blur": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1,
+        "soft": 0.98
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 2.15,
+        "noiseMs": 0.1,
+        "ms": {
+         "shadows": 0.35,
+         "post:gtao": 0.05,
+         "soft": 0.05,
+         "post:ao-blur": -0.05,
+         "post:bloom-down": -0.05,
+         "post:bloom-up": -0.05,
+         "post:agx": -0.05,
+         "post:bloom-prefilter": -0.15,
+         "smaa": -0.15,
+         "post:final": -0.25
+        },
+        "baseMeanMs": 2.33,
+        "noiseMeanMs": 0.09,
+        "meanMs": {
+         "shadows": 0.27,
+         "post:gtao": 0.09,
+         "post:bloom-up": 0.05,
+         "soft": 0.03,
+         "post:agx": 0.01,
+         "post:ao-blur": 0,
+         "smaa": -0.08,
+         "post:bloom-prefilter": -0.09,
+         "post:bloom-down": -0.1,
+         "post:final": -0.17
+        },
+        "parity": {
+         "baseMs": {
+          "even": 2.36,
+          "odd": 2.31
+         },
+         "noiseMs": {
+          "even": 0.05,
+          "odd": 0.12
+         },
+         "ms": {
+          "shadows": {
+           "even": 0.29,
+           "odd": 0.25
+          },
+          "post:gtao": {
+           "even": 0.09,
+           "odd": 0.09
+          },
+          "post:bloom-up": {
+           "even": 0.04,
+           "odd": 0.06
+          },
+          "soft": {
+           "even": 0.04,
+           "odd": 0.02
+          },
+          "post:agx": {
+           "even": 0.01,
+           "odd": 0
+          },
+          "post:ao-blur": {
+           "even": -0.01,
+           "odd": 0.01
+          },
+          "smaa": {
+           "even": -0.08,
+           "odd": -0.08
+          },
+          "post:bloom-prefilter": {
+           "even": -0.08,
+           "odd": -0.09
+          },
+          "post:bloom-down": {
+           "even": -0.07,
+           "odd": -0.12
+          },
+          "post:final": {
+           "even": -0.16,
+           "odd": -0.19
+          }
+         }
+        }
+       }
+      },
+      "summary": {
+       "kills": 15,
+       "score": 8119,
+       "alive": 35,
+       "listed": 39,
+       "particles": 164,
+       "debris": 12,
+       "tracers": 0,
+       "gibs": 12,
+       "pickups": 11,
+       "hash": "15e08bb6"
+      },
+      "frameMs": {
+       "med": 2.4,
+       "p95": 3.6,
+       "p99": 4.8,
+       "mean": 2.533,
+       "max": 11.6,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 1.9,
+       "p95": 2.4,
+       "p99": 2.8,
+       "mean": 1.95,
+       "max": 3.4,
+       "n": 900
+      },
+      "frameParity": {
+       "evenMs": 2.572,
+       "oddMs": 2.495,
+       "evenN": 449,
+       "oddN": 450
+      },
+      "cpuParity": {
+       "evenMs": 1.949,
+       "oddMs": 1.951,
+       "evenN": 450,
+       "oddN": 450
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 2562.1,
+       "jsMs": {
+        "med": 2.185,
+        "p95": 3.156,
+        "p99": 4.137,
+        "mean": 2.29,
+        "max": 16.611,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 2.195,
+        "p95": 3.129,
+        "p99": 3.859,
+        "mean": 2.24,
+        "max": 4.608,
+        "n": 898
+       },
+       "waitMsPerFrame": 0,
+       "rendererMainCpuPerFrame": 2.815,
+       "gpuMainCpuPerFrame": 1.2,
+       "vizCpuPerFrame": 0.151,
+       "gc": {
+        "minor": 12,
+        "major": 0,
+        "ms": 7.735,
+        "maxMs": 0.975
+       },
+       "outside": {
+        "tasksCpuMs": 0.5217,
+        "tasksWallMs": 0.5726,
+        "tasks": 11.556,
+        "byName": {
+         "FunctionCall": {
+          "n": 15.935,
+          "ms": 0.0356,
+          "cpuMs": 0.0269
+         },
+         "UpdateLayoutTree": {
+          "n": 0.988,
+          "ms": 0.1167,
+          "cpuMs": 0.1165,
+          "elements": 7.46
+         },
+         "Layout": {
+          "n": 0.829,
+          "ms": 0.048,
+          "cpuMs": 0.0476
+         },
+         "PrePaint": {
+          "n": 1.83,
+          "ms": 0.0415,
+          "cpuMs": 0.0406
+         },
+         "Paint": {
+          "n": 0.825,
+          "ms": 0.0369,
+          "cpuMs": 0.0323
+         },
+         "Layerize": {
+          "n": 0.977,
+          "ms": 0.05,
+          "cpuMs": 0.0494
+         },
+         "TimerFire": {
+          "n": 0.012,
+          "ms": 0.0001,
+          "cpuMs": 0.0001
+         },
+         "HitTest": {
+          "n": 0.835,
+          "ms": 0.0179,
+          "cpuMs": 0.0175
+         },
+         "EventDispatch": {
+          "n": 7.478,
+          "ms": 0.0495,
+          "cpuMs": 0.0268
+         }
+        },
+        "topSelf": {
+         "ThreadControllerImpl::RunTask": 0.1943,
+         "UpdateLayoutTree": 0.1167,
+         "Layerize": 0.05,
+         "Layout": 0.048,
+         "PrePaint": 0.0415,
+         "Paint": 0.0369,
+         "FunctionCall": 0.0356,
+         "EventDispatch": 0.0184,
+         "HitTest": 0.0179,
+         "BlinkScheduler_PerformMicrotaskCheckpoint": 0.0035,
+         "V8.GC_SCAVENGER_SCAVENGE_PARALLEL": 0.0025,
+         "SimpleWatcher::OnHandleReady": 0.0023
+        }
+       }
+      },
+      "heapEndMB": 57.57
+     },
+     "errors": [],
+     "cellMs": 29413,
+     "repeat": 0
+    }
+   ],
+   "median": null
+  }
+ ],
+ "profile": {
+  "downtown/low": {
+   "path": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 0.2172,
+      "render.total": 0.1778,
+      "render.main": 0.1669,
+      "player.update": 0.0216,
+      "render.shadows": 0.014,
+      "render.post": 0.0064,
+      "render.pre": 0.0033,
+      "effects.update": 0.0009,
+      "enemies.update": 0.0008,
+      "hud.update": 0.0001,
+      "other(step)": 0.016
+     },
+     "passesPerFrame": {
+      "post:composite": 1,
+      "shadows": 0.5
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 0.25,
+      "noiseMs": 0.1,
+      "ms": {
+       "post:composite": 0.05,
+       "shadows": 0.05
+      },
+      "baseMeanMs": 0.26,
+      "noiseMeanMs": 0,
+      "meanMs": {
+       "shadows": 0.02,
+       "post:composite": 0
+      },
+      "parity": {
+       "baseMs": {
+        "even": 0.24,
+        "odd": 0.27
+       },
+       "noiseMs": {
+        "even": 0.01,
+        "odd": 0.01
+       },
+       "ms": {
+        "shadows": {
+         "even": -0.02,
+         "odd": 0.05
+        },
+        "post:composite": {
+         "even": 0,
+         "odd": 0.01
+        }
+       }
+      }
+     }
+    }
+   ],
+   "fight": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 0.7502,
+      "render.total": 0.514,
+      "render.main": 0.4923,
+      "enemies.update": 0.0898,
+      "player.update": 0.0847,
+      "render.shadows": 0.0696,
+      "effects.update": 0.0326,
+      "render.post": 0.014,
+      "render.pre": 0.0066,
+      "hud.update": 0.0003,
+      "other(step)": 0.0288
+     },
+     "passesPerFrame": {
+      "post:composite": 1,
+      "shadows": 0.5
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 1.05,
+      "noiseMs": 0.1,
+      "ms": {
+       "post:composite": -0.15,
+       "shadows": -0.15
+      },
+      "baseMeanMs": 1.21,
+      "noiseMeanMs": 0.03,
+      "meanMs": {
+       "post:composite": -0.01,
+       "shadows": -0.04
+      },
+      "parity": {
+       "baseMs": {
+        "even": 1.12,
+        "odd": 1.3
+       },
+       "noiseMs": {
+        "even": 0.04,
+        "odd": 0.11
+       },
+       "ms": {
+        "post:composite": {
+         "even": -0.07,
+         "odd": 0.04
+        },
+        "shadows": {
+         "even": -0.14,
+         "odd": 0.05
+        }
+       }
+      }
+     }
+    }
+   ]
+  },
+  "downtown/medium": {
+   "path": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 0.5064,
+      "render.total": 0.4639,
+      "render.main": 0.4,
+      "render.post": 0.0463,
+      "render.shadows": 0.0394,
+      "player.update": 0.0182,
+      "render.pre": 0.0081,
+      "effects.update": 0.0021,
+      "enemies.update": 0.0011,
+      "hud.update": 0,
+      "other(step)": 0.0211
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 0.5,
+      "noiseMs": 0,
+      "ms": {
+       "shadows": 0.1,
+       "post:bloom-down": 0.1,
+       "smaa": 0.1,
+       "post:final": 0.1,
+       "post:bloom-prefilter": 0,
+       "post:bloom-up": 0,
+       "post:agx": 0
+      },
+      "baseMeanMs": 0.62,
+      "noiseMeanMs": 0.03,
+      "meanMs": {
+       "post:final": 0.04,
+       "smaa": 0.01,
+       "post:agx": 0,
+       "post:bloom-down": -0.01,
+       "post:bloom-prefilter": -0.02,
+       "shadows": -0.03,
+       "post:bloom-up": -0.03
+      },
+      "parity": {
+       "baseMs": {
+        "even": 0.64,
+        "odd": 0.6
+       },
+       "noiseMs": {
+        "even": 0.04,
+        "odd": 0.1
+       },
+       "ms": {
+        "post:final": {
+         "even": -0.04,
+         "odd": 0.11
+        },
+        "smaa": {
+         "even": 0.14,
+         "odd": -0.11
+        },
+        "post:agx": {
+         "even": -0.13,
+         "odd": 0.12
+        },
+        "post:bloom-down": {
+         "even": -0.07,
+         "odd": 0.04
+        },
+        "post:bloom-prefilter": {
+         "even": 0.07,
+         "odd": -0.11
+        },
+        "shadows": {
+         "even": 0.09,
+         "odd": -0.15
+        },
+        "post:bloom-up": {
+         "even": -0.02,
+         "odd": -0.04
+        }
+       }
+      }
+     }
+    }
+   ],
+   "fight": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 1.1304,
+      "render.total": 0.8351,
+      "render.main": 0.6733,
+      "render.shadows": 0.1376,
+      "enemies.update": 0.121,
+      "render.pre": 0.1081,
+      "player.update": 0.0899,
+      "effects.update": 0.0508,
+      "render.post": 0.0466,
+      "hud.update": 0.0004,
+      "other(step)": 0.0332
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 1.65,
+      "noiseMs": 0.7,
+      "ms": {
+       "shadows": 0.25,
+       "post:bloom-prefilter": 0.15,
+       "post:bloom-down": 0.15,
+       "post:bloom-up": 0.05,
+       "post:agx": -0.05,
+       "smaa": -0.25,
+       "post:final": -0.35
+      },
+      "baseMeanMs": 1.75,
+      "noiseMeanMs": 0.69,
+      "meanMs": {
+       "shadows": 0.26,
+       "post:bloom-prefilter": 0.24,
+       "post:bloom-down": 0.16,
+       "post:bloom-up": 0.05,
+       "post:agx": -0.05,
+       "smaa": -0.13,
+       "post:final": -0.23
+      },
+      "parity": {
+       "baseMs": {
+        "even": 1.75,
+        "odd": 1.75
+       },
+       "noiseMs": {
+        "even": 0.67,
+        "odd": 0.71
+       },
+       "ms": {
+        "shadows": {
+         "even": 0.25,
+         "odd": 0.27
+        },
+        "post:bloom-prefilter": {
+         "even": 0.22,
+         "odd": 0.25
+        },
+        "post:bloom-down": {
+         "even": 0.16,
+         "odd": 0.16
+        },
+        "post:bloom-up": {
+         "even": 0.04,
+         "odd": 0.07
+        },
+        "post:agx": {
+         "even": -0.03,
+         "odd": -0.07
+        },
+        "smaa": {
+         "even": -0.14,
+         "odd": -0.12
+        },
+        "post:final": {
+         "even": -0.22,
+         "odd": -0.24
+        }
+       }
+      }
+     }
+    }
+   ]
+  },
+  "downtown/high": {
+   "path": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 0.7166,
+      "render.total": 0.6764,
+      "render.main": 0.597,
+      "render.shadows": 0.1232,
+      "render.post": 0.0494,
+      "render.pre": 0.0253,
+      "player.update": 0.017,
+      "effects.update": 0.0019,
+      "enemies.update": 0.0013,
+      "hud.update": 0.0002,
+      "other(step)": 0.0198
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:gtao": 1,
+      "post:ao-blur": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 0.5,
+      "noiseMs": 0,
+      "ms": {
+       "shadows": 0,
+       "post:gtao": 0,
+       "post:ao-blur": 0,
+       "post:bloom-prefilter": 0,
+       "post:bloom-down": 0,
+       "post:bloom-up": 0,
+       "post:agx": 0,
+       "smaa": 0,
+       "post:final": 0
+      },
+      "baseMeanMs": 0.8,
+      "noiseMeanMs": 0.02,
+      "meanMs": {
+       "post:bloom-prefilter": 0.08,
+       "post:agx": 0.08,
+       "post:gtao": 0.01,
+       "shadows": 0,
+       "post:final": 0,
+       "post:bloom-down": -0.01,
+       "smaa": -0.02,
+       "post:ao-blur": -0.04,
+       "post:bloom-up": -0.04
+      },
+      "parity": {
+       "baseMs": {
+        "even": 0.62,
+        "odd": 0.97
+       },
+       "noiseMs": {
+        "even": 0.02,
+        "odd": 0.06
+       },
+       "ms": {
+        "post:bloom-prefilter": {
+         "even": -0.14,
+         "odd": 0.3
+        },
+        "post:agx": {
+         "even": -0.13,
+         "odd": 0.3
+        },
+        "post:gtao": {
+         "even": -0.31,
+         "odd": 0.32
+        },
+        "shadows": {
+         "even": -0.33,
+         "odd": 0.33
+        },
+        "post:final": {
+         "even": -0.38,
+         "odd": 0.36
+        },
+        "post:bloom-down": {
+         "even": -0.14,
+         "odd": 0.11
+        },
+        "smaa": {
+         "even": -0.23,
+         "odd": 0.18
+        },
+        "post:ao-blur": {
+         "even": -0.09,
+         "odd": 0.01
+        },
+        "post:bloom-up": {
+         "even": -0.11,
+         "odd": 0.03
+        }
+       }
+      }
+     }
+    }
+   ],
+   "fight": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 1.3418,
+      "render.total": 1.039,
+      "render.main": 0.8491,
+      "render.shadows": 0.2266,
+      "enemies.update": 0.1183,
+      "render.pre": 0.1126,
+      "player.update": 0.0913,
+      "render.post": 0.0698,
+      "effects.update": 0.0588,
+      "hud.update": 0.0006,
+      "other(step)": 0.0338
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:gtao": 1,
+      "post:ao-blur": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1,
+      "soft": 0.98
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 1.85,
+      "noiseMs": 0.3,
+      "ms": {
+       "post:ao-blur": 0.35,
+       "post:gtao": 0.25,
+       "post:final": 0.25,
+       "post:bloom-prefilter": 0.15,
+       "soft": 0.15,
+       "post:bloom-down": 0.05,
+       "post:bloom-up": -0.05,
+       "post:agx": -0.05,
+       "shadows": -0.15,
+       "smaa": -0.15
+      },
+      "baseMeanMs": 1.97,
+      "noiseMeanMs": 0.32,
+      "meanMs": {
+       "post:ao-blur": 0.39,
+       "post:final": 0.27,
+       "post:bloom-prefilter": 0.21,
+       "soft": 0.21,
+       "post:bloom-down": 0.17,
+       "post:bloom-up": 0.06,
+       "post:agx": 0.01,
+       "post:gtao": 0,
+       "shadows": -0.06,
+       "smaa": -0.16
+      },
+      "parity": {
+       "baseMs": {
+        "even": 1.97,
+        "odd": 1.97
+       },
+       "noiseMs": {
+        "even": 0.3,
+        "odd": 0.32
+       },
+       "ms": {
+        "post:ao-blur": {
+         "even": 0.37,
+         "odd": 0.4
+        },
+        "post:final": {
+         "even": 0.26,
+         "odd": 0.28
+        },
+        "post:bloom-prefilter": {
+         "even": 0.21,
+         "odd": 0.21
+        },
+        "soft": {
+         "even": 0.21,
+         "odd": 0.21
+        },
+        "post:bloom-down": {
+         "even": 0.16,
+         "odd": 0.18
+        },
+        "post:bloom-up": {
+         "even": 0.05,
+         "odd": 0.07
+        },
+        "post:agx": {
+         "even": 0,
+         "odd": 0.01
+        },
+        "post:gtao": {
+         "even": 0.05,
+         "odd": -0.06
+        },
+        "shadows": {
+         "even": -0.06,
+         "odd": -0.06
+        },
+        "smaa": {
+         "even": -0.13,
+         "odd": -0.19
+        }
+       }
+      }
+     }
+    }
+   ]
+  },
+  "downtown/ultra": {
+   "path": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 1.0208,
+      "render.total": 0.977,
+      "render.main": 0.9211,
+      "render.shadows": 0.1692,
+      "render.post": 0.0403,
+      "player.update": 0.0192,
+      "render.pre": 0.009,
+      "effects.update": 0.0026,
+      "enemies.update": 0.001,
+      "hud.update": 0.0002,
+      "other(step)": 0.0208
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:gtao": 1,
+      "post:ao-blur": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1,
+      "post:shaft-mask": 0.33,
+      "post:shaft-blur": 0.65
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 0.5,
+      "noiseMs": 0,
+      "ms": {
+       "shadows": 0.1,
+       "post:gtao": 0,
+       "post:ao-blur": 0,
+       "post:bloom-prefilter": 0,
+       "post:bloom-down": 0,
+       "post:bloom-up": 0,
+       "post:agx": 0,
+       "smaa": 0,
+       "post:final": 0,
+       "post:shaft-mask": 0,
+       "post:shaft-blur": 0
+      },
+      "baseMeanMs": 1.14,
+      "noiseMeanMs": 0.1,
+      "meanMs": {
+       "post:bloom-up": 0.1,
+       "post:gtao": 0.09,
+       "smaa": 0.08,
+       "post:ao-blur": 0.05,
+       "post:shaft-blur": 0.04,
+       "shadows": 0.03,
+       "post:bloom-down": -0.01,
+       "post:bloom-prefilter": -0.07,
+       "post:agx": -0.1,
+       "post:final": -0.1,
+       "post:shaft-mask": -0.1
+      },
+      "parity": {
+       "baseMs": {
+        "even": 1.1,
+        "odd": 1.18
+       },
+       "noiseMs": {
+        "even": 0.16,
+        "odd": 0.04
+       },
+       "ms": {
+        "post:bloom-up": {
+         "even": -0.06,
+         "odd": 0.27
+        },
+        "post:gtao": {
+         "even": 0.07,
+         "odd": 0.25
+        },
+        "smaa": {
+         "even": 0.04,
+         "odd": 0.13
+        },
+        "post:ao-blur": {
+         "even": -0.3,
+         "odd": 0.39
+        },
+        "post:shaft-blur": {
+         "even": -0.39,
+         "odd": 0.48
+        },
+        "shadows": {
+         "even": 0.28,
+         "odd": -0.22
+        },
+        "post:bloom-down": {
+         "even": -0.2,
+         "odd": 0.17
+        },
+        "post:bloom-prefilter": {
+         "even": -0.01,
+         "odd": -0.14
+        },
+        "post:agx": {
+         "even": -0.18,
+         "odd": -0.02
+        },
+        "post:final": {
+         "even": 0.24,
+         "odd": -0.44
+        },
+        "post:shaft-mask": {
+         "even": -0.49,
+         "odd": 0.28
+        }
+       }
+      }
+     }
+    }
+   ],
+   "fight": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 1.3978,
+      "render.total": 1.0857,
+      "render.main": 0.8954,
+      "render.shadows": 0.2503,
+      "enemies.update": 0.1249,
+      "render.pre": 0.1133,
+      "player.update": 0.0944,
+      "render.post": 0.0687,
+      "effects.update": 0.0602,
+      "hud.update": 0.0004,
+      "other(step)": 0.0322
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:gtao": 1,
+      "post:ao-blur": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:shaft-mask": 0.94,
+      "post:shaft-blur": 1.89,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1,
+      "soft": 0.98
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 1.7,
+      "noiseMs": 0.2,
+      "ms": {
+       "shadows": 0,
+       "post:shaft-mask": 0,
+       "post:shaft-blur": 0,
+       "post:gtao": -0.1,
+       "post:agx": -0.1,
+       "post:ao-blur": -0.2,
+       "smaa": -0.2,
+       "post:bloom-prefilter": -0.3,
+       "post:final": -0.3,
+       "soft": -0.3,
+       "post:bloom-down": -0.4,
+       "post:bloom-up": -0.5
+      },
+      "baseMeanMs": 1.86,
+      "noiseMeanMs": 0.39,
+      "meanMs": {
+       "shadows": 0.14,
+       "post:shaft-blur": 0.08,
+       "post:gtao": -0.01,
+       "post:agx": -0.05,
+       "post:shaft-mask": -0.08,
+       "post:ao-blur": -0.1,
+       "smaa": -0.13,
+       "post:final": -0.16,
+       "post:bloom-prefilter": -0.17,
+       "soft": -0.21,
+       "post:bloom-down": -0.24,
+       "post:bloom-up": -0.38
+      },
+      "parity": {
+       "baseMs": {
+        "even": 1.85,
+        "odd": 1.86
+       },
+       "noiseMs": {
+        "even": 0.39,
+        "odd": 0.39
+       },
+       "ms": {
+        "shadows": {
+         "even": 0.12,
+         "odd": 0.16
+        },
+        "post:shaft-blur": {
+         "even": 0.04,
+         "odd": 0.12
+        },
+        "post:gtao": {
+         "even": -0.04,
+         "odd": 0.03
+        },
+        "post:agx": {
+         "even": -0.06,
+         "odd": -0.04
+        },
+        "post:shaft-mask": {
+         "even": 0.01,
+         "odd": -0.17
+        },
+        "post:ao-blur": {
+         "even": -0.08,
+         "odd": -0.12
+        },
+        "smaa": {
+         "even": -0.16,
+         "odd": -0.11
+        },
+        "post:final": {
+         "even": -0.16,
+         "odd": -0.16
+        },
+        "post:bloom-prefilter": {
+         "even": -0.19,
+         "odd": -0.14
+        },
+        "soft": {
+         "even": -0.23,
+         "odd": -0.2
+        },
+        "post:bloom-down": {
+         "even": -0.25,
+         "odd": -0.24
+        },
+        "post:bloom-up": {
+         "even": -0.41,
+         "odd": -0.35
+        }
+       }
+      }
+     }
+    }
+   ]
+  },
+  "training/low": {
+   "path": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 0.7458,
+      "render.total": 0.5491,
+      "render.main": 0.5321,
+      "enemies.update": 0.1296,
+      "render.shadows": 0.1136,
+      "player.update": 0.0251,
+      "render.post": 0.0106,
+      "render.pre": 0.0059,
+      "effects.update": 0.0009,
+      "hud.update": 0.0003,
+      "other(step)": 0.0408
+     },
+     "passesPerFrame": {
+      "post:composite": 1,
+      "shadows": 0.5
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 0.9,
+      "noiseMs": 0,
+      "ms": {
+       "shadows": 0.2,
+       "post:composite": 0
+      },
+      "baseMeanMs": 0.95,
+      "noiseMeanMs": 0.01,
+      "meanMs": {
+       "shadows": 0.09,
+       "post:composite": 0.03
+      },
+      "parity": {
+       "baseMs": {
+        "even": 0.84,
+        "odd": 1.06
+       },
+       "noiseMs": {
+        "even": 0.01,
+        "odd": 0
+       },
+       "ms": {
+        "shadows": {
+         "even": -0.01,
+         "odd": 0.18
+        },
+        "post:composite": {
+         "even": 0.05,
+         "odd": 0.01
+        }
+       }
+      }
+     }
+    }
+   ],
+   "fight": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 1.5723,
+      "render.total": 1.1102,
+      "render.main": 1.0926,
+      "enemies.update": 0.2056,
+      "render.shadows": 0.1804,
+      "player.update": 0.0902,
+      "effects.update": 0.0233,
+      "render.post": 0.0107,
+      "render.pre": 0.0058,
+      "hud.update": 0.0003,
+      "other(step)": 0.1427
+     },
+     "passesPerFrame": {
+      "post:composite": 1,
+      "shadows": 0.5
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 1.85,
+      "noiseMs": 0.1,
+      "ms": {
+       "shadows": 0.15,
+       "post:composite": -0.05
+      },
+      "baseMeanMs": 1.95,
+      "noiseMeanMs": 0.08,
+      "meanMs": {
+       "shadows": 0.1,
+       "post:composite": -0.07
+      },
+      "parity": {
+       "baseMs": {
+        "even": 1.83,
+        "odd": 2.06
+       },
+       "noiseMs": {
+        "even": 0.08,
+        "odd": 0.05
+       },
+       "ms": {
+        "shadows": {
+         "even": 0,
+         "odd": 0.21
+        },
+        "post:composite": {
+         "even": -0.06,
+         "odd": -0.07
+        }
+       }
+      }
+     }
+    }
+   ]
+  },
+  "training/medium": {
+   "path": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 1.0407,
+      "render.total": 0.8012,
+      "render.main": 0.6509,
+      "render.shadows": 0.212,
+      "enemies.update": 0.1569,
+      "render.pre": 0.0979,
+      "render.post": 0.0467,
+      "player.update": 0.0248,
+      "effects.update": 0.0027,
+      "hud.update": 0.0003,
+      "other(step)": 0.0548
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 1.15,
+      "noiseMs": 0.1,
+      "ms": {
+       "shadows": 0.15,
+       "post:bloom-down": 0.05,
+       "post:bloom-up": 0.05,
+       "post:agx": 0.05,
+       "smaa": 0.05,
+       "post:final": 0.05,
+       "post:bloom-prefilter": -0.05
+      },
+      "baseMeanMs": 1.28,
+      "noiseMeanMs": 0.09,
+      "meanMs": {
+       "shadows": 0.17,
+       "post:agx": 0.05,
+       "post:bloom-up": 0.04,
+       "smaa": 0.04,
+       "post:final": 0.04,
+       "post:bloom-down": 0.03,
+       "post:bloom-prefilter": -0.08
+      },
+      "parity": {
+       "baseMs": {
+        "even": 1.3,
+        "odd": 1.26
+       },
+       "noiseMs": {
+        "even": 0.04,
+        "odd": 0.13
+       },
+       "ms": {
+        "shadows": {
+         "even": 0.13,
+         "odd": 0.2
+        },
+        "post:agx": {
+         "even": 0.03,
+         "odd": 0.08
+        },
+        "post:bloom-up": {
+         "even": 0.02,
+         "odd": 0.06
+        },
+        "smaa": {
+         "even": 0.01,
+         "odd": 0.06
+        },
+        "post:final": {
+         "even": 0.01,
+         "odd": 0.07
+        },
+        "post:bloom-down": {
+         "even": 0.01,
+         "odd": 0.05
+        },
+        "post:bloom-prefilter": {
+         "even": -0.1,
+         "odd": -0.05
+        }
+       }
+      }
+     }
+    }
+   ],
+   "fight": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 1.8354,
+      "render.total": 1.318,
+      "render.main": 1.1193,
+      "render.shadows": 0.3181,
+      "enemies.update": 0.2272,
+      "render.pre": 0.1392,
+      "player.update": 0.0933,
+      "render.post": 0.0519,
+      "effects.update": 0.0466,
+      "hud.update": 0.0006,
+      "other(step)": 0.1497
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 2.1,
+      "noiseMs": 0.2,
+      "ms": {
+       "shadows": 0.3,
+       "post:bloom-down": 0.1,
+       "post:bloom-up": 0.1,
+       "post:bloom-prefilter": 0,
+       "post:agx": 0,
+       "post:final": 0,
+       "smaa": -0.1
+      },
+      "baseMeanMs": 2.34,
+      "noiseMeanMs": 0.37,
+      "meanMs": {
+       "shadows": 0.42,
+       "post:bloom-down": 0.22,
+       "post:bloom-up": 0.21,
+       "post:agx": 0.13,
+       "post:bloom-prefilter": 0.11,
+       "smaa": 0.04,
+       "post:final": -0.04
+      },
+      "parity": {
+       "baseMs": {
+        "even": 2.36,
+        "odd": 2.31
+       },
+       "noiseMs": {
+        "even": 0.37,
+        "odd": 0.36
+       },
+       "ms": {
+        "shadows": {
+         "even": 0.43,
+         "odd": 0.42
+        },
+        "post:bloom-down": {
+         "even": 0.22,
+         "odd": 0.21
+        },
+        "post:bloom-up": {
+         "even": 0.2,
+         "odd": 0.21
+        },
+        "post:agx": {
+         "even": 0.12,
+         "odd": 0.13
+        },
+        "post:bloom-prefilter": {
+         "even": 0.17,
+         "odd": 0.05
+        },
+        "smaa": {
+         "even": 0.04,
+         "odd": 0.04
+        },
+        "post:final": {
+         "even": -0.04,
+         "odd": -0.05
+        }
+       }
+      }
+     }
+    }
+   ]
+  },
+  "training/high": {
+   "path": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 1.0374,
+      "render.total": 0.8141,
+      "render.main": 0.6714,
+      "render.shadows": 0.272,
+      "enemies.update": 0.1482,
+      "render.pre": 0.0876,
+      "render.post": 0.0489,
+      "player.update": 0.0249,
+      "effects.update": 0.0027,
+      "hud.update": 0.0002,
+      "other(step)": 0.0473
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:gtao": 1,
+      "post:ao-blur": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 1.1,
+      "noiseMs": 0,
+      "ms": {
+       "shadows": 0.2,
+       "post:gtao": 0,
+       "post:ao-blur": 0,
+       "post:bloom-prefilter": 0,
+       "post:bloom-down": 0,
+       "post:bloom-up": 0,
+       "smaa": 0,
+       "post:final": 0,
+       "post:agx": -0.1
+      },
+      "baseMeanMs": 1.23,
+      "noiseMeanMs": 0.01,
+      "meanMs": {
+       "shadows": 0.25,
+       "smaa": 0.03,
+       "post:final": 0.01,
+       "post:ao-blur": 0,
+       "post:bloom-up": 0,
+       "post:agx": 0,
+       "post:bloom-prefilter": -0.01,
+       "post:bloom-down": -0.01,
+       "post:gtao": -0.02
+      },
+      "parity": {
+       "baseMs": {
+        "even": 1.27,
+        "odd": 1.2
+       },
+       "noiseMs": {
+        "even": 0,
+        "odd": 0.01
+       },
+       "ms": {
+        "shadows": {
+         "even": 0.25,
+         "odd": 0.24
+        },
+        "smaa": {
+         "even": 0.03,
+         "odd": 0.03
+        },
+        "post:final": {
+         "even": 0.01,
+         "odd": 0.01
+        },
+        "post:ao-blur": {
+         "even": 0,
+         "odd": 0.01
+        },
+        "post:bloom-up": {
+         "even": 0.02,
+         "odd": -0.01
+        },
+        "post:agx": {
+         "even": -0.01,
+         "odd": 0
+        },
+        "post:bloom-prefilter": {
+         "even": -0.02,
+         "odd": 0
+        },
+        "post:bloom-down": {
+         "even": -0.03,
+         "odd": 0.02
+        },
+        "post:gtao": {
+         "even": 0.03,
+         "odd": -0.06
+        }
+       }
+      }
+     }
+    }
+   ],
+   "fight": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 2.1676,
+      "render.total": 1.6097,
+      "render.main": 1.3773,
+      "render.shadows": 0.5103,
+      "enemies.update": 0.2482,
+      "render.pre": 0.1521,
+      "player.update": 0.0943,
+      "render.post": 0.0711,
+      "effects.update": 0.0502,
+      "hud.update": 0.0003,
+      "other(step)": 0.1649
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:gtao": 1,
+      "post:ao-blur": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1,
+      "soft": 0.98
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 2.3,
+      "noiseMs": 0,
+      "ms": {
+       "shadows": 0.2,
+       "soft": 0.2,
+       "post:final": 0,
+       "post:gtao": -0.1,
+       "post:ao-blur": -0.1,
+       "post:bloom-prefilter": -0.1,
+       "post:bloom-up": -0.1,
+       "post:agx": -0.2,
+       "post:bloom-down": -0.3,
+       "smaa": -0.3
+      },
+      "baseMeanMs": 2.45,
+      "noiseMeanMs": 0.14,
+      "meanMs": {
+       "shadows": 0.22,
+       "soft": 0.15,
+       "post:ao-blur": -0.08,
+       "post:final": -0.11,
+       "post:bloom-prefilter": -0.12,
+       "post:bloom-up": -0.12,
+       "post:gtao": -0.14,
+       "post:agx": -0.17,
+       "smaa": -0.2,
+       "post:bloom-down": -0.31
+      },
+      "parity": {
+       "baseMs": {
+        "even": 2.47,
+        "odd": 2.42
+       },
+       "noiseMs": {
+        "even": 0.15,
+        "odd": 0.12
+       },
+       "ms": {
+        "shadows": {
+         "even": 0.23,
+         "odd": 0.21
+        },
+        "soft": {
+         "even": 0.15,
+         "odd": 0.14
+        },
+        "post:ao-blur": {
+         "even": -0.11,
+         "odd": -0.07
+        },
+        "post:final": {
+         "even": -0.07,
+         "odd": -0.16
+        },
+        "post:bloom-prefilter": {
+         "even": -0.11,
+         "odd": -0.14
+        },
+        "post:bloom-up": {
+         "even": -0.14,
+         "odd": -0.1
+        },
+        "post:gtao": {
+         "even": -0.16,
+         "odd": -0.12
+        },
+        "post:agx": {
+         "even": -0.13,
+         "odd": -0.22
+        },
+        "smaa": {
+         "even": -0.2,
+         "odd": -0.21
+        },
+        "post:bloom-down": {
+         "even": -0.32,
+         "odd": -0.32
+        }
+       }
+      }
+     }
+    }
+   ]
+  },
+  "training/ultra": {
+   "path": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 1.0224,
+      "render.total": 0.7963,
+      "render.main": 0.6569,
+      "render.shadows": 0.243,
+      "enemies.update": 0.1453,
+      "render.pre": 0.0854,
+      "render.post": 0.0476,
+      "player.update": 0.0276,
+      "effects.update": 0.0042,
+      "hud.update": 0.0004,
+      "other(step)": 0.0486
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:gtao": 1,
+      "post:ao-blur": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1,
+      "post:shaft-mask": 0.1,
+      "post:shaft-blur": 0.2
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 1.15,
+      "noiseMs": 0.1,
+      "ms": {
+       "shadows": 0.25,
+       "post:gtao": 0.05,
+       "post:ao-blur": 0.05,
+       "post:bloom-prefilter": 0.05,
+       "post:bloom-down": 0.05,
+       "post:bloom-up": 0.05,
+       "post:agx": 0.05,
+       "smaa": 0.05,
+       "post:final": 0.05,
+       "post:shaft-mask": 0.05,
+       "post:shaft-blur": -0.05
+      },
+      "baseMeanMs": 1.23,
+      "noiseMeanMs": 0.04,
+      "meanMs": {
+       "shadows": 0.22,
+       "post:bloom-down": 0.06,
+       "post:agx": 0.05,
+       "smaa": 0.04,
+       "post:final": 0.04,
+       "post:shaft-mask": 0.04,
+       "post:bloom-up": 0.03,
+       "post:gtao": 0.01,
+       "post:ao-blur": 0.01,
+       "post:bloom-prefilter": 0,
+       "post:shaft-blur": -0.05
+      },
+      "parity": {
+       "baseMs": {
+        "even": 1.27,
+        "odd": 1.19
+       },
+       "noiseMs": {
+        "even": 0.03,
+        "odd": 0.04
+       },
+       "ms": {
+        "shadows": {
+         "even": 0.22,
+         "odd": 0.23
+        },
+        "post:bloom-down": {
+         "even": 0.03,
+         "odd": 0.09
+        },
+        "post:agx": {
+         "even": 0.05,
+         "odd": 0.05
+        },
+        "smaa": {
+         "even": 0.05,
+         "odd": 0.03
+        },
+        "post:final": {
+         "even": 0.04,
+         "odd": 0.04
+        },
+        "post:shaft-mask": {
+         "even": 0.03,
+         "odd": 0.04
+        },
+        "post:bloom-up": {
+         "even": 0.04,
+         "odd": 0.03
+        },
+        "post:gtao": {
+         "even": 0.01,
+         "odd": 0.01
+        },
+        "post:ao-blur": {
+         "even": 0.01,
+         "odd": 0.01
+        },
+        "post:bloom-prefilter": {
+         "even": -0.01,
+         "odd": 0.01
+        },
+        "post:shaft-blur": {
+         "even": -0.06,
+         "odd": -0.04
+        }
+       }
+      }
+     }
+    }
+   ],
+   "fight": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 1.9498,
+      "render.total": 1.4236,
+      "render.main": 1.1973,
+      "render.shadows": 0.385,
+      "enemies.update": 0.2281,
+      "render.pre": 0.1512,
+      "player.update": 0.097,
+      "render.post": 0.0663,
+      "effects.update": 0.0507,
+      "hud.update": 0.001,
+      "other(step)": 0.1494
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:gtao": 1,
+      "post:ao-blur": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1,
+      "soft": 0.98
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 2.15,
+      "noiseMs": 0.1,
+      "ms": {
+       "shadows": 0.35,
+       "post:gtao": 0.05,
+       "soft": 0.05,
+       "post:ao-blur": -0.05,
+       "post:bloom-down": -0.05,
+       "post:bloom-up": -0.05,
+       "post:agx": -0.05,
+       "post:bloom-prefilter": -0.15,
+       "smaa": -0.15,
+       "post:final": -0.25
+      },
+      "baseMeanMs": 2.33,
+      "noiseMeanMs": 0.09,
+      "meanMs": {
+       "shadows": 0.27,
+       "post:gtao": 0.09,
+       "post:bloom-up": 0.05,
+       "soft": 0.03,
+       "post:agx": 0.01,
+       "post:ao-blur": 0,
+       "smaa": -0.08,
+       "post:bloom-prefilter": -0.09,
+       "post:bloom-down": -0.1,
+       "post:final": -0.17
+      },
+      "parity": {
+       "baseMs": {
+        "even": 2.36,
+        "odd": 2.31
+       },
+       "noiseMs": {
+        "even": 0.05,
+        "odd": 0.12
+       },
+       "ms": {
+        "shadows": {
+         "even": 0.29,
+         "odd": 0.25
+        },
+        "post:gtao": {
+         "even": 0.09,
+         "odd": 0.09
+        },
+        "post:bloom-up": {
+         "even": 0.04,
+         "odd": 0.06
+        },
+        "soft": {
+         "even": 0.04,
+         "odd": 0.02
+        },
+        "post:agx": {
+         "even": 0.01,
+         "odd": 0
+        },
+        "post:ao-blur": {
+         "even": -0.01,
+         "odd": 0.01
+        },
+        "smaa": {
+         "even": -0.08,
+         "odd": -0.08
+        },
+        "post:bloom-prefilter": {
+         "even": -0.08,
+         "odd": -0.09
+        },
+        "post:bloom-down": {
+         "even": -0.07,
+         "odd": -0.12
+        },
+        "post:final": {
+         "even": -0.16,
+         "odd": -0.19
+        }
+       }
+      }
+     }
+    }
+   ]
+  }
+ }
+}

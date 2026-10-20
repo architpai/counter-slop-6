@@ -1,0 +1,127 @@
+== job1 start Tue Oct 20 12:47:21 JST 2026
+== gate ok r8-pre 12:47:24
+ Wattage = 94W
+ Adapter Name = 96W USB-C Power Adapter
+== r8-pre-start agent-browser Chrome for Testing CPU 12:47:24: 31.8 % (sum over its processes)
+== r8-pre start
+Tue Oct 20 12:47:24 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	100%; charged; 0:00 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r8-pre end
+Tue Oct 20 12:52:03 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	100%; charged; 0:00 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+r8-pre rc=0
+== r8-pre-end agent-browser Chrome for Testing CPU 12:52:03: 36.2 % (sum over its processes)
+== gate ok r8cov 12:52:03
+ Wattage = 94W
+ Adapter Name = 96W USB-C Power Adapter
+== r8cov-start agent-browser Chrome for Testing CPU 12:52:03: 36.2 % (sum over its processes)
+== r8cov start
+Tue Oct 20 12:52:03 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	100%; charged; 0:00 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r8cov end
+Tue Oct 20 13:33:27 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	100%; charged; 0:00 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+r8cov rc=0
+== r8cov-end agent-browser Chrome for Testing CPU 13:33:27: 19.5 % (sum over its processes)
+== gate ok r8cl 13:33:27
+ Wattage = 94W
+ Adapter Name = 96W USB-C Power Adapter
+== r8cl-start agent-browser Chrome for Testing CPU 13:33:27: 19.5 % (sum over its processes)
+== r8cl start
+Tue Oct 20 13:33:27 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	100%; charged; 0:00 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r8cl end
+Tue Oct 20 13:48:37 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	100%; charged; 0:00 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+r8cl rc=0
+== r8cl-end agent-browser Chrome for Testing CPU 13:48:37: 0 % (sum over its processes)
+== job1 done Tue Oct 20 13:48:37 JST 2026
+== gate ok r8f 14:39:18
+ Wattage = 94W
+ Adapter Name = 96W USB-C Power Adapter
+== r8f-start agent-browser Chrome for Testing CPU 14:39:18: 460.4 % (sum over its processes)
+== r8f start
+Tue Oct 20 14:39:18 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	100%; charged; 0:00 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r8f end
+Tue Oct 20 15:30:35 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	100%; charged; 0:00 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+r8f rc=0
+== r8f-end agent-browser Chrome for Testing CPU 15:30:35: 62.5 % (sum over its processes)
+== gate ok r8ll 15:30:35
+ Wattage = 94W
+ Adapter Name = 96W USB-C Power Adapter
+== r8ll-start agent-browser Chrome for Testing CPU 15:30:35: 62.5 % (sum over its processes)
+== r8ll start
+Tue Oct 20 15:30:35 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	100%; charged; 0:00 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r8ll end
+Tue Oct 20 15:30:36 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	100%; charged; 0:00 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+r8ll rc=1
+== r8ll-end agent-browser Chrome for Testing CPU 15:30:36: 51.3 % (sum over its processes)
+== job2 done Tue Oct 20 15:30:36 JST 2026
+== gate ok r8l 15:30:41
+ Wattage = 94W
+ Adapter Name = 96W USB-C Power Adapter
+== r8l-start agent-browser Chrome CPU 15:30:42: 83.6 %
+== r8l start
+Tue Oct 20 15:30:42 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	100%; charged; 0:00 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== agent-browser Chrome for Testing CPU (sum over its processes, % of one core), sampled each minute during job 2 (r8f, 14:40-15:30): min 37.6 / median 80.8 / max 130.1 % (n=52; /tmp/r8/abrowser-cpu.log). It restarted at 14:34 (pid 9506). Not ours: left running as the brief says.
+== r8l end
+Tue Oct 20 15:54:40 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	100%; charged; 0:00 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+r8l rc=0
+== r8l-end agent-browser Chrome CPU 15:54:40: 49.5 %
+== job3 done Tue Oct 20 15:54:40 JST 2026
+== agent-browser Chrome CPU during job 3 (r8l, 15:31-15:54): min 48.9 / median 70.8 / max 144.4 % (n=25)
+== 16:03:56 (pmset -g log): the machine left AC (charger detached; 16:27 reading: 'Battery Power', 93 %, discharging, 'No adapter attached'). Every bench of record (r8-pre, r8cov, r8cl, r8f, r8l) had ended before, on AC at 100 %. After 16:04, on battery: the program sweep (exact counts), the render-chain sky-test reruns (HEAD, HEAD + late, final tree), no timing of record. The planned extra packing load A/B (r8l2, after review 1) was not run: the gate needs AC.

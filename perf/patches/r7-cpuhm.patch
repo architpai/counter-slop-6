@@ -1,0 +1,14 @@
+diff --git a/src/engine/render/quality.ts b/src/engine/render/quality.ts
+index 0ea3017..1f5c056 100644
+--- a/src/engine/render/quality.ts
++++ b/src/engine/render/quality.ts
+@@ -145,7 +145,8 @@ export function presetOf(values: Readonly<GfxValues>): PresetName | null {
+  * the old paths.
+  */
+ export function fightCpuPaths(values: Readonly<GfxValues>): boolean {
+-  return presetOf(values) === 'ultra';
++  const p = presetOf(values);
++  return p === 'ultra' || p === 'high' || p === 'medium';
+ }
+ 
+ // ------------------------------------------------------------------ storage

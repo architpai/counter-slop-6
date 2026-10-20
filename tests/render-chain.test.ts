@@ -1,7 +1,11 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import * as THREE from 'three';
-import { Renderer } from '@/engine/render/index';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { CHECK_SHADER_ERRORS, Renderer, SLOT_BYTES, UPLOAD_GAP_MS, roomEnvironment } from '@/engine/render/index';
 import { MATCH_QUIET_MS } from '@/engine/render/pacing';
+import { spriteGeometry, spriteMaterial } from '@/engine/render/fx';
+import { bladeBlood } from '@/engine/render/blade-blood';
+import { weaponMaterial } from '@/engine/render/materials';
 import { Composite, RIG_DEPTH } from '@/engine/render/postfx';
 import { PRESETS, PRESET_VALUES } from '@/engine/render/quality';
 import { aimShadowBox, cascadeCentre, sizeShadowBox } from '@/engine/render/shadows';
@@ -41,6 +45,21 @@ function passes(renderer: Renderer): string[] {
   return names;
 }
 
+/**
+ * One frame's renders of the post scene, and its passes (SMAA's render their own quad). Ultra runs the chain inside
+ * one render (`Composite._oneRender`) on High and Ultra; Low and Medium render each pass. No hook stays on the scene.
+ */
+function postRenders(renderer: Renderer): { renders: number; passes: number } {
+  const post = renderer.post, render = vi.spyOn(renderer.three, 'render'), pass = vi.spyOn(post, '_pass');
+  renderer.render(0, fx);
+  const renders = render.mock.calls.filter(([scene]) => scene === post.scene).length, passes = pass.mock.calls.length;
+  render.mockRestore();
+  pass.mockRestore();
+  expect(post.scene.onAfterRender).toBe(THREE.Object3D.prototype.onAfterRender);
+  expect([post._chainCamera, post._inChain, post._final.visible]).toEqual([null, false, true]);
+  return { renders, passes };
+}
+
 const bloom = ['post:bloom-prefilter', ...Array(4).fill('post:bloom-down'), ...Array(4).fill('post:bloom-up')];
 const expected: Record<PresetName, { config: Omit<PostConfig, 'samples'>; samples: number; chain: string[]; lights: number; soft: boolean }> = {
   // Low: the phase-1 single pass (FXAA, soft shoulder, grade, feedback), one shadow box.
@@ -55,6 +74,9 @@ const expected: Record<PresetName, { config: Omit<PostConfig, 'samples'>; sample
 
 test('each preset reaches the renderer: passes, tone mapping, MSAA, AO depth, cascades', () => {
   const renderer = makeRenderer();
+  // three checks every program's link here (off only in a production build), so the check below has logs to read.
+  expect(CHECK_SHADER_ERRORS).toBe(true);
+  expect(renderer.three.debug.checkShaderErrors).toBe(true);
   const maxSamples = renderer.three.capabilities.maxSamples;
   // A lit, shadowed floor and box in view, so every preset compiles the (cascaded) lighting chunk.
   const floor = new THREE.Mesh(new THREE.BoxGeometry(40, 0.2, 40), new THREE.MeshLambertMaterial());
@@ -70,6 +92,12 @@ test('each preset reaches the renderer: passes, tone mapping, MSAA, AO depth, ca
     // The pass chain, which also names the tone mapper: the soft shoulder lives in the
     // composite (Low), AgX in its own pass (realistic).
     expect(passes(renderer), name).toEqual(want.chain);
+    // The post chain in one render on High and Ultra; Low and Medium render each pass, as before Round 6.
+    const fast = name === 'ultra' || name === 'high';
+    expect([renderer._fightCpu, renderer.post._oneRender], name).toEqual([fast, fast]);
+    const { renders, passes: count } = postRenders(renderer);
+    expect(count, name).toBe(want.chain.filter(pass => pass !== 'smaa').length);
+    expect(renders, name).toBe(fast ? 1 : count);
     expect(renderer.post.target.samples).toBe(Math.min(want.samples, maxSamples));
     // AO, the soft particles (High, Ultra) and the light shafts (Ultra) read the depth texture.
     expect(renderer.post.target.depthTexture !== null).toBe(want.config.ao > 0 || want.config.depth || want.config.shafts);
@@ -85,6 +113,23 @@ test('each preset reaches the renderer: passes, tone mapping, MSAA, AO depth, ca
     const failed = programs.filter(program => program.diagnostics && !program.diagnostics.runnable);
     expect(failed.map(program => program.name), name).toEqual([]);
   }
+  // Ultra to Medium and Ultra to Low mid-session: back to a render per pass at the next frame, nothing left set; and
+  // back to one render on Ultra each time.
+  const perPass = (preset: PresetName) => expected[preset].chain.filter(pass => pass !== 'smaa').length;
+  for (const name of ['medium', 'low'] as const) {
+    renderer.applyQuality(PRESET_VALUES[name]);
+    expect([renderer._fightCpu, renderer.post._oneRender], name).toEqual([false, false]);
+    expect(postRenders(renderer), name).toEqual({ renders: perPass(name), passes: perPass(name) });
+    renderer.applyQuality(PRESET_VALUES.ultra);
+    expect([renderer._fightCpu, renderer.post._oneRender], name).toEqual([true, true]);
+    expect(postRenders(renderer), name).toEqual({ renders: 1, passes: perPass('ultra') });
+  }
+  // A custom set with Ultra's values is Ultra; any other custom set keeps the old paths.
+  renderer.applyQuality({ ...PRESET_VALUES.ultra });
+  expect(renderer._fightCpu).toBe(true);
+  renderer.applyQuality({ ...PRESET_VALUES.ultra, fpsTarget: 60 });
+  expect([renderer._fightCpu, renderer.post._oneRender]).toEqual([false, false]);
+  expect(postRenders(renderer).renders).toBeGreaterThan(1);
   // Off frees every shadow light but the sun, which stops casting.
   renderer.applyQuality({ ...PRESET_VALUES.ultra, shadows: 'off' });
   expect(renderer.cascades).toHaveLength(0);
@@ -139,6 +184,98 @@ test('soft particles draw into their own layer; a GPU that renders MSAA straight
 }, 60_000);
 
 // About 2 s alone; beside the suite's streaming tests in the one browser it has taken 14-17 s (c2c96cf's 14).
+test('the soft sprites and the light shafts link at the menu: a first smoke, fire and look at the sun link nothing', async () => {
+  const renderer = makeRenderer(), three = renderer.three;
+  renderer.camera.position.set(0, 1.6, 0);
+  // The pools' draws: one instance of each soft sprite in front of the eye, in the soft layer's scene.
+  const pools = (['soft', 'fire-soft'] as const).map(kind => {
+    const geometry = spriteGeometry(1);
+    geometry.instanceCount = 1;
+    (geometry.getAttribute('iPos') as THREE.InstancedBufferAttribute).setXYZW(0, 0, 1.6, -3, 1);
+    (geometry.getAttribute('iColor') as THREE.InstancedBufferAttribute).setXYZW(0, 1, 1, 1, 1);
+    const mesh = new THREE.Mesh(geometry, spriteMaterial(kind));
+    mesh.frustumCulled = false;
+    mesh.visible = false;
+    renderer.fxScene.add(mesh);
+    cleanup.push(() => geometry.dispose());
+    return mesh;
+  });
+  for (const name of ['high', 'ultra'] as const) {
+    renderer.applyQuality(PRESET_VALUES[name]);
+    expect([renderer._softFx, renderer.post.config.shafts], name).toEqual([true, name === 'ultra']);
+    renderer.post.setShafts(0, new THREE.Vector3(0, 0, -1), new THREE.Color(1, 1, 1));
+    for (const mesh of pools) mesh.visible = false;
+    const targets: unknown[] = [];
+    const setTarget = three.setRenderTarget.bind(three);
+    const spy = vi.spyOn(three, 'setRenderTarget').mockImplementation((target, ...rest) => { targets.push(target); setTarget(target, ...rest); });
+    for (let i = 0; i < 100 && (i < 2 || renderer._compiles.length + renderer._warmups.length > 0); i++) {
+      renderer.render(0, fx);
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    spy.mockRestore();
+    expect(renderer._compiles.length + renderer._warmups.length, name).toBe(0);
+    // The late template drew once in the soft layer (and left its scene as it was); on Ultra the shafts into their spare target.
+    expect(targets, name).toContain(renderer.post._soft);
+    expect(targets.includes(renderer.post._shafts[1]), name).toBe(name === 'ultra');
+    expect(renderer.fxScene.children.length === pools.length && renderer.fxScene.children.every((child, i) => child === pools[i]), name).toBe(true);
+    const programs = three.info.programs!.length;
+    // A fight: smoke and fire in the soft layer, and on Ultra the sun in view with the map's shafts on. A new fog
+    // object (as a shadow relink makes) has three key the sprites' programs again, in the layer's scene.
+    renderer.scene.fog = (renderer.scene.fog as THREE.Fog).clone();
+    for (const mesh of pools) mesh.visible = true;
+    renderer.post.setShafts(1, new THREE.Vector3(0, 0, -1), new THREE.Color(1, 1, 1));
+    const pass = vi.spyOn(renderer.post, '_pass');
+    renderer.render(0, fx);
+    const drawn = pass.mock.calls.map(([, material]) => material.name);
+    pass.mockRestore();
+    expect(drawn.includes('post:shaft-mask') && drawn.includes('post:shaft-blur'), name).toBe(name === 'ultra');
+    expect(three.info.programs!.length, name).toBe(programs);
+  }
+  expect(three.getContext().getError()).toBe(three.getContext().NO_ERROR);
+}, 60_000);
+
+test('a first air-slash wave or ban ring, and the Blender sword\'s blade, link nothing after the menu', async () => {
+  const renderer = makeRenderer(), three = renderer.three;
+  renderer.camera.position.set(0, 1.6, 0);
+  // The Blender sword's set material as the weapons' glb makes it, compiled as their warm-up compiles it.
+  const { material: steel } = weaponMaterial('sword');
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.8), steel);
+  blade.position.set(0, 1.6, -2);
+  cleanup.push(() => { blade.geometry.dispose(); steel.dispose(); });
+  for (const name of ['low', 'ultra'] as const) {
+    renderer.applyQuality(PRESET_VALUES[name]);
+    for (let i = 0; i < 100 && (i < 2 || renderer._compiles.length + renderer._warmups.length > 0); i++) {
+      renderer.render(0, fx);
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    expect(renderer._compiles.length + renderer._warmups.length, name).toBe(0);
+    renderer.scene.add(blade);
+    three.compile(blade, renderer.camera, renderer.scene);
+    renderer.render(0, fx);
+    const programs = three.info.programs!.length;
+    // Two waves (or rings) in turn, each in a material of its own that goes with it (weapons/wave.ts, enemies/hazards.ts).
+    for (let k = 0; k < 2; k++) {
+      const wave = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0xd2ecff, transparent: true,
+        opacity: 0.95, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false }));
+      wave.position.set(0, 1.6, -2);
+      renderer.scene.add(wave);
+      renderer.render(0, fx);
+      expect(three.info.programs!.length, `${name} wave ${k}`).toBe(programs);
+      wave.removeFromParent();
+      wave.geometry.dispose();
+      wave.material.dispose();
+      renderer.render(0, fx);
+      expect(three.info.programs!.length, `${name} wave ${k} gone`).toBe(programs);
+    }
+    // The sword built on the weapons' ready (weapons/models.ts `makeRealSwordModel`) puts its blood on: no relink.
+    bladeBlood(steel, blade, 0, -0.8, 0, 0.02, true).update(0.5);
+    renderer.render(0, fx);
+    expect(three.info.programs!.length, `${name} sword`).toBe(programs);
+    blade.removeFromParent();
+  }
+  expect(three.getContext().getError()).toBe(three.getContext().NO_ERROR);
+}, 60_000);
+
 test('dynamic resolution only moves viewports, a pass switched off frees its targets, and dispose frees them all', () => {
   const three = new THREE.WebGLRenderer({ canvas: document.createElement('canvas') });
   cleanup.push(() => { three.dispose(); three.forceContextLoss(); });
@@ -228,6 +365,78 @@ test('a reduced dynamic scale shows only this frame: nothing beyond the drawn co
   // Under 1 s alone; beside the other GPU test files it waits its turn for the GPU (9 s at 23af3f9), so it gets the time they do.
 }, 60_000);
 
+test('the chain inside one render draws exactly what a render per pass did', () => {
+  const three = new THREE.WebGLRenderer({ canvas: document.createElement('canvas'), depth: false, stencil: false });
+  cleanup.push(() => { three.dispose(); three.forceContextLoss(); });
+  three.setSize(320, 200, false);
+  three.autoClear = false;
+  three.info.autoReset = false;
+  three.shadowMap.enabled = true;
+  const gl = three.getContext(), scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(80, 1.6, 0.08, 420);
+  const bright = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 3, 2) }));
+  bright.position.set(0.4, 0, -2);
+  const wall = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), new THREE.MeshBasicMaterial({ color: 0x406080 }));
+  wall.position.set(-1.5, 0, -3);
+  scene.add(bright, wall);
+  const post = new Composite();
+  cleanup.push(() => post.dispose());
+  post.resize(320, 200, 1.6);
+  post.setShafts(1, new THREE.Vector3(0.2, 0.3, -1), new THREE.Color(1, 0.9, 0.8));
+  const frame = (perPass: boolean): { pixels: Uint8Array; calls: number; triangles: number } => {
+    three.setClearColor(0x335577);
+    three.setRenderTarget(post.target);
+    three.clear();
+    three.render(scene, camera);
+    three.info.reset();
+    // `draw` with every pass rendering itself (Low, Medium: the path before Round 6), or in one render (High, Ultra).
+    post._oneRender = !perPass;
+    post.draw(three, 0.5, fx, camera);
+    expect(post.scene.onAfterRender).toBe(THREE.Object3D.prototype.onAfterRender);
+    const { calls, triangles } = three.info.render;
+    const pixels = new Uint8Array(320 * 200 * 4);
+    gl.readPixels(0, 0, 320, 200, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    return { pixels, calls, triangles };
+  };
+  const configs: PostConfig[] = [
+    { look: 'realistic', samples: 4, fxaa: false, smaa: true, ao: 1, depth: true, bloom: true, shafts: true },
+    { look: 'realistic', samples: 2, fxaa: false, smaa: true, ao: 0, depth: false, bloom: true, shafts: false },
+    { look: 'realistic', samples: 0, fxaa: true, smaa: false, ao: 0, depth: false, bloom: false, shafts: false },
+    { look: 'lowpoly', samples: 0, fxaa: false, smaa: true, ao: 0.5, depth: false, bloom: true, shafts: false },
+  ];
+  for (const config of configs) {
+    post.configure(config);
+    for (const scale of [1, 0.7]) {
+      post.setScale(scale);
+      frame(false);
+      const programs = three.info.programs!.length;
+      const render = vi.spyOn(three, 'render'), pass = vi.spyOn(post, '_pass');
+      const chained = frame(false);
+      // The scene pass, then the chain's one render (SMAA's passes render their own quad).
+      expect(render.mock.calls.filter(([s]) => s === post.scene)).toHaveLength(1);
+      const passes = pass.mock.calls.length;
+      expect(passes).toBeGreaterThan(1);
+      // The next frame's shadow maps clear their depth: the chain leaves depth writes on, as each render did.
+      expect(gl.getParameter(gl.DEPTH_WRITEMASK)).toBe(true);
+      render.mockClear();
+      pass.mockClear();
+      const perPass = frame(true);
+      // A render of the post scene per pass, the same passes.
+      expect(render.mock.calls.filter(([s]) => s === post.scene)).toHaveLength(passes);
+      expect(pass.mock.calls.length).toBe(passes);
+      render.mockRestore();
+      pass.mockRestore();
+      const label = `${config.look}, smaa ${config.smaa}, ao ${config.ao}, scale ${scale}`;
+      expect(chained.calls, label).toBeGreaterThan(1);
+      expect([chained.calls, chained.triangles], label).toEqual([perPass.calls, perPass.triangles]);
+      let differ = 0;
+      for (let i = 0; i < chained.pixels.length; i++) if (chained.pixels[i] !== perPass.pixels[i]) differ++;
+      expect(differ, label).toBe(0);
+      expect(three.info.programs!.length, label).toBe(programs);
+    }
+  }
+  expect(gl.getError()).toBe(gl.NO_ERROR);
+}, 60_000);
+
 test('the rig draws into its own depth slice on every tier, so a transparent effect behind a wall stays hidden', async () => {
   const renderer = makeRenderer();
   const gl = renderer.three.getContext(), range = vi.spyOn(gl, 'depthRange');
@@ -314,10 +523,14 @@ function fakeSky(key: string): { sky: SkySource; freed: () => boolean } {
 }
 
 const settle = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 0));
-/** Render until a landed sky is on: it goes on a step a frame, in the upload slots (`_landSky`). */
+/**
+ * Render until a landed sky is on: it goes on a step a frame, in the upload slots (`_landSky`). The caps only stop a
+ * hang: beside the suite's other GPU tests one 10 ms timer after a first render has taken 4.2 s, so a short wall cap
+ * ran out before the first step.
+ */
 async function land(renderer: Renderer): Promise<number> {
   let frames = 0;
-  for (const start = performance.now(); renderer._skyLanding && performance.now() - start < 5000; frames++) {
+  for (const start = performance.now(); renderer._skyLanding && frames < 3000 && performance.now() - start < 60_000; frames++) {
     renderer.render(0, fx);
     await new Promise(resolve => setTimeout(resolve, 10));
   }
@@ -397,7 +610,7 @@ test('a streamed sky swaps in with uniform writes only, and Low puts the mood ba
   expect('SKY_MAP' in dome.defines).toBe(false);
   renderer.render(0, fx);
   expect(held).toHaveLength(0);
-});
+}, 90_000);
 
 test('a sky that lands after the map, the look or the renderer changed is freed', async () => {
   const held = holdSkies();
@@ -444,6 +657,65 @@ test('a sky that lands after the map, the look or the renderer changed is freed'
   expect(renderer._skyAssets).toBeNull();
 });
 
+test('an upload slot packs small items up to SLOT_BYTES across streams; a big one goes alone; a slow upload backs off', () => {
+  const renderer = makeRenderer();
+  let clock = 1000;
+  const now = vi.spyOn(performance, 'now').mockImplementation(() => clock);
+  cleanup.push(() => now.mockRestore());
+  const queue = (sizes: number[], cost = 0) => {
+    const left = [...sizes], sent: number[] = [];
+    const pump = (limit: number) => {
+      const next = left[0];
+      if (next === undefined || next > limit) return 0;
+      left.shift();
+      sent.push(next);
+      clock += cost;
+      return next;
+    };
+    return { sent, pump };
+  };
+  const small = SLOT_BYTES / 4, big = 2 * SLOT_BYTES;
+  const slot = (frame: number, ...pumps: ((limit: number) => number)[]) => {
+    renderer._frame = frame;
+    for (const pump of pumps) renderer._upload(pump);
+  };
+  renderer._uploadPace = 1;
+  renderer._uploadAt = 0;
+  // Three small maps of one stream and the first of the next fill a slot; the gap after it is one gap.
+  const a = queue([small, small, small]), b = queue([small, small, small]);
+  slot(1, a.pump, b.pump);
+  expect([a.sent.length, b.sent.length]).toEqual([3, 1]);
+  expect(renderer._uploadAt).toBe(1000 + UPLOAD_GAP_MS);
+  // Nothing more before the gap is out, in this frame or the next.
+  slot(1, b.pump);
+  slot(2, b.pump);
+  expect(b.sent.length).toBe(1);
+  // A big map goes alone at the start of a slot, the gap after it follows its bytes, and a big map
+  // behind a small one waits for the next slot.
+  const c = queue([big, small, big]);
+  clock = 2000;
+  slot(3, c.pump, b.pump);
+  expect([c.sent, b.sent.length]).toEqual([[big], 1]);
+  expect(renderer._uploadAt).toBeCloseTo(2000 + big / 6e4);
+  clock = 3000;
+  slot(4, c.pump);
+  expect(c.sent).toEqual([big, small]);
+  clock = 4000;
+  slot(5, c.pump);
+  expect(c.sent).toEqual([big, small, big]);
+  // Uploads stop joining once the slot has spent `SLOT_PACK_MS` (2 ms) uploading.
+  const d = queue([small, small, small], 1.5);
+  clock = 5000;
+  slot(6, d.pump);
+  expect(d.sent.length).toBe(2);
+  // An upload slower than 4 ms doubles the pace and closes the slot.
+  const e = queue([small, small], 5);
+  clock = 6000;
+  slot(7, e.pump, b.pump);
+  expect([e.sent.length, b.sent.length, renderer._uploadPace]).toEqual([1, 1, 2]);
+  expect(renderer._uploadAt).toBe(6000 + 2 * UPLOAD_GAP_MS);
+});
+
 test('a sky that lands in a match waits out its quiet start, then goes on a step a frame', async () => {
   const held = holdSkies();
   const renderer = makeRenderer();
@@ -454,8 +726,13 @@ test('a sky that lands in a match waits out its quiet start, then goes on a step
   const house = fakeSky('house');
   held.shift()!.resolve(house.sky);
   await settle();
+  expect(renderer._skyLanding?.key).toBe('house');
   const uploads = vi.spyOn(renderer.three, 'initTexture');
+  // Each frame in a quiet start, however long the frames before took (a first frame's timer has taken 4.2 s beside
+  // the suite's other GPU tests, past MATCH_QUIET_MS): the match goes live again just before it.
   for (let i = 0; i < 5; i++) {
+    renderer.setLive(false);
+    renderer.setLive(true);
     renderer._uploadAt = 0;
     renderer.render(0, fx);
   }
@@ -487,7 +764,7 @@ test('a sky that lands in a match waits out its quiet start, then goes on a step
   const envFreed = vi.spyOn(env, 'dispose');
   renderer.applyQuality(PRESET_VALUES.low);
   expect([mexico.freed(), envFreed.mock.calls.length > 0, renderer._skyLanding]).toEqual([true, true, null]);
-});
+}, 60_000);
 
 test('opaque lit materials write the share of their light that AO may darken into alpha', () => {
   const three = new THREE.WebGLRenderer({ canvas: document.createElement('canvas') });
@@ -522,4 +799,39 @@ test('opaque lit materials write the share of their light that AO may darken int
   // A transparent material keeps its own alpha for blending.
   plane.material = new THREE.MeshLambertMaterial({ transparent: true, opacity: 0.5, blending: THREE.NoBlending });
   expect(alpha()).toBeCloseTo(0.5, 5);
+});
+
+test('the room environment compiles its scene at fromScene\'s first draw: the same programs and texels as fromScene alone', () => {
+  const run = (early: boolean) => {
+    const canvas = document.createElement('canvas');
+    const three = new THREE.WebGLRenderer({ canvas, antialias: false, depth: false, stencil: false });
+    three.outputColorSpace = THREE.SRGBColorSpace;
+    three.toneMapping = THREE.NoToneMapping;
+    three.autoClear = false;
+    three.shadowMap.enabled = true;
+    three.setClearColor(0x8fa3b8);
+    const pmrem = new THREE.PMREMGenerator(three), render = three.render;
+    const target = early ? roomEnvironment(three, pmrem, new RoomEnvironment()) : pmrem.fromScene(new RoomEnvironment(), 0.04);
+    expect(three.render).toBe(render);
+    const texels = new Uint16Array(target.width * target.height * 4);
+    three.readRenderTargetPixels(target, 0, 0, target.width, target.height, texels);
+    // A shader material's key starts with its two shader stages' ids, which count across renderers: left out.
+    const programs = three.info.programs!.map(program => `${program.name}|${program.name ? program.cacheKey.split(',').slice(2).join() : program.cacheKey}`);
+    expect(three.getContext().getError()).toBe(three.getContext().NO_ERROR);
+    target.dispose();
+    pmrem.dispose();
+    three.dispose();
+    three.forceContextLoss();
+    return { texels, programs };
+  };
+  const alone = run(false), early = run(true);
+  // The room's programs are made first (the background box's draw first made the basic one), and none is added or changed.
+  expect(alone.programs[0]!.startsWith('|basic,')).toBe(true);
+  expect(early.programs[0]!.startsWith('|physical,')).toBe(true);
+  expect(early.programs).toHaveLength(alone.programs.length);
+  expect([...early.programs].sort()).toEqual([...alone.programs].sort());
+  let differ = 0;
+  for (let i = 0; i < alone.texels.length; i++) if (alone.texels[i] !== early.texels[i]) differ++;
+  expect(differ).toBe(0);
+  expect(alone.texels.some(v => v !== 0)).toBe(true);
 });

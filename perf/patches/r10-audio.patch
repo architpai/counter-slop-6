@@ -1,0 +1,15 @@
+diff --git a/src/components/GameMount.tsx b/src/components/GameMount.tsx
+index 374cade..11f044e 100644
+--- a/src/components/GameMount.tsx
++++ b/src/components/GameMount.tsx
+@@ -34,6 +34,10 @@ export default function GameMount() {
+     // StrictMode replays this effect with the same React-owned store. Make the
+     // view available before boot, so even an early boot failure stays visible.
+     store.activate();
++    // The browser's first AudioContext blocks the main thread ~100-190 ms while it starts the audio service (a sync
++    // IPC for the output device), on the match's first frame when the start has no pointer gesture (keyboard,
++    // gamepad). Listing the devices starts that service now, off the main thread, with no context and no sound.
++    navigator.mediaDevices?.enumerateDevices?.().catch(() => {});
+     let cancelled = false;
+     let handle: GameHandle | null = null;
+ 

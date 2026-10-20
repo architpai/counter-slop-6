@@ -1,0 +1,13 @@
+diff --git a/src/engine/render/index.ts b/src/engine/render/index.ts
+index fc36da4..38c0033 100644
+--- a/src/engine/render/index.ts
++++ b/src/engine/render/index.ts
+@@ -474,6 +474,8 @@ export class Renderer {
+       }
+     };
+     shadowMap.render = (lights, scene, camera) => {
++      // PROBE (throwaway): after the first draw, never redraw the maps (stale maps still sampled)
++      if (shadowMap.needsUpdate && lights.every(l => (l as THREE.DirectionalLight).shadow?.map)) { shadowMap.needsUpdate = false; return; }
+       if (!shadowMap.needsUpdate) return drawShadows(lights, scene, camera);
+       this.operators.shadowSwap(true);
+       try {

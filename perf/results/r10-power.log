@@ -1,0 +1,187 @@
+== round 10 start 2026-10-20 19:58:44
+ Wattage = 30W
+ Adapter Name = 30W USB-C Power Adapter
+ -InternalBattery-0 (id=22282339)	62%; charging; 2:55 remaining present: true
+other Chrome for Testing CPU%: 101.9
+== agents running 2026-10-20 20:02:39
+ Wattage = 30W
+ Adapter Name = 30W USB-C Power Adapter
+ -InternalBattery-0 (id=22282339)	62%; charging; 3:15 remaining present: true
+other Chrome for Testing CPU%: 79.9
+== audio+blood done 2026-10-20 20:19:30
+ Wattage = 30W
+ Adapter Name = 30W USB-C Power Adapter
+ -InternalBattery-0 (id=22282339)	59%; charging; (no estimate) present: true
+other Chrome for Testing CPU%: 81.9
+== before r10-hitch-audio 2026-10-20 20:34:04
+ Wattage = 30W
+ Adapter Name = 30W USB-C Power Adapter
+ -InternalBattery-0 (id=22282339)	57%; charging; 4:25 remaining present: true
+other Chrome for Testing CPU%: 69.7
+== r10-hitch-audio start
+Tue Oct 20 20:34:08 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	57%; charging; 4:25 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r10-hitch-audio end
+Tue Oct 20 20:37:05 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	56%; charging; (no estimate) present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== before r10b-downtown 2026-10-20 20:45:58
+ Wattage = 30W
+ Adapter Name = 30W USB-C Power Adapter
+ -InternalBattery-0 (id=22282339)	56%; charging; (no estimate) present: true
+other Chrome for Testing CPU%: 93.8
+== r10b-downtown start
+Tue Oct 20 20:46:03 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	56%; charging; (no estimate) present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r10b-downtown end
+Tue Oct 20 20:55:23 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	52%; charging; (no estimate) present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== before r10b-house 2026-10-20 20:55:37
+ Wattage = 30W
+ Adapter Name = 30W USB-C Power Adapter
+ -InternalBattery-0 (id=22282339)	52%; charging; (no estimate) present: true
+other Chrome for Testing CPU%: 64.8
+== r10b-house start
+Tue Oct 20 20:55:37 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	52%; charging; (no estimate) present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r10b-house end
+Tue Oct 20 21:04:47 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	46%; charging; (no estimate) present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== charging; sweep final (exact, no gate) 2026-10-20 21:05:02
+ Wattage = 30W
+ Adapter Name = 30W USB-C Power Adapter
+ -InternalBattery-0 (id=22282339)	46%; charging; (no estimate) present: true
+other Chrome for Testing CPU%: 91.4
+== after sweeps 2026-10-20 21:20:00
+ Wattage = 30W
+ Adapter Name = 30W USB-C Power Adapter
+ -InternalBattery-0 (id=22282339)	38%; charging; (no estimate) present: true
+other Chrome for Testing CPU%: 95.5
+== before r10b-mexico 2026-10-20 21:47:13
+ Wattage = 30W
+ Adapter Name = 30W USB-C Power Adapter
+ -InternalBattery-0 (id=22282339)	50%; charging; 2:32 remaining present: true
+other Chrome for Testing CPU%: 69.8
+== r10b-mexico start
+Tue Oct 20 21:47:13 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	50%; charging; 2:32 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r10b-mexico end
+Tue Oct 20 21:55:58 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	46%; charging; (no estimate) present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== before r10b-training 2026-10-20 22:06:59
+ Wattage = 30W
+ Adapter Name = 30W USB-C Power Adapter
+ -InternalBattery-0 (id=22282339)	50%; charging; 2:28 remaining present: true
+other Chrome for Testing CPU%: 89
+== r10b-training start
+Tue Oct 20 22:06:59 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	50%; charging; 2:28 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r10b-training end
+Tue Oct 20 22:15:38 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	46%; charging; (no estimate) present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== before r10l 2026-10-20 22:28:24
+ Wattage = 30W
+ Adapter Name = 30W USB-C Power Adapter
+ -InternalBattery-0 (id=22282339)	50%; charging; 2:37 remaining present: true
+other Chrome for Testing CPU%: 61.3
+== r10l start
+Tue Oct 20 22:28:24 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	50%; charging; 2:37 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r10l end
+Tue Oct 20 22:42:04 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	43%; charging; (no estimate) present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== before r10b-downtown2 2026-10-20 22:58:35
+ Wattage = 30W
+ Adapter Name = 30W USB-C Power Adapter
+ -InternalBattery-0 (id=22282339)	50%; charging; 2:28 remaining present: true
+other Chrome for Testing CPU%: 71.6
+== r10b-downtown2 start
+Tue Oct 20 22:58:35 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	50%; charging; 2:28 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r10b-downtown2 end
+Tue Oct 20 23:04:08 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	47%; charging; (no estimate) present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== before r10-measure 2026-10-20 23:04:08
+ Wattage = 30W
+ Adapter Name = 30W USB-C Power Adapter
+ -InternalBattery-0 (id=22282339)	47%; charging; (no estimate) present: true
+other Chrome for Testing CPU%: 64.7
+== r10-measure start
+Tue Oct 20 23:04:08 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	47%; charging; (no estimate) present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== r10-measure end
+Tue Oct 20 23:09:16 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	43%; charging; (no estimate) present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== after r10-measure 2026-10-20 23:09:17
+ Wattage = 30W
+ Adapter Name = 30W USB-C Power Adapter
+ -InternalBattery-0 (id=22282339)	43%; charging; (no estimate) present: true
+other Chrome for Testing CPU%: 71.6
+== round 10 end 2026-10-20 23:14:46
+ Wattage = 30W
+ Adapter Name = 30W USB-C Power Adapter
+ -InternalBattery-0 (id=22282339)	45%; charging; 2:41 remaining present: true
+other Chrome for Testing CPU%: 77.3

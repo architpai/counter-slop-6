@@ -1,0 +1,152 @@
+== POST-STATE 2026-10-21T01:42:44+09:00 (prestate: perf/results/msi-prestate.txt)
+== ls -A ~
+.agent-browser
+.agents
+.azure
+.bash_history
+.bash_logout
+.bashrc
+.cache
+.claude
+.claude.json
+.codex
+.config
+.gitconfig
+.local
+.npm
+.npm-global
+.npmrc
+.nv
+.profile
+.ssh
+.t3
+Developer
+bench
+bench-turbo
+files
+perf-scratch-shooter
+render
+== ls -la /home/fleet/.cache
+total 36
+drwx------  9 fleet fleet 4096 2026-10-20_17:26:56 .
+drwxr-x--- 21 fleet fleet 4096 2026-10-21_00:08:51 ..
+drwxrwxr-x  3 fleet fleet 4096 2026-10-20_11:40:40 Microsoft
+drwxrwxr-x  3 fleet fleet 4096 2026-10-20_17:26:56 blender
+drwxrwxr-x  3 fleet fleet 4096 2026-10-20_11:17:10 claude
+drwxrwxr-x  3 fleet fleet 4096 2026-10-20_11:31:38 claude-cli-nodejs
+drwxr-xr-x  2 fleet fleet 4096 2026-10-20_14:44:44 fontconfig
+-rw-r--r--  1 fleet fleet    0 2026-10-19_18:32:49 motd.legal-displayed
+drwx------  3 fleet fleet 4096 2026-10-20_17:26:49 nvidia
+drwxrwxr-x  4 fleet fleet 4096 2026-10-20_17:26:44 thumbnails
+== ls -la /home/fleet/.config
+total 24
+drwxrwxr-x  5 fleet fleet 4096 2026-10-20_14:44:13 .
+drwxr-x--- 21 fleet fleet 4096 2026-10-21_00:08:51 ..
+drwxrwxr-x  2 fleet fleet 4096 2026-10-20_13:20:48 environment.d
+drwx------  3 fleet fleet 4096 2026-10-20_14:44:13 google-chrome-for-testing
+-rw-------  1 fleet fleet   49 2026-10-20_11:35:50 llama-api-key
+drwxrwxr-x  3 fleet fleet 4096 2026-10-20_11:34:47 systemd
+== ls -la /home/fleet/.local/share
+total 16
+drwxrwxr-x 4 fleet fleet 4096 2026-10-20_14:44:45 .
+drwxrwxr-x 5 fleet fleet 4096 2026-10-20_11:17:10 ..
+drwxrwxr-x 3 fleet fleet 4096 2026-10-20_11:17:10 claude
+drwx------ 3 fleet fleet 4096 2026-10-20_14:44:45 pki
+== ls -la /tmp
+total 20
+drwxrwxrwt 16 root  root   420 2026-10-21_00:21:24 .
+drwxr-xr-x 20 root  root  4096 2026-10-19_18:20:46 ..
+drwxrwxrwt  2 root  root    40 2026-10-20_14:30:29 .ICE-unix
+drwxrwxrwt  2 root  root    40 2026-10-20_14:30:29 .X11-unix
+drwxrwxrwt  2 root  root    40 2026-10-20_14:30:29 .XIM-unix
+drwxrwxrwt  2 root  root    40 2026-10-20_14:30:29 .font-unix
+-rw-rw-r--  1 fleet fleet    0 2026-10-20_17:29:02 blender-render.lock
+drwx------  2 fleet fleet   40 2026-10-21_00:08:50 claude-1000
+-rw-rw-r--  1 fleet fleet  509 2026-10-20_22:11:35 es.txt
+-rw-r--r--  1 fleet fleet 1538 2026-10-20_22:14:06 llama-server.service
+drwxrwxr-x  3 fleet fleet   60 2026-10-20_14:41:17 node-compile-cache
+-rw-rw-r--  1 fleet fleet 3011 2026-10-20_22:14:20 sleep.log
+-rw-rw-r--  1 fleet fleet 2049 2026-10-20_15:31:43 smoke.log
+drwx------  2 root  root    40 2026-10-20_14:30:29 snap-private-tmp
+drwx------  3 root  root    60 2026-10-20_14:30:31 systemd-private-7447491c3e7a4c03885a087b8a4a6586-ModemManager.service-CVtVS3
+drwx------  3 root  root    60 2026-10-20_14:30:31 systemd-private-7447491c3e7a4c03885a087b8a4a6586-bolt.service-0nuxvH
+drwx------  3 root  root    60 2026-10-20_14:30:30 systemd-private-7447491c3e7a4c03885a087b8a4a6586-chrony.service-ijmDjQ
+drwx------  3 root  root    60 2026-10-20_14:54:31 systemd-private-7447491c3e7a4c03885a087b8a4a6586-fwupd.service-cDjmDk
+drwx------  3 root  root    60 2026-10-20_14:30:30 systemd-private-7447491c3e7a4c03885a087b8a4a6586-polkit.service-s2i2KB
+drwx------  3 root  root    60 2026-10-20_14:30:30 systemd-private-7447491c3e7a4c03885a087b8a4a6586-systemd-logind.service-kzr0NV
+drwx------  3 root  root    60 2026-10-20_14:30:31 systemd-private-7447491c3e7a4c03885a087b8a4a6586-upower.service-PFoiIn
+== ls -la /dev/shm
+total 0
+drwxrwxrwt  2 root root   40 2026-10-20_14:30:26 .
+drwxr-xr-x 21 root root 4900 2026-10-20_14:30:31 ..
+== ls -la /home/fleet/.npm
+total 16
+drwxrwxr-x  4 fleet fleet 4096 2026-10-20_11:19:17 .
+drwxr-x--- 21 fleet fleet 4096 2026-10-21_00:08:51 ..
+drwxrwxr-x  5 fleet fleet 4096 2026-10-20_11:19:18 _cacache
+drwxrwxr-x  2 fleet fleet 4096 2026-10-20_15:25:34 _logs
+-rw-rw-r--  1 fleet fleet    0 2026-10-20_11:19:09 _update-notifier-last-checked
+== ls -la /home/fleet/.nv
+total 12
+drwx------  3 fleet fleet 4096 2026-10-20_12:31:13 .
+drwxr-x--- 21 fleet fleet 4096 2026-10-21_00:08:51 ..
+drwx------  2 fleet fleet 4096 2026-10-20_12:31:13 ComputeCache
+== ls -la /home/fleet/.cache/nvidia
+total 12
+drwx------ 3 fleet fleet 4096 2026-10-20_17:26:49 .
+drwx------ 9 fleet fleet 4096 2026-10-20_17:26:56 ..
+drwx------ 3 fleet fleet 4096 2026-10-20_17:26:49 GLCache
+== find ~ (outside /home/fleet/perf-scratch-shooter) -newermt 2026-10-21 00:03, depth 4
+2026-10-21_00:03:44.8730489450 fleet /home/fleet/.t3/userdata
+2026-10-21_00:03:44.8730489450 fleet /home/fleet/.t3/userdata/model-manifest.json
+2026-10-21_00:03:45.2561770820 fleet /home/fleet/.claude/plugins
+2026-10-21_00:03:45.2691773180 fleet /home/fleet/.claude/cache/model-catalog
+2026-10-21_00:03:45.2691773180 fleet /home/fleet/.claude/cache/model-catalog/157167e7-cbed-4df5-8074-c48cd71f644f-606659fdf790-cc.json
+2026-10-21_00:03:45.3711791740 fleet /home/fleet/.claude/backups/.claude.json.backup.1792508625372
+2026-10-21_00:03:45.3781793010 fleet /home/fleet/.claude/skills/synced/157167e7-cbed-4df5-8074-c48cd71f644f_a0bec916-9a90-4c60-bc60-20a23db78d8b
+2026-10-21_00:03:46.3752938380 fleet /home/fleet/.codex/plugins/cache/openai-curated-remote
+2026-10-21_00:03:46.3753639860 fleet /home/fleet/.codex/plugins/.remote-plugin-install-staging
+2026-10-21_00:03:46.4581989520 fleet /home/fleet/.codex/goals_1.sqlite
+2026-10-21_00:03:46.4641990610 fleet /home/fleet/.codex/memories_1.sqlite
+2026-10-21_00:03:46.4641990610 fleet /home/fleet/.codex/queue_1.sqlite
+2026-10-21_00:03:46.4641990610 fleet /home/fleet/.codex/state_5.sqlite
+2026-10-21_00:08:50.4147293140 fleet /home/fleet/.t3/caches/cursor.json
+2026-10-21_00:08:50.4147293140 fleet /home/fleet/.t3/caches/opencode.json
+2026-10-21_00:08:50.4317296240 fleet /home/fleet/.t3/caches/pi.json
+2026-10-21_00:08:50.4327296420 fleet /home/fleet/.t3/caches/grok.json
+2026-10-21_00:08:50.4864211230 fleet /home/fleet/.codex/goals_1.sqlite-shm
+2026-10-21_00:08:50.6707339720 fleet /home/fleet/.t3/caches/muse.json
+2026-10-21_00:08:51.0307405220 fleet /home/fleet/.claude/plugins/synced/157167e7-cbed-4df5-8074-c48cd71f644f_a0bec916-9a90-4c60-bc60-20a23db78d8b
+2026-10-21_00:08:51.1247422330 fleet /home/fleet/.claude/backups/.claude.json.backup.1792508931125
+2026-10-21_00:08:51.1347424140 fleet /home/fleet/.claude/backups
+2026-10-21_00:08:51.1437425780 fleet /home/fleet/.codex/models_cache.json
+2026-10-21_00:08:51.4277477460 fleet /home/fleet/.claude/sessions
+2026-10-21_00:08:51.4307478000 fleet /home/fleet/.claude.json
+2026-10-21_00:08:51.4387479460 fleet /home/fleet
+2026-10-21_00:08:51.8537554970 fleet /home/fleet/.t3/caches/claudeAgent.json
+2026-10-21_00:08:51.8837560430 fleet /home/fleet/.codex/tmp/arg0-linux
+2026-10-21_00:08:51.8857560790 fleet /home/fleet/.codex/memories_1.sqlite-shm
+2026-10-21_00:08:51.8877561150 fleet /home/fleet/.codex
+2026-10-21_00:08:51.8877561150 fleet /home/fleet/.codex/queue_1.sqlite-shm
+2026-10-21_00:08:51.8887561330 fleet /home/fleet/.codex/state_5.sqlite-shm
+2026-10-21_00:08:51.9117565520 fleet /home/fleet/.t3/caches
+2026-10-21_00:08:51.9117565520 fleet /home/fleet/.t3/caches/codex.json
+2026-10-21_00:08:52.2707630840 fleet /home/fleet/.local/state/claude/locks
+2026-10-21_00:31:13.9440352670 fleet /home/fleet/.t3/userdata/logs/server.trace.ndjson.1
+2026-10-21_00:31:18.9501255960 fleet /home/fleet/.t3/userdata/logs
+2026-10-21_01:42:43.9625269880 fleet /home/fleet/.t3/userdata/logs/server.trace.ndjson
+== find /tmp /dev/shm -newermt 2026-10-21 00:03
+2026-10-21_00:21:24.0773917510 root /tmp
+2026-10-21_00:08:50.9057382480 fleet /tmp/claude-1000
+== processes of fleet
+    PID     ELAPSED COMMAND
+   2432    11:12:06 systemd
+   2442    11:12:06 (sd-pam)
+   2462    11:12:06 node-MainThread
+   2514    11:12:05 node-MainThread
+   2555    11:12:04 t3-resource-mon
+   3295    11:11:33 bash
+   5947    10:57:59 dbus-daemon
+   6011    10:57:59 at-spi-bus-laun
+ 200470       00:00 sshd-session
+ 200471       00:00 ps

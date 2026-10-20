@@ -1,0 +1,6175 @@
+{
+ "meta": {
+  "label": "baseline-profile",
+  "mode": "profile",
+  "date": "2026-10-18T10:41:22.584Z",
+  "git": {
+   "sha": "be475357ff53370403c8ff2b21fccd702f9b7207",
+   "branch": "perf/loop",
+   "dirty": false
+  },
+  "chrome": "153.0.8010.12",
+  "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+  "viewport": {
+   "width": 1920,
+   "height": 1080,
+   "deviceScaleFactor": 1
+  },
+  "chromeArgs": [
+   "--use-gl=angle",
+   "--use-angle=metal",
+   "--ignore-gpu-blocklist",
+   "--disable-gpu-vsync",
+   "--disable-frame-rate-limit",
+   "--enable-precise-memory-info"
+  ],
+  "node": "v24.16.0",
+  "args": [
+   "--profile",
+   "--label",
+   "baseline-profile"
+  ],
+  "config": {
+   "label": "baseline-profile",
+   "maps": [
+    "downtown",
+    "house",
+    "mexico",
+    "training"
+   ],
+   "presets": [
+    "low",
+    "medium",
+    "high",
+    "ultra"
+   ],
+   "repeat": 1,
+   "frames": 900,
+   "warmup": 240,
+   "fightWarmup": 240,
+   "ablateFrames": 240,
+   "idle": 120,
+   "seed": 20261018,
+   "profile": true,
+   "trace": true,
+   "gpuTimer": false,
+   "headed": false,
+   "raw": false,
+   "build": false,
+   "quick": false
+  },
+  "timer": {
+   "downtown/low#0": {
+    "supported": true,
+    "reason": "0/120 results, 383 zero, 0 disjoint; query undefined ms over the 1.5 ms frame interval; the extra pass moved the frame interval by 3.2 ms only; the query grew nullx what the extra pass added to the frame interval",
+    "read": 1920,
+    "zero": 383,
+    "disjoint": 0,
+    "base": {
+     "queryMedMs": null,
+     "frameMedMs": 1.5,
+     "results": 0
+    },
+    "calibrated": {
+     "queryMedMs": null,
+     "frameMedMs": 4.7,
+     "results": 0
+    },
+    "slope": null,
+    "working": false
+   },
+   "downtown/medium#0": {
+    "supported": true,
+    "reason": "0/120 results, 3467 zero, 0 disjoint; query undefined ms over the 2.8 ms frame interval; the extra pass moved the frame interval by 3.6 ms only; the query grew nullx what the extra pass added to the frame interval",
+    "read": 8130,
+    "zero": 3467,
+    "disjoint": 0,
+    "base": {
+     "queryMedMs": null,
+     "frameMedMs": 2.8,
+     "results": 0
+    },
+    "calibrated": {
+     "queryMedMs": null,
+     "frameMedMs": 6.4,
+     "results": 0
+    },
+    "slope": null,
+    "working": false
+   },
+   "downtown/high#0": {
+    "supported": true,
+    "reason": "0/120 results, 4004 zero, 0 disjoint; query undefined ms over the 3 ms frame interval; the extra pass moved the frame interval by 3.8 ms only; the query grew nullx what the extra pass added to the frame interval",
+    "read": 9210,
+    "zero": 4004,
+    "disjoint": 0,
+    "base": {
+     "queryMedMs": null,
+     "frameMedMs": 3,
+     "results": 0
+    },
+    "calibrated": {
+     "queryMedMs": null,
+     "frameMedMs": 6.8,
+     "results": 0
+    },
+    "slope": null,
+    "working": false
+   },
+   "downtown/ultra#0": {
+    "supported": true,
+    "reason": "0/120 results, 4828 zero, 0 disjoint; query undefined ms over the 4.1 ms frame interval; the extra pass moved the frame interval by 3.8 ms only; the query grew nullx what the extra pass added to the frame interval",
+    "read": 10830,
+    "zero": 4828,
+    "disjoint": 0,
+    "base": {
+     "queryMedMs": null,
+     "frameMedMs": 4.1,
+     "results": 0
+    },
+    "calibrated": {
+     "queryMedMs": null,
+     "frameMedMs": 7.9,
+     "results": 0
+    },
+    "slope": null,
+    "working": false
+   },
+   "house/low#0": {
+    "supported": true,
+    "reason": "0/120 results, 389 zero, 0 disjoint; query undefined ms over the 0.7 ms frame interval; the extra pass moved the frame interval by 4.1 ms only; the query grew nullx what the extra pass added to the frame interval",
+    "read": 1920,
+    "zero": 389,
+    "disjoint": 0,
+    "base": {
+     "queryMedMs": null,
+     "frameMedMs": 0.7,
+     "results": 0
+    },
+    "calibrated": {
+     "queryMedMs": null,
+     "frameMedMs": 4.8,
+     "results": 0
+    },
+    "slope": null,
+    "working": false
+   },
+   "house/medium#0": {
+    "supported": true,
+    "reason": "0/120 results, 3446 zero, 0 disjoint; query undefined ms over the 3.1 ms frame interval; the extra pass moved the frame interval by 5.2 ms only; the query grew nullx what the extra pass added to the frame interval",
+    "read": 8130,
+    "zero": 3446,
+    "disjoint": 0,
+    "base": {
+     "queryMedMs": null,
+     "frameMedMs": 3.1,
+     "results": 0
+    },
+    "calibrated": {
+     "queryMedMs": null,
+     "frameMedMs": 8.3,
+     "results": 0
+    },
+    "slope": null,
+    "working": false
+   },
+   "house/high#0": {
+    "supported": true,
+    "reason": "0/120 results, 3987 zero, 0 disjoint; query undefined ms over the 3.3 ms frame interval; the extra pass moved the frame interval by 6.2 ms only; the query grew nullx what the extra pass added to the frame interval",
+    "read": 9210,
+    "zero": 3987,
+    "disjoint": 0,
+    "base": {
+     "queryMedMs": null,
+     "frameMedMs": 3.3,
+     "results": 0
+    },
+    "calibrated": {
+     "queryMedMs": null,
+     "frameMedMs": 9.5,
+     "results": 0
+    },
+    "slope": null,
+    "working": false
+   },
+   "house/ultra#0": {
+    "supported": true,
+    "reason": "0/120 results, 3994 zero, 0 disjoint; query undefined ms over the 4.5 ms frame interval; the extra pass moved the frame interval by 4.9 ms only; the query grew nullx what the extra pass added to the frame interval",
+    "read": 9210,
+    "zero": 3994,
+    "disjoint": 0,
+    "base": {
+     "queryMedMs": null,
+     "frameMedMs": 4.5,
+     "results": 0
+    },
+    "calibrated": {
+     "queryMedMs": null,
+     "frameMedMs": 9.4,
+     "results": 0
+    },
+    "slope": null,
+    "working": false
+   },
+   "mexico/low#0": {
+    "supported": true,
+    "reason": "0/120 results, 391 zero, 0 disjoint; query undefined ms over the 0.9 ms frame interval; the extra pass moved the frame interval by 3.9 ms only; the query grew nullx what the extra pass added to the frame interval",
+    "read": 1920,
+    "zero": 391,
+    "disjoint": 0,
+    "base": {
+     "queryMedMs": null,
+     "frameMedMs": 0.9,
+     "results": 0
+    },
+    "calibrated": {
+     "queryMedMs": null,
+     "frameMedMs": 4.8,
+     "results": 0
+    },
+    "slope": null,
+    "working": false
+   },
+   "mexico/medium#0": {
+    "supported": true,
+    "reason": "0/120 results, 3478 zero, 0 disjoint; query undefined ms over the 2.9 ms frame interval; the extra pass moved the frame interval by 3.6 ms only; the query grew nullx what the extra pass added to the frame interval",
+    "read": 8130,
+    "zero": 3478,
+    "disjoint": 0,
+    "base": {
+     "queryMedMs": null,
+     "frameMedMs": 2.9,
+     "results": 0
+    },
+    "calibrated": {
+     "queryMedMs": null,
+     "frameMedMs": 6.5,
+     "results": 0
+    },
+    "slope": null,
+    "working": false
+   },
+   "mexico/high#0": {
+    "supported": true,
+    "reason": "0/120 results, 3999 zero, 0 disjoint; query undefined ms over the 3.3 ms frame interval; the extra pass moved the frame interval by 6.9 ms only; the query grew nullx what the extra pass added to the frame interval",
+    "read": 9210,
+    "zero": 3999,
+    "disjoint": 0,
+    "base": {
+     "queryMedMs": null,
+     "frameMedMs": 3.3,
+     "results": 0
+    },
+    "calibrated": {
+     "queryMedMs": null,
+     "frameMedMs": 10.2,
+     "results": 0
+    },
+    "slope": null,
+    "working": false
+   },
+   "mexico/ultra#0": {
+    "supported": true,
+    "reason": "0/120 results, 4828 zero, 0 disjoint; query undefined ms over the 4.5 ms frame interval; the extra pass moved the frame interval by 5.1 ms only; the query grew nullx what the extra pass added to the frame interval",
+    "read": 10830,
+    "zero": 4828,
+    "disjoint": 0,
+    "base": {
+     "queryMedMs": null,
+     "frameMedMs": 4.5,
+     "results": 0
+    },
+    "calibrated": {
+     "queryMedMs": null,
+     "frameMedMs": 9.6,
+     "results": 0
+    },
+    "slope": null,
+    "working": false
+   },
+   "training/low#0": {
+    "supported": true,
+    "reason": "0/120 results, 416 zero, 0 disjoint; query undefined ms over the 1.6 ms frame interval; the extra pass moved the frame interval by 3.1 ms only; the query grew nullx what the extra pass added to the frame interval",
+    "read": 1920,
+    "zero": 416,
+    "disjoint": 0,
+    "base": {
+     "queryMedMs": null,
+     "frameMedMs": 1.6,
+     "results": 0
+    },
+    "calibrated": {
+     "queryMedMs": null,
+     "frameMedMs": 4.7,
+     "results": 0
+    },
+    "slope": null,
+    "working": false
+   },
+   "training/medium#0": {
+    "supported": true,
+    "reason": "0/120 results, 3441 zero, 0 disjoint; query undefined ms over the 2.2 ms frame interval; the extra pass moved the frame interval by 4.8 ms only; the query grew nullx what the extra pass added to the frame interval",
+    "read": 8130,
+    "zero": 3441,
+    "disjoint": 0,
+    "base": {
+     "queryMedMs": null,
+     "frameMedMs": 2.2,
+     "results": 0
+    },
+    "calibrated": {
+     "queryMedMs": null,
+     "frameMedMs": 7,
+     "results": 0
+    },
+    "slope": null,
+    "working": false
+   },
+   "training/high#0": {
+    "supported": true,
+    "reason": "0/120 results, 3979 zero, 0 disjoint; query undefined ms over the 3.5 ms frame interval; the extra pass moved the frame interval by 6 ms only; the query grew nullx what the extra pass added to the frame interval",
+    "read": 9210,
+    "zero": 3979,
+    "disjoint": 0,
+    "base": {
+     "queryMedMs": null,
+     "frameMedMs": 3.5,
+     "results": 0
+    },
+    "calibrated": {
+     "queryMedMs": null,
+     "frameMedMs": 9.5,
+     "results": 0
+    },
+    "slope": null,
+    "working": false
+   },
+   "training/ultra#0": {
+    "supported": true,
+    "reason": "0/120 results, 3962 zero, 0 disjoint; query undefined ms over the 4.6 ms frame interval; the extra pass moved the frame interval by 5 ms only; the query grew nullx what the extra pass added to the frame interval",
+    "read": 9210,
+    "zero": 3962,
+    "disjoint": 0,
+    "base": {
+     "queryMedMs": null,
+     "frameMedMs": 4.6,
+     "results": 0
+    },
+    "calibrated": {
+     "queryMedMs": null,
+     "frameMedMs": 9.6,
+     "results": 0
+    },
+    "slope": null,
+    "working": false
+   }
+  },
+  "timerNote": "EXT_disjoint_timer_query_webgl2 on ANGLE Metal returns non-zero, non-disjoint results that scale with GPU work, but they are spans of 2-2.5x the GPU-bound frame interval (e.g. Ultra downtown idle: query 8.4 ms at a 3.5 ms frame; one injected fullscreen pass: query 20.7 ms at an 8.1 ms frame), so not GPU busy time. gpuMs is null where the per-cell check fails (query median > 1.1x frame median); frameMs is the GPU-bound measure (trace.waitMsPerFrame shows the main thread waiting on the GPU side).",
+  "durationMs": 963907,
+  "errors": []
+ },
+ "cells": [
+  {
+   "map": "downtown",
+   "preset": "low",
+   "runs": [
+    {
+     "map": "downtown",
+     "preset": "low",
+     "chrome": "153.0.8010.12",
+     "load": {
+      "firstPlayableMs": 464.3,
+      "readyMs": 483.7,
+      "liveMs": 321.1,
+      "enteredMs": 360.9
+     },
+     "facts": {
+      "preset": "low",
+      "look": "lowpoly",
+      "fpsTarget": 0,
+      "dynamicRes": true,
+      "renderScale": 0.75,
+      "pixelRatio": 1,
+      "devicePixelRatio": 1,
+      "drawingBuffer": [
+       1920,
+       1080
+      ],
+      "sceneTarget": [
+       1440,
+       810
+      ],
+      "msaa": 0,
+      "deferredWarmups": 4,
+      "level": "downtown",
+      "mode": "solo",
+      "state": "play",
+      "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+      "timer": {
+       "supported": true,
+       "reason": null
+      },
+      "crossOriginIsolated": false,
+      "dynamicScale": 1,
+      "idle": {
+       "frameMedMs": 0.3,
+       "fps": 3333.3,
+       "cpuMedMs": 0.2
+      }
+     },
+     "timer": {
+      "supported": true,
+      "reason": "0/120 results, 383 zero, 0 disjoint; query undefined ms over the 1.5 ms frame interval; the extra pass moved the frame interval by 3.2 ms only; the query grew nullx what the extra pass added to the frame interval",
+      "read": 1920,
+      "zero": 383,
+      "disjoint": 0,
+      "base": {
+       "queryMedMs": null,
+       "frameMedMs": 1.5,
+       "results": 0
+      },
+      "calibrated": {
+       "queryMedMs": null,
+       "frameMedMs": 4.7,
+       "results": 0
+      },
+      "slope": null,
+      "working": false
+     },
+     "route": {
+      "points": 1307,
+      "length": 301.6,
+      "warnings": []
+     },
+     "path": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 1.3108,
+        "render.total": 1.2829,
+        "render.main": 1.2372,
+        "render.shadows": 0.0403,
+        "render.post": 0.0227,
+        "render.pre": 0.0181,
+        "player.update": 0.015,
+        "enemies.update": 0.0008,
+        "effects.update": 0.0006,
+        "hud.update": 0,
+        "other(step)": 0.0115
+       },
+       "passesPerFrame": {
+        "post:composite": 1,
+        "shadows": 0.5
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 2,
+        "noiseMs": 0,
+        "ms": {
+         "shadows": 0.8,
+         "post:composite": 0.2
+        }
+       }
+      },
+      "summary": {
+       "kills": 0,
+       "score": 0,
+       "alive": 0,
+       "listed": 0,
+       "particles": 0,
+       "debris": 0,
+       "tracers": 0,
+       "gibs": 0,
+       "pickups": 0,
+       "hash": "cb963c47"
+      },
+      "frameMs": {
+       "med": 2.1,
+       "p95": 2.6,
+       "p99": 2.8,
+       "mean": 1.384,
+       "max": 4.9,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 2,
+       "p95": 2.5,
+       "p99": 2.6,
+       "mean": 1.311,
+       "max": 4.8,
+       "n": 900
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 1282.6,
+       "jsMs": {
+        "med": 0.184,
+        "p95": 0.252,
+        "p99": 0.424,
+        "mean": 0.213,
+        "max": 8.766,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 1.779,
+        "p95": 2.514,
+        "p99": 4.743,
+        "mean": 1.334,
+        "max": 4.774,
+        "n": 898
+       },
+       "waitMsPerFrame": 1.155,
+       "rendererMainCpuPerFrame": 0.27,
+       "gpuMainCpuPerFrame": 0.182,
+       "vizCpuPerFrame": 0.022
+      },
+      "heapEndMB": 57.98
+     },
+     "fight": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 1.0307,
+        "render.total": 0.7901,
+        "render.main": 0.7579,
+        "player.update": 0.0936,
+        "enemies.update": 0.0931,
+        "render.shadows": 0.0767,
+        "effects.update": 0.0272,
+        "render.pre": 0.0166,
+        "render.post": 0.0074,
+        "hud.update": 0.0004,
+        "other(step)": 0.0263
+       },
+       "passesPerFrame": {
+        "post:composite": 1,
+        "shadows": 0.5
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 1.3,
+        "noiseMs": 0.2,
+        "ms": {
+         "shadows": 0.2,
+         "post:composite": 0
+        }
+       }
+      },
+      "summary": {
+       "kills": 14,
+       "score": 6178,
+       "alive": 10,
+       "listed": 13,
+       "particles": 27,
+       "debris": 8,
+       "tracers": 5,
+       "gibs": 8,
+       "pickups": 11,
+       "hash": "5b59981d"
+      },
+      "frameMs": {
+       "med": 1.4,
+       "p95": 2.9,
+       "p99": 3.3,
+       "mean": 1.565,
+       "max": 13.4,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 0.8,
+       "p95": 2.3,
+       "p99": 2.6,
+       "mean": 1.031,
+       "max": 12.5,
+       "n": 900
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 1448.2,
+       "jsMs": {
+        "med": 0.739,
+        "p95": 1.413,
+        "p99": 2.391,
+        "mean": 0.843,
+        "max": 15.594,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 0.856,
+        "p95": 2.333,
+        "p99": 2.763,
+        "mean": 1.068,
+        "max": 13.142,
+        "n": 898
+       },
+       "waitMsPerFrame": 0.236,
+       "rendererMainCpuPerFrame": 1.362,
+       "gpuMainCpuPerFrame": 0.588,
+       "vizCpuPerFrame": 0.424
+      },
+      "heapEndMB": 38.05
+     },
+     "errors": [],
+     "cellMs": 21141,
+     "repeat": 0
+    }
+   ],
+   "median": null
+  },
+  {
+   "map": "downtown",
+   "preset": "medium",
+   "runs": [
+    {
+     "map": "downtown",
+     "preset": "medium",
+     "chrome": "153.0.8010.12",
+     "load": {
+      "firstPlayableMs": 538.1,
+      "readyMs": 8542.5,
+      "liveMs": 322,
+      "enteredMs": 432.3
+     },
+     "facts": {
+      "preset": "medium",
+      "look": "realistic",
+      "fpsTarget": 0,
+      "dynamicRes": true,
+      "renderScale": 1,
+      "pixelRatio": 1,
+      "devicePixelRatio": 1,
+      "drawingBuffer": [
+       1920,
+       1080
+      ],
+      "sceneTarget": [
+       1920,
+       1080
+      ],
+      "msaa": 2,
+      "deferredWarmups": 5,
+      "level": "downtown",
+      "mode": "solo",
+      "state": "play",
+      "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+      "timer": {
+       "supported": true,
+       "reason": null
+      },
+      "crossOriginIsolated": false,
+      "dynamicScale": 1,
+      "idle": {
+       "frameMedMs": 0.8,
+       "fps": 1250,
+       "cpuMedMs": 0.5
+      }
+     },
+     "timer": {
+      "supported": true,
+      "reason": "0/120 results, 3467 zero, 0 disjoint; query undefined ms over the 2.8 ms frame interval; the extra pass moved the frame interval by 3.6 ms only; the query grew nullx what the extra pass added to the frame interval",
+      "read": 8130,
+      "zero": 3467,
+      "disjoint": 0,
+      "base": {
+       "queryMedMs": null,
+       "frameMedMs": 2.8,
+       "results": 0
+      },
+      "calibrated": {
+       "queryMedMs": null,
+       "frameMedMs": 6.4,
+       "results": 0
+      },
+      "slope": null,
+      "working": false
+     },
+     "route": {
+      "points": 1307,
+      "length": 301.6,
+      "warnings": []
+     },
+     "path": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 2.2844,
+        "render.total": 2.2418,
+        "render.main": 2.0344,
+        "render.post": 0.1861,
+        "render.shadows": 0.1133,
+        "player.update": 0.0212,
+        "render.pre": 0.0128,
+        "effects.update": 0.003,
+        "enemies.update": 0.0008,
+        "hud.update": 0.0003,
+        "other(step)": 0.0173
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 2.7,
+        "noiseMs": 0,
+        "ms": {
+         "shadows": 0.1,
+         "post:bloom-prefilter": 0.1,
+         "post:bloom-down": 0.1,
+         "post:bloom-up": 0.1,
+         "post:agx": 0.1,
+         "smaa": 0.1,
+         "post:final": 0.1
+        }
+       }
+      },
+      "summary": {
+       "kills": 0,
+       "score": 0,
+       "alive": 0,
+       "listed": 0,
+       "particles": 0,
+       "debris": 0,
+       "tracers": 0,
+       "gibs": 0,
+       "pickups": 0,
+       "hash": "cb963c47"
+      },
+      "frameMs": {
+       "med": 2.7,
+       "p95": 3.7,
+       "p99": 5.3,
+       "mean": 2.401,
+       "max": 6.2,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 2.6,
+       "p95": 3.3,
+       "p99": 5.1,
+       "mean": 2.284,
+       "max": 5.7,
+       "n": 900
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 2246.1,
+       "jsMs": {
+        "med": 0.487,
+        "p95": 1.102,
+        "p99": 1.454,
+        "mean": 0.593,
+        "max": 7.897,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 2.629,
+        "p95": 3.627,
+        "p99": 6.064,
+        "mean": 2.327,
+        "max": 7.505,
+        "n": 898
+       },
+       "waitMsPerFrame": 1.768,
+       "rendererMainCpuPerFrame": 0.727,
+       "gpuMainCpuPerFrame": 0.617,
+       "vizCpuPerFrame": 0.422
+      },
+      "heapEndMB": 55.78
+     },
+     "fight": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 1.8213,
+        "render.total": 1.3149,
+        "render.main": 1.0929,
+        "render.shadows": 0.2226,
+        "enemies.update": 0.2134,
+        "player.update": 0.159,
+        "render.pre": 0.1404,
+        "effects.update": 0.0724,
+        "render.post": 0.0683,
+        "hud.update": 0.002,
+        "other(step)": 0.0596
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 2.4,
+        "noiseMs": 0.2,
+        "ms": {
+         "smaa": 0.2,
+         "shadows": 0,
+         "post:bloom-up": 0,
+         "post:agx": 0,
+         "post:final": 0,
+         "post:bloom-prefilter": -0.2,
+         "post:bloom-down": -0.3
+        }
+       }
+      },
+      "summary": {
+       "kills": 13,
+       "score": 4098,
+       "alive": 11,
+       "listed": 14,
+       "particles": 80,
+       "debris": 8,
+       "tracers": 1,
+       "gibs": 7,
+       "pickups": 5,
+       "hash": "52ff35f6"
+      },
+      "frameMs": {
+       "med": 2.8,
+       "p95": 4.5,
+       "p99": 5.8,
+       "mean": 2.876,
+       "max": 12.9,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 1.7,
+       "p95": 2.9,
+       "p99": 3.5,
+       "mean": 1.821,
+       "max": 12.3,
+       "n": 900
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 2535.1,
+       "jsMs": {
+        "med": 1.669,
+        "p95": 2.664,
+        "p99": 4.187,
+        "mean": 1.759,
+        "max": 14.663,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 1.832,
+        "p95": 3.083,
+        "p99": 4.321,
+        "mean": 1.928,
+        "max": 14.756,
+        "n": 898
+       },
+       "waitMsPerFrame": 0.182,
+       "rendererMainCpuPerFrame": 2.62,
+       "gpuMainCpuPerFrame": 1.299,
+       "vizCpuPerFrame": 0.246
+      },
+      "heapEndMB": 67.14
+     },
+     "errors": [],
+     "cellMs": 48373,
+     "repeat": 0
+    }
+   ],
+   "median": null
+  },
+  {
+   "map": "downtown",
+   "preset": "high",
+   "runs": [
+    {
+     "map": "downtown",
+     "preset": "high",
+     "chrome": "153.0.8010.12",
+     "load": {
+      "firstPlayableMs": 547.8,
+      "readyMs": 8408.3,
+      "liveMs": 323.8,
+      "enteredMs": 444.8
+     },
+     "facts": {
+      "preset": "high",
+      "look": "realistic",
+      "fpsTarget": 0,
+      "dynamicRes": true,
+      "renderScale": 1,
+      "pixelRatio": 1,
+      "devicePixelRatio": 1,
+      "drawingBuffer": [
+       1920,
+       1080
+      ],
+      "sceneTarget": [
+       1920,
+       1080
+      ],
+      "msaa": 2,
+      "deferredWarmups": 5,
+      "level": "downtown",
+      "mode": "solo",
+      "state": "play",
+      "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+      "timer": {
+       "supported": true,
+       "reason": null
+      },
+      "crossOriginIsolated": false,
+      "dynamicScale": 1,
+      "idle": {
+       "frameMedMs": 2.7,
+       "fps": 370.4,
+       "cpuMedMs": 2.5
+      }
+     },
+     "timer": {
+      "supported": true,
+      "reason": "0/120 results, 4004 zero, 0 disjoint; query undefined ms over the 3 ms frame interval; the extra pass moved the frame interval by 3.8 ms only; the query grew nullx what the extra pass added to the frame interval",
+      "read": 9210,
+      "zero": 4004,
+      "disjoint": 0,
+      "base": {
+       "queryMedMs": null,
+       "frameMedMs": 3,
+       "results": 0
+      },
+      "calibrated": {
+       "queryMedMs": null,
+       "frameMedMs": 6.8,
+       "results": 0
+      },
+      "slope": null,
+      "working": false
+     },
+     "route": {
+      "points": 1307,
+      "length": 301.6,
+      "warnings": []
+     },
+     "path": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 2.6727,
+        "render.total": 2.6184,
+        "render.main": 2.3512,
+        "render.post": 0.2417,
+        "render.shadows": 0.2092,
+        "player.update": 0.0239,
+        "render.pre": 0.0166,
+        "effects.update": 0.0041,
+        "enemies.update": 0.0014,
+        "hud.update": 0.0001,
+        "other(step)": 0.0248
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:gtao": 1,
+        "post:ao-blur": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 2.8,
+        "noiseMs": 0,
+        "ms": {
+         "shadows": 0.1,
+         "post:gtao": 0,
+         "post:ao-blur": 0,
+         "post:bloom-prefilter": 0,
+         "post:bloom-down": 0,
+         "post:bloom-up": 0,
+         "post:agx": 0,
+         "smaa": 0,
+         "post:final": 0
+        }
+       }
+      },
+      "summary": {
+       "kills": 0,
+       "score": 0,
+       "alive": 0,
+       "listed": 0,
+       "particles": 0,
+       "debris": 0,
+       "tracers": 0,
+       "gibs": 0,
+       "pickups": 0,
+       "hash": "cb963c47"
+      },
+      "frameMs": {
+       "med": 2.9,
+       "p95": 4.1,
+       "p99": 5.3,
+       "mean": 2.819,
+       "max": 5.7,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 2.8,
+       "p95": 3.8,
+       "p99": 5.3,
+       "mean": 2.673,
+       "max": 5.6,
+       "n": 900
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 2517.8,
+       "jsMs": {
+        "med": 0.476,
+        "p95": 0.752,
+        "p99": 1.098,
+        "mean": 0.534,
+        "max": 6.342,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 2.76,
+        "p95": 3.695,
+        "p99": 5.254,
+        "mean": 2.653,
+        "max": 5.609,
+        "n": 898
+       },
+       "waitMsPerFrame": 2.158,
+       "rendererMainCpuPerFrame": 0.644,
+       "gpuMainCpuPerFrame": 0.609,
+       "vizCpuPerFrame": 0.286
+      },
+      "heapEndMB": 53.25
+     },
+     "fight": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 2.6468,
+        "render.total": 2.1153,
+        "render.main": 1.7982,
+        "render.shadows": 0.4198,
+        "enemies.update": 0.2207,
+        "player.update": 0.1613,
+        "render.post": 0.1541,
+        "render.pre": 0.1499,
+        "effects.update": 0.0883,
+        "hud.update": 0.0014,
+        "other(step)": 0.0598
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:gtao": 1,
+        "post:ao-blur": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1,
+        "soft": 0.98
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 3.15,
+        "noiseMs": 0.3,
+        "ms": {
+         "smaa": 0.35,
+         "shadows": 0.25,
+         "post:gtao": 0.15,
+         "post:bloom-prefilter": 0.15,
+         "post:agx": 0.15,
+         "soft": 0.15,
+         "post:ao-blur": 0.05,
+         "post:final": 0.05,
+         "post:bloom-down": -0.05,
+         "post:bloom-up": -0.05
+        }
+       }
+      },
+      "summary": {
+       "kills": 13,
+       "score": 4098,
+       "alive": 11,
+       "listed": 14,
+       "particles": 80,
+       "debris": 8,
+       "tracers": 1,
+       "gibs": 7,
+       "pickups": 5,
+       "hash": "52ff35f6"
+      },
+      "frameMs": {
+       "med": 3.4,
+       "p95": 5,
+       "p99": 6,
+       "mean": 3.501,
+       "max": 20.4,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 2.6,
+       "p95": 4,
+       "p99": 4.8,
+       "mean": 2.647,
+       "max": 17.8,
+       "n": 900
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 3125.4,
+       "jsMs": {
+        "med": 2.066,
+        "p95": 3.188,
+        "p99": 5.486,
+        "mean": 2.163,
+        "max": 20.358,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 2.467,
+        "p95": 3.872,
+        "p99": 5.457,
+        "mean": 2.601,
+        "max": 20.507,
+        "n": 898
+       },
+       "waitMsPerFrame": 0.475,
+       "rendererMainCpuPerFrame": 2.985,
+       "gpuMainCpuPerFrame": 1.541,
+       "vizCpuPerFrame": 0.607
+      },
+      "heapEndMB": 68.8
+     },
+     "errors": [],
+     "cellMs": 62372,
+     "repeat": 0
+    }
+   ],
+   "median": null
+  },
+  {
+   "map": "downtown",
+   "preset": "ultra",
+   "runs": [
+    {
+     "map": "downtown",
+     "preset": "ultra",
+     "chrome": "153.0.8010.12",
+     "load": {
+      "firstPlayableMs": 592.7,
+      "readyMs": 10517.2,
+      "liveMs": 361.6,
+      "enteredMs": 491.7
+     },
+     "facts": {
+      "preset": "ultra",
+      "look": "realistic",
+      "fpsTarget": 0,
+      "dynamicRes": false,
+      "renderScale": 1,
+      "pixelRatio": 1,
+      "devicePixelRatio": 1,
+      "drawingBuffer": [
+       1920,
+       1080
+      ],
+      "sceneTarget": [
+       1920,
+       1080
+      ],
+      "msaa": 4,
+      "deferredWarmups": 5,
+      "level": "downtown",
+      "mode": "solo",
+      "state": "play",
+      "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+      "timer": {
+       "supported": true,
+       "reason": null
+      },
+      "crossOriginIsolated": false,
+      "dynamicScale": 1,
+      "idle": {
+       "frameMedMs": 3.4,
+       "fps": 294.1,
+       "cpuMedMs": 3.2
+      }
+     },
+     "timer": {
+      "supported": true,
+      "reason": "0/120 results, 4828 zero, 0 disjoint; query undefined ms over the 4.1 ms frame interval; the extra pass moved the frame interval by 3.8 ms only; the query grew nullx what the extra pass added to the frame interval",
+      "read": 10830,
+      "zero": 4828,
+      "disjoint": 0,
+      "base": {
+       "queryMedMs": null,
+       "frameMedMs": 4.1,
+       "results": 0
+      },
+      "calibrated": {
+       "queryMedMs": null,
+       "frameMedMs": 7.9,
+       "results": 0
+      },
+      "slope": null,
+      "working": false
+     },
+     "route": {
+      "points": 1307,
+      "length": 301.6,
+      "warnings": []
+     },
+     "path": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 4.0266,
+        "render.total": 3.9837,
+        "render.main": 3.6823,
+        "render.shadows": 0.3841,
+        "render.post": 0.2737,
+        "player.update": 0.0188,
+        "render.pre": 0.0172,
+        "effects.update": 0.003,
+        "enemies.update": 0.0011,
+        "hud.update": 0.0003,
+        "other(step)": 0.0197
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:gtao": 1,
+        "post:ao-blur": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1,
+        "post:shaft-mask": 0.33,
+        "post:shaft-blur": 0.65
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 4.05,
+        "noiseMs": 0.1,
+        "ms": {
+         "shadows": 0.25,
+         "post:gtao": 0.25,
+         "smaa": 0.15,
+         "post:ao-blur": 0.05,
+         "post:bloom-prefilter": 0.05,
+         "post:bloom-down": 0.05,
+         "post:bloom-up": 0.05,
+         "post:agx": 0.05,
+         "post:final": 0.05,
+         "post:shaft-mask": -0.05,
+         "post:shaft-blur": -0.05
+        }
+       }
+      },
+      "summary": {
+       "kills": 0,
+       "score": 0,
+       "alive": 0,
+       "listed": 0,
+       "particles": 0,
+       "debris": 0,
+       "tracers": 0,
+       "gibs": 0,
+       "pickups": 0,
+       "hash": "cb963c47"
+      },
+      "frameMs": {
+       "med": 4.1,
+       "p95": 5.3,
+       "p99": 7.7,
+       "mean": 4.143,
+       "max": 8.8,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 4,
+       "p95": 5.2,
+       "p99": 7.6,
+       "mean": 4.027,
+       "max": 8.7,
+       "n": 900
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 3394.7,
+       "jsMs": {
+        "med": 0.514,
+        "p95": 0.726,
+        "p99": 1.074,
+        "mean": 0.554,
+        "max": 5.018,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 3.867,
+        "p95": 4.451,
+        "p99": 7.343,
+        "mean": 3.644,
+        "max": 7.962,
+        "n": 898
+       },
+       "waitMsPerFrame": 3.12,
+       "rendererMainCpuPerFrame": 0.658,
+       "gpuMainCpuPerFrame": 0.692,
+       "vizCpuPerFrame": 0.669
+      },
+      "heapEndMB": 46.46
+     },
+     "fight": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 4.4764,
+        "render.total": 3.787,
+        "render.main": 3.3089,
+        "render.shadows": 0.881,
+        "enemies.update": 0.2916,
+        "render.pre": 0.237,
+        "render.post": 0.2228,
+        "player.update": 0.214,
+        "effects.update": 0.1261,
+        "hud.update": 0.0012,
+        "other(step)": 0.0565
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:gtao": 1,
+        "post:ao-blur": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:shaft-mask": 0.94,
+        "post:shaft-blur": 1.89,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1,
+        "soft": 0.98
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 5.15,
+        "noiseMs": 0.1,
+        "ms": {
+         "post:gtao": 0.65,
+         "shadows": 0.35,
+         "smaa": 0.25,
+         "post:ao-blur": 0.15,
+         "post:agx": 0.15,
+         "post:final": 0.05,
+         "soft": 0.05,
+         "post:bloom-prefilter": -0.05,
+         "post:bloom-down": -0.05,
+         "post:bloom-up": -0.05,
+         "post:shaft-mask": -0.05,
+         "post:shaft-blur": -0.05
+        }
+       }
+      },
+      "summary": {
+       "kills": 13,
+       "score": 4098,
+       "alive": 11,
+       "listed": 14,
+       "particles": 80,
+       "debris": 8,
+       "tracers": 1,
+       "gibs": 7,
+       "pickups": 5,
+       "hash": "52ff35f6"
+      },
+      "frameMs": {
+       "med": 5.4,
+       "p95": 7.7,
+       "p99": 9.4,
+       "mean": 5.453,
+       "max": 31.3,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 4.4,
+       "p95": 6,
+       "p99": 8.4,
+       "mean": 4.476,
+       "max": 27.7,
+       "n": 900
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 4746,
+       "jsMs": {
+        "med": 1.951,
+        "p95": 3.171,
+        "p99": 6.843,
+        "mean": 2.098,
+        "max": 19.473,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 4.386,
+        "p95": 6.487,
+        "p99": 8.192,
+        "mean": 4.441,
+        "max": 19.54,
+        "n": 898
+       },
+       "waitMsPerFrame": 2.388,
+       "rendererMainCpuPerFrame": 2.889,
+       "gpuMainCpuPerFrame": 1.543,
+       "vizCpuPerFrame": 1.01
+      },
+      "heapEndMB": 58.96
+     },
+     "errors": [],
+     "cellMs": 106763,
+     "repeat": 0
+    }
+   ],
+   "median": null
+  },
+  {
+   "map": "house",
+   "preset": "low",
+   "runs": [
+    {
+     "map": "house",
+     "preset": "low",
+     "chrome": "153.0.8010.12",
+     "load": {
+      "firstPlayableMs": 746.9,
+      "readyMs": 775.5,
+      "liveMs": 530.3,
+      "enteredMs": 595.5
+     },
+     "facts": {
+      "preset": "low",
+      "look": "lowpoly",
+      "fpsTarget": 0,
+      "dynamicRes": true,
+      "renderScale": 0.75,
+      "pixelRatio": 1,
+      "devicePixelRatio": 1,
+      "drawingBuffer": [
+       1920,
+       1080
+      ],
+      "sceneTarget": [
+       1440,
+       810
+      ],
+      "msaa": 0,
+      "deferredWarmups": 4,
+      "level": "house",
+      "mode": "solo",
+      "state": "play",
+      "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+      "timer": {
+       "supported": true,
+       "reason": null
+      },
+      "crossOriginIsolated": false,
+      "dynamicScale": 1,
+      "idle": {
+       "frameMedMs": 0.4,
+       "fps": 2500,
+       "cpuMedMs": 0.3
+      }
+     },
+     "timer": {
+      "supported": true,
+      "reason": "0/120 results, 389 zero, 0 disjoint; query undefined ms over the 0.7 ms frame interval; the extra pass moved the frame interval by 4.1 ms only; the query grew nullx what the extra pass added to the frame interval",
+      "read": 1920,
+      "zero": 389,
+      "disjoint": 0,
+      "base": {
+       "queryMedMs": null,
+       "frameMedMs": 0.7,
+       "results": 0
+      },
+      "calibrated": {
+       "queryMedMs": null,
+       "frameMedMs": 4.8,
+       "results": 0
+      },
+      "slope": null,
+      "working": false
+     },
+     "route": {
+      "points": 899,
+      "length": 206.9,
+      "warnings": []
+     },
+     "path": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 1.5744,
+        "render.total": 1.5486,
+        "render.main": 1.5123,
+        "render.shadows": 0.0667,
+        "render.pre": 0.0197,
+        "player.update": 0.017,
+        "render.post": 0.0123,
+        "enemies.update": 0.0003,
+        "effects.update": 0.0002,
+        "hud.update": 0,
+        "other(step)": 0.0083
+       },
+       "passesPerFrame": {
+        "post:composite": 1,
+        "shadows": 0.5
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 2.2,
+        "noiseMs": 0.2,
+        "ms": {
+         "shadows": 1.4,
+         "post:composite": 0
+        }
+       }
+      },
+      "summary": {
+       "kills": 0,
+       "score": 0,
+       "alive": 0,
+       "listed": 0,
+       "particles": 0,
+       "debris": 0,
+       "tracers": 0,
+       "gibs": 0,
+       "pickups": 0,
+       "hash": "3bfc919"
+      },
+      "frameMs": {
+       "med": 2.5,
+       "p95": 2.8,
+       "p99": 3.3,
+       "mean": 1.638,
+       "max": 5.3,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 2.4,
+       "p95": 2.8,
+       "p99": 3,
+       "mean": 1.574,
+       "max": 5.3,
+       "n": 900
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 1397.6,
+       "jsMs": {
+        "med": 0.193,
+        "p95": 0.274,
+        "p99": 0.367,
+        "mean": 0.22,
+        "max": 7.635,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 2.158,
+        "p95": 2.79,
+        "p99": 4.913,
+        "mean": 1.486,
+        "max": 5.437,
+        "n": 898
+       },
+       "waitMsPerFrame": 1.297,
+       "rendererMainCpuPerFrame": 0.255,
+       "gpuMainCpuPerFrame": 0.18,
+       "vizCpuPerFrame": 0.023
+      },
+      "heapEndMB": 41.94
+     },
+     "fight": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 1.1859,
+        "render.total": 0.8541,
+        "render.main": 0.8193,
+        "enemies.update": 0.1272,
+        "player.update": 0.0964,
+        "render.shadows": 0.0901,
+        "effects.update": 0.0814,
+        "render.pre": 0.0159,
+        "render.post": 0.0131,
+        "hud.update": 0.0007,
+        "other(step)": 0.0261
+       },
+       "passesPerFrame": {
+        "post:composite": 1,
+        "shadows": 0.5
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 1.45,
+        "noiseMs": 0.1,
+        "ms": {
+         "shadows": 0.15,
+         "post:composite": 0.05
+        }
+       }
+      },
+      "summary": {
+       "kills": 11,
+       "score": 3888,
+       "alive": 13,
+       "listed": 15,
+       "particles": 28,
+       "debris": 10,
+       "tracers": 1,
+       "gibs": 10,
+       "pickups": 7,
+       "hash": "c533b426"
+      },
+      "frameMs": {
+       "med": 1.5,
+       "p95": 3,
+       "p99": 3.7,
+       "mean": 1.684,
+       "max": 6.4,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 1,
+       "p95": 2.5,
+       "p99": 2.9,
+       "mean": 1.186,
+       "max": 3.8,
+       "n": 900
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 1506.7,
+       "jsMs": {
+        "med": 0.903,
+        "p95": 1.609,
+        "p99": 2.742,
+        "mean": 0.996,
+        "max": 14.643,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 1.004,
+        "p95": 2.403,
+        "p99": 3.084,
+        "mean": 1.182,
+        "max": 3.891,
+        "n": 898
+       },
+       "waitMsPerFrame": 0.228,
+       "rendererMainCpuPerFrame": 1.439,
+       "gpuMainCpuPerFrame": 0.631,
+       "vizCpuPerFrame": 0.053
+      },
+      "heapEndMB": 34.2
+     },
+     "errors": [],
+     "cellMs": 22125,
+     "repeat": 0
+    }
+   ],
+   "median": null
+  },
+  {
+   "map": "house",
+   "preset": "medium",
+   "runs": [
+    {
+     "map": "house",
+     "preset": "medium",
+     "chrome": "153.0.8010.12",
+     "load": {
+      "firstPlayableMs": 502.8,
+      "readyMs": 8100.5,
+      "liveMs": 291.5,
+      "enteredMs": 397.6
+     },
+     "facts": {
+      "preset": "medium",
+      "look": "realistic",
+      "fpsTarget": 0,
+      "dynamicRes": true,
+      "renderScale": 1,
+      "pixelRatio": 1,
+      "devicePixelRatio": 1,
+      "drawingBuffer": [
+       1920,
+       1080
+      ],
+      "sceneTarget": [
+       1920,
+       1080
+      ],
+      "msaa": 2,
+      "deferredWarmups": 5,
+      "level": "house",
+      "mode": "solo",
+      "state": "play",
+      "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+      "timer": {
+       "supported": true,
+       "reason": null
+      },
+      "crossOriginIsolated": false,
+      "dynamicScale": 1,
+      "idle": {
+       "frameMedMs": 0.8,
+       "fps": 1250,
+       "cpuMedMs": 0.6
+      }
+     },
+     "timer": {
+      "supported": true,
+      "reason": "0/120 results, 3446 zero, 0 disjoint; query undefined ms over the 3.1 ms frame interval; the extra pass moved the frame interval by 5.2 ms only; the query grew nullx what the extra pass added to the frame interval",
+      "read": 8130,
+      "zero": 3446,
+      "disjoint": 0,
+      "base": {
+       "queryMedMs": null,
+       "frameMedMs": 3.1,
+       "results": 0
+      },
+      "calibrated": {
+       "queryMedMs": null,
+       "frameMedMs": 8.3,
+       "results": 0
+      },
+      "slope": null,
+      "working": false
+     },
+     "route": {
+      "points": 899,
+      "length": 206.9,
+      "warnings": []
+     },
+     "path": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 2.6128,
+        "render.total": 2.5676,
+        "render.main": 2.3251,
+        "render.post": 0.1966,
+        "render.shadows": 0.1346,
+        "render.pre": 0.0259,
+        "player.update": 0.0208,
+        "effects.update": 0.0031,
+        "enemies.update": 0.001,
+        "hud.update": 0.0001,
+        "other(step)": 0.0202
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 3,
+        "noiseMs": 0,
+        "ms": {
+         "shadows": 0.1,
+         "post:bloom-prefilter": 0.1,
+         "post:bloom-down": 0.1,
+         "post:bloom-up": 0.1,
+         "post:agx": 0.1,
+         "smaa": 0.1,
+         "post:final": 0.1
+        }
+       }
+      },
+      "summary": {
+       "kills": 0,
+       "score": 0,
+       "alive": 0,
+       "listed": 0,
+       "particles": 0,
+       "debris": 0,
+       "tracers": 0,
+       "gibs": 0,
+       "pickups": 0,
+       "hash": "3bfc919"
+      },
+      "frameMs": {
+       "med": 3,
+       "p95": 3.8,
+       "p99": 5.7,
+       "mean": 2.721,
+       "max": 6.9,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 3,
+       "p95": 3.6,
+       "p99": 5.6,
+       "mean": 2.613,
+       "max": 6.8,
+       "n": 900
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 2555,
+       "jsMs": {
+        "med": 0.46,
+        "p95": 0.792,
+        "p99": 1.18,
+        "mean": 0.521,
+        "max": 5.806,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 2.928,
+        "p95": 3.846,
+        "p99": 5.513,
+        "mean": 2.706,
+        "max": 9.556,
+        "n": 898
+       },
+       "waitMsPerFrame": 2.235,
+       "rendererMainCpuPerFrame": 0.608,
+       "gpuMainCpuPerFrame": 0.557,
+       "vizCpuPerFrame": 1.221
+      },
+      "heapEndMB": 62.23
+     },
+     "fight": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 2.7593,
+        "render.total": 1.9812,
+        "render.main": 1.675,
+        "render.shadows": 0.3354,
+        "enemies.update": 0.2799,
+        "effects.update": 0.2677,
+        "render.pre": 0.2049,
+        "player.update": 0.184,
+        "render.post": 0.0896,
+        "hud.update": 0.0002,
+        "other(step)": 0.0463
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 2.85,
+        "noiseMs": 0.5,
+        "ms": {
+         "shadows": 0.35,
+         "post:bloom-prefilter": 0.05,
+         "post:bloom-down": 0.05,
+         "smaa": -0.05,
+         "post:bloom-up": -0.15,
+         "post:agx": -0.25,
+         "post:final": -0.45
+        }
+       }
+      },
+      "summary": {
+       "kills": 12,
+       "score": 4563,
+       "alive": 12,
+       "listed": 15,
+       "particles": 124,
+       "debris": 6,
+       "tracers": 1,
+       "gibs": 5,
+       "pickups": 9,
+       "hash": "f484119c"
+      },
+      "frameMs": {
+       "med": 3.7,
+       "p95": 5.5,
+       "p99": 6.9,
+       "mean": 3.649,
+       "max": 9.6,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 2.8,
+       "p95": 3.8,
+       "p99": 4.5,
+       "mean": 2.759,
+       "max": 8.8,
+       "n": 900
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 3172.5,
+       "jsMs": {
+        "med": 2.376,
+        "p95": 3.923,
+        "p99": 6.458,
+        "mean": 2.498,
+        "max": 13.709,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 2.508,
+        "p95": 3.983,
+        "p99": 5.501,
+        "mean": 2.636,
+        "max": 9.654,
+        "n": 898
+       },
+       "waitMsPerFrame": 0.19,
+       "rendererMainCpuPerFrame": 3.32,
+       "gpuMainCpuPerFrame": 1.75,
+       "vizCpuPerFrame": 0.331
+      },
+      "heapEndMB": 59.96
+     },
+     "errors": [],
+     "cellMs": 57160,
+     "repeat": 0
+    }
+   ],
+   "median": null
+  },
+  {
+   "map": "house",
+   "preset": "high",
+   "runs": [
+    {
+     "map": "house",
+     "preset": "high",
+     "chrome": "153.0.8010.12",
+     "load": {
+      "firstPlayableMs": 744.1,
+      "readyMs": 8225.2,
+      "liveMs": 439.2,
+      "enteredMs": 604.5
+     },
+     "facts": {
+      "preset": "high",
+      "look": "realistic",
+      "fpsTarget": 0,
+      "dynamicRes": true,
+      "renderScale": 1,
+      "pixelRatio": 1,
+      "devicePixelRatio": 1,
+      "drawingBuffer": [
+       1920,
+       1080
+      ],
+      "sceneTarget": [
+       1920,
+       1080
+      ],
+      "msaa": 2,
+      "deferredWarmups": 5,
+      "level": "house",
+      "mode": "solo",
+      "state": "play",
+      "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+      "timer": {
+       "supported": true,
+       "reason": null
+      },
+      "crossOriginIsolated": false,
+      "dynamicScale": 1,
+      "idle": {
+       "frameMedMs": 3,
+       "fps": 333.3,
+       "cpuMedMs": 2.8
+      }
+     },
+     "timer": {
+      "supported": true,
+      "reason": "0/120 results, 3987 zero, 0 disjoint; query undefined ms over the 3.3 ms frame interval; the extra pass moved the frame interval by 6.2 ms only; the query grew nullx what the extra pass added to the frame interval",
+      "read": 9210,
+      "zero": 3987,
+      "disjoint": 0,
+      "base": {
+       "queryMedMs": null,
+       "frameMedMs": 3.3,
+       "results": 0
+      },
+      "calibrated": {
+       "queryMedMs": null,
+       "frameMedMs": 9.5,
+       "results": 0
+      },
+      "slope": null,
+      "working": false
+     },
+     "route": {
+      "points": 899,
+      "length": 206.9,
+      "warnings": []
+     },
+     "path": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 2.9071,
+        "render.total": 2.8494,
+        "render.main": 2.6333,
+        "render.shadows": 0.3347,
+        "render.post": 0.1773,
+        "player.update": 0.0277,
+        "render.pre": 0.0201,
+        "effects.update": 0.0042,
+        "enemies.update": 0.0014,
+        "hud.update": 0.0001,
+        "other(step)": 0.0243
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:gtao": 1,
+        "post:ao-blur": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 3.25,
+        "noiseMs": 0.1,
+        "ms": {
+         "smaa": 0.25,
+         "shadows": 0.15,
+         "post:bloom-down": 0.15,
+         "post:bloom-up": 0.15,
+         "post:agx": 0.15,
+         "post:gtao": 0.05,
+         "post:ao-blur": 0.05,
+         "post:bloom-prefilter": 0.05,
+         "post:final": 0.05
+        }
+       }
+      },
+      "summary": {
+       "kills": 0,
+       "score": 0,
+       "alive": 0,
+       "listed": 0,
+       "particles": 0,
+       "debris": 0,
+       "tracers": 0,
+       "gibs": 0,
+       "pickups": 0,
+       "hash": "3bfc919"
+      },
+      "frameMs": {
+       "med": 3.5,
+       "p95": 4.4,
+       "p99": 6.2,
+       "mean": 3.04,
+       "max": 7.6,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 3.3,
+       "p95": 4.2,
+       "p99": 6.1,
+       "mean": 2.907,
+       "max": 7.5,
+       "n": 900
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 2751.6,
+       "jsMs": {
+        "med": 0.527,
+        "p95": 0.776,
+        "p99": 1.089,
+        "mean": 0.577,
+        "max": 5.32,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 3.06,
+        "p95": 4.148,
+        "p99": 5.708,
+        "mean": 2.946,
+        "max": 6.998,
+        "n": 898
+       },
+       "waitMsPerFrame": 2.41,
+       "rendererMainCpuPerFrame": 0.652,
+       "gpuMainCpuPerFrame": 0.64,
+       "vizCpuPerFrame": 0.614
+      },
+      "heapEndMB": 45.58
+     },
+     "fight": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 3.3911,
+        "render.total": 2.4912,
+        "render.main": 2.1184,
+        "render.shadows": 0.5857,
+        "enemies.update": 0.3223,
+        "effects.update": 0.3,
+        "render.pre": 0.2302,
+        "player.update": 0.2078,
+        "render.post": 0.1281,
+        "hud.update": 0.001,
+        "other(step)": 0.0688
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:gtao": 1,
+        "post:ao-blur": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1,
+        "soft": 0.98
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 3.95,
+        "noiseMs": 1.3,
+        "ms": {
+         "shadows": 0.75,
+         "post:gtao": 0.55,
+         "post:ao-blur": 0.35,
+         "post:bloom-prefilter": 0.05,
+         "post:bloom-down": 0.05,
+         "smaa": 0.05,
+         "post:bloom-up": -0.15,
+         "post:agx": -0.25,
+         "post:final": -0.25,
+         "soft": -0.35
+        }
+       }
+      },
+      "summary": {
+       "kills": 12,
+       "score": 4563,
+       "alive": 12,
+       "listed": 15,
+       "particles": 124,
+       "debris": 6,
+       "tracers": 1,
+       "gibs": 5,
+       "pickups": 9,
+       "hash": "f484119c"
+      },
+      "frameMs": {
+       "med": 4.4,
+       "p95": 7,
+       "p99": 9.5,
+       "mean": 4.458,
+       "max": 16.5,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 3.4,
+       "p95": 4.7,
+       "p99": 5.4,
+       "mean": 3.391,
+       "max": 11.1,
+       "n": 900
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 3632.9,
+       "jsMs": {
+        "med": 2.801,
+        "p95": 4.376,
+        "p99": 6.804,
+        "mean": 2.918,
+        "max": 12.426,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 3.011,
+        "p95": 4.519,
+        "p99": 6.156,
+        "mean": 3.105,
+        "max": 9.945,
+        "n": 898
+       },
+       "waitMsPerFrame": 0.214,
+       "rendererMainCpuPerFrame": 3.803,
+       "gpuMainCpuPerFrame": 2.089,
+       "vizCpuPerFrame": 0.129
+      },
+      "heapEndMB": 34.19
+     },
+     "errors": [],
+     "cellMs": 74794,
+     "repeat": 0
+    }
+   ],
+   "median": null
+  },
+  {
+   "map": "house",
+   "preset": "ultra",
+   "runs": [
+    {
+     "map": "house",
+     "preset": "ultra",
+     "chrome": "153.0.8010.12",
+     "load": {
+      "firstPlayableMs": 937,
+      "readyMs": 11136.6,
+      "liveMs": 548.6,
+      "enteredMs": 769.4
+     },
+     "facts": {
+      "preset": "ultra",
+      "look": "realistic",
+      "fpsTarget": 0,
+      "dynamicRes": false,
+      "renderScale": 1,
+      "pixelRatio": 1,
+      "devicePixelRatio": 1,
+      "drawingBuffer": [
+       1920,
+       1080
+      ],
+      "sceneTarget": [
+       1920,
+       1080
+      ],
+      "msaa": 4,
+      "deferredWarmups": 5,
+      "level": "house",
+      "mode": "solo",
+      "state": "play",
+      "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+      "timer": {
+       "supported": true,
+       "reason": null
+      },
+      "crossOriginIsolated": false,
+      "dynamicScale": 1,
+      "idle": {
+       "frameMedMs": 4.2,
+       "fps": 238.1,
+       "cpuMedMs": 4.1
+      }
+     },
+     "timer": {
+      "supported": true,
+      "reason": "0/120 results, 3994 zero, 0 disjoint; query undefined ms over the 4.5 ms frame interval; the extra pass moved the frame interval by 4.9 ms only; the query grew nullx what the extra pass added to the frame interval",
+      "read": 9210,
+      "zero": 3994,
+      "disjoint": 0,
+      "base": {
+       "queryMedMs": null,
+       "frameMedMs": 4.5,
+       "results": 0
+      },
+      "calibrated": {
+       "queryMedMs": null,
+       "frameMedMs": 9.4,
+       "results": 0
+      },
+      "slope": null,
+      "working": false
+     },
+     "route": {
+      "points": 899,
+      "length": 206.9,
+      "warnings": []
+     },
+     "path": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 3.9209,
+        "render.total": 3.8697,
+        "render.main": 3.5971,
+        "render.shadows": 0.3709,
+        "render.post": 0.2499,
+        "player.update": 0.0248,
+        "render.pre": 0.0159,
+        "effects.update": 0.0032,
+        "enemies.update": 0.0018,
+        "hud.update": 0.0002,
+        "other(step)": 0.0212
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:gtao": 1,
+        "post:ao-blur": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:shaft-mask": 0.33,
+        "post:shaft-blur": 0.67,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 4.05,
+        "noiseMs": 0.1,
+        "ms": {
+         "post:gtao": 0.75,
+         "smaa": 0.75,
+         "shadows": 0.45,
+         "post:agx": 0.35,
+         "post:ao-blur": 0.25,
+         "post:final": 0.15,
+         "post:bloom-prefilter": 0.05,
+         "post:bloom-down": -0.05,
+         "post:shaft-blur": -0.15,
+         "post:bloom-up": -0.25,
+         "post:shaft-mask": -0.25
+        }
+       }
+      },
+      "summary": {
+       "kills": 0,
+       "score": 0,
+       "alive": 0,
+       "listed": 0,
+       "particles": 0,
+       "debris": 0,
+       "tracers": 0,
+       "gibs": 0,
+       "pickups": 0,
+       "hash": "3bfc919"
+      },
+      "frameMs": {
+       "med": 4.2,
+       "p95": 5,
+       "p99": 7.2,
+       "mean": 4.03,
+       "max": 8,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 4.1,
+       "p95": 4.8,
+       "p99": 7,
+       "mean": 3.921,
+       "max": 7.9,
+       "n": 900
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 3605.1,
+       "jsMs": {
+        "med": 0.68,
+        "p95": 0.936,
+        "p99": 1.162,
+        "mean": 0.73,
+        "max": 5.006,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 4.081,
+        "p95": 5.185,
+        "p99": 7.157,
+        "mean": 3.899,
+        "max": 7.795,
+        "n": 898
+       },
+       "waitMsPerFrame": 3.207,
+       "rendererMainCpuPerFrame": 0.806,
+       "gpuMainCpuPerFrame": 0.844,
+       "vizCpuPerFrame": 0.173
+      },
+      "heapEndMB": 37.03
+     },
+     "fight": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 4.0823,
+        "render.total": 3.1984,
+        "render.main": 2.7728,
+        "render.shadows": 0.7893,
+        "enemies.update": 0.3238,
+        "effects.update": 0.2894,
+        "render.pre": 0.2324,
+        "player.update": 0.2123,
+        "render.post": 0.1814,
+        "hud.update": 0.0011,
+        "other(step)": 0.0573
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:gtao": 1,
+        "post:ao-blur": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1,
+        "soft": 0.98,
+        "post:shaft-mask": 0.14,
+        "post:shaft-blur": 0.27
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 4.8,
+        "noiseMs": 0.2,
+        "ms": {
+         "post:gtao": 0.5,
+         "smaa": 0.3,
+         "shadows": 0.2,
+         "post:agx": 0.2,
+         "post:ao-blur": 0.1,
+         "post:bloom-prefilter": 0.1,
+         "post:bloom-up": 0.1,
+         "soft": 0.1,
+         "post:bloom-down": 0,
+         "post:final": 0,
+         "post:shaft-mask": -0.1,
+         "post:shaft-blur": -0.1
+        }
+       }
+      },
+      "summary": {
+       "kills": 12,
+       "score": 4563,
+       "alive": 12,
+       "listed": 15,
+       "particles": 124,
+       "debris": 6,
+       "tracers": 1,
+       "gibs": 5,
+       "pickups": 9,
+       "hash": "f484119c"
+      },
+      "frameMs": {
+       "med": 5,
+       "p95": 7.1,
+       "p99": 9,
+       "mean": 5.043,
+       "max": 11.7,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 4,
+       "p95": 5.5,
+       "p99": 7.3,
+       "mean": 4.082,
+       "max": 9.1,
+       "n": 900
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 4547.4,
+       "jsMs": {
+        "med": 3.422,
+        "p95": 4.958,
+        "p99": 8.365,
+        "mean": 3.498,
+        "max": 13.999,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 3.88,
+        "p95": 5.753,
+        "p99": 7.705,
+        "mean": 4.072,
+        "max": 9.233,
+        "n": 898
+       },
+       "waitMsPerFrame": 0.62,
+       "rendererMainCpuPerFrame": 4.419,
+       "gpuMainCpuPerFrame": 2.314,
+       "vizCpuPerFrame": 0.21
+      },
+      "heapEndMB": 46.73
+     },
+     "errors": [],
+     "cellMs": 108655,
+     "repeat": 0
+    }
+   ],
+   "median": null
+  },
+  {
+   "map": "mexico",
+   "preset": "low",
+   "runs": [
+    {
+     "map": "mexico",
+     "preset": "low",
+     "chrome": "153.0.8010.12",
+     "load": {
+      "firstPlayableMs": 726.6,
+      "readyMs": 737.1,
+      "liveMs": 533.4,
+      "enteredMs": 589.1
+     },
+     "facts": {
+      "preset": "low",
+      "look": "lowpoly",
+      "fpsTarget": 0,
+      "dynamicRes": true,
+      "renderScale": 0.75,
+      "pixelRatio": 1,
+      "devicePixelRatio": 1,
+      "drawingBuffer": [
+       1920,
+       1080
+      ],
+      "sceneTarget": [
+       1440,
+       810
+      ],
+      "msaa": 0,
+      "deferredWarmups": 4,
+      "level": "mexico",
+      "mode": "solo",
+      "state": "play",
+      "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+      "timer": {
+       "supported": true,
+       "reason": null
+      },
+      "crossOriginIsolated": false,
+      "dynamicScale": 1,
+      "idle": {
+       "frameMedMs": 0.5,
+       "fps": 2000,
+       "cpuMedMs": 0.4
+      }
+     },
+     "timer": {
+      "supported": true,
+      "reason": "0/120 results, 391 zero, 0 disjoint; query undefined ms over the 0.9 ms frame interval; the extra pass moved the frame interval by 3.9 ms only; the query grew nullx what the extra pass added to the frame interval",
+      "read": 1920,
+      "zero": 391,
+      "disjoint": 0,
+      "base": {
+       "queryMedMs": null,
+       "frameMedMs": 0.9,
+       "results": 0
+      },
+      "calibrated": {
+       "queryMedMs": null,
+       "frameMedMs": 4.8,
+       "results": 0
+      },
+      "slope": null,
+      "working": false
+     },
+     "route": {
+      "points": 805,
+      "length": 185.3,
+      "warnings": []
+     },
+     "path": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 1.3221,
+        "render.total": 1.2939,
+        "render.main": 1.2587,
+        "render.shadows": 0.0854,
+        "player.update": 0.0158,
+        "render.pre": 0.0148,
+        "render.post": 0.009,
+        "effects.update": 0.0007,
+        "enemies.update": 0.0006,
+        "hud.update": 0,
+        "other(step)": 0.0111
+       },
+       "passesPerFrame": {
+        "post:composite": 1,
+        "shadows": 0.5
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 2.15,
+        "noiseMs": 0.1,
+        "ms": {
+         "post:composite": 0.75,
+         "shadows": 0.05
+        }
+       }
+      },
+      "summary": {
+       "kills": 0,
+       "score": 0,
+       "alive": 0,
+       "listed": 0,
+       "particles": 0,
+       "debris": 0,
+       "tracers": 0,
+       "gibs": 0,
+       "pickups": 0,
+       "hash": "63f3638d"
+      },
+      "frameMs": {
+       "med": 2.1,
+       "p95": 2.6,
+       "p99": 2.8,
+       "mean": 1.384,
+       "max": 5,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 2,
+       "p95": 2.5,
+       "p99": 2.7,
+       "mean": 1.322,
+       "max": 5,
+       "n": 900
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 1274,
+       "jsMs": {
+        "med": 0.28,
+        "p95": 0.416,
+        "p99": 0.496,
+        "mean": 0.312,
+        "max": 8.13,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 1.878,
+        "p95": 2.566,
+        "p99": 4.368,
+        "mean": 1.35,
+        "max": 5.093,
+        "n": 898
+       },
+       "waitMsPerFrame": 1.059,
+       "rendererMainCpuPerFrame": 0.354,
+       "gpuMainCpuPerFrame": 0.213,
+       "vizCpuPerFrame": 0.201
+      },
+      "heapEndMB": 46.2
+     },
+     "fight": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 0.9863,
+        "render.total": 0.6712,
+        "render.main": 0.637,
+        "enemies.update": 0.1368,
+        "player.update": 0.1056,
+        "render.shadows": 0.0873,
+        "effects.update": 0.0374,
+        "render.pre": 0.0173,
+        "render.post": 0.0086,
+        "hud.update": 0.0013,
+        "other(step)": 0.034
+       },
+       "passesPerFrame": {
+        "post:composite": 1,
+        "shadows": 0.5
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 1.9,
+        "noiseMs": 0.4,
+        "ms": {
+         "post:composite": 0.1,
+         "shadows": 0.1
+        }
+       }
+      },
+      "summary": {
+       "kills": 12,
+       "score": 4613,
+       "alive": 12,
+       "listed": 15,
+       "particles": 41,
+       "debris": 9,
+       "tracers": 7,
+       "gibs": 5,
+       "pickups": 7,
+       "hash": "19c9dac"
+      },
+      "frameMs": {
+       "med": 1.8,
+       "p95": 3.1,
+       "p99": 4.6,
+       "mean": 1.812,
+       "max": 12.7,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 0.9,
+       "p95": 1.6,
+       "p99": 2.4,
+       "mean": 0.986,
+       "max": 11.9,
+       "n": 900
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 1568.9,
+       "jsMs": {
+        "med": 0.937,
+        "p95": 1.683,
+        "p99": 2.436,
+        "mean": 1.013,
+        "max": 14.069,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 1.008,
+        "p95": 2.061,
+        "p99": 2.691,
+        "mean": 1.113,
+        "max": 12.388,
+        "n": 898
+       },
+       "waitMsPerFrame": 0.116,
+       "rendererMainCpuPerFrame": 1.61,
+       "gpuMainCpuPerFrame": 0.749,
+       "vizCpuPerFrame": 0.067
+      },
+      "heapEndMB": 75.81
+     },
+     "errors": [],
+     "cellMs": 20274,
+     "repeat": 0
+    }
+   ],
+   "median": null
+  },
+  {
+   "map": "mexico",
+   "preset": "medium",
+   "runs": [
+    {
+     "map": "mexico",
+     "preset": "medium",
+     "chrome": "153.0.8010.12",
+     "load": {
+      "firstPlayableMs": 550.3,
+      "readyMs": 7094.2,
+      "liveMs": 332.9,
+      "enteredMs": 437.1
+     },
+     "facts": {
+      "preset": "medium",
+      "look": "realistic",
+      "fpsTarget": 0,
+      "dynamicRes": true,
+      "renderScale": 1,
+      "pixelRatio": 1,
+      "devicePixelRatio": 1,
+      "drawingBuffer": [
+       1920,
+       1080
+      ],
+      "sceneTarget": [
+       1920,
+       1080
+      ],
+      "msaa": 2,
+      "deferredWarmups": 5,
+      "level": "mexico",
+      "mode": "solo",
+      "state": "play",
+      "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+      "timer": {
+       "supported": true,
+       "reason": null
+      },
+      "crossOriginIsolated": false,
+      "dynamicScale": 1,
+      "idle": {
+       "frameMedMs": 1.2,
+       "fps": 833.3,
+       "cpuMedMs": 0.8
+      }
+     },
+     "timer": {
+      "supported": true,
+      "reason": "0/120 results, 3478 zero, 0 disjoint; query undefined ms over the 2.9 ms frame interval; the extra pass moved the frame interval by 3.6 ms only; the query grew nullx what the extra pass added to the frame interval",
+      "read": 8130,
+      "zero": 3478,
+      "disjoint": 0,
+      "base": {
+       "queryMedMs": null,
+       "frameMedMs": 2.9,
+       "results": 0
+      },
+      "calibrated": {
+       "queryMedMs": null,
+       "frameMedMs": 6.5,
+       "results": 0
+      },
+      "slope": null,
+      "working": false
+     },
+     "route": {
+      "points": 805,
+      "length": 185.3,
+      "warnings": []
+     },
+     "path": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 2.8072,
+        "render.total": 2.7369,
+        "render.main": 2.5406,
+        "render.shadows": 0.298,
+        "render.post": 0.1537,
+        "player.update": 0.0304,
+        "render.pre": 0.0246,
+        "effects.update": 0.0039,
+        "enemies.update": 0.0024,
+        "hud.update": 0.0001,
+        "other(step)": 0.0335
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 2.85,
+        "noiseMs": 0.1,
+        "ms": {
+         "shadows": 0.15,
+         "smaa": 0.15,
+         "post:bloom-down": 0.05,
+         "post:bloom-up": 0.05,
+         "post:agx": 0.05,
+         "post:final": 0.05,
+         "post:bloom-prefilter": -0.15
+        }
+       }
+      },
+      "summary": {
+       "kills": 0,
+       "score": 0,
+       "alive": 0,
+       "listed": 0,
+       "particles": 0,
+       "debris": 0,
+       "tracers": 0,
+       "gibs": 0,
+       "pickups": 0,
+       "hash": "63f3638d"
+      },
+      "frameMs": {
+       "med": 2.9,
+       "p95": 4.3,
+       "p99": 5.6,
+       "mean": 2.944,
+       "max": 7.2,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 2.8,
+       "p95": 4.1,
+       "p99": 5.5,
+       "mean": 2.807,
+       "max": 7,
+       "n": 900
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 2145,
+       "jsMs": {
+        "med": 0.538,
+        "p95": 0.816,
+        "p99": 1.107,
+        "mean": 0.592,
+        "max": 6.308,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 2.626,
+        "p95": 3.305,
+        "p99": 5.294,
+        "mean": 2.285,
+        "max": 6.095,
+        "n": 898
+       },
+       "waitMsPerFrame": 1.722,
+       "rendererMainCpuPerFrame": 0.666,
+       "gpuMainCpuPerFrame": 0.547,
+       "vizCpuPerFrame": 0.481
+      },
+      "heapEndMB": 73.3
+     },
+     "fight": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 3.0378,
+        "render.total": 2.3324,
+        "render.main": 1.9984,
+        "render.shadows": 0.4578,
+        "enemies.update": 0.2927,
+        "render.pre": 0.2337,
+        "player.update": 0.2078,
+        "effects.update": 0.1402,
+        "render.post": 0.0852,
+        "hud.update": 0.0008,
+        "other(step)": 0.0639
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 3.5,
+        "noiseMs": 0.4,
+        "ms": {
+         "post:bloom-up": 0.7,
+         "shadows": 0.5,
+         "post:bloom-down": 0.5,
+         "post:agx": 0.3,
+         "post:bloom-prefilter": 0.2,
+         "smaa": 0.2,
+         "post:final": -0.1
+        }
+       }
+      },
+      "summary": {
+       "kills": 12,
+       "score": 3618,
+       "alive": 12,
+       "listed": 16,
+       "particles": 69,
+       "debris": 9,
+       "tracers": 5,
+       "gibs": 5,
+       "pickups": 7,
+       "hash": "b01cea13"
+      },
+      "frameMs": {
+       "med": 4,
+       "p95": 6.3,
+       "p99": 8.7,
+       "mean": 4.111,
+       "max": 21.5,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 3,
+       "p95": 4.3,
+       "p99": 5.1,
+       "mean": 3.038,
+       "max": 25.1,
+       "n": 900
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 3471.8,
+       "jsMs": {
+        "med": 2.837,
+        "p95": 4.243,
+        "p99": 6.283,
+        "mean": 2.898,
+        "max": 21.445,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 2.934,
+        "p95": 4.273,
+        "p99": 5.455,
+        "mean": 2.949,
+        "max": 21.498,
+        "n": 898
+       },
+       "waitMsPerFrame": 0.086,
+       "rendererMainCpuPerFrame": 3.746,
+       "gpuMainCpuPerFrame": 2.079,
+       "vizCpuPerFrame": 0.141
+      },
+      "heapEndMB": 68.86
+     },
+     "errors": [],
+     "cellMs": 53466,
+     "repeat": 0
+    }
+   ],
+   "median": null
+  },
+  {
+   "map": "mexico",
+   "preset": "high",
+   "runs": [
+    {
+     "map": "mexico",
+     "preset": "high",
+     "chrome": "153.0.8010.12",
+     "load": {
+      "firstPlayableMs": 933.5,
+      "readyMs": 7412.2,
+      "liveMs": 602.3,
+      "enteredMs": 779.2
+     },
+     "facts": {
+      "preset": "high",
+      "look": "realistic",
+      "fpsTarget": 0,
+      "dynamicRes": true,
+      "renderScale": 1,
+      "pixelRatio": 1,
+      "devicePixelRatio": 1,
+      "drawingBuffer": [
+       1920,
+       1080
+      ],
+      "sceneTarget": [
+       1920,
+       1080
+      ],
+      "msaa": 2,
+      "deferredWarmups": 5,
+      "level": "mexico",
+      "mode": "solo",
+      "state": "play",
+      "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+      "timer": {
+       "supported": true,
+       "reason": null
+      },
+      "crossOriginIsolated": false,
+      "dynamicScale": 1,
+      "idle": {
+       "frameMedMs": 2.9,
+       "fps": 344.8,
+       "cpuMedMs": 2.8
+      }
+     },
+     "timer": {
+      "supported": true,
+      "reason": "0/120 results, 3999 zero, 0 disjoint; query undefined ms over the 3.3 ms frame interval; the extra pass moved the frame interval by 6.9 ms only; the query grew nullx what the extra pass added to the frame interval",
+      "read": 9210,
+      "zero": 3999,
+      "disjoint": 0,
+      "base": {
+       "queryMedMs": null,
+       "frameMedMs": 3.3,
+       "results": 0
+      },
+      "calibrated": {
+       "queryMedMs": null,
+       "frameMedMs": 10.2,
+       "results": 0
+      },
+      "slope": null,
+      "working": false
+     },
+     "route": {
+      "points": 805,
+      "length": 185.3,
+      "warnings": []
+     },
+     "path": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 3.0192,
+        "render.total": 2.9474,
+        "render.main": 2.6951,
+        "render.shadows": 0.392,
+        "render.post": 0.2134,
+        "player.update": 0.0342,
+        "render.pre": 0.0269,
+        "effects.update": 0.0043,
+        "enemies.update": 0.0018,
+        "hud.update": 0.0006,
+        "other(step)": 0.0309
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:gtao": 1,
+        "post:ao-blur": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 3.3,
+        "noiseMs": 0,
+        "ms": {
+         "smaa": 0.4,
+         "shadows": 0.3,
+         "post:bloom-prefilter": 0.3,
+         "post:bloom-down": 0.3,
+         "post:bloom-up": 0.3,
+         "post:agx": 0.3,
+         "post:final": 0.3,
+         "post:gtao": 0.2,
+         "post:ao-blur": 0.2
+        }
+       }
+      },
+      "summary": {
+       "kills": 0,
+       "score": 0,
+       "alive": 0,
+       "listed": 0,
+       "particles": 0,
+       "debris": 0,
+       "tracers": 0,
+       "gibs": 0,
+       "pickups": 0,
+       "hash": "63f3638d"
+      },
+      "frameMs": {
+       "med": 3.3,
+       "p95": 4.3,
+       "p99": 6.1,
+       "mean": 3.15,
+       "max": 6.9,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 3.2,
+       "p95": 4.1,
+       "p99": 6,
+       "mean": 3.019,
+       "max": 6.8,
+       "n": 900
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 2843.4,
+       "jsMs": {
+        "med": 0.726,
+        "p95": 1.175,
+        "p99": 1.455,
+        "mean": 0.814,
+        "max": 6.182,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 2.928,
+        "p95": 4.226,
+        "p99": 6.212,
+        "mean": 3.037,
+        "max": 6.957,
+        "n": 898
+       },
+       "waitMsPerFrame": 2.263,
+       "rendererMainCpuPerFrame": 0.9,
+       "gpuMainCpuPerFrame": 0.758,
+       "vizCpuPerFrame": 0.049
+      },
+      "heapEndMB": 84.33
+     },
+     "fight": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 3.5906,
+        "render.total": 2.7769,
+        "render.main": 2.3627,
+        "render.shadows": 0.7136,
+        "enemies.update": 0.3381,
+        "render.pre": 0.2612,
+        "player.update": 0.2343,
+        "effects.update": 0.1652,
+        "render.post": 0.1367,
+        "hud.update": 0.0014,
+        "other(step)": 0.0747
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:gtao": 1,
+        "post:ao-blur": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1,
+        "soft": 0.98
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 3.7,
+        "noiseMs": 0.4,
+        "ms": {
+         "post:final": 0.8,
+         "post:ao-blur": 0.6,
+         "soft": 0.5,
+         "post:bloom-prefilter": 0.4,
+         "shadows": 0.2,
+         "smaa": 0.2,
+         "post:agx": 0,
+         "post:gtao": -0.1,
+         "post:bloom-down": -0.3,
+         "post:bloom-up": -0.5
+        }
+       }
+      },
+      "summary": {
+       "kills": 12,
+       "score": 3618,
+       "alive": 12,
+       "listed": 16,
+       "particles": 69,
+       "debris": 9,
+       "tracers": 5,
+       "gibs": 5,
+       "pickups": 7,
+       "hash": "b01cea13"
+      },
+      "frameMs": {
+       "med": 4.6,
+       "p95": 7.1,
+       "p99": 9,
+       "mean": 4.705,
+       "max": 20.9,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 3.6,
+       "p95": 4.9,
+       "p99": 5.7,
+       "mean": 3.591,
+       "max": 28.4,
+       "n": 900
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 4031.4,
+       "jsMs": {
+        "med": 3.218,
+        "p95": 4.734,
+        "p99": 7.27,
+        "mean": 3.392,
+        "max": 21.297,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 3.233,
+        "p95": 4.719,
+        "p99": 6.148,
+        "mean": 3.359,
+        "max": 21.31,
+        "n": 898
+       },
+       "waitMsPerFrame": 0,
+       "rendererMainCpuPerFrame": 4.45,
+       "gpuMainCpuPerFrame": 2.502,
+       "vizCpuPerFrame": 0.157
+      },
+      "heapEndMB": 77.84
+     },
+     "errors": [],
+     "cellMs": 72618,
+     "repeat": 0
+    }
+   ],
+   "median": null
+  },
+  {
+   "map": "mexico",
+   "preset": "ultra",
+   "runs": [
+    {
+     "map": "mexico",
+     "preset": "ultra",
+     "chrome": "153.0.8010.12",
+     "load": {
+      "firstPlayableMs": 978.3,
+      "readyMs": 9351.1,
+      "liveMs": 640.4,
+      "enteredMs": 824
+     },
+     "facts": {
+      "preset": "ultra",
+      "look": "realistic",
+      "fpsTarget": 0,
+      "dynamicRes": false,
+      "renderScale": 1,
+      "pixelRatio": 1,
+      "devicePixelRatio": 1,
+      "drawingBuffer": [
+       1920,
+       1080
+      ],
+      "sceneTarget": [
+       1920,
+       1080
+      ],
+      "msaa": 4,
+      "deferredWarmups": 5,
+      "level": "mexico",
+      "mode": "solo",
+      "state": "play",
+      "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+      "timer": {
+       "supported": true,
+       "reason": null
+      },
+      "crossOriginIsolated": false,
+      "dynamicScale": 1,
+      "idle": {
+       "frameMedMs": 4.3,
+       "fps": 232.6,
+       "cpuMedMs": 4.2
+      }
+     },
+     "timer": {
+      "supported": true,
+      "reason": "0/120 results, 4828 zero, 0 disjoint; query undefined ms over the 4.5 ms frame interval; the extra pass moved the frame interval by 5.1 ms only; the query grew nullx what the extra pass added to the frame interval",
+      "read": 10830,
+      "zero": 4828,
+      "disjoint": 0,
+      "base": {
+       "queryMedMs": null,
+       "frameMedMs": 4.5,
+       "results": 0
+      },
+      "calibrated": {
+       "queryMedMs": null,
+       "frameMedMs": 9.6,
+       "results": 0
+      },
+      "slope": null,
+      "working": false
+     },
+     "route": {
+      "points": 805,
+      "length": 185.3,
+      "warnings": []
+     },
+     "path": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 4.151,
+        "render.total": 4.0583,
+        "render.main": 3.7414,
+        "render.shadows": 0.91,
+        "render.post": 0.2747,
+        "player.update": 0.0397,
+        "render.pre": 0.0284,
+        "effects.update": 0.0057,
+        "enemies.update": 0.0023,
+        "hud.update": 0.0003,
+        "other(step)": 0.0447
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:gtao": 1,
+        "post:ao-blur": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:shaft-mask": 0.5,
+        "post:shaft-blur": 1,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 4.5,
+        "noiseMs": 0,
+        "ms": {
+         "post:gtao": 0.8,
+         "shadows": 0.3,
+         "post:ao-blur": 0.3,
+         "post:bloom-down": 0.3,
+         "post:bloom-up": 0.3,
+         "post:shaft-mask": 0.3,
+         "post:shaft-blur": 0.3,
+         "post:agx": 0.3,
+         "post:bloom-prefilter": 0.2,
+         "smaa": 0.2,
+         "post:final": 0
+        }
+       }
+      },
+      "summary": {
+       "kills": 0,
+       "score": 0,
+       "alive": 0,
+       "listed": 0,
+       "particles": 0,
+       "debris": 0,
+       "tracers": 0,
+       "gibs": 0,
+       "pickups": 0,
+       "hash": "63f3638d"
+      },
+      "frameMs": {
+       "med": 4.4,
+       "p95": 5.2,
+       "p99": 8,
+       "mean": 4.315,
+       "max": 9.2,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 4.3,
+       "p95": 5.1,
+       "p99": 8,
+       "mean": 4.151,
+       "max": 9.1,
+       "n": 900
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 3799.1,
+       "jsMs": {
+        "med": 0.965,
+        "p95": 1.329,
+        "p99": 1.524,
+        "mean": 1.012,
+        "max": 5.378,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 4.188,
+        "p95": 4.907,
+        "p99": 7.994,
+        "mean": 4.091,
+        "max": 9.209,
+        "n": 898
+       },
+       "waitMsPerFrame": 3.11,
+       "rendererMainCpuPerFrame": 1.118,
+       "gpuMainCpuPerFrame": 0.987,
+       "vizCpuPerFrame": 0.262
+      },
+      "heapEndMB": 89.21
+     },
+     "fight": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 3.8329,
+        "render.total": 3.0863,
+        "render.main": 2.6808,
+        "render.shadows": 0.8907,
+        "enemies.update": 0.3132,
+        "render.pre": 0.2379,
+        "player.update": 0.2101,
+        "effects.update": 0.1554,
+        "render.post": 0.1537,
+        "hud.update": 0.0011,
+        "other(step)": 0.0668
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:gtao": 1,
+        "post:ao-blur": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:shaft-mask": 0.53,
+        "post:shaft-blur": 1.06,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1,
+        "soft": 0.98
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 4.45,
+        "noiseMs": 0.3,
+        "ms": {
+         "post:gtao": 0.45,
+         "smaa": 0.35,
+         "shadows": 0.15,
+         "post:ao-blur": 0.15,
+         "post:agx": 0.05,
+         "post:bloom-prefilter": -0.05,
+         "soft": -0.05,
+         "post:bloom-up": -0.15,
+         "post:shaft-mask": -0.15,
+         "post:shaft-blur": -0.15,
+         "post:bloom-down": -0.25,
+         "post:final": -0.25
+        }
+       }
+      },
+      "summary": {
+       "kills": 12,
+       "score": 3618,
+       "alive": 12,
+       "listed": 16,
+       "particles": 69,
+       "debris": 9,
+       "tracers": 5,
+       "gibs": 5,
+       "pickups": 7,
+       "hash": "b01cea13"
+      },
+      "frameMs": {
+       "med": 4.8,
+       "p95": 7,
+       "p99": 9.7,
+       "mean": 4.943,
+       "max": 21.8,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 3.8,
+       "p95": 5.2,
+       "p99": 6.2,
+       "mean": 3.833,
+       "max": 27.8,
+       "n": 900
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 4542.8,
+       "jsMs": {
+        "med": 3.403,
+        "p95": 4.763,
+        "p99": 7.468,
+        "mean": 3.489,
+        "max": 30.096,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 3.762,
+        "p95": 5.339,
+        "p99": 7.435,
+        "mean": 3.965,
+        "max": 21.815,
+        "n": 898
+       },
+       "waitMsPerFrame": 0.513,
+       "rendererMainCpuPerFrame": 4.519,
+       "gpuMainCpuPerFrame": 2.361,
+       "vizCpuPerFrame": 0.572
+      },
+      "heapEndMB": 69.33
+     },
+     "errors": [],
+     "cellMs": 103440,
+     "repeat": 0
+    }
+   ],
+   "median": null
+  },
+  {
+   "map": "training",
+   "preset": "low",
+   "runs": [
+    {
+     "map": "training",
+     "preset": "low",
+     "chrome": "153.0.8010.12",
+     "load": {
+      "firstPlayableMs": 880.8,
+      "readyMs": 912.6,
+      "liveMs": 582.2,
+      "enteredMs": 648.7
+     },
+     "facts": {
+      "preset": "low",
+      "look": "lowpoly",
+      "fpsTarget": 0,
+      "dynamicRes": true,
+      "renderScale": 0.75,
+      "pixelRatio": 1,
+      "devicePixelRatio": 1,
+      "drawingBuffer": [
+       1920,
+       1080
+      ],
+      "sceneTarget": [
+       1440,
+       810
+      ],
+      "msaa": 0,
+      "deferredWarmups": 4,
+      "level": "training",
+      "mode": "training",
+      "state": "play",
+      "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+      "timer": {
+       "supported": true,
+       "reason": null
+      },
+      "crossOriginIsolated": false,
+      "dynamicScale": 1,
+      "idle": {
+       "frameMedMs": 1.8,
+       "fps": 555.6,
+       "cpuMedMs": 1.6
+      }
+     },
+     "timer": {
+      "supported": true,
+      "reason": "0/120 results, 416 zero, 0 disjoint; query undefined ms over the 1.6 ms frame interval; the extra pass moved the frame interval by 3.1 ms only; the query grew nullx what the extra pass added to the frame interval",
+      "read": 1920,
+      "zero": 416,
+      "disjoint": 0,
+      "base": {
+       "queryMedMs": null,
+       "frameMedMs": 1.6,
+       "results": 0
+      },
+      "calibrated": {
+       "queryMedMs": null,
+       "frameMedMs": 4.7,
+       "results": 0
+      },
+      "slope": null,
+      "working": false
+     },
+     "route": {
+      "points": 337,
+      "length": 79,
+      "warnings": []
+     },
+     "path": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 1.4898,
+        "render.total": 1.1539,
+        "render.main": 1.1213,
+        "render.shadows": 0.2079,
+        "enemies.update": 0.1701,
+        "player.update": 0.0443,
+        "render.pre": 0.0166,
+        "render.post": 0.0099,
+        "effects.update": 0.0008,
+        "hud.update": 0.0001,
+        "other(step)": 0.1206
+       },
+       "passesPerFrame": {
+        "post:composite": 1,
+        "shadows": 0.5
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 1.5,
+        "noiseMs": 0,
+        "ms": {
+         "shadows": 0.2,
+         "post:composite": 0.1
+        }
+       }
+      },
+      "summary": {
+       "kills": 0,
+       "score": 0,
+       "alive": 22,
+       "listed": 22,
+       "particles": 0,
+       "debris": 0,
+       "tracers": 0,
+       "gibs": 0,
+       "pickups": 0,
+       "hash": "eabfb9a8"
+      },
+      "frameMs": {
+       "med": 1.5,
+       "p95": 2.8,
+       "p99": 3.6,
+       "mean": 1.609,
+       "max": 8.5,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 1.3,
+       "p95": 2.6,
+       "p99": 3.2,
+       "mean": 1.49,
+       "max": 5.1,
+       "n": 900
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 1179.2,
+       "jsMs": {
+        "med": 1.011,
+        "p95": 1.524,
+        "p99": 1.936,
+        "mean": 1.045,
+        "max": 10.097,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 1.091,
+        "p95": 2.205,
+        "p99": 2.895,
+        "mean": 1.185,
+        "max": 4.845,
+        "n": 898
+       },
+       "waitMsPerFrame": 0.149,
+       "rendererMainCpuPerFrame": 1.145,
+       "gpuMainCpuPerFrame": 0.543,
+       "vizCpuPerFrame": 0.082
+      },
+      "heapEndMB": 65.08
+     },
+     "fight": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 1.9386,
+        "render.total": 1.2151,
+        "render.main": 1.1722,
+        "enemies.update": 0.2772,
+        "render.shadows": 0.1524,
+        "player.update": 0.1337,
+        "effects.update": 0.0311,
+        "render.pre": 0.0217,
+        "render.post": 0.0117,
+        "hud.update": 0.0009,
+        "other(step)": 0.2806
+       },
+       "passesPerFrame": {
+        "post:composite": 1,
+        "shadows": 0.5
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 2.25,
+        "noiseMs": 0.3,
+        "ms": {
+         "shadows": 0.25,
+         "post:composite": -0.15
+        }
+       }
+      },
+      "summary": {
+       "kills": 12,
+       "score": 5516,
+       "alive": 38,
+       "listed": 40,
+       "particles": 103,
+       "debris": 7,
+       "tracers": 1,
+       "gibs": 7,
+       "pickups": 10,
+       "hash": "9b83280c"
+      },
+      "frameMs": {
+       "med": 2.6,
+       "p95": 3.8,
+       "p99": 4.7,
+       "mean": 2.639,
+       "max": 14.7,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 1.9,
+       "p95": 2.6,
+       "p99": 2.9,
+       "mean": 1.939,
+       "max": 9.6,
+       "n": 900
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 2380,
+       "jsMs": {
+        "med": 1.956,
+        "p95": 2.813,
+        "p99": 3.304,
+        "mean": 2.004,
+        "max": 10.414,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 1.965,
+        "p95": 2.827,
+        "p99": 3.301,
+        "mean": 2.005,
+        "max": 4.377,
+        "n": 898
+       },
+       "waitMsPerFrame": 0,
+       "rendererMainCpuPerFrame": 2.633,
+       "gpuMainCpuPerFrame": 1.24,
+       "vizCpuPerFrame": 0.094
+      },
+      "heapEndMB": 49.07
+     },
+     "errors": [],
+     "cellMs": 18476,
+     "repeat": 0
+    }
+   ],
+   "median": null
+  },
+  {
+   "map": "training",
+   "preset": "medium",
+   "runs": [
+    {
+     "map": "training",
+     "preset": "medium",
+     "chrome": "153.0.8010.12",
+     "load": {
+      "firstPlayableMs": 665.1,
+      "readyMs": 5442.8,
+      "liveMs": 325.2,
+      "enteredMs": 443.2
+     },
+     "facts": {
+      "preset": "medium",
+      "look": "realistic",
+      "fpsTarget": 0,
+      "dynamicRes": true,
+      "renderScale": 1,
+      "pixelRatio": 1,
+      "devicePixelRatio": 1,
+      "drawingBuffer": [
+       1920,
+       1080
+      ],
+      "sceneTarget": [
+       1920,
+       1080
+      ],
+      "msaa": 2,
+      "deferredWarmups": 5,
+      "level": "training",
+      "mode": "training",
+      "state": "play",
+      "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+      "timer": {
+       "supported": true,
+       "reason": null
+      },
+      "crossOriginIsolated": false,
+      "dynamicScale": 1,
+      "idle": {
+       "frameMedMs": 1.9,
+       "fps": 526.3,
+       "cpuMedMs": 1.7
+      }
+     },
+     "timer": {
+      "supported": true,
+      "reason": "0/120 results, 3441 zero, 0 disjoint; query undefined ms over the 2.2 ms frame interval; the extra pass moved the frame interval by 4.8 ms only; the query grew nullx what the extra pass added to the frame interval",
+      "read": 8130,
+      "zero": 3441,
+      "disjoint": 0,
+      "base": {
+       "queryMedMs": null,
+       "frameMedMs": 2.2,
+       "results": 0
+      },
+      "calibrated": {
+       "queryMedMs": null,
+       "frameMedMs": 7,
+       "results": 0
+      },
+      "slope": null,
+      "working": false
+     },
+     "route": {
+      "points": 337,
+      "length": 79,
+      "warnings": []
+     },
+     "path": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 2.383,
+        "render.total": 1.6801,
+        "render.main": 1.4443,
+        "render.shadows": 0.4248,
+        "enemies.update": 0.3479,
+        "render.pre": 0.1264,
+        "render.post": 0.099,
+        "player.update": 0.0811,
+        "effects.update": 0.0061,
+        "hud.update": 0.001,
+        "other(step)": 0.2668
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 2.65,
+        "noiseMs": 0.3,
+        "ms": {
+         "shadows": 0.45,
+         "post:bloom-prefilter": 0.25,
+         "post:bloom-down": 0.05,
+         "smaa": -0.15,
+         "post:final": -0.15,
+         "post:agx": -0.35,
+         "post:bloom-up": -0.85
+        }
+       }
+      },
+      "summary": {
+       "kills": 0,
+       "score": 0,
+       "alive": 22,
+       "listed": 22,
+       "particles": 0,
+       "debris": 0,
+       "tracers": 0,
+       "gibs": 0,
+       "pickups": 0,
+       "hash": "eabfb9a8"
+      },
+      "frameMs": {
+       "med": 2.5,
+       "p95": 3.8,
+       "p99": 4.7,
+       "mean": 2.555,
+       "max": 17.3,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 2.3,
+       "p95": 3.5,
+       "p99": 4.5,
+       "mean": 2.383,
+       "max": 5.4,
+       "n": 900
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 2294.8,
+       "jsMs": {
+        "med": 1.577,
+        "p95": 2.309,
+        "p99": 2.659,
+        "mean": 1.645,
+        "max": 7.596,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 2.334,
+        "p95": 3.652,
+        "p99": 5.278,
+        "mean": 2.376,
+        "max": 6.303,
+        "n": 898
+       },
+       "waitMsPerFrame": 0.755,
+       "rendererMainCpuPerFrame": 1.782,
+       "gpuMainCpuPerFrame": 0.815,
+       "vizCpuPerFrame": 0.061
+      },
+      "heapEndMB": 61.04
+     },
+     "fight": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 3.537,
+        "render.total": 2.2578,
+        "render.main": 1.9852,
+        "render.shadows": 0.5427,
+        "enemies.update": 0.4853,
+        "player.update": 0.2157,
+        "render.pre": 0.2076,
+        "effects.update": 0.0722,
+        "render.post": 0.0563,
+        "hud.update": 0.0017,
+        "other(step)": 0.5043
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 3.7,
+        "noiseMs": 0.2,
+        "ms": {
+         "shadows": 0.6,
+         "post:bloom-prefilter": 0.4,
+         "post:bloom-down": 0.3,
+         "post:bloom-up": 0.2,
+         "post:agx": 0.2,
+         "smaa": 0.2,
+         "post:final": 0
+        }
+       }
+      },
+      "summary": {
+       "kills": 15,
+       "score": 8119,
+       "alive": 35,
+       "listed": 39,
+       "particles": 164,
+       "debris": 12,
+       "tracers": 0,
+       "gibs": 12,
+       "pickups": 11,
+       "hash": "15e08bb6"
+      },
+      "frameMs": {
+       "med": 4.2,
+       "p95": 5.7,
+       "p99": 6.9,
+       "mean": 4.29,
+       "max": 22.3,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 3.5,
+       "p95": 4.3,
+       "p99": 5,
+       "mean": 3.537,
+       "max": 5.6,
+       "n": 900
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 3639.7,
+       "jsMs": {
+        "med": 3.236,
+        "p95": 4.281,
+        "p99": 5.384,
+        "mean": 3.348,
+        "max": 12.508,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 3.249,
+        "p95": 4.257,
+        "p99": 4.978,
+        "mean": 3.318,
+        "max": 10.456,
+        "n": 898
+       },
+       "waitMsPerFrame": 0,
+       "rendererMainCpuPerFrame": 4.03,
+       "gpuMainCpuPerFrame": 1.803,
+       "vizCpuPerFrame": 0.096
+      },
+      "heapEndMB": 35.77
+     },
+     "errors": [],
+     "cellMs": 50066,
+     "repeat": 0
+    }
+   ],
+   "median": null
+  },
+  {
+   "map": "training",
+   "preset": "high",
+   "runs": [
+    {
+     "map": "training",
+     "preset": "high",
+     "chrome": "153.0.8010.12",
+     "load": {
+      "firstPlayableMs": 648.7,
+      "readyMs": 5893.8,
+      "liveMs": 355.2,
+      "enteredMs": 483.9
+     },
+     "facts": {
+      "preset": "high",
+      "look": "realistic",
+      "fpsTarget": 0,
+      "dynamicRes": true,
+      "renderScale": 1,
+      "pixelRatio": 1,
+      "devicePixelRatio": 1,
+      "drawingBuffer": [
+       1920,
+       1080
+      ],
+      "sceneTarget": [
+       1920,
+       1080
+      ],
+      "msaa": 2,
+      "deferredWarmups": 5,
+      "level": "training",
+      "mode": "training",
+      "state": "play",
+      "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+      "timer": {
+       "supported": true,
+       "reason": null
+      },
+      "crossOriginIsolated": false,
+      "dynamicScale": 1,
+      "idle": {
+       "frameMedMs": 3,
+       "fps": 333.3,
+       "cpuMedMs": 2.8
+      }
+     },
+     "timer": {
+      "supported": true,
+      "reason": "0/120 results, 3979 zero, 0 disjoint; query undefined ms over the 3.5 ms frame interval; the extra pass moved the frame interval by 6 ms only; the query grew nullx what the extra pass added to the frame interval",
+      "read": 9210,
+      "zero": 3979,
+      "disjoint": 0,
+      "base": {
+       "queryMedMs": null,
+       "frameMedMs": 3.5,
+       "results": 0
+      },
+      "calibrated": {
+       "queryMedMs": null,
+       "frameMedMs": 9.5,
+       "results": 0
+      },
+      "slope": null,
+      "working": false
+     },
+     "route": {
+      "points": 337,
+      "length": 79,
+      "warnings": []
+     },
+     "path": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 2.9827,
+        "render.total": 1.9797,
+        "render.main": 1.6904,
+        "render.shadows": 0.6646,
+        "enemies.update": 0.4963,
+        "render.pre": 0.1771,
+        "player.update": 0.1078,
+        "render.post": 0.1024,
+        "effects.update": 0.0054,
+        "hud.update": 0.0004,
+        "other(step)": 0.3931
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:gtao": 1,
+        "post:ao-blur": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 2.9,
+        "noiseMs": 0,
+        "ms": {
+         "shadows": 0.5,
+         "smaa": 0.5,
+         "post:final": 0.2,
+         "post:ao-blur": 0.1,
+         "post:bloom-prefilter": 0.1,
+         "post:agx": 0.1,
+         "post:bloom-down": 0,
+         "post:bloom-up": 0,
+         "post:gtao": -0.1
+        }
+       }
+      },
+      "summary": {
+       "kills": 0,
+       "score": 0,
+       "alive": 22,
+       "listed": 22,
+       "particles": 0,
+       "debris": 0,
+       "tracers": 0,
+       "gibs": 0,
+       "pickups": 0,
+       "hash": "eabfb9a8"
+      },
+      "frameMs": {
+       "med": 2.9,
+       "p95": 4.9,
+       "p99": 7.5,
+       "mean": 3.187,
+       "max": 21.2,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 2.8,
+       "p95": 4.3,
+       "p99": 7.2,
+       "mean": 2.983,
+       "max": 9.3,
+       "n": 900
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 2757,
+       "jsMs": {
+        "med": 2.399,
+        "p95": 3.175,
+        "p99": 3.891,
+        "mean": 2.462,
+        "max": 8.649,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 2.82,
+        "p95": 4.086,
+        "p99": 5.268,
+        "mean": 2.871,
+        "max": 6.152,
+        "n": 898
+       },
+       "waitMsPerFrame": 0.428,
+       "rendererMainCpuPerFrame": 2.622,
+       "gpuMainCpuPerFrame": 1.155,
+       "vizCpuPerFrame": 0.287
+      },
+      "heapEndMB": 38.49
+     },
+     "fight": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 4.3843,
+        "render.total": 2.8106,
+        "render.main": 2.4604,
+        "render.shadows": 0.8213,
+        "enemies.update": 0.6088,
+        "player.update": 0.2603,
+        "render.pre": 0.2273,
+        "render.post": 0.1096,
+        "effects.update": 0.095,
+        "hud.update": 0.0008,
+        "other(step)": 0.6088
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:gtao": 1,
+        "post:ao-blur": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1,
+        "soft": 0.98
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 4.2,
+        "noiseMs": 0,
+        "ms": {
+         "shadows": 0.6,
+         "smaa": 0.3,
+         "post:bloom-prefilter": 0.1,
+         "post:bloom-down": 0.1,
+         "post:agx": 0.1,
+         "post:gtao": 0,
+         "post:ao-blur": 0,
+         "post:bloom-up": 0,
+         "post:final": 0,
+         "soft": 0
+        }
+       }
+      },
+      "summary": {
+       "kills": 15,
+       "score": 8119,
+       "alive": 35,
+       "listed": 39,
+       "particles": 164,
+       "debris": 12,
+       "tracers": 0,
+       "gibs": 12,
+       "pickups": 11,
+       "hash": "15e08bb6"
+      },
+      "frameMs": {
+       "med": 5.1,
+       "p95": 6.8,
+       "p99": 8.5,
+       "mean": 5.171,
+       "max": 22.9,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 4.3,
+       "p95": 5.3,
+       "p99": 6.1,
+       "mean": 4.384,
+       "max": 13.4,
+       "n": 900
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 4436.4,
+       "jsMs": {
+        "med": 4.014,
+        "p95": 5.204,
+        "p99": 6.934,
+        "mean": 4.098,
+        "max": 12.668,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 4.029,
+        "p95": 5.143,
+        "p99": 5.901,
+        "mean": 4.065,
+        "max": 7.372,
+        "n": 898
+       },
+       "waitMsPerFrame": 0,
+       "rendererMainCpuPerFrame": 4.909,
+       "gpuMainCpuPerFrame": 2.163,
+       "vizCpuPerFrame": 0.117
+      },
+      "heapEndMB": 32.93
+     },
+     "errors": [],
+     "cellMs": 61630,
+     "repeat": 0
+    }
+   ],
+   "median": null
+  },
+  {
+   "map": "training",
+   "preset": "ultra",
+   "runs": [
+    {
+     "map": "training",
+     "preset": "ultra",
+     "chrome": "153.0.8010.12",
+     "load": {
+      "firstPlayableMs": 813.8,
+      "readyMs": 6745.8,
+      "liveMs": 451.8,
+      "enteredMs": 614.4
+     },
+     "facts": {
+      "preset": "ultra",
+      "look": "realistic",
+      "fpsTarget": 0,
+      "dynamicRes": false,
+      "renderScale": 1,
+      "pixelRatio": 1,
+      "devicePixelRatio": 1,
+      "drawingBuffer": [
+       1920,
+       1080
+      ],
+      "sceneTarget": [
+       1920,
+       1080
+      ],
+      "msaa": 4,
+      "deferredWarmups": 5,
+      "level": "training",
+      "mode": "training",
+      "state": "play",
+      "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M4 Pro, Unspecified Version)",
+      "timer": {
+       "supported": true,
+       "reason": null
+      },
+      "crossOriginIsolated": false,
+      "dynamicScale": 1,
+      "idle": {
+       "frameMedMs": 4.2,
+       "fps": 238.1,
+       "cpuMedMs": 4.2
+      }
+     },
+     "timer": {
+      "supported": true,
+      "reason": "0/120 results, 3962 zero, 0 disjoint; query undefined ms over the 4.6 ms frame interval; the extra pass moved the frame interval by 5 ms only; the query grew nullx what the extra pass added to the frame interval",
+      "read": 9210,
+      "zero": 3962,
+      "disjoint": 0,
+      "base": {
+       "queryMedMs": null,
+       "frameMedMs": 4.6,
+       "results": 0
+      },
+      "calibrated": {
+       "queryMedMs": null,
+       "frameMedMs": 9.6,
+       "results": 0
+      },
+      "slope": null,
+      "working": false
+     },
+     "route": {
+      "points": 337,
+      "length": 79,
+      "warnings": []
+     },
+     "path": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 4.0011,
+        "render.total": 2.8969,
+        "render.main": 2.5209,
+        "render.shadows": 1.0699,
+        "enemies.update": 0.5506,
+        "render.pre": 0.1807,
+        "render.post": 0.1802,
+        "player.update": 0.1313,
+        "effects.update": 0.0061,
+        "hud.update": 0.0003,
+        "other(step)": 0.4159
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:gtao": 1,
+        "post:ao-blur": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1,
+        "post:shaft-mask": 0.1,
+        "post:shaft-blur": 0.2
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 4.15,
+        "noiseMs": 0.3,
+        "ms": {
+         "shadows": 0.65,
+         "post:gtao": 0.65,
+         "smaa": 0.35,
+         "post:ao-blur": 0.25,
+         "post:agx": 0.15,
+         "post:bloom-prefilter": 0.05,
+         "post:final": -0.05,
+         "post:bloom-down": -0.15,
+         "post:bloom-up": -0.15,
+         "post:shaft-mask": -0.15,
+         "post:shaft-blur": -0.15
+        }
+       }
+      },
+      "summary": {
+       "kills": 0,
+       "score": 0,
+       "alive": 22,
+       "listed": 22,
+       "particles": 0,
+       "debris": 0,
+       "tracers": 0,
+       "gibs": 0,
+       "pickups": 0,
+       "hash": "eabfb9a8"
+      },
+      "frameMs": {
+       "med": 4.1,
+       "p95": 6,
+       "p99": 7.7,
+       "mean": 4.219,
+       "max": 20.5,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 3.9,
+       "p95": 5.2,
+       "p99": 7.3,
+       "mean": 4.001,
+       "max": 10.3,
+       "n": 900
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 3694.1,
+       "jsMs": {
+        "med": 2.408,
+        "p95": 3.216,
+        "p99": 4.386,
+        "mean": 2.502,
+        "max": 8.25,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 4.028,
+        "p95": 5.012,
+        "p99": 7.073,
+        "mean": 3.931,
+        "max": 8.266,
+        "n": 898
+       },
+       "waitMsPerFrame": 1.467,
+       "rendererMainCpuPerFrame": 2.64,
+       "gpuMainCpuPerFrame": 1.17,
+       "vizCpuPerFrame": 0.293
+      },
+      "heapEndMB": 74.18
+     },
+     "fight": {
+      "profile": {
+       "gpuFrames": 0,
+       "gpuQuerySpans": null,
+       "cpuFrames": 900,
+       "cpu": {
+        "frame.cpu": 5.3248,
+        "render.total": 3.5229,
+        "render.main": 3.1071,
+        "render.shadows": 1.1968,
+        "enemies.update": 0.6882,
+        "player.update": 0.3019,
+        "render.pre": 0.2766,
+        "render.post": 0.1236,
+        "effects.update": 0.1064,
+        "hud.update": 0.0014,
+        "other(step)": 0.704
+       },
+       "passesPerFrame": {
+        "shadows": 1,
+        "post:gtao": 1,
+        "post:ao-blur": 1,
+        "post:bloom-prefilter": 1,
+        "post:bloom-down": 4,
+        "post:bloom-up": 4,
+        "post:agx": 1,
+        "smaa": 1,
+        "post:final": 1,
+        "soft": 0.98
+       },
+       "gpuAblation": {
+        "frames": 240,
+        "baseMs": 4.95,
+        "noiseMs": 0.3,
+        "ms": {
+         "shadows": 0.85,
+         "post:ao-blur": 0.35,
+         "post:bloom-prefilter": 0.25,
+         "post:agx": 0.15,
+         "post:gtao": 0.05,
+         "post:bloom-down": 0.05,
+         "smaa": 0.05,
+         "soft": 0.05,
+         "post:bloom-up": -0.05,
+         "post:final": -0.25
+        }
+       }
+      },
+      "summary": {
+       "kills": 15,
+       "score": 8119,
+       "alive": 35,
+       "listed": 39,
+       "particles": 164,
+       "debris": 12,
+       "tracers": 0,
+       "gibs": 12,
+       "pickups": 11,
+       "hash": "15e08bb6"
+      },
+      "frameMs": {
+       "med": 6.2,
+       "p95": 8.2,
+       "p99": 10,
+       "mean": 6.354,
+       "max": 23,
+       "n": 900
+      },
+      "cpuMs": {
+       "med": 5.3,
+       "p95": 6.3,
+       "p99": 7,
+       "mean": 5.325,
+       "max": 21.6,
+       "n": 900
+      },
+      "trace": {
+       "frames": 898,
+       "windowMs": 5130,
+       "jsMs": {
+        "med": 4.722,
+        "p95": 6.11,
+        "p99": 7.703,
+        "mean": 4.774,
+        "max": 12.849,
+        "n": 898
+       },
+       "rafWallMs": {
+        "med": 4.739,
+        "p95": 6.051,
+        "p99": 7.178,
+        "mean": 4.75,
+        "max": 11.189,
+        "n": 898
+       },
+       "waitMsPerFrame": 0.003,
+       "rendererMainCpuPerFrame": 5.676,
+       "gpuMainCpuPerFrame": 2.462,
+       "vizCpuPerFrame": 0.137
+      },
+      "heapEndMB": 66.97
+     },
+     "errors": [],
+     "cellMs": 81297,
+     "repeat": 0
+    }
+   ],
+   "median": null
+  }
+ ],
+ "profile": {
+  "downtown/low": {
+   "path": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 1.3108,
+      "render.total": 1.2829,
+      "render.main": 1.2372,
+      "render.shadows": 0.0403,
+      "render.post": 0.0227,
+      "render.pre": 0.0181,
+      "player.update": 0.015,
+      "enemies.update": 0.0008,
+      "effects.update": 0.0006,
+      "hud.update": 0,
+      "other(step)": 0.0115
+     },
+     "passesPerFrame": {
+      "post:composite": 1,
+      "shadows": 0.5
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 2,
+      "noiseMs": 0,
+      "ms": {
+       "shadows": 0.8,
+       "post:composite": 0.2
+      }
+     }
+    }
+   ],
+   "fight": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 1.0307,
+      "render.total": 0.7901,
+      "render.main": 0.7579,
+      "player.update": 0.0936,
+      "enemies.update": 0.0931,
+      "render.shadows": 0.0767,
+      "effects.update": 0.0272,
+      "render.pre": 0.0166,
+      "render.post": 0.0074,
+      "hud.update": 0.0004,
+      "other(step)": 0.0263
+     },
+     "passesPerFrame": {
+      "post:composite": 1,
+      "shadows": 0.5
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 1.3,
+      "noiseMs": 0.2,
+      "ms": {
+       "shadows": 0.2,
+       "post:composite": 0
+      }
+     }
+    }
+   ]
+  },
+  "downtown/medium": {
+   "path": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 2.2844,
+      "render.total": 2.2418,
+      "render.main": 2.0344,
+      "render.post": 0.1861,
+      "render.shadows": 0.1133,
+      "player.update": 0.0212,
+      "render.pre": 0.0128,
+      "effects.update": 0.003,
+      "enemies.update": 0.0008,
+      "hud.update": 0.0003,
+      "other(step)": 0.0173
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 2.7,
+      "noiseMs": 0,
+      "ms": {
+       "shadows": 0.1,
+       "post:bloom-prefilter": 0.1,
+       "post:bloom-down": 0.1,
+       "post:bloom-up": 0.1,
+       "post:agx": 0.1,
+       "smaa": 0.1,
+       "post:final": 0.1
+      }
+     }
+    }
+   ],
+   "fight": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 1.8213,
+      "render.total": 1.3149,
+      "render.main": 1.0929,
+      "render.shadows": 0.2226,
+      "enemies.update": 0.2134,
+      "player.update": 0.159,
+      "render.pre": 0.1404,
+      "effects.update": 0.0724,
+      "render.post": 0.0683,
+      "hud.update": 0.002,
+      "other(step)": 0.0596
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 2.4,
+      "noiseMs": 0.2,
+      "ms": {
+       "smaa": 0.2,
+       "shadows": 0,
+       "post:bloom-up": 0,
+       "post:agx": 0,
+       "post:final": 0,
+       "post:bloom-prefilter": -0.2,
+       "post:bloom-down": -0.3
+      }
+     }
+    }
+   ]
+  },
+  "downtown/high": {
+   "path": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 2.6727,
+      "render.total": 2.6184,
+      "render.main": 2.3512,
+      "render.post": 0.2417,
+      "render.shadows": 0.2092,
+      "player.update": 0.0239,
+      "render.pre": 0.0166,
+      "effects.update": 0.0041,
+      "enemies.update": 0.0014,
+      "hud.update": 0.0001,
+      "other(step)": 0.0248
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:gtao": 1,
+      "post:ao-blur": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 2.8,
+      "noiseMs": 0,
+      "ms": {
+       "shadows": 0.1,
+       "post:gtao": 0,
+       "post:ao-blur": 0,
+       "post:bloom-prefilter": 0,
+       "post:bloom-down": 0,
+       "post:bloom-up": 0,
+       "post:agx": 0,
+       "smaa": 0,
+       "post:final": 0
+      }
+     }
+    }
+   ],
+   "fight": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 2.6468,
+      "render.total": 2.1153,
+      "render.main": 1.7982,
+      "render.shadows": 0.4198,
+      "enemies.update": 0.2207,
+      "player.update": 0.1613,
+      "render.post": 0.1541,
+      "render.pre": 0.1499,
+      "effects.update": 0.0883,
+      "hud.update": 0.0014,
+      "other(step)": 0.0598
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:gtao": 1,
+      "post:ao-blur": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1,
+      "soft": 0.98
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 3.15,
+      "noiseMs": 0.3,
+      "ms": {
+       "smaa": 0.35,
+       "shadows": 0.25,
+       "post:gtao": 0.15,
+       "post:bloom-prefilter": 0.15,
+       "post:agx": 0.15,
+       "soft": 0.15,
+       "post:ao-blur": 0.05,
+       "post:final": 0.05,
+       "post:bloom-down": -0.05,
+       "post:bloom-up": -0.05
+      }
+     }
+    }
+   ]
+  },
+  "downtown/ultra": {
+   "path": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 4.0266,
+      "render.total": 3.9837,
+      "render.main": 3.6823,
+      "render.shadows": 0.3841,
+      "render.post": 0.2737,
+      "player.update": 0.0188,
+      "render.pre": 0.0172,
+      "effects.update": 0.003,
+      "enemies.update": 0.0011,
+      "hud.update": 0.0003,
+      "other(step)": 0.0197
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:gtao": 1,
+      "post:ao-blur": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1,
+      "post:shaft-mask": 0.33,
+      "post:shaft-blur": 0.65
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 4.05,
+      "noiseMs": 0.1,
+      "ms": {
+       "shadows": 0.25,
+       "post:gtao": 0.25,
+       "smaa": 0.15,
+       "post:ao-blur": 0.05,
+       "post:bloom-prefilter": 0.05,
+       "post:bloom-down": 0.05,
+       "post:bloom-up": 0.05,
+       "post:agx": 0.05,
+       "post:final": 0.05,
+       "post:shaft-mask": -0.05,
+       "post:shaft-blur": -0.05
+      }
+     }
+    }
+   ],
+   "fight": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 4.4764,
+      "render.total": 3.787,
+      "render.main": 3.3089,
+      "render.shadows": 0.881,
+      "enemies.update": 0.2916,
+      "render.pre": 0.237,
+      "render.post": 0.2228,
+      "player.update": 0.214,
+      "effects.update": 0.1261,
+      "hud.update": 0.0012,
+      "other(step)": 0.0565
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:gtao": 1,
+      "post:ao-blur": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:shaft-mask": 0.94,
+      "post:shaft-blur": 1.89,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1,
+      "soft": 0.98
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 5.15,
+      "noiseMs": 0.1,
+      "ms": {
+       "post:gtao": 0.65,
+       "shadows": 0.35,
+       "smaa": 0.25,
+       "post:ao-blur": 0.15,
+       "post:agx": 0.15,
+       "post:final": 0.05,
+       "soft": 0.05,
+       "post:bloom-prefilter": -0.05,
+       "post:bloom-down": -0.05,
+       "post:bloom-up": -0.05,
+       "post:shaft-mask": -0.05,
+       "post:shaft-blur": -0.05
+      }
+     }
+    }
+   ]
+  },
+  "house/low": {
+   "path": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 1.5744,
+      "render.total": 1.5486,
+      "render.main": 1.5123,
+      "render.shadows": 0.0667,
+      "render.pre": 0.0197,
+      "player.update": 0.017,
+      "render.post": 0.0123,
+      "enemies.update": 0.0003,
+      "effects.update": 0.0002,
+      "hud.update": 0,
+      "other(step)": 0.0083
+     },
+     "passesPerFrame": {
+      "post:composite": 1,
+      "shadows": 0.5
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 2.2,
+      "noiseMs": 0.2,
+      "ms": {
+       "shadows": 1.4,
+       "post:composite": 0
+      }
+     }
+    }
+   ],
+   "fight": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 1.1859,
+      "render.total": 0.8541,
+      "render.main": 0.8193,
+      "enemies.update": 0.1272,
+      "player.update": 0.0964,
+      "render.shadows": 0.0901,
+      "effects.update": 0.0814,
+      "render.pre": 0.0159,
+      "render.post": 0.0131,
+      "hud.update": 0.0007,
+      "other(step)": 0.0261
+     },
+     "passesPerFrame": {
+      "post:composite": 1,
+      "shadows": 0.5
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 1.45,
+      "noiseMs": 0.1,
+      "ms": {
+       "shadows": 0.15,
+       "post:composite": 0.05
+      }
+     }
+    }
+   ]
+  },
+  "house/medium": {
+   "path": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 2.6128,
+      "render.total": 2.5676,
+      "render.main": 2.3251,
+      "render.post": 0.1966,
+      "render.shadows": 0.1346,
+      "render.pre": 0.0259,
+      "player.update": 0.0208,
+      "effects.update": 0.0031,
+      "enemies.update": 0.001,
+      "hud.update": 0.0001,
+      "other(step)": 0.0202
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 3,
+      "noiseMs": 0,
+      "ms": {
+       "shadows": 0.1,
+       "post:bloom-prefilter": 0.1,
+       "post:bloom-down": 0.1,
+       "post:bloom-up": 0.1,
+       "post:agx": 0.1,
+       "smaa": 0.1,
+       "post:final": 0.1
+      }
+     }
+    }
+   ],
+   "fight": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 2.7593,
+      "render.total": 1.9812,
+      "render.main": 1.675,
+      "render.shadows": 0.3354,
+      "enemies.update": 0.2799,
+      "effects.update": 0.2677,
+      "render.pre": 0.2049,
+      "player.update": 0.184,
+      "render.post": 0.0896,
+      "hud.update": 0.0002,
+      "other(step)": 0.0463
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 2.85,
+      "noiseMs": 0.5,
+      "ms": {
+       "shadows": 0.35,
+       "post:bloom-prefilter": 0.05,
+       "post:bloom-down": 0.05,
+       "smaa": -0.05,
+       "post:bloom-up": -0.15,
+       "post:agx": -0.25,
+       "post:final": -0.45
+      }
+     }
+    }
+   ]
+  },
+  "house/high": {
+   "path": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 2.9071,
+      "render.total": 2.8494,
+      "render.main": 2.6333,
+      "render.shadows": 0.3347,
+      "render.post": 0.1773,
+      "player.update": 0.0277,
+      "render.pre": 0.0201,
+      "effects.update": 0.0042,
+      "enemies.update": 0.0014,
+      "hud.update": 0.0001,
+      "other(step)": 0.0243
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:gtao": 1,
+      "post:ao-blur": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 3.25,
+      "noiseMs": 0.1,
+      "ms": {
+       "smaa": 0.25,
+       "shadows": 0.15,
+       "post:bloom-down": 0.15,
+       "post:bloom-up": 0.15,
+       "post:agx": 0.15,
+       "post:gtao": 0.05,
+       "post:ao-blur": 0.05,
+       "post:bloom-prefilter": 0.05,
+       "post:final": 0.05
+      }
+     }
+    }
+   ],
+   "fight": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 3.3911,
+      "render.total": 2.4912,
+      "render.main": 2.1184,
+      "render.shadows": 0.5857,
+      "enemies.update": 0.3223,
+      "effects.update": 0.3,
+      "render.pre": 0.2302,
+      "player.update": 0.2078,
+      "render.post": 0.1281,
+      "hud.update": 0.001,
+      "other(step)": 0.0688
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:gtao": 1,
+      "post:ao-blur": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1,
+      "soft": 0.98
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 3.95,
+      "noiseMs": 1.3,
+      "ms": {
+       "shadows": 0.75,
+       "post:gtao": 0.55,
+       "post:ao-blur": 0.35,
+       "post:bloom-prefilter": 0.05,
+       "post:bloom-down": 0.05,
+       "smaa": 0.05,
+       "post:bloom-up": -0.15,
+       "post:agx": -0.25,
+       "post:final": -0.25,
+       "soft": -0.35
+      }
+     }
+    }
+   ]
+  },
+  "house/ultra": {
+   "path": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 3.9209,
+      "render.total": 3.8697,
+      "render.main": 3.5971,
+      "render.shadows": 0.3709,
+      "render.post": 0.2499,
+      "player.update": 0.0248,
+      "render.pre": 0.0159,
+      "effects.update": 0.0032,
+      "enemies.update": 0.0018,
+      "hud.update": 0.0002,
+      "other(step)": 0.0212
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:gtao": 1,
+      "post:ao-blur": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:shaft-mask": 0.33,
+      "post:shaft-blur": 0.67,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 4.05,
+      "noiseMs": 0.1,
+      "ms": {
+       "post:gtao": 0.75,
+       "smaa": 0.75,
+       "shadows": 0.45,
+       "post:agx": 0.35,
+       "post:ao-blur": 0.25,
+       "post:final": 0.15,
+       "post:bloom-prefilter": 0.05,
+       "post:bloom-down": -0.05,
+       "post:shaft-blur": -0.15,
+       "post:bloom-up": -0.25,
+       "post:shaft-mask": -0.25
+      }
+     }
+    }
+   ],
+   "fight": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 4.0823,
+      "render.total": 3.1984,
+      "render.main": 2.7728,
+      "render.shadows": 0.7893,
+      "enemies.update": 0.3238,
+      "effects.update": 0.2894,
+      "render.pre": 0.2324,
+      "player.update": 0.2123,
+      "render.post": 0.1814,
+      "hud.update": 0.0011,
+      "other(step)": 0.0573
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:gtao": 1,
+      "post:ao-blur": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1,
+      "soft": 0.98,
+      "post:shaft-mask": 0.14,
+      "post:shaft-blur": 0.27
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 4.8,
+      "noiseMs": 0.2,
+      "ms": {
+       "post:gtao": 0.5,
+       "smaa": 0.3,
+       "shadows": 0.2,
+       "post:agx": 0.2,
+       "post:ao-blur": 0.1,
+       "post:bloom-prefilter": 0.1,
+       "post:bloom-up": 0.1,
+       "soft": 0.1,
+       "post:bloom-down": 0,
+       "post:final": 0,
+       "post:shaft-mask": -0.1,
+       "post:shaft-blur": -0.1
+      }
+     }
+    }
+   ]
+  },
+  "mexico/low": {
+   "path": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 1.3221,
+      "render.total": 1.2939,
+      "render.main": 1.2587,
+      "render.shadows": 0.0854,
+      "player.update": 0.0158,
+      "render.pre": 0.0148,
+      "render.post": 0.009,
+      "effects.update": 0.0007,
+      "enemies.update": 0.0006,
+      "hud.update": 0,
+      "other(step)": 0.0111
+     },
+     "passesPerFrame": {
+      "post:composite": 1,
+      "shadows": 0.5
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 2.15,
+      "noiseMs": 0.1,
+      "ms": {
+       "post:composite": 0.75,
+       "shadows": 0.05
+      }
+     }
+    }
+   ],
+   "fight": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 0.9863,
+      "render.total": 0.6712,
+      "render.main": 0.637,
+      "enemies.update": 0.1368,
+      "player.update": 0.1056,
+      "render.shadows": 0.0873,
+      "effects.update": 0.0374,
+      "render.pre": 0.0173,
+      "render.post": 0.0086,
+      "hud.update": 0.0013,
+      "other(step)": 0.034
+     },
+     "passesPerFrame": {
+      "post:composite": 1,
+      "shadows": 0.5
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 1.9,
+      "noiseMs": 0.4,
+      "ms": {
+       "post:composite": 0.1,
+       "shadows": 0.1
+      }
+     }
+    }
+   ]
+  },
+  "mexico/medium": {
+   "path": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 2.8072,
+      "render.total": 2.7369,
+      "render.main": 2.5406,
+      "render.shadows": 0.298,
+      "render.post": 0.1537,
+      "player.update": 0.0304,
+      "render.pre": 0.0246,
+      "effects.update": 0.0039,
+      "enemies.update": 0.0024,
+      "hud.update": 0.0001,
+      "other(step)": 0.0335
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 2.85,
+      "noiseMs": 0.1,
+      "ms": {
+       "shadows": 0.15,
+       "smaa": 0.15,
+       "post:bloom-down": 0.05,
+       "post:bloom-up": 0.05,
+       "post:agx": 0.05,
+       "post:final": 0.05,
+       "post:bloom-prefilter": -0.15
+      }
+     }
+    }
+   ],
+   "fight": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 3.0378,
+      "render.total": 2.3324,
+      "render.main": 1.9984,
+      "render.shadows": 0.4578,
+      "enemies.update": 0.2927,
+      "render.pre": 0.2337,
+      "player.update": 0.2078,
+      "effects.update": 0.1402,
+      "render.post": 0.0852,
+      "hud.update": 0.0008,
+      "other(step)": 0.0639
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 3.5,
+      "noiseMs": 0.4,
+      "ms": {
+       "post:bloom-up": 0.7,
+       "shadows": 0.5,
+       "post:bloom-down": 0.5,
+       "post:agx": 0.3,
+       "post:bloom-prefilter": 0.2,
+       "smaa": 0.2,
+       "post:final": -0.1
+      }
+     }
+    }
+   ]
+  },
+  "mexico/high": {
+   "path": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 3.0192,
+      "render.total": 2.9474,
+      "render.main": 2.6951,
+      "render.shadows": 0.392,
+      "render.post": 0.2134,
+      "player.update": 0.0342,
+      "render.pre": 0.0269,
+      "effects.update": 0.0043,
+      "enemies.update": 0.0018,
+      "hud.update": 0.0006,
+      "other(step)": 0.0309
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:gtao": 1,
+      "post:ao-blur": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 3.3,
+      "noiseMs": 0,
+      "ms": {
+       "smaa": 0.4,
+       "shadows": 0.3,
+       "post:bloom-prefilter": 0.3,
+       "post:bloom-down": 0.3,
+       "post:bloom-up": 0.3,
+       "post:agx": 0.3,
+       "post:final": 0.3,
+       "post:gtao": 0.2,
+       "post:ao-blur": 0.2
+      }
+     }
+    }
+   ],
+   "fight": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 3.5906,
+      "render.total": 2.7769,
+      "render.main": 2.3627,
+      "render.shadows": 0.7136,
+      "enemies.update": 0.3381,
+      "render.pre": 0.2612,
+      "player.update": 0.2343,
+      "effects.update": 0.1652,
+      "render.post": 0.1367,
+      "hud.update": 0.0014,
+      "other(step)": 0.0747
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:gtao": 1,
+      "post:ao-blur": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1,
+      "soft": 0.98
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 3.7,
+      "noiseMs": 0.4,
+      "ms": {
+       "post:final": 0.8,
+       "post:ao-blur": 0.6,
+       "soft": 0.5,
+       "post:bloom-prefilter": 0.4,
+       "shadows": 0.2,
+       "smaa": 0.2,
+       "post:agx": 0,
+       "post:gtao": -0.1,
+       "post:bloom-down": -0.3,
+       "post:bloom-up": -0.5
+      }
+     }
+    }
+   ]
+  },
+  "mexico/ultra": {
+   "path": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 4.151,
+      "render.total": 4.0583,
+      "render.main": 3.7414,
+      "render.shadows": 0.91,
+      "render.post": 0.2747,
+      "player.update": 0.0397,
+      "render.pre": 0.0284,
+      "effects.update": 0.0057,
+      "enemies.update": 0.0023,
+      "hud.update": 0.0003,
+      "other(step)": 0.0447
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:gtao": 1,
+      "post:ao-blur": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:shaft-mask": 0.5,
+      "post:shaft-blur": 1,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 4.5,
+      "noiseMs": 0,
+      "ms": {
+       "post:gtao": 0.8,
+       "shadows": 0.3,
+       "post:ao-blur": 0.3,
+       "post:bloom-down": 0.3,
+       "post:bloom-up": 0.3,
+       "post:shaft-mask": 0.3,
+       "post:shaft-blur": 0.3,
+       "post:agx": 0.3,
+       "post:bloom-prefilter": 0.2,
+       "smaa": 0.2,
+       "post:final": 0
+      }
+     }
+    }
+   ],
+   "fight": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 3.8329,
+      "render.total": 3.0863,
+      "render.main": 2.6808,
+      "render.shadows": 0.8907,
+      "enemies.update": 0.3132,
+      "render.pre": 0.2379,
+      "player.update": 0.2101,
+      "effects.update": 0.1554,
+      "render.post": 0.1537,
+      "hud.update": 0.0011,
+      "other(step)": 0.0668
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:gtao": 1,
+      "post:ao-blur": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:shaft-mask": 0.53,
+      "post:shaft-blur": 1.06,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1,
+      "soft": 0.98
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 4.45,
+      "noiseMs": 0.3,
+      "ms": {
+       "post:gtao": 0.45,
+       "smaa": 0.35,
+       "shadows": 0.15,
+       "post:ao-blur": 0.15,
+       "post:agx": 0.05,
+       "post:bloom-prefilter": -0.05,
+       "soft": -0.05,
+       "post:bloom-up": -0.15,
+       "post:shaft-mask": -0.15,
+       "post:shaft-blur": -0.15,
+       "post:bloom-down": -0.25,
+       "post:final": -0.25
+      }
+     }
+    }
+   ]
+  },
+  "training/low": {
+   "path": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 1.4898,
+      "render.total": 1.1539,
+      "render.main": 1.1213,
+      "render.shadows": 0.2079,
+      "enemies.update": 0.1701,
+      "player.update": 0.0443,
+      "render.pre": 0.0166,
+      "render.post": 0.0099,
+      "effects.update": 0.0008,
+      "hud.update": 0.0001,
+      "other(step)": 0.1206
+     },
+     "passesPerFrame": {
+      "post:composite": 1,
+      "shadows": 0.5
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 1.5,
+      "noiseMs": 0,
+      "ms": {
+       "shadows": 0.2,
+       "post:composite": 0.1
+      }
+     }
+    }
+   ],
+   "fight": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 1.9386,
+      "render.total": 1.2151,
+      "render.main": 1.1722,
+      "enemies.update": 0.2772,
+      "render.shadows": 0.1524,
+      "player.update": 0.1337,
+      "effects.update": 0.0311,
+      "render.pre": 0.0217,
+      "render.post": 0.0117,
+      "hud.update": 0.0009,
+      "other(step)": 0.2806
+     },
+     "passesPerFrame": {
+      "post:composite": 1,
+      "shadows": 0.5
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 2.25,
+      "noiseMs": 0.3,
+      "ms": {
+       "shadows": 0.25,
+       "post:composite": -0.15
+      }
+     }
+    }
+   ]
+  },
+  "training/medium": {
+   "path": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 2.383,
+      "render.total": 1.6801,
+      "render.main": 1.4443,
+      "render.shadows": 0.4248,
+      "enemies.update": 0.3479,
+      "render.pre": 0.1264,
+      "render.post": 0.099,
+      "player.update": 0.0811,
+      "effects.update": 0.0061,
+      "hud.update": 0.001,
+      "other(step)": 0.2668
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 2.65,
+      "noiseMs": 0.3,
+      "ms": {
+       "shadows": 0.45,
+       "post:bloom-prefilter": 0.25,
+       "post:bloom-down": 0.05,
+       "smaa": -0.15,
+       "post:final": -0.15,
+       "post:agx": -0.35,
+       "post:bloom-up": -0.85
+      }
+     }
+    }
+   ],
+   "fight": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 3.537,
+      "render.total": 2.2578,
+      "render.main": 1.9852,
+      "render.shadows": 0.5427,
+      "enemies.update": 0.4853,
+      "player.update": 0.2157,
+      "render.pre": 0.2076,
+      "effects.update": 0.0722,
+      "render.post": 0.0563,
+      "hud.update": 0.0017,
+      "other(step)": 0.5043
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 3.7,
+      "noiseMs": 0.2,
+      "ms": {
+       "shadows": 0.6,
+       "post:bloom-prefilter": 0.4,
+       "post:bloom-down": 0.3,
+       "post:bloom-up": 0.2,
+       "post:agx": 0.2,
+       "smaa": 0.2,
+       "post:final": 0
+      }
+     }
+    }
+   ]
+  },
+  "training/high": {
+   "path": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 2.9827,
+      "render.total": 1.9797,
+      "render.main": 1.6904,
+      "render.shadows": 0.6646,
+      "enemies.update": 0.4963,
+      "render.pre": 0.1771,
+      "player.update": 0.1078,
+      "render.post": 0.1024,
+      "effects.update": 0.0054,
+      "hud.update": 0.0004,
+      "other(step)": 0.3931
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:gtao": 1,
+      "post:ao-blur": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 2.9,
+      "noiseMs": 0,
+      "ms": {
+       "shadows": 0.5,
+       "smaa": 0.5,
+       "post:final": 0.2,
+       "post:ao-blur": 0.1,
+       "post:bloom-prefilter": 0.1,
+       "post:agx": 0.1,
+       "post:bloom-down": 0,
+       "post:bloom-up": 0,
+       "post:gtao": -0.1
+      }
+     }
+    }
+   ],
+   "fight": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 4.3843,
+      "render.total": 2.8106,
+      "render.main": 2.4604,
+      "render.shadows": 0.8213,
+      "enemies.update": 0.6088,
+      "player.update": 0.2603,
+      "render.pre": 0.2273,
+      "render.post": 0.1096,
+      "effects.update": 0.095,
+      "hud.update": 0.0008,
+      "other(step)": 0.6088
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:gtao": 1,
+      "post:ao-blur": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1,
+      "soft": 0.98
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 4.2,
+      "noiseMs": 0,
+      "ms": {
+       "shadows": 0.6,
+       "smaa": 0.3,
+       "post:bloom-prefilter": 0.1,
+       "post:bloom-down": 0.1,
+       "post:agx": 0.1,
+       "post:gtao": 0,
+       "post:ao-blur": 0,
+       "post:bloom-up": 0,
+       "post:final": 0,
+       "soft": 0
+      }
+     }
+    }
+   ]
+  },
+  "training/ultra": {
+   "path": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 4.0011,
+      "render.total": 2.8969,
+      "render.main": 2.5209,
+      "render.shadows": 1.0699,
+      "enemies.update": 0.5506,
+      "render.pre": 0.1807,
+      "render.post": 0.1802,
+      "player.update": 0.1313,
+      "effects.update": 0.0061,
+      "hud.update": 0.0003,
+      "other(step)": 0.4159
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:gtao": 1,
+      "post:ao-blur": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1,
+      "post:shaft-mask": 0.1,
+      "post:shaft-blur": 0.2
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 4.15,
+      "noiseMs": 0.3,
+      "ms": {
+       "shadows": 0.65,
+       "post:gtao": 0.65,
+       "smaa": 0.35,
+       "post:ao-blur": 0.25,
+       "post:agx": 0.15,
+       "post:bloom-prefilter": 0.05,
+       "post:final": -0.05,
+       "post:bloom-down": -0.15,
+       "post:bloom-up": -0.15,
+       "post:shaft-mask": -0.15,
+       "post:shaft-blur": -0.15
+      }
+     }
+    }
+   ],
+   "fight": [
+    {
+     "gpuFrames": 0,
+     "gpuQuerySpans": null,
+     "cpuFrames": 900,
+     "cpu": {
+      "frame.cpu": 5.3248,
+      "render.total": 3.5229,
+      "render.main": 3.1071,
+      "render.shadows": 1.1968,
+      "enemies.update": 0.6882,
+      "player.update": 0.3019,
+      "render.pre": 0.2766,
+      "render.post": 0.1236,
+      "effects.update": 0.1064,
+      "hud.update": 0.0014,
+      "other(step)": 0.704
+     },
+     "passesPerFrame": {
+      "shadows": 1,
+      "post:gtao": 1,
+      "post:ao-blur": 1,
+      "post:bloom-prefilter": 1,
+      "post:bloom-down": 4,
+      "post:bloom-up": 4,
+      "post:agx": 1,
+      "smaa": 1,
+      "post:final": 1,
+      "soft": 0.98
+     },
+     "gpuAblation": {
+      "frames": 240,
+      "baseMs": 4.95,
+      "noiseMs": 0.3,
+      "ms": {
+       "shadows": 0.85,
+       "post:ao-blur": 0.35,
+       "post:bloom-prefilter": 0.25,
+       "post:agx": 0.15,
+       "post:gtao": 0.05,
+       "post:bloom-down": 0.05,
+       "smaa": 0.05,
+       "soft": 0.05,
+       "post:bloom-up": -0.05,
+       "post:final": -0.25
+      }
+     }
+    }
+   ]
+  }
+ }
+}

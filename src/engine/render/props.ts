@@ -480,6 +480,8 @@ export class DressingMerge {
   #next = 0;
   #pending: [DressingPart['kind'], Batch][] | null = null;
   readonly parts: DressingPart[] = [];
+  /** The streamer has stepped it in its upload slots (`PropAssets.pump`); before that it may only be placed (`place`). */
+  claimed = false;
 
   constructor(dressing: LevelDressing, kit: Kit, cell = PROP_CELL) {
     this.#dressing = dressing;
@@ -506,24 +508,41 @@ export class DressingMerge {
     return cellBatch(this.#large, (cable.from[0] + cable.to[0]) / 2, (cable.from[2] + cable.to[2]) / 2, this.#cell);
   }
 
+  /** Is this the merge of this dressing, kit and cell? */
+  fits(dressing: LevelDressing, kit: Kit, cell: number): boolean {
+    return this.#dressing === dressing && this.#kit === kit && this.#cell === cell;
+  }
+
+  /**
+   * Write placements into the batches for about `budget` ms (at least one), then the cables; true once all are
+   * written. Plain arrays only: no three object (a geometry draws `Math.random` for its uuid), so it can run
+   * outside the upload slots; the meshes are finished in `step`.
+   */
+  place(budget: number): boolean {
+    if (this.#pending !== null) return true;
+    const until = performance.now() + budget, props = this.#dressing.props;
+    do {
+      const p = props[this.#next];
+      if (p === undefined) break;
+      addPiece(this.#batchOf(p), this.#kit.get(p.piece)!, p);
+      this.#next++;
+    } while (performance.now() < until);
+    if (this.#next < props.length) return false;
+    for (const cable of this.#dressing.cables) addCable(this.#cableBatch(cable), cable);
+    const cells = (kind: DressingPart['kind'], batches: Map<string, Batch>) =>
+      [...batches.keys()].sort().map(key => [kind, batches.get(key)!] as [DressingPart['kind'], Batch]);
+    this.#pending = [...cells('large', this.#large), ['backdrop', this.#backdrop], ...cells('small', this.#small)];
+    this.#pending = this.#pending.filter(([, batch]) => !batch.empty);
+    return true;
+  }
+
   /** Work for about `budget` ms; true once every mesh is finished (`parts`). */
   step(budget: number): boolean {
-    const until = performance.now() + budget, props = this.#dressing.props;
     if (this.#pending === null) {
-      do {
-        const p = props[this.#next];
-        if (p === undefined) break;
-        addPiece(this.#batchOf(p), this.#kit.get(p.piece)!, p);
-        this.#next++;
-      } while (performance.now() < until);
-      if (this.#next < props.length) return false;
-      for (const cable of this.#dressing.cables) addCable(this.#cableBatch(cable), cable);
-      const cells = (kind: DressingPart['kind'], batches: Map<string, Batch>) =>
-        [...batches.keys()].sort().map(key => [kind, batches.get(key)!] as [DressingPart['kind'], Batch]);
-      this.#pending = [...cells('large', this.#large), ['backdrop', this.#backdrop], ...cells('small', this.#small)];
-      this.#pending = this.#pending.filter(([, batch]) => !batch.empty);
+      this.place(budget);
       return false;
     }
+    const until = performance.now() + budget;
     do {
       const next = this.#pending.shift();
       if (next) this.parts.push({ kind: next[0], ...next[1].geometry() });
@@ -744,14 +763,17 @@ export class PropAssets {
    * and the kit is in, a step of merging the map's dressing (`MERGE_STEP_MS`
    * of script, 0: it uploads nothing, so the next frame may step again), and
    * once it is merged, build its meshes and hand them to be warmed (the
-   * merged geometry's bytes). 0 too when there is nothing to do yet.
+   * merged geometry's bytes). 0 too when there is nothing to do yet. With a
+   * `limit` (a slot another upload already used) only an atlas of at most
+   * that many bytes goes up; the merge and the build wait for a slot of their own.
    */
-  pump(): number {
+  pump(limit = Infinity): number {
     const atlases = this.#atlases.find(a => a.size === this.#size && a !== this.#worn && a.maps !== null);
     if (atlases?.maps) {
       const atlas = PROP_ATLASES[atlases.uploaded];
       if (atlas !== undefined) {
         const texture = atlases.maps.get(atlas)!, bytes = textureBytes(texture);
+        if (bytes > limit) return 0;
         this.#loaders.upload(texture);
         if (texture instanceof THREE.CompressedTexture) texture.mipmaps = [];
         atlases.uploaded++;
@@ -760,14 +782,32 @@ export class PropAssets {
         return bytes;
       }
     }
-    if (this.#built !== null || this.#worn === null || this.#request === null) return 0;
+    if (limit !== Infinity || this.#built !== null || this.#worn === null || this.#request === null) return 0;
     const kit = this.#kit, dressing = this.#request.dressing;
     if (dressing !== null && (kit === null || this.#kitFamily !== dressing.family)) return 0;
     if (dressing !== null && kit !== null) {
-      this.#merge ??= new DressingMerge(dressing, kit, propDetail(this.#size!).cell);
+      // The merge the slots would start now (a placed one too, `premerge`); once claimed it runs to its end, as before.
+      const cell = propDetail(this.#size!).cell;
+      if (this.#merge === null || (!this.#merge.claimed && !this.#merge.fits(dressing, kit, cell))) this.#merge = new DressingMerge(dressing, kit, cell);
+      this.#merge.claimed = true;
       if (!this.#merge.step(MERGE_STEP_MS)) return 0;
     }
     return this.#build(kit);
+  }
+
+  /**
+   * Once the family's kit is in: write the map's dressing into the merge's arrays (`DressingMerge.place`,
+   * `MERGE_STEP_MS` of script), every frame past a match's quiet start, ahead of the upload slots and the atlases.
+   * It makes no three object, so the meshes, their materials and the build come from `pump` at the same point as
+   * before, only with fewer of its steps left to run.
+   */
+  premerge(): void {
+    if (this.#built !== null || this.#request === null || this.#size === null || !this.pending) return;
+    const kit = this.#kit, dressing = this.#request.dressing;
+    if (dressing === null || kit === null || this.#kitFamily !== dressing.family) return;
+    const cell = propDetail(this.#size).cell;
+    if (this.#merge === null || (!this.#merge.claimed && !this.#merge.fits(dressing, kit, cell))) this.#merge = new DressingMerge(dressing, kit, cell);
+    this.#merge.place(MERGE_STEP_MS);
   }
 
   #wear(atlases: Atlases): void {

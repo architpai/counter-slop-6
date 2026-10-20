@@ -1,0 +1,1424 @@
++ date
+Wed Oct 21 12:03:09 AM JST 2026
+msi
+fleet
++ hostname
++ whoami
++ uname -a
+Linux msi 7.0.0-38-generic #38-Ubuntu SMP PREEMPT_DYNAMIC Fri Sep  4 09:10:14 UTC 2026 x86_64 GNU/Linux
++ ls -la /home/fleet
+total 172
+drwxr-x--- 20 fleet fleet  4096 Oct 21 00:00 .
+drwxr-xr-x  3 root  root   4096 Oct 19 18:22 ..
+drwxrwxr-x  3 fleet fleet  4096 Oct 20 14:43 .agent-browser
+drwxrwxr-x  2 fleet fleet  4096 Oct 20 11:39 .agents
+drwxrwxr-x  5 fleet fleet  4096 Oct 20 11:46 .azure
+-rw-------  1 fleet fleet    33 Oct 20 11:33 .bash_history
+-rw-r--r--  1 fleet fleet   220 Feb 13  2026 .bash_logout
+-rw-r--r--  1 fleet fleet  3888 Oct 20 13:20 .bashrc
+drwx------  9 fleet fleet  4096 Oct 20 17:26 .cache
+drwxrwxr-x  9 fleet fleet  4096 Oct 20 22:10 .claude
+-rw-------  1 fleet fleet 66938 Oct 20 22:10 .claude.json
+drwxrwxr-x 10 fleet fleet  4096 Oct 20 22:10 .codex
+drwxrwxr-x  5 fleet fleet  4096 Oct 20 14:44 .config
+-rw-rw-r--  1 fleet fleet   336 Oct 20 11:40 .gitconfig
+drwxrwxr-x  5 fleet fleet  4096 Oct 20 11:17 .local
+drwxrwxr-x  4 fleet fleet  4096 Oct 20 11:19 .npm
+drwxrwxr-x  4 fleet fleet  4096 Oct 20 11:28 .npm-global
+-rw-------  1 fleet fleet    31 Oct 20 11:19 .npmrc
+drwx------  3 fleet fleet  4096 Oct 20 12:31 .nv
+-rw-r--r--  1 fleet fleet   807 Feb 13  2026 .profile
+drwx------  2 fleet fleet  4096 Oct 20 11:39 .ssh
+drwxrwxr-x  6 fleet fleet  4096 Oct 20 11:34 .t3
+drwxrwxr-x  7 fleet fleet  4096 Oct 20 11:47 Developer
+drwxr-xr-x  6 fleet fleet  4096 Oct 20 16:03 bench
+drwxr-xr-x  4 fleet fleet  4096 Oct 20 14:46 bench-turbo
+drwxr-xr-x  2 fleet fleet  4096 Oct 20 11:05 files
+drwxrwxr-x  2 fleet fleet  4096 Oct 20 17:29 render
+total 36
+drwx------  9 fleet fleet 4096 Oct 20 17:26 .
+drwxr-x--- 20 fleet fleet 4096 Oct 21 00:00 ..
+drwxrwxr-x  3 fleet fleet 4096 Oct 20 11:40 Microsoft
+drwxrwxr-x  3 fleet fleet 4096 Oct 20 17:26 blender
+drwxrwxr-x  3 fleet fleet 4096 Oct 20 11:17 claude
+drwxrwxr-x  3 fleet fleet 4096 Oct 20 11:31 claude-cli-nodejs
+drwxr-xr-x  2 fleet fleet 4096 Oct 20 14:44 fontconfig
+-rw-r--r--  1 fleet fleet    0 Oct 19 18:32 motd.legal-displayed
+drwx------  3 fleet fleet 4096 Oct 20 17:26 nvidia
+drwxrwxr-x  4 fleet fleet 4096 Oct 20 17:26 thumbnails
++ ls -la /home/fleet/.cache
+total 24
+drwxrwxr-x  5 fleet fleet 4096 Oct 20 14:44 .
+drwxr-x--- 20 fleet fleet 4096 Oct 21 00:00 ..
+drwxrwxr-x  2 fleet fleet 4096 Oct 20 13:20 environment.d
+drwx------  3 fleet fleet 4096 Oct 20 14:44 google-chrome-for-testing
+-rw-------  1 fleet fleet   49 Oct 20 11:35 llama-api-key
+drwxrwxr-x  3 fleet fleet 4096 Oct 20 11:34 systemd
+total 16
+drwxrwxr-x 4 fleet fleet 4096 Oct 20 14:44 .
+drwxrwxr-x 5 fleet fleet 4096 Oct 20 11:17 ..
+drwxrwxr-x 3 fleet fleet 4096 Oct 20 11:17 claude
+drwx------ 3 fleet fleet 4096 Oct 20 14:44 pki
++ ls -la /home/fleet/.config
++ ls -la /home/fleet/.local/share
++ ls -la /tmp
+total 20
+drwxrwxrwt 16 root  root   420 Oct 21 00:00 .
+drwxr-xr-x 20 root  root  4096 Oct 19 18:20 ..
+drwxrwxrwt  2 root  root    40 Oct 20 14:30 .ICE-unix
+drwxrwxrwt  2 root  root    40 Oct 20 14:30 .X11-unix
+drwxrwxrwt  2 root  root    40 Oct 20 14:30 .XIM-unix
+drwxrwxrwt  2 root  root    40 Oct 20 14:30 .font-unix
+-rw-rw-r--  1 fleet fleet    0 Oct 20 17:29 blender-render.lock
+drwx------  2 fleet fleet   40 Oct 20 22:10 claude-1000
+-rw-rw-r--  1 fleet fleet  509 Oct 20 22:11 es.txt
+-rw-r--r--  1 fleet fleet 1538 Oct 20 22:14 llama-server.service
+drwxrwxr-x  3 fleet fleet   60 Oct 20 14:41 node-compile-cache
+-rw-rw-r--  1 fleet fleet 3011 Oct 20 22:14 sleep.log
+-rw-rw-r--  1 fleet fleet 2049 Oct 20 15:31 smoke.log
+drwx------  2 root  root    40 Oct 20 14:30 snap-private-tmp
+drwx------  3 root  root    60 Oct 20 14:30 systemd-private-7447491c3e7a4c03885a087b8a4a6586-ModemManager.service-CVtVS3
+drwx------  3 root  root    60 Oct 20 14:30 systemd-private-7447491c3e7a4c03885a087b8a4a6586-bolt.service-0nuxvH
+drwx------  3 root  root    60 Oct 20 14:30 systemd-private-7447491c3e7a4c03885a087b8a4a6586-chrony.service-ijmDjQ
+drwx------  3 root  root    60 Oct 20 14:54 systemd-private-7447491c3e7a4c03885a087b8a4a6586-fwupd.service-cDjmDk
+drwx------  3 root  root    60 Oct 20 14:30 systemd-private-7447491c3e7a4c03885a087b8a4a6586-polkit.service-s2i2KB
+drwx------  3 root  root    60 Oct 20 14:30 systemd-private-7447491c3e7a4c03885a087b8a4a6586-systemd-logind.service-kzr0NV
+drwx------  3 root  root    60 Oct 20 14:30 systemd-private-7447491c3e7a4c03885a087b8a4a6586-upower.service-PFoiIn
++ ls -la /dev/shm
+total 0
+drwxrwxrwt  2 root root   40 Oct 20 14:30 .
+drwxr-xr-x 21 root root 4900 Oct 20 14:30 ..
+total 16
+drwxrwxr-x  4 fleet fleet 4096 Oct 20 11:19 .
+drwxr-x--- 20 fleet fleet 4096 Oct 21 00:00 ..
++ ls -la /home/fleet/.npm
++ head -3
++ ls -la /home/fleet/.nv
++ head
+total 12
+drwx------  3 fleet fleet 4096 Oct 20 12:31 .
+drwxr-x--- 20 fleet fleet 4096 Oct 21 00:00 ..
+drwx------  2 fleet fleet 4096 Oct 20 12:31 ComputeCache
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/nvme0n1p2  1.9T   21G  1.8T   2% /
+tmpfs            62G  2.6M   62G   1% /tmp
+tmpfs            62G     0   62G   0% /dev/shm
++ df -h /home /tmp /dev/shm
+== START 2026-10-21T00:03:22+09:00
+== find depth 4 (home, excluding nothing), with mtime
+2026-10-21 00:00 d 4096 /home/fleet
+2026-10-20 14:43 d 4096 /home/fleet/.agent-browser
+2026-10-20 14:43 d 4096 /home/fleet/.agent-browser/browsers
+2026-10-20 14:43 d 4096 /home/fleet/.agent-browser/browsers/chrome-155.0.8059.84
+2026-10-20 14:43 f 248 /home/fleet/.agent-browser/browsers/chrome-155.0.8059.84/ABOUT
+2026-10-20 14:43 f 298806600 /home/fleet/.agent-browser/browsers/chrome-155.0.8059.84/chrome
+2026-10-20 14:43 f 595583 /home/fleet/.agent-browser/browsers/chrome-155.0.8059.84/chrome_100_percent.pak
+2026-10-20 14:43 f 965875 /home/fleet/.agent-browser/browsers/chrome-155.0.8059.84/chrome_200_percent.pak
+2026-10-20 14:43 f 1961920 /home/fleet/.agent-browser/browsers/chrome-155.0.8059.84/chrome_crashpad_handler
+2026-10-20 14:43 f 15216 /home/fleet/.agent-browser/browsers/chrome-155.0.8059.84/chrome_sandbox
+2026-10-20 14:43 f 4510 /home/fleet/.agent-browser/browsers/chrome-155.0.8059.84/chrome-wrapper
+2026-10-20 14:43 f 660 /home/fleet/.agent-browser/browsers/chrome-155.0.8059.84/deb.deps
+2026-10-20 14:43 d 4096 /home/fleet/.agent-browser/browsers/chrome-155.0.8059.84/hyphen-data
+2026-10-20 14:43 f 10819840 /home/fleet/.agent-browser/browsers/chrome-155.0.8059.84/icudtl.dat
+2026-10-20 14:43 f 234008 /home/fleet/.agent-browser/browsers/chrome-155.0.8059.84/libEGL.so
+2026-10-20 14:43 f 234008 /home/fleet/.agent-browser/browsers/chrome-155.0.8059.84/libGLESv2.so
+2026-10-20 14:43 f 4294072 /home/fleet/.agent-browser/browsers/chrome-155.0.8059.84/libvk_swiftshader.so
+2026-10-20 14:43 f 694224 /home/fleet/.agent-browser/browsers/chrome-155.0.8059.84/libvulkan.so.1
+2026-10-20 14:43 d 12288 /home/fleet/.agent-browser/browsers/chrome-155.0.8059.84/locales
+2026-10-20 14:43 d 4096 /home/fleet/.agent-browser/browsers/chrome-155.0.8059.84/MEIPreload
+2026-10-20 14:43 f 2772 /home/fleet/.agent-browser/browsers/chrome-155.0.8059.84/product_logo_48.png
+2026-10-20 14:43 d 4096 /home/fleet/.agent-browser/browsers/chrome-155.0.8059.84/resources
+2026-10-20 14:43 f 24390464 /home/fleet/.agent-browser/browsers/chrome-155.0.8059.84/resources.pak
+2026-10-20 14:43 f 2760 /home/fleet/.agent-browser/browsers/chrome-155.0.8059.84/rpm.deps
+2026-10-20 14:43 f 753952 /home/fleet/.agent-browser/browsers/chrome-155.0.8059.84/v8_context_snapshot.bin
+2026-10-20 14:43 f 107 /home/fleet/.agent-browser/browsers/chrome-155.0.8059.84/vk_swiftshader_icd.json
+2026-10-20 14:43 d 4096 /home/fleet/.agent-browser/browsers/chrome-155.0.8059.84/WidevineCdm
+2026-10-20 11:39 d 4096 /home/fleet/.agents
+2026-08-28 09:37 f 163 /home/fleet/.agents/._AGENTS.md
+2026-08-28 09:37 f 126 /home/fleet/.agents/AGENTS.md
+2026-10-20 11:46 d 4096 /home/fleet/.azure
+2026-10-20 11:40 f 5 /home/fleet/.azure/az.json
+2026-10-20 11:40 f 5 /home/fleet/.azure/az.sess
+2026-10-20 11:46 f 1475 /home/fleet/.azure/azureProfile.json
+2026-10-20 11:46 f 66 /home/fleet/.azure/clouds.config
+2026-10-20 11:40 f 5 /home/fleet/.azure/commandIndex.json
+2026-10-20 11:47 d 4096 /home/fleet/.azure/commands
+2026-10-20 11:40 f 211 /home/fleet/.azure/commands/2026-10-20.11-40-40.version.16028.log
+2026-10-20 11:46 f 233 /home/fleet/.azure/commands/2026-10-20.11-40-45.login.16217.log
+2026-10-20 11:46 f 227 /home/fleet/.azure/commands/2026-10-20.11-46-04.account_show.17473.log
+2026-10-20 11:46 f 253 /home/fleet/.azure/commands/2026-10-20.11-46-15.account_get-access-token.17585.log
+2026-10-20 11:46 f 253 /home/fleet/.azure/commands/2026-10-20.11-46-25.account_get-access-token.17657.log
+2026-10-20 11:46 f 253 /home/fleet/.azure/commands/2026-10-20.11-46-39.account_get-access-token.17785.log
+2026-10-20 11:46 f 253 /home/fleet/.azure/commands/2026-10-20.11-46-46.account_get-access-token.17840.log
+2026-10-20 11:47 f 253 /home/fleet/.azure/commands/2026-10-20.11-47-02.account_get-access-token.17974.log
+2026-10-20 11:40 f 27 /home/fleet/.azure/config
+2026-10-20 11:40 f 5 /home/fleet/.azure/extensionHelpIndex.json
+2026-10-20 11:40 f 5 /home/fleet/.azure/extensionIndex.json
+2026-10-20 11:40 f 5 /home/fleet/.azure/helpIndex.json
+2026-10-20 11:40 d 4096 /home/fleet/.azure/logs
+2026-10-20 11:47 f 7440 /home/fleet/.azure/logs/telemetry.log
+2026-10-20 11:46 f 8802 /home/fleet/.azure/msal_http_cache.bin
+2026-10-20 11:46 f 19004 /home/fleet/.azure/msal_token_cache.json
+2026-10-20 11:47 d 4096 /home/fleet/.azure/telemetry
+2026-10-20 11:40 f 211 /home/fleet/.azure/versionCheck.json
+2026-10-20 11:33 f 33 /home/fleet/.bash_history
+2026-02-13 21:16 f 220 /home/fleet/.bash_logout
+2026-10-20 13:20 f 3888 /home/fleet/.bashrc
+2026-10-20 16:03 d 4096 /home/fleet/bench
+2026-10-20 12:31 f 3140 /home/fleet/bench/compare.py
+2026-10-20 12:48 d 4096 /home/fleet/bench/linux
+2026-10-20 12:37 f 415 /home/fleet/bench/linux/cpu-experts.err
+2026-10-20 12:38 f 2186 /home/fleet/bench/linux/cpu-experts.jsonl
+2026-10-20 12:38 f 415 /home/fleet/bench/linux/cpu-only.err
+2026-10-20 12:38 f 2178 /home/fleet/bench/linux/cpu-only.jsonl
+2026-10-20 12:31 f 415 /home/fleet/bench/linux/gpu-27b.err
+2026-10-20 12:35 f 8723 /home/fleet/bench/linux/gpu-27b.jsonl
+2026-10-20 12:38 f 495 /home/fleet/bench/linux/gpu-cpu-experts.csv
+2026-10-20 12:38 f 347 /home/fleet/bench/linux/gpu-cpu-only.csv
+2026-10-20 12:35 f 3761 /home/fleet/bench/linux/gpu-gpu-27b.csv
+2026-10-20 12:37 f 1288 /home/fleet/bench/linux/gpu-hybrid-35b.csv
+2026-10-20 12:47 f 7684 /home/fleet/bench/linux/gpu-sustained-27b.csv
+2026-10-20 12:35 f 415 /home/fleet/bench/linux/hybrid-35b.err
+2026-10-20 12:37 f 4381 /home/fleet/bench/linux/hybrid-35b.jsonl
+2026-10-20 12:48 f 68 /home/fleet/bench/linux/server.json
+2026-10-20 12:39 f 415 /home/fleet/bench/linux/sustained-27b.err
+2026-10-20 12:47 f 1898 /home/fleet/bench/linux/sustained-27b.jsonl
+2026-10-20 12:31 f 229 /home/fleet/bench/linux/system.json
+2026-10-20 15:31 f 5727 /home/fleet/bench/mtp_trials.py
+2026-10-20 15:57 d 4096 /home/fleet/bench/ppl
+2026-10-20 16:01 f 269 /home/fleet/bench/ppl.log
+2026-10-20 16:01 f 9092 /home/fleet/bench/ppl/Qwen3.8-27B-GSQ-RCO-IQ3_S-mtp.gguf.log
+2026-10-20 15:57 f 9092 /home/fleet/bench/ppl/Qwen3.8-27B-UD-IQ3_S.gguf.log
+2026-10-20 15:53 f 9092 /home/fleet/bench/ppl/Qwen3.8-27B-UD-IQ3_XXS.gguf.log
+2016-09-27 09:14 d 4096 /home/fleet/bench/ppl/wikitext-2-raw
+2016-08-16 03:44 f 1290590 /home/fleet/bench/ppl/wikitext-2-raw/wiki.test.raw
+2016-08-16 03:44 f 10940747 /home/fleet/bench/ppl/wikitext-2-raw/wiki.train.raw
+2016-08-16 03:44 f 1146846 /home/fleet/bench/ppl/wikitext-2-raw/wiki.valid.raw
+2026-10-20 12:31 f 2547 /home/fleet/bench/run-bench.ps1
+2026-10-20 12:31 f 1960 /home/fleet/bench/run-bench.sh
+2026-10-20 12:48 f 1292 /home/fleet/bench/run.log
+2026-10-20 15:31 f 479 /home/fleet/bench/run-mtp-trials.sh
+2026-10-20 15:49 f 500 /home/fleet/bench/run-ppl.sh
+2026-10-20 12:31 f 608 /home/fleet/bench/tests.txt
+2026-10-20 16:10 d 4096 /home/fleet/bench/trials
+2026-10-20 16:10 f 358 /home/fleet/bench/trials2.log
+2026-10-20 15:37 f 3229 /home/fleet/bench/trials/base.json
+2026-10-20 15:37 f 24403 /home/fleet/bench/trials/base.server.log
+2026-10-20 16:10 f 3360 /home/fleet/bench/trials/gsq-mtp2.json
+2026-10-20 16:10 f 20359 /home/fleet/bench/trials/gsq-mtp2.server.log
+2026-10-20 16:06 f 3346 /home/fleet/bench/trials/gsq-mtp3.json
+2026-10-20 16:06 f 19407 /home/fleet/bench/trials/gsq-mtp3.server.log
+2026-10-20 15:48 f 1251 /home/fleet/bench/trials.log
+2026-10-20 15:41 f 3329 /home/fleet/bench/trials/mtp2.json
+2026-10-20 15:41 f 20113 /home/fleet/bench/trials/mtp2.server.log
+2026-10-20 15:45 f 3235 /home/fleet/bench/trials/mtp3.json
+2026-10-20 15:45 f 20116 /home/fleet/bench/trials/mtp3.server.log
+2026-10-20 15:48 f 3390 /home/fleet/bench/trials/mtp4.json
+2026-10-20 15:48 f 20115 /home/fleet/bench/trials/mtp4.server.log
+2026-10-20 14:46 d 4096 /home/fleet/bench-turbo
+2026-10-20 14:46 f 3140 /home/fleet/bench-turbo/compare.py
+2026-10-20 14:59 d 4096 /home/fleet/bench-turbo/linux
+2026-10-20 14:47 f 415 /home/fleet/bench-turbo/linux/gpu-27b.err
+2026-10-20 14:50 f 8720 /home/fleet/bench-turbo/linux/gpu-27b.jsonl
+2026-10-20 14:50 f 3541 /home/fleet/bench-turbo/linux/gpu-gpu-27b.csv
+2026-10-20 14:59 f 7245 /home/fleet/bench-turbo/linux/gpu-sustained-27b.csv
+2026-10-20 14:59 f 68 /home/fleet/bench-turbo/linux/server.json
+2026-10-20 14:51 f 415 /home/fleet/bench-turbo/linux/sustained-27b.err
+2026-10-20 14:59 f 1904 /home/fleet/bench-turbo/linux/sustained-27b.jsonl
+2026-10-20 14:46 f 229 /home/fleet/bench-turbo/linux/system.json
+2026-10-20 14:46 f 2547 /home/fleet/bench-turbo/run-bench.ps1
+2026-10-20 14:46 f 1960 /home/fleet/bench-turbo/run-bench.sh
+2026-10-20 14:59 f 657 /home/fleet/bench-turbo/run.log
+2026-10-20 14:46 f 231 /home/fleet/bench-turbo/tests.txt
+2026-10-20 14:46 d 4096 /home/fleet/bench-turbo/windows
+2026-10-20 14:46 f 2226 /home/fleet/bench-turbo/windows/cpu-experts.jsonl
+2026-10-20 14:46 f 2216 /home/fleet/bench-turbo/windows/cpu-only.jsonl
+2026-10-20 14:46 f 8868 /home/fleet/bench-turbo/windows/gpu-27b.jsonl
+2026-10-20 14:46 f 860 /home/fleet/bench-turbo/windows/gpu-cpu-experts.csv
+2026-10-20 14:46 f 493 /home/fleet/bench-turbo/windows/gpu-cpu-only.csv
+2026-10-20 14:46 f 3778 /home/fleet/bench-turbo/windows/gpu-gpu-27b.csv
+2026-10-20 14:46 f 1885 /home/fleet/bench-turbo/windows/gpu-hybrid-35b.csv
+2026-10-20 14:46 f 7759 /home/fleet/bench-turbo/windows/gpu-sustained-27b.csv
+2026-10-20 14:46 f 4457 /home/fleet/bench-turbo/windows/hybrid-35b.jsonl
+2026-10-20 14:46 f 91 /home/fleet/bench-turbo/windows/server.json
+2026-10-20 14:46 f 1920 /home/fleet/bench-turbo/windows/sustained-27b.jsonl
+2026-10-20 14:46 f 241 /home/fleet/bench-turbo/windows/system.json
+2026-10-20 12:31 d 4096 /home/fleet/bench/windows
+2026-10-20 12:31 f 2226 /home/fleet/bench/windows/cpu-experts.jsonl
+2026-10-20 12:31 f 2216 /home/fleet/bench/windows/cpu-only.jsonl
+2026-10-20 12:31 f 8868 /home/fleet/bench/windows/gpu-27b.jsonl
+2026-10-20 12:31 f 860 /home/fleet/bench/windows/gpu-cpu-experts.csv
+2026-10-20 12:31 f 493 /home/fleet/bench/windows/gpu-cpu-only.csv
+2026-10-20 12:31 f 3778 /home/fleet/bench/windows/gpu-gpu-27b.csv
+2026-10-20 12:31 f 1885 /home/fleet/bench/windows/gpu-hybrid-35b.csv
+2026-10-20 12:31 f 7759 /home/fleet/bench/windows/gpu-sustained-27b.csv
+2026-10-20 12:31 f 4457 /home/fleet/bench/windows/hybrid-35b.jsonl
+2026-10-20 12:31 f 91 /home/fleet/bench/windows/server.json
+2026-10-20 12:31 f 1920 /home/fleet/bench/windows/sustained-27b.jsonl
+2026-10-20 12:31 f 241 /home/fleet/bench/windows/system.json
+2026-10-20 17:26 d 4096 /home/fleet/.cache
+2026-10-20 17:26 d 4096 /home/fleet/.cache/blender
+2026-10-20 17:26 d 4096 /home/fleet/.cache/blender/gl-shader-cache
+2026-10-20 11:17 d 4096 /home/fleet/.cache/claude
+2026-10-20 11:31 d 4096 /home/fleet/.cache/claude-cli-nodejs
+2026-10-20 11:31 d 4096 /home/fleet/.cache/claude-cli-nodejs/-home-fleet
+2026-10-20 11:33 d 4096 /home/fleet/.cache/claude-cli-nodejs/-home-fleet/mcp-logs-claude-ai-Claude-Docs
+2026-10-20 11:19 d 4096 /home/fleet/.cache/claude/staging
+2026-10-20 14:44 d 4096 /home/fleet/.cache/fontconfig
+2026-10-20 14:44 f 3024 /home/fleet/.cache/fontconfig/0bd3dc0958fa2205aaaa8ebb13e2872b-le64.cache-12
+2026-10-20 14:44 f 192 /home/fleet/.cache/fontconfig/3830d5c3ddfd5cd38a049b759396e72e-le64.cache-12
+2026-10-20 14:44 f 112 /home/fleet/.cache/fontconfig/4c599c202bc5c08e2d34565a40eac3b2-le64.cache-12
+2026-10-20 14:44 f 160 /home/fleet/.cache/fontconfig/573ec803664ed168555e0e8b6d0f0c7f-le64.cache-12
+2026-10-20 14:44 f 208 /home/fleet/.cache/fontconfig/7ef2298fde41cc6eeb7af42e48b7d293-le64.cache-12
+2026-10-20 14:44 f 70488 /home/fleet/.cache/fontconfig/9b89f8e3dae116d678bbf48e5f21f69b-le64.cache-12
+2026-10-20 14:44 f 200 /home/fleet/.cache/fontconfig/CACHEDIR.TAG
+2026-10-20 14:44 f 91328 /home/fleet/.cache/fontconfig/d52a8644073d54c13679302ca1180695-le64.cache-12
+2026-10-20 11:40 d 4096 /home/fleet/.cache/Microsoft
+2026-10-20 11:40 d 4096 /home/fleet/.cache/Microsoft/DeveloperTools
+2026-10-20 11:40 f 36 /home/fleet/.cache/Microsoft/DeveloperTools/deviceid
+2026-10-19 18:32 f 0 /home/fleet/.cache/motd.legal-displayed
+2026-10-20 17:26 d 4096 /home/fleet/.cache/nvidia
+2026-10-20 17:26 d 4096 /home/fleet/.cache/nvidia/GLCache
+2026-10-20 17:26 d 4096 /home/fleet/.cache/nvidia/GLCache/4fc983a3650d25efdf8c3d290b25f854
+2026-10-20 17:26 d 4096 /home/fleet/.cache/thumbnails
+2026-10-20 17:26 d 4096 /home/fleet/.cache/thumbnails/fail
+2026-10-20 17:26 d 4096 /home/fleet/.cache/thumbnails/fail/blender
+2026-10-20 17:26 d 4096 /home/fleet/.cache/thumbnails/large
+2026-10-20 22:10 d 4096 /home/fleet/.claude
+2026-10-20 22:10 d 4096 /home/fleet/.claude/backups
+2026-10-20 11:34 f 62128 /home/fleet/.claude/backups/.claude.json.backup.1792463689999
+2026-10-20 12:30 f 66903 /home/fleet/.claude/backups/.claude.json.backup.1792467037561
+2026-10-20 13:20 f 66903 /home/fleet/.claude/backups/.claude.json.backup.1792470051155
+2026-10-20 14:30 f 66903 /home/fleet/.claude/backups/.claude.json.backup.1792474241893
+2026-10-20 22:10 f 66901 /home/fleet/.claude/backups/.claude.json.backup.1792501816551
+2026-10-20 11:31 d 4096 /home/fleet/.claude/cache
+2026-10-20 11:30 f 1057524 /home/fleet/.claude/cache/changelog.md
+2026-10-20 22:10 d 4096 /home/fleet/.claude/cache/model-catalog
+2026-10-20 22:10 f 14382 /home/fleet/.claude/cache/model-catalog/157167e7-cbed-4df5-8074-c48cd71f644f-606659fdf790-cc.json
+2026-10-20 11:39 l 29 /home/fleet/.claude/CLAUDE.md
+2026-10-20 22:10 f 558 /home/fleet/.claude/.credentials.json
+2026-10-20 11:19 d 4096 /home/fleet/.claude/downloads
+2026-10-20 22:10 f 66938 /home/fleet/.claude.json
+2026-10-20 11:33 f 24 /home/fleet/.claude/.last-cleanup
+2026-10-20 22:10 d 4096 /home/fleet/.claude/plugins
+2026-10-20 11:33 d 4096 /home/fleet/.claude/plugins/synced
+2026-10-20 22:10 d 4096 /home/fleet/.claude/plugins/synced/157167e7-cbed-4df5-8074-c48cd71f644f_a0bec916-9a90-4c60-bc60-20a23db78d8b
+2026-10-20 11:33 f 0 /home/fleet/.claude/plugins/synced/.bucket-157167e7-cbed-4df5-8074-c48cd71f644f_a0bec916-9a90-4c60-bc60-20a23db78d8b
+2026-10-20 11:50 d 4096 /home/fleet/.claude/projects
+2026-10-20 11:33 d 4096 /home/fleet/.claude/projects/-home-fleet
+2026-10-20 11:33 f 178066 /home/fleet/.claude/projects/-home-fleet/d42f326e-dd5d-4f73-80f0-18c18ac4b0cb.jsonl
+2026-10-20 11:50 d 4096 /home/fleet/.claude/projects/-home-fleet-Developer-Wacoms-Dev-wacoms-app
+2026-09-02 19:03 d 4096 /home/fleet/.claude/projects/-home-fleet-Developer-Wacoms-Dev-wacoms-app/memory
+2026-10-20 11:50 d 4096 /home/fleet/.claude/projects/-home-fleet-Developer-web-gpis-devmaps
+2026-10-13 16:55 d 4096 /home/fleet/.claude/projects/-home-fleet-Developer-web-gpis-devmaps/memory
+2026-10-20 11:50 d 4096 /home/fleet/.claude/projects/-home-fleet-Developer-zerin-tile-forwarding
+2026-07-06 16:48 d 4096 /home/fleet/.claude/projects/-home-fleet-Developer-zerin-tile-forwarding/memory
+2026-10-20 11:33 d 4096 /home/fleet/.claude/projects/-home-fleet/memory
+2026-10-20 22:10 d 4096 /home/fleet/.claude/sessions
+2026-10-20 11:30 f 22 /home/fleet/.claude/settings.json
+2026-10-20 11:33 d 4096 /home/fleet/.claude/skills
+2026-10-20 11:33 d 4096 /home/fleet/.claude/skills/synced
+2026-10-20 22:10 d 4096 /home/fleet/.claude/skills/synced/157167e7-cbed-4df5-8074-c48cd71f644f_a0bec916-9a90-4c60-bc60-20a23db78d8b
+2026-10-20 11:33 f 0 /home/fleet/.claude/skills/synced/.bucket-157167e7-cbed-4df5-8074-c48cd71f644f_a0bec916-9a90-4c60-bc60-20a23db78d8b
+2026-10-20 22:10 d 4096 /home/fleet/.codex
+2026-10-20 11:39 l 29 /home/fleet/.codex/AGENTS.md
+2026-10-20 11:32 f 3873 /home/fleet/.codex/auth.json
+2026-10-20 11:33 d 4096 /home/fleet/.codex/cache
+2026-10-20 13:20 d 4096 /home/fleet/.codex/cache/codex_apps_server_info
+2026-10-20 13:20 f 189 /home/fleet/.codex/cache/codex_apps_server_info/3f33bac5ade6c0c803ff2e7da90ea4868f7e69bb.json
+2026-10-20 13:20 d 4096 /home/fleet/.codex/cache/codex_apps_tools
+2026-10-20 13:20 f 2201897 /home/fleet/.codex/cache/codex_apps_tools/3f33bac5ade6c0c803ff2e7da90ea4868f7e69bb.json
+2026-10-20 11:36 f 139 /home/fleet/.codex/config.toml
+2026-10-20 22:10 f 32768 /home/fleet/.codex/goals_1.sqlite
+2026-10-20 22:10 f 32768 /home/fleet/.codex/goals_1.sqlite-shm
+2026-10-20 11:33 f 74192 /home/fleet/.codex/goals_1.sqlite-wal
+2026-10-20 11:33 f 36 /home/fleet/.codex/installation_id
+2026-10-20 11:36 f 51 /home/fleet/.codex/local.config.toml
+2026-10-20 11:31 d 4096 /home/fleet/.codex/log
+2026-10-20 11:32 f 395 /home/fleet/.codex/log/codex-login.log
+2026-10-20 11:33 f 49152 /home/fleet/.codex/logs_2.sqlite
+2026-10-20 22:10 f 45056 /home/fleet/.codex/memories_1.sqlite
+2026-10-20 22:10 f 32768 /home/fleet/.codex/memories_1.sqlite-shm
+2026-10-20 11:33 f 86552 /home/fleet/.codex/memories_1.sqlite-wal
+2026-10-20 22:10 f 399709 /home/fleet/.codex/models_cache.json
+2026-10-20 11:33 d 4096 /home/fleet/.codex/plugins
+2026-10-20 11:33 d 4096 /home/fleet/.codex/plugins/cache
+2026-10-20 22:10 d 4096 /home/fleet/.codex/plugins/cache/openai-curated-remote
+2026-10-20 22:10 d 4096 /home/fleet/.codex/plugins/.remote-plugin-install-staging
+2026-10-20 22:10 f 40960 /home/fleet/.codex/queue_1.sqlite
+2026-10-20 22:10 f 32768 /home/fleet/.codex/queue_1.sqlite-shm
+2026-10-20 11:33 f 82432 /home/fleet/.codex/queue_1.sqlite-wal
+2026-10-20 11:33 f 3 /home/fleet/.codex/.sandbox_migration
+2026-10-20 11:33 d 4096 /home/fleet/.codex/sessions
+2026-10-20 11:33 d 4096 /home/fleet/.codex/sessions/2026
+2026-10-20 11:33 d 4096 /home/fleet/.codex/sessions/2026/10
+2026-10-20 13:21 d 4096 /home/fleet/.codex/shell_snapshots
+2026-10-20 11:33 d 4096 /home/fleet/.codex/skills
+2026-10-20 11:33 d 4096 /home/fleet/.codex/skills/.system
+2026-10-20 11:33 f 17 /home/fleet/.codex/skills/.system/.codex-system-skills.marker
+2026-10-20 11:33 d 4096 /home/fleet/.codex/skills/.system/imagegen
+2026-10-20 11:33 d 4096 /home/fleet/.codex/skills/.system/openai-docs
+2026-10-20 11:33 d 4096 /home/fleet/.codex/skills/.system/review-agent
+2026-10-20 11:33 d 4096 /home/fleet/.codex/skills/.system/skill-creator
+2026-10-20 11:33 d 4096 /home/fleet/.codex/skills/.system/skill-installer
+2026-10-20 13:20 f 278528 /home/fleet/.codex/state_5.sqlite
+2026-10-20 22:10 f 32768 /home/fleet/.codex/state_5.sqlite-shm
+2026-10-20 13:21 f 2982912 /home/fleet/.codex/state_5.sqlite-wal
+2026-10-20 11:33 f 4096 /home/fleet/.codex/thread_history_1.sqlite
+2026-10-20 13:21 f 32768 /home/fleet/.codex/thread_history_1.sqlite-shm
+2026-10-20 13:21 f 704552 /home/fleet/.codex/thread_history_1.sqlite-wal
+2026-10-20 13:21 d 4096 /home/fleet/.codex/thread-writer-locks
+2026-10-20 11:33 f 0 /home/fleet/.codex/thread-writer-locks/.coordination.lock
+2026-10-20 11:28 d 4096 /home/fleet/.codex/tmp
+2026-10-20 22:10 d 4096 /home/fleet/.codex/tmp/arg0-linux
+2026-10-20 14:44 d 4096 /home/fleet/.config
+2026-10-20 13:20 d 4096 /home/fleet/.config/environment.d
+2026-10-20 13:20 f 67 /home/fleet/.config/environment.d/50-msi-llama.conf
+2026-10-20 14:44 d 4096 /home/fleet/.config/google-chrome-for-testing
+2026-10-20 14:44 d 4096 /home/fleet/.config/google-chrome-for-testing/Crash Reports
+2026-10-20 14:44 d 4096 /home/fleet/.config/google-chrome-for-testing/Crash Reports/attachments
+2026-10-20 14:44 d 4096 /home/fleet/.config/google-chrome-for-testing/Crash Reports/completed
+2026-10-20 14:44 d 4096 /home/fleet/.config/google-chrome-for-testing/Crash Reports/new
+2026-10-20 14:44 d 4096 /home/fleet/.config/google-chrome-for-testing/Crash Reports/pending
+2026-10-20 15:26 f 40 /home/fleet/.config/google-chrome-for-testing/Crash Reports/settings.dat
+2026-10-20 11:35 f 49 /home/fleet/.config/llama-api-key
+2026-10-20 11:34 d 4096 /home/fleet/.config/systemd
+2026-10-20 11:34 d 4096 /home/fleet/.config/systemd/user
+2026-10-20 11:34 d 4096 /home/fleet/.config/systemd/user/default.target.wants
+2026-10-20 11:34 f 592 /home/fleet/.config/systemd/user/t3code.service
+2026-10-20 11:47 d 4096 /home/fleet/Developer
+2026-10-20 11:48 d 4096 /home/fleet/Developer/hybrid-tilefication
+2026-10-20 11:47 f 406 /home/fleet/Developer/hybrid-tilefication/AGENTS.md
+2026-10-20 11:47 f 764 /home/fleet/Developer/hybrid-tilefication/azure-pipelines-pr.yml
+2026-10-20 11:47 f 2550 /home/fleet/Developer/hybrid-tilefication/azure-pipelines.yml
+2026-10-19 21:47 f 4575 /home/fleet/Developer/hybrid-tilefication/CLAUDE.local.md
+2026-10-20 11:47 f 4625 /home/fleet/Developer/hybrid-tilefication/docker-compose.yml
+2026-10-20 11:47 d 4096 /home/fleet/Developer/hybrid-tilefication/docs
+2026-10-20 11:47 d 4096 /home/fleet/Developer/hybrid-tilefication/docs/audit-checks
+2026-10-20 11:47 f 11547 /home/fleet/Developer/hybrid-tilefication/docs/cdx_system_review_2026-06-12.md
+2026-10-20 11:47 f 26155 /home/fleet/Developer/hybrid-tilefication/docs/counter-findings.md
+2026-10-20 11:47 f 22356 /home/fleet/Developer/hybrid-tilefication/docs/detailed-findings.md
+2026-10-20 11:47 f 2818 /home/fleet/Developer/hybrid-tilefication/docs/dev-exact-zoom-2026-09-19.md
+2026-10-20 11:47 f 11335 /home/fleet/Developer/hybrid-tilefication/docs/exact-zoom.md
+2026-10-20 11:47 f 11517 /home/fleet/Developer/hybrid-tilefication/docs/handoff-2026-09-06.md
+2026-10-20 11:47 f 6863 /home/fleet/Developer/hybrid-tilefication/docs/infrastructure.md
+2026-10-20 11:47 f 15438 /home/fleet/Developer/hybrid-tilefication/docs/local-implementation-2026-09-05.md
+2026-10-20 11:47 f 3780 /home/fleet/Developer/hybrid-tilefication/docs/local-verification-2026-09-05.json
+2026-10-20 11:47 f 19937 /home/fleet/Developer/hybrid-tilefication/docs/performance-stability-audit-2026-09-05.md
+2026-10-20 11:47 f 4608 /home/fleet/Developer/hybrid-tilefication/docs/prod-cost-check-2026-09-20.md
+2026-10-20 11:47 f 3027 /home/fleet/Developer/hybrid-tilefication/docs/prod-exact-zoom-2026-09-19.md
+2026-10-20 11:47 f 31255 /home/fleet/Developer/hybrid-tilefication/docs/system-review-2026-06-12.md
+2026-10-20 11:47 f 29019 /home/fleet/Developer/hybrid-tilefication/docs/verified-audit-2026-09-05.md
+2026-10-20 11:47 f 5755 /home/fleet/Developer/hybrid-tilefication/docs/vm-size-test-2026-10-18.md
+2026-09-04 21:56 f 1352 /home/fleet/Developer/hybrid-tilefication/.env.development
+2026-09-04 21:56 f 1351 /home/fleet/Developer/hybrid-tilefication/.env.production
+2026-10-20 11:47 f 1694 /home/fleet/Developer/hybrid-tilefication/example.env
+2026-10-20 11:47 f 5165 /home/fleet/Developer/hybrid-tilefication/findings.md
+2026-10-20 11:50 d 4096 /home/fleet/Developer/hybrid-tilefication/.git
+2026-10-20 11:47 f 302 /home/fleet/Developer/hybrid-tilefication/.git/config
+2026-10-20 11:47 f 73 /home/fleet/Developer/hybrid-tilefication/.git/description
+2026-10-20 11:47 f 20 /home/fleet/Developer/hybrid-tilefication/.git/HEAD
+2026-10-20 11:48 d 4096 /home/fleet/Developer/hybrid-tilefication/.git/hooks
+2026-10-20 11:47 f 384 /home/fleet/Developer/hybrid-tilefication/.gitignore
+2026-10-20 11:50 f 23044 /home/fleet/Developer/hybrid-tilefication/.git/index
+2026-10-20 11:47 d 4096 /home/fleet/Developer/hybrid-tilefication/.git/info
+2026-10-20 11:47 d 4096 /home/fleet/Developer/hybrid-tilefication/.git/logs
+2026-10-20 11:47 d 4096 /home/fleet/Developer/hybrid-tilefication/.git/objects
+2026-10-20 11:47 f 351 /home/fleet/Developer/hybrid-tilefication/.git/packed-refs
+2026-10-20 11:47 d 4096 /home/fleet/Developer/hybrid-tilefication/.git/refs
+2026-10-13 22:31 d 4096 /home/fleet/Developer/hybrid-tilefication/knowcave
+2026-10-18 11:09 d 4096 /home/fleet/Developer/hybrid-tilefication/knowcave/current
+2026-10-13 22:31 f 1081 /home/fleet/Developer/hybrid-tilefication/knowcave/link-local-docs.sh
+2026-10-13 22:34 f 2946 /home/fleet/Developer/hybrid-tilefication/knowcave/README.md
+2026-10-20 21:17 d 4096 /home/fleet/Developer/hybrid-tilefication/knowcave/workflows
+2026-09-29 12:16 d 4096 /home/fleet/Developer/hybrid-tilefication/local-artifacts
+2026-09-29 10:42 d 4096 /home/fleet/Developer/hybrid-tilefication/local-artifacts/incident-2026-09-28
+2026-10-20 11:47 f 11564 /home/fleet/Developer/hybrid-tilefication/maplibre_viewer-dev.html
+2026-10-20 11:47 f 11557 /home/fleet/Developer/hybrid-tilefication/maplibre_viewer-prod.html
+2026-10-20 11:47 f 11676 /home/fleet/Developer/hybrid-tilefication/openlayers_viewer-dev.html
+2026-10-20 11:47 f 11661 /home/fleet/Developer/hybrid-tilefication/openlayers_viewer-prod.html
+2026-10-07 10:44 d 4096 /home/fleet/Developer/hybrid-tilefication/plans
+2026-10-07 13:11 f 10118 /home/fleet/Developer/hybrid-tilefication/plans/multilingual-names-dev-runbook.md
+2026-10-06 23:28 f 32080 /home/fleet/Developer/hybrid-tilefication/plans/multilingual-names-plan.md
+2026-10-20 11:47 d 4096 /home/fleet/Developer/hybrid-tilefication/proxy
+2026-10-20 11:47 f 191 /home/fleet/Developer/hybrid-tilefication/proxy/Dockerfile
+2026-10-20 11:47 d 4096 /home/fleet/Developer/hybrid-tilefication/proxy/lib
+2026-10-20 11:47 f 170 /home/fleet/Developer/hybrid-tilefication/proxy/mbtiles-layers.json
+2026-10-20 11:47 f 445 /home/fleet/Developer/hybrid-tilefication/proxy/package.json
+2026-10-20 11:47 f 212274 /home/fleet/Developer/hybrid-tilefication/proxy/package-lock.json
+2026-10-20 11:47 f 19973 /home/fleet/Developer/hybrid-tilefication/proxy/server.js
+2026-10-20 11:47 d 4096 /home/fleet/Developer/hybrid-tilefication/proxy/test
+2026-10-20 11:47 d 4096 /home/fleet/Developer/hybrid-tilefication/proxy/test-support
+2026-10-20 11:47 f 6165 /home/fleet/Developer/hybrid-tilefication/proxy/verify-cache-generation.mjs
+2026-10-20 11:47 f 41502 /home/fleet/Developer/hybrid-tilefication/README.md
+2026-10-20 11:47 d 4096 /home/fleet/Developer/hybrid-tilefication/scripts
+2026-10-20 11:47 f 4340 /home/fleet/Developer/hybrid-tilefication/scripts/deploy.sh
+2026-10-20 11:47 f 1046 /home/fleet/Developer/hybrid-tilefication/scripts/graceful-stop-worker.sh
+2026-10-20 11:47 d 4096 /home/fleet/Developer/hybrid-tilefication/scripts/migrations
+2026-10-20 11:47 f 915 /home/fleet/Developer/hybrid-tilefication/scripts/rollback.sh
+2026-10-20 11:47 f 2032 /home/fleet/Developer/hybrid-tilefication/scripts/switch-env.sh
+2026-10-20 11:47 d 4096 /home/fleet/Developer/hybrid-tilefication/scripts/test
+2026-10-20 11:47 f 3551 /home/fleet/Developer/hybrid-tilefication/scripts/upload-mbtiles-archive.sh
+2026-10-20 11:47 f 4161 /home/fleet/Developer/hybrid-tilefication/scripts/verify-mbtiles-migration.js
+2026-10-20 11:47 d 4096 /home/fleet/Developer/hybrid-tilefication/test
+2026-10-20 11:47 f 15871 /home/fleet/Developer/hybrid-tilefication/test/AB_Stress_Soak_Dev_vs_Prod_20260417.ipynb
+2026-10-20 11:47 d 4096 /home/fleet/Developer/hybrid-tilefication/test/baselines
+2026-10-20 11:47 f 8858 /home/fleet/Developer/hybrid-tilefication/test/build_ab_stress_soak_report.py
+2026-10-20 11:47 f 7862 /home/fleet/Developer/hybrid-tilefication/test/build_outdoor_load_report.py
+2026-10-20 11:47 f 3473 /home/fleet/Developer/hybrid-tilefication/test/gen_outdoor_urls.py
+2026-10-20 11:47 f 4781 /home/fleet/Developer/hybrid-tilefication/test/load_test.sh
+2026-10-20 11:47 f 11451 /home/fleet/Developer/hybrid-tilefication/test/Outdoor_v1_Hybrid_Performance_Report.ipynb
+2026-10-20 11:47 f 1863 /home/fleet/Developer/hybrid-tilefication/test/parse_har.sh
+2026-10-20 11:47 f 4004 /home/fleet/Developer/hybrid-tilefication/test/README.md
+2026-10-20 11:47 f 2442 /home/fleet/Developer/hybrid-tilefication/test/run_outdoor_load_tests.sh
+2026-10-20 11:47 f 5947 /home/fleet/Developer/hybrid-tilefication/test/soak_test.sh
+2026-10-20 11:47 f 6016 /home/fleet/Developer/hybrid-tilefication/test/stress_test.sh
+2026-10-20 11:47 f 225626496 /home/fleet/Developer/hybrid-tilefication/test/test.har
+2026-10-20 11:47 f 1969 /home/fleet/Developer/hybrid-tilefication/test/test-tile-layers.sh
+2026-10-20 11:47 f 23326 /home/fleet/Developer/hybrid-tilefication/test/Tile_Server_Performance_Report.ipynb
+2026-10-20 11:47 d 4096 /home/fleet/Developer/hybrid-tilefication/tippecanoe-seed
+2026-10-20 11:47 f 837 /home/fleet/Developer/hybrid-tilefication/tippecanoe-seed/Dockerfile
+2026-10-20 11:47 f 43 /home/fleet/Developer/hybrid-tilefication/tippecanoe-seed/.dockerignore
+2026-10-20 11:47 f 3183 /home/fleet/Developer/hybrid-tilefication/tippecanoe-seed/layers.json
+2026-10-20 11:47 d 4096 /home/fleet/Developer/hybrid-tilefication/tippecanoe-seed/lib
+2026-10-20 11:47 f 413 /home/fleet/Developer/hybrid-tilefication/tippecanoe-seed/package.json
+2026-10-20 11:47 f 44946 /home/fleet/Developer/hybrid-tilefication/tippecanoe-seed/package-lock.json
+2026-10-20 11:47 f 32665 /home/fleet/Developer/hybrid-tilefication/tippecanoe-seed/seed.js
+2026-10-20 11:47 d 4096 /home/fleet/Developer/hybrid-tilefication/tippecanoe-seed/sql
+2026-10-20 11:47 d 4096 /home/fleet/Developer/hybrid-tilefication/tippecanoe-seed/test
+2026-10-10 18:28 f 3837 /home/fleet/Developer/hybrid-tilefication/TODO-multilingual-names.md
+2026-10-20 11:47 d 4096 /home/fleet/Developer/hybrid-tilefication/worker
+2026-10-20 11:47 f 1096 /home/fleet/Developer/hybrid-tilefication/worker/Dockerfile
+2026-10-20 11:47 f 59110 /home/fleet/Developer/hybrid-tilefication/worker/index.js
+2026-10-20 11:47 d 4096 /home/fleet/Developer/hybrid-tilefication/worker/lib
+2026-10-20 11:47 f 491 /home/fleet/Developer/hybrid-tilefication/worker/package.json
+2026-10-20 11:47 f 190944 /home/fleet/Developer/hybrid-tilefication/worker/package-lock.json
+2026-10-20 11:47 d 4096 /home/fleet/Developer/hybrid-tilefication/worker/test
+2026-10-20 11:47 d 4096 /home/fleet/Developer/hybrid-tilefication/worker/test-support
+2026-10-20 11:47 f 5620 /home/fleet/Developer/hybrid-tilefication/worker/verify-building-trigger.mjs
+2026-10-20 11:47 f 20294 /home/fleet/Developer/hybrid-tilefication/worker/verify-exact-zoom.mjs
+2026-10-20 11:47 f 12893 /home/fleet/Developer/hybrid-tilefication/worker/verify-mb3.mjs
+2026-10-20 11:47 f 9414 /home/fleet/Developer/hybrid-tilefication/worker/verify-render-buffer.mjs
+2026-10-09 09:54 f 163 /home/fleet/Developer/._ssh_keys
+2026-10-09 09:54 d 4096 /home/fleet/Developer/ssh_keys
+2026-10-09 09:54 f 120 /home/fleet/Developer/ssh_keys/._.DS_Store
+2026-10-09 09:54 f 6148 /home/fleet/Developer/ssh_keys/.DS_Store
+2026-03-30 19:17 f 163 /home/fleet/Developer/ssh_keys/._gpis-livekit-vm_key
+2026-03-30 19:17 f 1675 /home/fleet/Developer/ssh_keys/gpis-livekit-vm_key
+2026-03-30 19:17 f 163 /home/fleet/Developer/ssh_keys/._gpis-livekit-vm_key.pub
+2026-03-30 19:17 f 380 /home/fleet/Developer/ssh_keys/gpis-livekit-vm_key.pub
+2026-03-25 13:57 f 163 /home/fleet/Developer/ssh_keys/._pg-work-vm_key
+2026-03-25 13:57 f 419 /home/fleet/Developer/ssh_keys/pg-work-vm_key
+2026-03-25 13:57 f 163 /home/fleet/Developer/ssh_keys/._pg-work-vm_key.pub
+2026-03-25 13:57 f 106 /home/fleet/Developer/ssh_keys/pg-work-vm_key.pub
+2026-03-25 13:57 f 163 /home/fleet/Developer/ssh_keys/._vm-postgresql-dev-key
+2026-03-25 13:57 f 419 /home/fleet/Developer/ssh_keys/vm-postgresql-dev-key
+2026-03-25 13:57 f 163 /home/fleet/Developer/ssh_keys/._vm-postgresql-dev-key.pub
+2026-03-25 13:57 f 109 /home/fleet/Developer/ssh_keys/vm-postgresql-dev-key.pub
+2026-03-25 13:57 f 163 /home/fleet/Developer/ssh_keys/._vm-postgresql-prod-key
+2026-03-25 13:57 f 419 /home/fleet/Developer/ssh_keys/vm-postgresql-prod-key
+2026-03-25 13:57 f 163 /home/fleet/Developer/ssh_keys/._vm-postgresql-prod-key.pub
+2026-03-25 13:57 f 110 /home/fleet/Developer/ssh_keys/vm-postgresql-prod-key.pub
+2026-03-25 13:57 f 163 /home/fleet/Developer/ssh_keys/._vm-tilefication-dev_key
+2026-03-25 13:57 f 419 /home/fleet/Developer/ssh_keys/vm-tilefication-dev_key
+2026-03-25 13:57 f 163 /home/fleet/Developer/ssh_keys/._vm-tilefication-dev_key.pub
+2026-03-25 13:57 f 111 /home/fleet/Developer/ssh_keys/vm-tilefication-dev_key.pub
+2026-03-25 13:57 f 163 /home/fleet/Developer/ssh_keys/._vm-tilefication-prod_key
+2026-03-25 13:57 f 432 /home/fleet/Developer/ssh_keys/vm-tilefication-prod_key
+2026-03-25 13:57 f 163 /home/fleet/Developer/ssh_keys/._vm-tilefication-prod_key.pub
+2026-03-25 13:57 f 112 /home/fleet/Developer/ssh_keys/vm-tilefication-prod_key.pub
+2026-10-20 11:46 d 4096 /home/fleet/Developer/Wacoms-Dev
+2026-10-20 11:49 d 4096 /home/fleet/Developer/Wacoms-Dev/wacoms_app
+2026-10-13 21:50 f 5690 /home/fleet/Developer/Wacoms-Dev/wacoms_app/AGENTS.md
+2026-06-16 14:25 d 4096 /home/fleet/Developer/Wacoms-Dev/wacoms_app/apps
+2026-10-20 18:36 d 4096 /home/fleet/Developer/Wacoms-Dev/wacoms_app/arch_ag
+2026-10-20 11:46 f 7963 /home/fleet/Developer/Wacoms-Dev/wacoms_app/azure-pipelines-staging.yml
+2026-10-20 11:46 f 5593 /home/fleet/Developer/Wacoms-Dev/wacoms_app/azure-pipelines.yml
+2026-08-05 10:21 d 4096 /home/fleet/Developer/Wacoms-Dev/wacoms_app/backups
+2026-10-20 18:36 d 4096 /home/fleet/Developer/Wacoms-Dev/wacoms_app/.cc
+2026-10-20 18:36 d 4096 /home/fleet/Developer/Wacoms-Dev/wacoms_app/.cdx
+2026-10-19 18:54 f 12141 /home/fleet/Developer/Wacoms-Dev/wacoms_app/CLAUDE.md
+2026-10-20 11:46 d 4096 /home/fleet/Developer/Wacoms-Dev/wacoms_app/docs
+2026-10-20 09:55 f 1589 /home/fleet/Developer/Wacoms-Dev/wacoms_app/.env
+2026-10-20 11:46 f 4890 /home/fleet/Developer/Wacoms-Dev/wacoms_app/.env.example
+2026-10-20 11:46 f 1197 /home/fleet/Developer/Wacoms-Dev/wacoms_app/.env.prod.example
+2026-10-20 11:46 f 1208 /home/fleet/Developer/Wacoms-Dev/wacoms_app/.env.staging.example
+2026-10-20 11:46 f 1628 /home/fleet/Developer/Wacoms-Dev/wacoms_app/eslint.config.js
+2026-10-20 11:50 d 4096 /home/fleet/Developer/Wacoms-Dev/wacoms_app/.git
+2026-10-20 11:46 f 940 /home/fleet/Developer/Wacoms-Dev/wacoms_app/.gitignore
+2026-10-20 11:46 f 848 /home/fleet/Developer/Wacoms-Dev/wacoms_app/knexfile.js
+2026-10-20 19:32 d 4096 /home/fleet/Developer/Wacoms-Dev/wacoms_app/knowcave
+2026-10-20 11:46 d 12288 /home/fleet/Developer/Wacoms-Dev/wacoms_app/migrations
+2026-10-20 11:46 f 3639 /home/fleet/Developer/Wacoms-Dev/wacoms_app/package.json
+2026-10-20 11:46 f 314529 /home/fleet/Developer/Wacoms-Dev/wacoms_app/package-lock.json
+2026-10-20 11:46 d 4096 /home/fleet/Developer/Wacoms-Dev/wacoms_app/packages
+2026-09-01 14:14 d 4096 /home/fleet/Developer/Wacoms-Dev/wacoms_app/.pi
+2026-10-20 11:46 f 93 /home/fleet/Developer/Wacoms-Dev/wacoms_app/.prettierignore
+2026-10-20 11:46 f 89 /home/fleet/Developer/Wacoms-Dev/wacoms_app/.prettierrc.json
+2026-10-20 11:46 f 4781 /home/fleet/Developer/Wacoms-Dev/wacoms_app/README.md
+2026-10-20 11:46 d 4096 /home/fleet/Developer/Wacoms-Dev/wacoms_app/scripts
+2026-10-20 11:46 f 2161 /home/fleet/Developer/Wacoms-Dev/wacoms_app/vitest.config.ts
+2026-10-20 11:46 f 2158 /home/fleet/Developer/Wacoms-Dev/wacoms_app/wacoms_app_test.yml
+2026-10-20 11:46 d 4096 /home/fleet/Developer/web
+2026-10-20 11:48 d 4096 /home/fleet/Developer/web/gpis-devmaps
+2026-10-13 18:01 f 5633 /home/fleet/Developer/web/gpis-devmaps/AGENTS.md
+2026-10-13 16:22 d 4096 /home/fleet/Developer/web/gpis-devmaps/apps
+2026-10-09 16:46 d 4096 /home/fleet/Developer/web/gpis-devmaps/.claude
+2026-10-13 16:44 f 11 /home/fleet/Developer/web/gpis-devmaps/CLAUDE.md
+2026-10-13 16:56 f 28249 /home/fleet/Developer/web/gpis-devmaps/CONTEXT.md
+2026-10-15 10:53 d 4096 /home/fleet/Developer/web/gpis-devmaps/docs
+2026-10-20 11:46 f 289 /home/fleet/Developer/web/gpis-devmaps/eslint.config.js
+2026-10-20 11:50 d 4096 /home/fleet/Developer/web/gpis-devmaps/.git
+2026-10-20 11:46 f 402 /home/fleet/Developer/web/gpis-devmaps/.gitignore
+2026-10-13 17:55 d 4096 /home/fleet/Developer/web/gpis-devmaps/knowcave
+2026-10-20 11:46 f 2908 /home/fleet/Developer/web/gpis-devmaps/package.json
+2026-10-20 11:46 f 950140 /home/fleet/Developer/web/gpis-devmaps/package-lock.json
+2026-10-20 11:46 d 4096 /home/fleet/Developer/web/gpis-devmaps/pipelines
+2026-10-15 12:08 d 4096 /home/fleet/Developer/web/gpis-devmaps/plans
+2026-10-20 11:46 f 11574 /home/fleet/Developer/web/gpis-devmaps/README.md
+2026-04-30 00:02 d 4096 /home/fleet/Developer/web/gpis-devmaps/.superpowers
+2026-10-16 15:42 d 4096 /home/fleet/Developer/web/gpis-devmaps/temp-artifacts
+2026-10-20 11:46 f 307 /home/fleet/Developer/web/gpis-devmaps/tsconfig.base.json
+2026-10-20 11:48 d 4096 /home/fleet/Developer/zerin_tile_forwarding
+2026-10-20 11:46 f 5983 /home/fleet/Developer/zerin_tile_forwarding/AGENTS.md
+2026-10-20 11:46 f 2343 /home/fleet/Developer/zerin_tile_forwarding/azure-pipelines.yml
+2026-09-16 17:56 d 4096 /home/fleet/Developer/zerin_tile_forwarding/.claude
+2026-09-17 10:10 d 4096 /home/fleet/Developer/zerin_tile_forwarding/.claude/artifacts
+2026-10-13 21:50 f 249 /home/fleet/Developer/zerin_tile_forwarding/CLAUDE.md
+2026-05-13 13:37 d 4096 /home/fleet/Developer/zerin_tile_forwarding/.claude/projects
+2026-05-29 10:49 d 4096 /home/fleet/Developer/zerin_tile_forwarding/.claude/worktrees
+2026-10-20 11:46 f 20839 /home/fleet/Developer/zerin_tile_forwarding/CONTEXT.md
+2026-10-20 11:46 d 4096 /home/fleet/Developer/zerin_tile_forwarding/deploy
+2026-10-20 11:46 f 3812 /home/fleet/Developer/zerin_tile_forwarding/deploy/cluster.compose.yml
+2026-10-20 11:46 f 1977 /home/fleet/Developer/zerin_tile_forwarding/Dockerfile
+2026-10-20 11:46 f 128 /home/fleet/Developer/zerin_tile_forwarding/.dockerignore
+2026-09-29 18:53 d 4096 /home/fleet/Developer/zerin_tile_forwarding/docs
+2026-10-20 11:46 d 4096 /home/fleet/Developer/zerin_tile_forwarding/docs/adr
+2026-05-29 10:49 d 4096 /home/fleet/Developer/zerin_tile_forwarding/docs/archive
+2026-05-29 10:49 f 7425 /home/fleet/Developer/zerin_tile_forwarding/docs/code-review-2026-05-29.md
+2026-05-29 10:49 f 14009 /home/fleet/Developer/zerin_tile_forwarding/docs/code-review-findings.md
+2026-10-20 11:46 f 6967 /home/fleet/Developer/zerin_tile_forwarding/docs/DEPLOYMENT.md
+2026-10-20 11:46 d 4096 /home/fleet/Developer/zerin_tile_forwarding/docs/design
+2026-07-26 19:43 d 4096 /home/fleet/Developer/zerin_tile_forwarding/docs/plans
+2026-09-21 20:21 d 4096 /home/fleet/Developer/zerin_tile_forwarding/docs/reviews
+2026-10-20 11:46 d 4096 /home/fleet/Developer/zerin_tile_forwarding/docs/specs
+2026-06-04 23:14 d 4096 /home/fleet/Developer/zerin_tile_forwarding/docs/superpowers
+2026-05-29 10:49 f 9012 /home/fleet/Developer/zerin_tile_forwarding/docs/testing-exclusions.md
+2026-10-20 11:46 f 482 /home/fleet/Developer/zerin_tile_forwarding/.env
+2026-10-20 11:46 f 482 /home/fleet/Developer/zerin_tile_forwarding/.env.development
+2026-10-20 11:46 f 409 /home/fleet/Developer/zerin_tile_forwarding/.env.example
+2026-09-17 13:28 f 345 /home/fleet/Developer/zerin_tile_forwarding/.env.local
+2026-10-20 11:46 f 381 /home/fleet/Developer/zerin_tile_forwarding/.env.production
+2026-10-20 11:50 d 4096 /home/fleet/Developer/zerin_tile_forwarding/.git
+2026-10-20 11:46 f 287 /home/fleet/Developer/zerin_tile_forwarding/.git/config
+2026-10-20 11:46 f 73 /home/fleet/Developer/zerin_tile_forwarding/.git/description
+2026-10-20 11:46 f 21 /home/fleet/Developer/zerin_tile_forwarding/.git/HEAD
+2026-10-20 11:49 d 4096 /home/fleet/Developer/zerin_tile_forwarding/.git/hooks
+2026-10-20 11:46 f 430 /home/fleet/Developer/zerin_tile_forwarding/.gitignore
+2026-10-20 11:50 f 36759 /home/fleet/Developer/zerin_tile_forwarding/.git/index
+2026-10-20 11:46 d 4096 /home/fleet/Developer/zerin_tile_forwarding/.git/info
+2026-10-20 11:46 d 4096 /home/fleet/Developer/zerin_tile_forwarding/.git/logs
+2026-10-20 11:46 d 4096 /home/fleet/Developer/zerin_tile_forwarding/.git/objects
+2026-10-20 11:46 f 365 /home/fleet/Developer/zerin_tile_forwarding/.git/packed-refs
+2026-10-20 11:46 d 4096 /home/fleet/Developer/zerin_tile_forwarding/.git/refs
+2026-10-20 11:46 f 636 /home/fleet/Developer/zerin_tile_forwarding/index.html
+2026-10-13 22:31 d 4096 /home/fleet/Developer/zerin_tile_forwarding/knowcave
+2026-10-13 21:48 d 4096 /home/fleet/Developer/zerin_tile_forwarding/knowcave/current
+2026-10-13 22:31 f 1206 /home/fleet/Developer/zerin_tile_forwarding/knowcave/link-local-docs.sh
+2026-10-13 22:34 f 2715 /home/fleet/Developer/zerin_tile_forwarding/knowcave/README.md
+2026-10-20 21:17 d 4096 /home/fleet/Developer/zerin_tile_forwarding/knowcave/workflows
+2026-10-20 11:46 d 4096 /home/fleet/Developer/zerin_tile_forwarding/__mocks__
+2026-10-20 11:46 f 2214 /home/fleet/Developer/zerin_tile_forwarding/__mocks__/maplibre-gl.js
+2026-10-20 11:46 f 1654 /home/fleet/Developer/zerin_tile_forwarding/package.json
+2026-10-20 11:46 f 261980 /home/fleet/Developer/zerin_tile_forwarding/package-lock.json
+2026-10-20 11:46 d 4096 /home/fleet/Developer/zerin_tile_forwarding/public
+2026-10-20 11:46 d 4096 /home/fleet/Developer/zerin_tile_forwarding/public/app
+2026-10-20 11:46 f 5037 /home/fleet/Developer/zerin_tile_forwarding/README.md
+2026-10-20 11:46 f 12240 /home/fleet/Developer/zerin_tile_forwarding/release-blocker.html
+2026-10-20 11:46 f 13963 /home/fleet/Developer/zerin_tile_forwarding/release-blocker.md
+2026-10-20 11:46 d 4096 /home/fleet/Developer/zerin_tile_forwarding/server
+2026-10-20 11:46 f 6952 /home/fleet/Developer/zerin_tile_forwarding/server/appleSatellite.js
+2026-10-20 11:46 f 1434 /home/fleet/Developer/zerin_tile_forwarding/server/env.js
+2026-10-20 11:46 f 6175 /home/fleet/Developer/zerin_tile_forwarding/server.js
+2026-10-20 11:46 f 27561 /home/fleet/Developer/zerin_tile_forwarding/server/zenrinSession.js
+2026-10-20 11:46 d 4096 /home/fleet/Developer/zerin_tile_forwarding/src
+2026-10-20 11:46 f 538 /home/fleet/Developer/zerin_tile_forwarding/src/App.tsx
+2026-10-20 11:46 d 4096 /home/fleet/Developer/zerin_tile_forwarding/src/components
+2026-10-20 11:46 d 4096 /home/fleet/Developer/zerin_tile_forwarding/src/config
+2026-10-20 11:46 d 4096 /home/fleet/Developer/zerin_tile_forwarding/src/constants
+2026-10-20 11:46 d 4096 /home/fleet/Developer/zerin_tile_forwarding/src/contexts
+2026-10-20 11:46 d 4096 /home/fleet/Developer/zerin_tile_forwarding/src/georeferencer
+2026-10-20 11:46 d 4096 /home/fleet/Developer/zerin_tile_forwarding/src/hooks
+2026-10-20 11:46 f 699 /home/fleet/Developer/zerin_tile_forwarding/src/index.css
+2026-10-20 11:46 d 4096 /home/fleet/Developer/zerin_tile_forwarding/src/lib
+2026-10-20 11:46 f 235 /home/fleet/Developer/zerin_tile_forwarding/src/main.tsx
+2026-10-20 11:46 d 4096 /home/fleet/Developer/zerin_tile_forwarding/src/services
+2026-10-20 11:46 d 4096 /home/fleet/Developer/zerin_tile_forwarding/src/store
+2026-10-20 11:46 d 4096 /home/fleet/Developer/zerin_tile_forwarding/src/theme
+2026-10-20 11:46 d 4096 /home/fleet/Developer/zerin_tile_forwarding/src/types
+2026-10-20 11:46 d 4096 /home/fleet/Developer/zerin_tile_forwarding/src/utils
+2026-10-20 11:46 f 82854 /home/fleet/Developer/zerin_tile_forwarding/src/vanilla-styles.css
+2026-10-20 11:46 f 38 /home/fleet/Developer/zerin_tile_forwarding/src/vite-env.d.ts
+2026-10-20 11:46 d 4096 /home/fleet/Developer/zerin_tile_forwarding/tests
+2026-10-20 11:46 d 4096 /home/fleet/Developer/zerin_tile_forwarding/tests/client
+2026-10-20 11:46 f 0 /home/fleet/Developer/zerin_tile_forwarding/tests/.gitkeep
+2026-10-20 11:46 d 4096 /home/fleet/Developer/zerin_tile_forwarding/tests/server
+2026-10-20 11:46 f 599 /home/fleet/Developer/zerin_tile_forwarding/tsconfig.json
+2026-10-20 11:46 f 252 /home/fleet/Developer/zerin_tile_forwarding/tsconfig.node.json
+2026-10-20 11:46 f 602 /home/fleet/Developer/zerin_tile_forwarding/vite.config.ts
+2026-10-20 11:46 f 2452 /home/fleet/Developer/zerin_tile_forwarding/vitest.config.mjs
+2026-09-29 13:26 d 4096 /home/fleet/Developer/zerin_tile_forwarding/.worktrees
+2026-09-29 12:01 d 4096 /home/fleet/Developer/zerin_tile_forwarding/.worktrees/multi-select-testing
+2026-10-20 11:05 d 4096 /home/fleet/files
+2026-10-20 11:05 f 516 /home/fleet/files/llama-server-35b-a3b.args
+2026-10-20 16:11 f 1244 /home/fleet/files/llama-server.service
+2026-10-20 11:05 f 194 /home/fleet/files/logind-lid.conf
+2026-10-20 15:32 f 385 /home/fleet/files/models.sha256
+2026-10-20 11:05 f 103 /home/fleet/files/ubuntu-iso.sha256
+2026-10-20 11:40 f 336 /home/fleet/.gitconfig
+2026-10-20 11:17 d 4096 /home/fleet/.local
+2026-10-20 11:19 d 4096 /home/fleet/.local/bin
+2026-10-20 11:19 l 48 /home/fleet/.local/bin/claude
+2026-10-20 14:44 d 4096 /home/fleet/.local/share
+2026-10-20 11:17 d 4096 /home/fleet/.local/share/claude
+2026-10-20 11:19 d 4096 /home/fleet/.local/share/claude/versions
+2026-10-20 14:44 d 4096 /home/fleet/.local/share/pki
+2026-10-20 14:44 d 4096 /home/fleet/.local/share/pki/nssdb
+2026-10-20 11:17 d 4096 /home/fleet/.local/state
+2026-10-20 11:17 d 4096 /home/fleet/.local/state/claude
+2026-10-20 22:10 d 4096 /home/fleet/.local/state/claude/locks
+2026-10-20 11:19 d 4096 /home/fleet/.npm
+2026-10-20 11:19 d 4096 /home/fleet/.npm/_cacache
+2026-10-20 11:19 d 4096 /home/fleet/.npm/_cacache/content-v2
+2026-10-20 15:25 d 4096 /home/fleet/.npm/_cacache/content-v2/sha512
+2026-10-20 15:25 d 4096 /home/fleet/.npm/_cacache/index-v5
+2026-10-20 14:41 d 4096 /home/fleet/.npm/_cacache/index-v5/3d
+2026-10-20 11:34 d 4096 /home/fleet/.npm/_cacache/index-v5/54
+2026-10-20 11:19 d 4096 /home/fleet/.npm/_cacache/index-v5/5b
+2026-10-20 15:25 d 4096 /home/fleet/.npm/_cacache/index-v5/83
+2026-10-20 11:33 d 4096 /home/fleet/.npm/_cacache/index-v5/a3
+2026-10-20 11:28 d 4096 /home/fleet/.npm/_cacache/index-v5/b3
+2026-10-20 14:41 d 4096 /home/fleet/.npm/_cacache/index-v5/e9
+2026-10-20 11:19 d 4096 /home/fleet/.npm/_cacache/index-v5/f5
+2026-10-20 15:25 d 4096 /home/fleet/.npm/_cacache/tmp
+2026-10-20 11:28 d 4096 /home/fleet/.npm-global
+2026-10-20 15:25 d 4096 /home/fleet/.npm-global/bin
+2026-10-20 15:25 l 82 /home/fleet/.npm-global/bin/agent-browser
+2026-10-20 11:28 l 46 /home/fleet/.npm-global/bin/codex
+2026-10-20 11:34 l 33 /home/fleet/.npm-global/bin/t3
+2026-10-20 11:19 d 4096 /home/fleet/.npm-global/lib
+2026-10-20 15:25 d 4096 /home/fleet/.npm-global/lib/node_modules
+2026-10-20 15:25 d 4096 /home/fleet/.npm-global/lib/node_modules/agent-browser
+2026-10-20 11:19 d 4096 /home/fleet/.npm-global/lib/node_modules/@openai
+2026-10-20 11:34 d 4096 /home/fleet/.npm-global/lib/node_modules/t3
+2026-10-20 15:25 d 4096 /home/fleet/.npm/_logs
+2026-10-20 11:19 f 834 /home/fleet/.npm/_logs/2026-10-20T02_19_09_505Z-debug-0.log
+2026-10-20 11:19 f 758 /home/fleet/.npm/_logs/2026-10-20T02_19_14_466Z-debug-0.log
+2026-10-20 11:28 f 6680 /home/fleet/.npm/_logs/2026-10-20T02_19_14_527Z-debug-0.log
+2026-10-20 11:33 f 843 /home/fleet/.npm/_logs/2026-10-20T02_33_52_751Z-debug-0.log
+2026-10-20 11:34 f 1797 /home/fleet/.npm/_logs/2026-10-20T02_34_09_493Z-debug-0.log
+2026-10-20 14:41 f 773 /home/fleet/.npm/_logs/2026-10-20T05_41_17_648Z-debug-0.log
+2026-10-20 14:41 f 1779 /home/fleet/.npm/_logs/2026-10-20T05_41_18_559Z-debug-0.log
+2026-10-20 14:41 f 660 /home/fleet/.npm/_logs/2026-10-20T05_41_21_959Z-debug-0.log
+2026-10-20 15:25 f 2509 /home/fleet/.npm/_logs/2026-10-20T06_25_31_603Z-debug-0.log
+2026-10-20 15:25 f 660 /home/fleet/.npm/_logs/2026-10-20T06_25_34_638Z-debug-0.log
+2026-10-20 11:19 f 31 /home/fleet/.npmrc
+2026-10-20 11:19 f 0 /home/fleet/.npm/_update-notifier-last-checked
+2026-10-20 12:31 d 4096 /home/fleet/.nv
+2026-10-20 12:31 d 4096 /home/fleet/.nv/ComputeCache
+2026-02-13 21:16 f 807 /home/fleet/.profile
+2026-10-20 17:29 d 4096 /home/fleet/render
+2026-10-20 11:39 d 4096 /home/fleet/.ssh
+2026-10-20 11:02 f 95 /home/fleet/.ssh/authorized_keys
+2026-10-20 11:39 f 829 /home/fleet/.ssh/config
+2026-03-25 13:39 f 163 /home/fleet/.ssh/._id_ed25519
+2026-03-25 13:39 f 399 /home/fleet/.ssh/id_ed25519
+2026-03-25 13:39 f 163 /home/fleet/.ssh/._id_ed25519.pub
+2026-03-25 13:39 f 95 /home/fleet/.ssh/id_ed25519.pub
+2026-03-30 19:15 f 163 /home/fleet/.ssh/._id_rsa
+2026-03-30 19:15 f 1675 /home/fleet/.ssh/id_rsa
+2026-03-30 19:15 f 163 /home/fleet/.ssh/._id_rsa.pub
+2026-03-30 19:15 f 380 /home/fleet/.ssh/id_rsa.pub
+2026-10-20 15:55 f 11508 /home/fleet/.ssh/known_hosts
+2026-10-20 11:34 d 4096 /home/fleet/.t3
+2026-10-20 22:10 d 4096 /home/fleet/.t3/caches
+2026-10-20 14:30 f 668 /home/fleet/.t3/caches/antigravity.json
+2026-10-20 22:10 f 42533 /home/fleet/.t3/caches/claudeAgent.json
+2026-10-20 22:10 f 15523 /home/fleet/.t3/caches/codex.json
+2026-10-20 22:10 f 596 /home/fleet/.t3/caches/cursor.json
+2026-10-20 22:10 f 740 /home/fleet/.t3/caches/grok.json
+2026-10-20 22:10 f 569 /home/fleet/.t3/caches/muse.json
+2026-10-20 22:10 f 619 /home/fleet/.t3/caches/opencode.json
+2026-10-20 22:10 f 773 /home/fleet/.t3/caches/pi.json
+2026-10-20 11:34 d 4096 /home/fleet/.t3/caches/pull-requests
+2026-10-20 14:30 d 4096 /home/fleet/.t3/runtime
+2026-10-20 11:34 f 70 /home/fleet/.t3/runtime/service-state.json
+2026-10-20 11:34 d 4096 /home/fleet/.t3/runtime/versions
+2026-10-20 11:34 d 4096 /home/fleet/.t3/runtime/versions/0.1.1-nightly.20261020.3386
+2026-10-20 22:10 d 4096 /home/fleet/.t3/userdata
+2026-10-20 11:34 d 4096 /home/fleet/.t3/userdata/attachments
+2026-10-20 11:34 f 37 /home/fleet/.t3/userdata/environment-id
+2026-10-20 11:34 f 7967 /home/fleet/.t3/userdata/keybindings.json
+2026-10-20 11:34 f 34 /home/fleet/.t3/userdata/keybindings-migrations
+2026-10-20 21:13 d 4096 /home/fleet/.t3/userdata/logs
+2026-10-20 14:30 f 12437 /home/fleet/.t3/userdata/logs/boot-service.log
+2026-10-20 11:34 d 4096 /home/fleet/.t3/userdata/logs/provider
+2026-10-21 00:03 f 8591159 /home/fleet/.t3/userdata/logs/server.trace.ndjson
+2026-10-20 21:13 f 10484533 /home/fleet/.t3/userdata/logs/server.trace.ndjson.1
+2026-10-20 17:27 f 10485085 /home/fleet/.t3/userdata/logs/server.trace.ndjson.2
+2026-10-20 14:22 f 10483883 /home/fleet/.t3/userdata/logs/server.trace.ndjson.3
+2026-10-20 11:34 d 4096 /home/fleet/.t3/userdata/logs/terminals
+2026-10-20 22:10 f 12249 /home/fleet/.t3/userdata/model-manifest.json
+2026-10-20 11:34 d 4096 /home/fleet/.t3/userdata/secrets
+2026-10-20 11:34 f 270 /home/fleet/.t3/userdata/secrets/cloud-link-ed25519-key-pair.bin
+2026-10-20 11:34 f 32 /home/fleet/.t3/userdata/secrets/mcp-oauth-signing-key.bin
+2026-10-20 11:34 f 32 /home/fleet/.t3/userdata/secrets/secret-request-salt.bin
+2026-10-20 11:34 f 32 /home/fleet/.t3/userdata/secrets/server-signing-key.bin
+2026-10-20 11:34 f 0 /home/fleet/.t3/userdata/server-owner.sqlite
+2026-10-20 14:30 f 512 /home/fleet/.t3/userdata/server-owner.sqlite-journal
+2026-10-20 14:30 f 226 /home/fleet/.t3/userdata/server-runtime.json
+2026-10-20 12:30 f 36 /home/fleet/.t3/userdata/settings.json
+2026-10-20 14:29 f 790528 /home/fleet/.t3/userdata/statev2.sqlite
+2026-10-20 16:02 f 32768 /home/fleet/.t3/userdata/statev2.sqlite-shm
+2026-10-20 16:02 f 24752 /home/fleet/.t3/userdata/statev2.sqlite-wal
+2026-10-20 11:34 d 4096 /home/fleet/.t3/userdata/themes
+2026-10-20 22:10 f 2196310 /home/fleet/.t3/userdata/usage-model-rates.json
+2026-10-20 22:10 f 2791 /home/fleet/.t3/userdata/usage-scan-cache-v5.json
+2026-10-20 11:34 d 4096 /home/fleet/.t3/worktrees
+== /tmp full
+2026-10-21 00:00 root d /tmp
+2026-10-20 22:14 fleet f /tmp/llama-server.service
+2026-10-20 22:11 fleet f /tmp/es.txt
+2026-10-20 17:29 fleet f /tmp/blender-render.lock
+2026-10-20 22:14 fleet f /tmp/sleep.log
+2026-10-20 15:31 fleet f /tmp/smoke.log
+2026-10-20 14:54 root d /tmp/systemd-private-7447491c3e7a4c03885a087b8a4a6586-fwupd.service-cDjmDk
+2026-10-20 14:41 fleet d /tmp/node-compile-cache
+2026-10-20 14:41 fleet d /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/6d6d5f1c
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/3dcf6415
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/c45def14
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/0dc96296
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/1172e634
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/e15a74c2
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/140a0144
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/f2ce6811
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/1b6d87f9
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/9222b63d
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/7d9fc342
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/a5d5052b
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/2bdcf063
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/475bb660
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/e083bc25
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/7264f2d9
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/fa7b1e5e
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/436e0990
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/0f0a7988
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/a6a586d8
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/c81e7cd4
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/d11ca801
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/e3019385
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/aaff74f9
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/a339d434
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/2dfc3763
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/d630c505
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/50b941b1
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/12d6085e
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/1449be6d
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/5191235d
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/7fc846f5
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/250f9c68
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/1b2a3a2a
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/3a521e90
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/5088a5b2
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/0f063766
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/92e8e3a2
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/2d96951b
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/753fef06
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/382de301
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/6e21950d
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/e6d3bb65
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/684322c8
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/221af82a
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/59813190
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/3fbc5c53
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/9e25568a
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/88f715d0
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/88e0f645
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/49430d8e
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/7faaa2b7
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/acddb56f
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/2ecc8411
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/1a0b6a98
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/d1388c4a
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/1bbb6102
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/0fd0b3f1
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/f0fa33bb
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/214ffcb5
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/fc486bc8
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/102ef5fd
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/e2d2db5c
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/bf397f20
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/ac2bd971
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/336958ec
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/3ce37815
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/0fef87ad
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/d1dce9a7
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/98f34ccb
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/8b0142f4
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/d7ca2a2a
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/c7e3c3b3
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/518e6db2
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/2fcd57fe
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/0873de5b
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/6b1dd637
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/a6ea4b9f
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/33857a06
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/9f9db43a
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/304a34e9
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/7f487c26
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/29fa1f7c
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/b23acf1c
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/4c47dc52
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/ae901c44
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/6c53203c
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/35ecf28e
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/32c3690e
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/d8be5a18
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/057f0d84
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/c29f3de2
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/5a2bad40
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/fbe433f3
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/c317d524
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/99757a15
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/89a78b27
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/c4ff2d84
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/8f0d912a
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/3c07ab31
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/3c96dce2
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/c616432e
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/5467f56d
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/7c6cbfd7
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/a535f225
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/d688117d
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/49d1006b
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/c9b3658c
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/232bb390
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/04085c5d
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/5e2f2f14
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/d3c7f8b9
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/de2f4222
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/764f1fcf
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/ee175f50
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/04d9d011
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/8c431d24
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/468005ea
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/046957ae
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/17fb02de
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/4d2f83f7
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/24d32a8d
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/7d2c66fe
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/8a07634d
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/7b43029f
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/2cc9283b
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/378d679f
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/26489bb3
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/73dc70c8
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/b9b788a7
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/80d419f1
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/17bea670
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/b39cf02e
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/c82abdcb
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/465030ee
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/55920610
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/8f360549
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/fa91e12e
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/aa742600
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/2e55c3a5
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/12940077
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/fce51f1c
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/eb553518
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/65cde378
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/d3ef2551
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/9f2a355d
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/a98da92f
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/57b160ad
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/8c007e0e
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/d11c129f
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/d2049875
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/1e79468d
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/0d04415e
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/ddb123a1
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/4c58a332
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/207c7dae
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/1fa45f11
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/ae7303a9
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/3fb014f3
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/e3f73ed5
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/a9a31f40
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/9858c0ef
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/3a9df0e4
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/b3cb61ef
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/4bbd7e97
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/cb39fc8b
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/559ad2c2
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/9a9f2251
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/6e4ff91e
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/fde1f22c
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/10d84fd3
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/52059bbd
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/b694a736
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/d1e7c37a
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/bec154b0
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/9ccf5632
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/660988f2
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/a5bdcdc2
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/563aaba5
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/5edebc65
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/9c667eb9
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/90e6985d
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/0b2855c5
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/28cd767f
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/091ce0e2
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/3029e332
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/54709ba1
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/7718e016
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/c4aca27d
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/b5f81263
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/99b6a49a
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/d53d817d
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/c0c83417
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/1ac49b5c
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/622b33b0
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/391c424a
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/7c63e190
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/563c5a5b
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/41847ab3
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/8480710b
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/9d887cbe
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/f7923593
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/11cb2a80
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/269c56d8
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/0fdd5abd
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/03f36f82
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/13bd6df4
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/cdcb9a3a
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/6a65a83f
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/76532a09
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/d01939e4
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/73e61496
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/010ca46c
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/149ec42e
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/94cd4d86
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/636599f0
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/875d5b8b
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/ab50a3c6
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/758cf23f
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/1827c055
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/d2e353eb
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/d5b339ce
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/47e91824
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/ffbe5609
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/e6ff280a
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/e45fd827
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/47dd1147
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/e05c5b1d
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/ef36498f
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/1e880b66
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/e14957ef
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/4f340aea
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/9451c10a
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/a9aa2ee8
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/c4b054d3
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/fb980dca
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/90925e8d
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/ad4a0ba9
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/8166bce3
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/7566a99c
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/f8e05e04
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/1978cd64
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/9e3468c3
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/71c316ce
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/72440b2a
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/27f07a12
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/88d80057
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/50a7b1d6
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/1f4b8cdd
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/20995dbb
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/a7e7dec4
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/94439c59
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/4a31a215
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/95847940
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/0c5232a3
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/7a29d76e
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/712742d6
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/85ee96ac
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/204d30cc
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/4a7f67b1
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/33ab5973
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/38c4fc01
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/5f56d863
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/4fe1f8a6
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/311bad02
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/c9b05194
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/35ff1778
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/fbc173a0
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/d31b0b3e
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/5fe6ecaf
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/d90c912c
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/284df1ba
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/48d1f1c8
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/4124d0d7
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/3a2a3a4b
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/0014c7b4
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/d4a49a25
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/7b81fa86
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/992bebce
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/6048ce02
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/e084facb
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/e4445f1f
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/31db85fd
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/30b81987
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/97ea8261
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/b4b7ce2c
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/afc339ca
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/804cf119
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/ecc4bf5b
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/bf0ed511
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/4652bac2
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/ddeb63be
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/9c6a3dce
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/78ec12fe
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/f6b8fa96
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/ae2aa98b
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/8fd2d67a
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/be8e3c53
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/dfe9ea14
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/8bb67756
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/744355f7
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/fa210d92
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/09dde953
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/0a1fa128
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/0f0c8433
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/5d92a678
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/67ae60c6
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/23a412ce
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/094e6b9e
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/16b76a41
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/7ba1b446
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/1148d269
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/e90dd27f
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/ba2d0e84
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/ea67da59
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/d91695c9
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/fc8d3fab
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/bd1f064f
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/aa862e85
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/2bc0d199
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/d2e71ea6
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/16e14a72
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/828ac9b3
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/079d197c
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/f994d10f
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/80cea747
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/4d78a390
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/de05357f
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/828a1323
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/c191be05
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/05fec450
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/5f1df0eb
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/263f0e14
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/86f038a4
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/71bde3a2
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/c4e533e3
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/298138b1
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/b20aa54b
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/9e724a52
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/2cbb34c0
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/a6305dfb
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/78e935bf
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/844075b3
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/7d43326e
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/e66acb74
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/8d72fcbe
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/1f9b0e5c
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/eb2a18ff
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/9f8fd60b
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/77f31fbb
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/c5596213
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/11e1e7e1
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/9c2a21eb
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/09615a35
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/aa7847ac
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/3c3fb401
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/a0e6c283
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/178cdd1b
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/923b43eb
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/7bbd0f9a
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/d77112d2
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/8235ed93
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/963c3aee
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/e674a16c
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/ffd896a0
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/19b40a6a
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/f97ebb6e
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/52fc01a1
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/05b636cf
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/d1a24e6b
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/2c66374b
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/d9a8a787
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/755cf1aa
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/3c39e184
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/8cee33a3
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/78b374bb
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/1c575097
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/5f919d1b
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/bbc5b65c
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/47508c2e
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/d149043c
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/ed0a1bdd
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/ee42ba44
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/48aa5edb
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/c868fc5e
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/cb24812a
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/fadf1a38
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/06f773c7
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/7f8f0416
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/309b04de
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/ca71db21
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/d86b1b2a
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/973c40c2
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/6c301b7e
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/e15da18e
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/3ef86212
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/8840590a
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/8cef7c80
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/fa606627
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/fa91102b
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/10123dee
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/defb5d31
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/23c95ffc
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/b8ae7f8d
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/442e1715
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/694ec7e6
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/edaaaf57
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/fdc8c15b
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/fabf3bdc
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/3f3308c6
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/5dca1a77
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/d626981b
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/09f704ec
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/b3c6e157
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/5f7e7acf
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/ef6ee7db
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/63b752c8
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/084167c6
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/70ea9bd2
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/fef23548
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/b18f607b
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/11f1577f
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/0aa851b3
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/158a58e3
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/5556610b
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/d449cc90
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/6ae82fed
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/e1787d1f
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/db79065b
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/ce3fa832
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/15dac900
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/357ecf82
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/9d00c3f3
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/559b7e2b
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/4cdf50fd
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/7fe03be4
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/86d3f244
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/52a098ea
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/5e15371f
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/27141edb
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/4a2f7337
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/1e2212b8
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/58a86747
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/03798312
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/4b9ee3ed
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/d3ce9c60
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/642de9df
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/0a70f056
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/288dc48f
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/d2fb1e9b
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/45efdcd8
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/66718a50
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/8d34e5a6
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/9af85e0f
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/de16f5cb
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/ae5cd13f
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/f23718ea
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/6824ca7e
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/80e0f000
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/20d4355f
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/09275b59
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/ae965f4a
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/5b85805a
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/5f7ac527
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/6f06e5c8
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/c295ee47
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/47ede548
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/6b685747
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/afe7f086
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/01b7386d
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/ce5f8bd8
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/40429bd2
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/acfd8818
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/164dc688
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/954df96b
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/18997b58
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/22a111e0
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/4744f7d7
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/d42f2212
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/cd25871e
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/00279342
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/1a1a92fe
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/02ef88e8
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/ed4d3f5c
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/a490d57b
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/ef2e5440
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/2a8813f8
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/66b0f63a
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/6843e15f
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/cc425018
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/4390ba1e
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/bfd470c5
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/dfd0d2ba
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/83412358
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/6d365289
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/fec41f63
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/8aa2de4d
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/ebac0d45
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/4d531b7f
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/d245b2d1
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/373ef455
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/ee02a576
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/da16af9a
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/2442c1f5
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/76499fec
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/25cb1a0e
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/4a98117d
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/1f328c74
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/20cad7f4
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/3c3ab2f4
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/9b8bdc7b
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/7f33eb18
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/303a53bd
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/2357f5d4
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/09800fe0
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/0f68cbe2
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/2d464d3d
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/2cc8e4ff
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/46772a61
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/4f764ed1
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/ad1d190c
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/8fec5c6a
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/87e9eef0
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/f5cd7fec
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/c8a47f87
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/59c632ba
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/186176c2
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/f4a9e467
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/278f25ae
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/07cf3f8a
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/3c29b655
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/116cae05
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/022c8d76
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/ef275563
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/f544413c
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/9c8ecb47
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/437deda3
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/4f7636c4
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/5c70eb54
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/4dbc19b7
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/66226d6a
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/23ea36aa
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/b924c91d
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/4337c5df
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/c0aebe56
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/e49015d8
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/eeae78b4
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/61f7bb7b
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/f217bb8a
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/29ae7849
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/059f2378
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/23ac1f21
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/a2a3e151
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/02ccd9ce
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/90014fac
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/1fdf173b
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/8e77503a
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/83b2186a
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/a41832b1
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/317ac786
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/dcce07e5
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/0d9f97b3
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/fc62d5d5
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/5a52cdc4
+2026-10-20 14:41 fleet f /tmp/node-compile-cache/v22.23.3-x64-9ac5647c-1000/9b798567
+2026-10-20 22:10 fleet d /tmp/claude-1000
+2026-10-20 14:30 root d /tmp/systemd-private-7447491c3e7a4c03885a087b8a4a6586-bolt.service-0nuxvH
+2026-10-20 14:30 root d /tmp/systemd-private-7447491c3e7a4c03885a087b8a4a6586-ModemManager.service-CVtVS3
+2026-10-20 14:30 root d /tmp/systemd-private-7447491c3e7a4c03885a087b8a4a6586-upower.service-PFoiIn
+2026-10-20 14:30 root d /tmp/systemd-private-7447491c3e7a4c03885a087b8a4a6586-systemd-logind.service-kzr0NV
+2026-10-20 14:30 root d /tmp/systemd-private-7447491c3e7a4c03885a087b8a4a6586-polkit.service-s2i2KB
+2026-10-20 14:30 root d /tmp/systemd-private-7447491c3e7a4c03885a087b8a4a6586-chrony.service-ijmDjQ
+2026-10-20 14:30 root d /tmp/.font-unix
+2026-10-20 14:30 root d /tmp/.XIM-unix
+2026-10-20 14:30 root d /tmp/.ICE-unix
+2026-10-20 14:30 root d /tmp/.X11-unix
+2026-10-20 14:30 root d /tmp/snap-private-tmp
+2026-10-20 14:30 root d /dev/shm
+== procs
+USER         PID %CPU %MEM     ELAPSED COMMAND
+root       88241  2.0  0.0       00:01 sshd-session
+root        1895  1.3  0.0    09:32:51 nvidia-powerd
+root        1909  0.2  0.0    09:32:51 tailscaled
+fleet       2514  0.2  0.2    09:32:43 node-MainThread
+llama      85592  0.2  0.3    01:49:14 llama-server
+root        1903  0.0  0.0    09:32:51 systemd-logind
+root        2110  0.0  0.0    09:32:51 upowerd
+root           1  0.0  0.0    09:32:58 systemd
+root        1913  0.0  0.0    09:32:51 thermald
+root          15  0.0  0.0    09:32:58 rcu_preempt
+root         226  0.0  0.0    09:32:58 irq/9-acpi
+root         793  0.0  0.0    09:32:53 systemd-udevd
+root       86995  0.0  0.0       04:55 kworker/u128:4-flush-259:0
+root         792  0.0  0.0    09:32:53 multipathd
+root       84329  0.0  0.0    01:51:46 kworker/0:0-events
+root        1901  0.0  0.0    09:32:51 snapd
+root          98  0.0  0.0    09:32:58 ksoftirqd/21
+root       86689  0.0  0.0       33:08 kworker/2:2-events
+root       86747  0.0  0.0       06:08 kworker/u128:2-flush-259:0
+root         749  0.0  0.0    09:32:53 systemd-journal
+root       81435  0.0  0.0    04:33:08 kworker/0:1-inode_switch_wbs
+root        8482  0.0  0.0    09:08:50 fwupd
+root         219  0.0  0.0    09:32:58 kcompactd0
+root       83988  0.0  0.0    01:53:08 kworker/4:0-events
+Wed Oct 21 00:03:22 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 595.91.07              Driver Version: 595.91.07      CUDA Version: 13.2     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA GeForce RTX 4090 ...    Off |   00000000:01:00.0 Off |                  N/A |
+| N/A   42C    P8              2W /  150W |     272MiB /  16376MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|    0   N/A  N/A           85592      C   ...lama.cpp/current/llama-server        262MiB |
++-----------------------------------------------------------------------------------------+
+1
+ADP1
+BAT1

@@ -1,0 +1,508 @@
+diff --git a/src/engine/render/flat-shadows.ts b/src/engine/render/flat-shadows.ts
+new file mode 100644
+index 0000000..2372d60
+--- /dev/null
++++ b/src/engine/render/flat-shadows.ts
+@@ -0,0 +1,227 @@
++import * as THREE from 'three';
++import { quietly } from './materials';
++import type { FigureRig } from './figure';
++
++/**
++ * Low's flat figures (render/tactical.ts) in one shadow draw each: a figure's
++ * casters (a humanoid's 7, 8 with a shield) are one merged geometry, drawn
++ * where the first one three draws is in its scene walk, each vertex moved by
++ * its own part's matrix (`partMV[part]`). Its positions, triangles and order
++ * are the parts' own, and each part's matrix is the one three would upload
++ * for it (shadow camera inverse x world, rounded to float32), so the map's
++ * texels are the same as seven draws'. A part three would not draw (hidden,
++ * culled by the shadow frustum) gets `OUT_OF_VIEW`: its triangles collapse
++ * to a point behind the camera and are clipped.
++ */
++
++/** The most casters one draw takes: the program's matrix array. */
++export const FLAT_CASTERS = 12;
++
++/** Every vertex to (0, 0, 1e10) in view space: behind the light's camera, so clipped; one point, so no area. */
++const OUT_OF_VIEW: readonly number[] = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1e10, 1];
++
++/** three's `project_vertex`, each vertex by its part's matrix; the rest of the depth program as three's own. */
++function flatDepthShader(this: THREE.Material, shader: THREE.WebGLProgramParametersWithUniforms): void {
++  shader.uniforms.partMV = (this.userData as FlatUserData).partMV;
++  shader.vertexShader = shader.vertexShader
++    .replace('#include <common>', `#include <common>\nuniform mat4 partMV[ ${FLAT_CASTERS} ];\nattribute float part;`)
++    .replace('#include <project_vertex>', THREE.ShaderChunk.project_vertex
++      .replace('mvPosition = modelViewMatrix * mvPosition;', 'mvPosition = partMV[ int( part ) ] * mvPosition;'));
++}
++const flatDepthKey = (): string => 'flat-shadow';
++
++interface FlatUserData { partMV: { value: Float32Array } }
++
++/** A depth material for one figure's draw (three's shadow one, `RGBADepthPacking`); make it `quietly`. */
++function flatDepthMaterial(): THREE.MeshDepthMaterial {
++  const material = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
++  const partMV = { value: new Float32Array(16 * FLAT_CASTERS) };
++  for (let i = 0; i < FLAT_CASTERS; i++) partMV.value.set(OUT_OF_VIEW, 16 * i);
++  (material.userData as FlatUserData).partMV = partMV;
++  material.onBeforeCompile = flatDepthShader;
++  material.customProgramCacheKey = flatDepthKey;
++  return material;
++}
++
++/** `casters`' positions, back to back, a `part` per vertex, and their triangles in order; null for one three draws otherwise. */
++export function mergeCasters(geometries: readonly THREE.BufferGeometry[]): THREE.BufferGeometry | null {
++  let vertices = 0, indices = 0;
++  for (const geometry of geometries) {
++    const position = geometry.getAttribute('position');
++    if (!(position instanceof THREE.BufferAttribute) || !(position.array instanceof Float32Array) || position.itemSize !== 3
++      || !geometry.index || geometry.groups.length > 0 || geometry.drawRange.start !== 0 || geometry.drawRange.count !== Infinity
++      || Object.keys(geometry.morphAttributes).length > 0) return null;
++    vertices += position.count;
++    indices += geometry.index.count;
++  }
++  const position = new Float32Array(3 * vertices), part = new Uint8Array(vertices);
++  const index = vertices > 0xffff ? new Uint32Array(indices) : new Uint16Array(indices);
++  let v = 0, i = 0;
++  geometries.forEach((geometry, k) => {
++    const source = geometry.getAttribute('position') as THREE.BufferAttribute, corners = geometry.index!.array;
++    position.set((source.array as Float32Array).subarray(0, 3 * source.count), 3 * v);
++    part.fill(k, v, v + source.count);
++    for (let c = 0; c < geometry.index!.count; c++) index[i + c] = v + corners[c]!;
++    v += source.count;
++    i += geometry.index!.count;
++  });
++  const geometry = new THREE.BufferGeometry();
++  geometry.setAttribute('position', new THREE.BufferAttribute(position, 3));
++  geometry.setAttribute('part', new THREE.BufferAttribute(part, 1));
++  geometry.setIndex(new THREE.BufferAttribute(index, 1));
++  // Page-level, like the parts it merges: disposers skip it.
++  geometry.userData.shared = true;
++  return geometry;
++}
++
++/** A figure's state between shadow frames. */
++interface Flat {
++  /** Its flat surfaces: a caster that is not one is not merged. */
++  readonly low: ReadonlySet<THREE.Object3D>;
++  /** Its casters in three's walk order and their geometries. */
++  readonly casters: THREE.Mesh[];
++  readonly geometries: THREE.BufferGeometry[];
++  merged: THREE.BufferGeometry | null;
++  /** Which caster carries the draw this pass, and what it had. */
++  carrier: number;
++  own: { geometry: THREE.BufferGeometry; depth: THREE.Material | undefined; culled: boolean } | null;
++}
++
++const _mv = new THREE.Matrix4();
++const isCaster = (node: THREE.Object3D): boolean => node.castShadow
++  && ((node as THREE.Mesh).isMesh === true || (node as THREE.Line).isLine === true || (node as THREE.Points).isPoints === true);
++
++/**
++ * Around Low's shadow pass (render/index.ts): `swap` puts each intact flat
++ * figure with two or more parts in the map on one draw, `restore` puts it
++ * back. Allocates nothing once each figure's merged geometry and the draws'
++ * materials are made (`quietly`).
++ */
++export class FlatShadows {
++  readonly #flats = new WeakMap<FigureRig, Flat>();
++  /** Merged geometries by their casters' geometry ids. */
++  readonly #merged = new Map<string, THREE.BufferGeometry | null>();
++  /** One depth material per figure drawn in a pass: consecutive draws switch material, so three uploads each one's matrices. */
++  readonly #materials: THREE.MeshDepthMaterial[] = [];
++  readonly #swapped: Flat[] = [];
++  readonly #next: THREE.Mesh[] = [];
++  readonly #shown: boolean[] = [];
++
++  /**
++   * Merge `figures` for the pass of `light`'s one map, as `camera` (three's layer test) draws it. The light's shadow
++   * camera and frustum are set here as three sets them again in the pass (`LightShadow.updateMatrices`, same inputs).
++   */
++  swap(figures: Iterable<FigureRig>, light: THREE.DirectionalLight, camera: THREE.Camera): void {
++    const shadow = light.shadow;
++    // A new map's first pass updates the projection first: left to three.
++    if (shadow.map === null) return;
++    shadow.updateMatrices(light);
++    const frustum = shadow.getFrustum();
++    for (const rig of figures) {
++      if (rig.disposed || rig.worn || rig.armature || rig.lent.size > 0 || !rig.root.parent) continue;
++      const flat = this.#flat(rig);
++      const next = this.#next, shown = this.#shown;
++      next.length = shown.length = 0;
++      if (!this.#collect(flat, rig.root, true, camera.layers) || next.length < 2) continue;
++      let same = next.length === flat.casters.length;
++      for (let i = 0; same && i < next.length; i++) same = next[i] === flat.casters[i] && next[i]!.geometry === flat.geometries[i];
++      if (!same) {
++        flat.casters.length = flat.geometries.length = 0;
++        for (const mesh of next) flat.casters.push(mesh), flat.geometries.push(mesh.geometry);
++        const key = flat.geometries.map(geometry => geometry.id).join();
++        if (!this.#merged.has(key)) this.#merged.set(key, quietly(() => mergeCasters(flat.geometries)));
++        flat.merged = this.#merged.get(key)!;
++      }
++      if (!flat.merged) continue;
++      // three's draw test for each, culling included (`renderObject`): drawn, its model-view matrix as three uploads it
++      // for its own draw (the shadow camera's inverse times its world, float32); not, `OUT_OF_VIEW`.
++      const material = this.#materials[this.#swapped.length] ??= quietly(flatDepthMaterial);
++      const out = (material.userData as FlatUserData).partMV.value;
++      let carrier = -1, drawn = 0;
++      for (let i = 0; i < next.length; i++) {
++        const mesh = next[i]!;
++        if (shown[i]! && (!mesh.frustumCulled || frustum.intersectsObject(mesh))) {
++          out.set(_mv.multiplyMatrices(shadow.camera.matrixWorldInverse, mesh.matrixWorld).elements, 16 * i);
++          if (drawn++ === 0) carrier = i;
++        } else out.set(OUT_OF_VIEW, 16 * i);
++      }
++      if (drawn < 2) continue;
++      const mesh = flat.casters[flat.carrier = carrier]!;
++      flat.own = { geometry: mesh.geometry, depth: mesh.customDepthMaterial, culled: mesh.frustumCulled };
++      this.#swapped.push(flat);
++      mesh.geometry = flat.merged;
++      mesh.customDepthMaterial = material;
++      mesh.frustumCulled = false;
++      for (let i = carrier + 1; i < flat.casters.length; i++) flat.casters[i]!.castShadow = false;
++    }
++  }
++
++  /** Every figure `swap` merged back as it was. */
++  restore(): void {
++    for (const flat of this.#swapped) {
++      const mesh = flat.casters[flat.carrier]!, own = flat.own!;
++      mesh.geometry = own.geometry;
++      mesh.customDepthMaterial = own.depth;
++      mesh.frustumCulled = own.culled;
++      for (let i = flat.carrier + 1; i < flat.casters.length; i++) flat.casters[i]!.castShadow = true;
++      flat.own = null;
++    }
++    this.#swapped.length = 0;
++  }
++
++  /** The figures merged this pass (tests). */
++  get swapped(): number { return this.#swapped.length; }
++
++  #flat(rig: FigureRig): Flat {
++    let flat = this.#flats.get(rig);
++    if (!flat) {
++      flat = { low: new Set(rig.low), casters: [], geometries: [], merged: null, carrier: 0, own: null };
++      this.#flats.set(rig, flat);
++    }
++    return flat;
++  }
++
++  /**
++   * Three's walk under `node` (render/WebGLShadowMap `renderObject`): its casters into `#next`, with whether three
++   * would draw each but for the frustum. False if a caster cannot go in the merged draw (not a flat surface, too many,
++   * a depth material of its own, or a material three would draw another way).
++   */
++  #collect(flat: Flat, node: THREE.Object3D, shown: boolean, layers: THREE.Layers): boolean {
++    shown &&= node.visible;
++    if (isCaster(node)) {
++      const mesh = node as THREE.Mesh, material = mesh.material;
++      if (!flat.low.has(mesh) || this.#next.length === FLAT_CASTERS || mesh.customDepthMaterial !== undefined
++        || (mesh as THREE.SkinnedMesh).isSkinnedMesh || (mesh as THREE.InstancedMesh).isInstancedMesh || mesh.morphTargetInfluences !== undefined
++        || Array.isArray(material) || !plain(material)) return false;
++      this.#next.push(mesh);
++      this.#shown.push(shown && mesh.layers.test(layers) && material.visible);
++    }
++    const children = node.children;
++    for (let i = 0; i < children.length; i++) if (!this.#collect(flat, children[i]!, shown, layers)) return false;
++    return true;
++  }
++}
++
++/** A material three's shadow pass draws with its plain depth material, double-sided (one front face for any part's matrix). */
++function plain(material: THREE.Material): boolean {
++  const side = material.shadowSide ?? material.side, maps = material as THREE.MeshStandardMaterial;
++  return side === THREE.DoubleSide && !maps.wireframe && material.alphaTest === 0 && !maps.map && !maps.alphaMap
++    && !maps.displacementMap && !(material.clippingPlanes?.length);
++}
++
++/**
++ * A caster drawn with the warm-up (render/index.ts `SHADOW_PROBE`): the merged draw's depth program links at the menu.
++ * One collapsed triangle, all parts `OUT_OF_VIEW`: no fragment in any pass.
++ */
++export function flatShadowProbe(): THREE.Mesh {
++  return quietly(() => {
++    const geometry = new THREE.BufferGeometry();
++    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(9), 3));
++    geometry.setAttribute('part', new THREE.BufferAttribute(new Uint8Array(3), 1));
++    geometry.setIndex(new THREE.BufferAttribute(new Uint16Array([0, 1, 2]), 1));
++    const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
++    mesh.castShadow = true;
++    mesh.customDepthMaterial = flatDepthMaterial();
++    return mesh;
++  });
++}
+diff --git a/src/engine/render/index.ts b/src/engine/render/index.ts
+index fc36da4..0262ac9 100644
+--- a/src/engine/render/index.ts
++++ b/src/engine/render/index.ts
+@@ -20,6 +20,7 @@ import { WeaponAssets, weaponTextureSize } from './weapons';
+ import { FX_UNIFORMS, FxAssets, fxTemplate, fxTextureSize } from './fx';
+ import { useOperatorSource, usePropSource } from './figure';
+ import { OperatorAssets, operatorWant } from './operators';
++import { FlatShadows, flatShadowProbe } from './flat-shadows';
+ import { PropAssets, dressingSets, propTextureSize } from './props';
+ import type { PostFX } from './postfx';
+ import type { SkyUniforms } from './materials';
+@@ -157,6 +158,8 @@ const luminance = (c: THREE.Color): number => 0.2126 * c.r + 0.7152 * c.g + 0.07
+  */
+ const SHADOW_PROBE = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial());
+ SHADOW_PROBE.castShadow = true;
++// And Low's merged figure draw's (render/flat-shadows.ts).
++SHADOW_PROBE.add(flatShadowProbe());
+ 
+ /**
+  * A root whose shader work is held off a match's frames (`Renderer._compiles`,
+@@ -473,12 +476,17 @@ export class Renderer {
+         }
+       }
+     };
++    // Low's one map: each flat figure in one draw (`FlatShadows`).
++    const flats = new FlatShadows();
+     shadowMap.render = (lights, scene, camera) => {
+       if (!shadowMap.needsUpdate) return drawShadows(lights, scene, camera);
+       this.operators.shadowSwap(true);
+       try {
++        const sun = lights.length === 1 && this._boxes === null && this._quality.look !== 'realistic' ? lights[0] : null;
++        if (sun instanceof THREE.DirectionalLight) flats.swap(this.operators.figures, sun, camera);
+         drawCasters(lights, scene, camera);
+       } finally {
++        flats.restore();
+         this.operators.shadowSwap(false);
+       }
+     };
+diff --git a/src/engine/render/operators.ts b/src/engine/render/operators.ts
+index 7f9964b..9562063 100644
+--- a/src/engine/render/operators.ts
++++ b/src/engine/render/operators.ts
+@@ -187,6 +187,8 @@ export class OperatorAssets implements OperatorSource {
+   kind(kind: string): KindTemplate | null { return this.#kinds.get(kind) ?? null; }
+   /** Figures wearing an operator now. */
+   get worn(): number { return this.#bodies.size; }
++  /** Every figure that can wear one, worn or not (Low's flat shadows, render/flat-shadows.ts). */
++  get figures(): ReadonlySet<FigureRig> { return this.#figures; }
+ 
+   /** The baked occlusion's strength (`OPERATOR_AO`, by the AO setting), on the set materials: their twins and the figures' copies read it there. */
+   occlusion(intensity: number): void {
+diff --git a/tests/flat-shadows.test.ts b/tests/flat-shadows.test.ts
+new file mode 100644
+index 0000000..8e27416
+--- /dev/null
++++ b/tests/flat-shadows.test.ts
+@@ -0,0 +1,217 @@
++import { afterEach, expect, test, vi } from 'vitest';
++import { BoxGeometry, DirectionalLight, Matrix4, Mesh, MeshBasicMaterial, PerspectiveCamera, Scene, WebGLRenderTarget, WebGLRenderer } from 'three';
++import type { BufferGeometry, Material, Object3D } from 'three';
++import { makeFigure } from '@/engine/render/figure';
++import type { Figure, FigureRig } from '@/engine/render/figure';
++import { FLAT_CASTERS, FlatShadows } from '@/engine/render/flat-shadows';
++import { TACTICAL_MODELS } from '@/engine/render/tactical';
++import { makeModel } from '@/engine/enemies/model';
++import { TYPES } from '@/engine/enemies/types';
++import type { EnemyKind } from '@/engine/types';
++
++const KINDS = Object.keys(TACTICAL_MODELS) as (keyof typeof TACTICAL_MODELS)[];
++const OUT_OF_VIEW = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1e10, 1];
++
++/** A figure of a kind, as the game makes it: enemies through their model, the player as players.ts does. */
++function figureOf(kind: string): Figure {
++  if (kind === 'player') return makeFigure({ kind: 'humanoid', tactical: 'player', color: 0x4c7dff, weapon: 'r4c', bodyWidth: 1, limbR: 0.033, hat: 'cap' });
++  const stats = TYPES[kind as EnemyKind];
++  const { figure } = makeModel(stats);
++  figure.root.scale.setScalar(stats.scale);
++  return figure;
++}
++
++/** The meshes three's shadow walk reaches that cast, in its order (depth first, child order). */
++function casters(root: Object3D): Mesh[] {
++  const out: Mesh[] = [];
++  root.traverse(node => { if (node instanceof Mesh && node.castShadow) out.push(node); });
++  return out;
++}
++
++/** Every mesh's fields the swap touches. */
++function fields(root: Object3D): unknown[] {
++  const out: unknown[] = [];
++  root.traverse(node => {
++    if (node instanceof Mesh) out.push(node, node.geometry, node.castShadow, node.customDepthMaterial, node.frustumCulled, node.material);
++  });
++  return out;
++}
++
++const bits = (array: ArrayLike<number>) => new Uint32Array(Float32Array.from(array).buffer);
++
++function sun(extent: number): DirectionalLight {
++  const light = new DirectionalLight(0xffffff, 2);
++  light.castShadow = true;
++  light.position.set(5, 12, 4);
++  light.shadow.mapSize.set(1024, 1024);
++  Object.assign(light.shadow.camera, { left: -extent, right: extent, top: extent, bottom: -extent, near: 0.5, far: 40 });
++  light.shadow.camera.updateProjectionMatrix();
++  return light;
++}
++
++const made: Figure[] = [];
++afterEach(() => {
++  for (const figure of made.splice(0)) figure.dispose();
++  vi.restoreAllMocks();
++});
++
++test('each flat figure casts in one draw: its casters\' triangles in walk order, each part by three\'s own matrix', () => {
++  const scene = new Scene(), camera = new PerspectiveCamera();
++  // A tight box: some figures are cut by it, so some parts are culled and some drawn.
++  const light = sun(3.2);
++  scene.add(light, light.target);
++  const figures = [...KINDS.map(figureOf), figureOf('shield')];
++  made.push(...figures);
++  figures.at(-1)!.dropShield();
++  for (const [i, figure] of figures.entries()) {
++    figure.root.position.set((i % 6) * 2.2 - 6, 0, Math.floor(i / 6) * 2.2 - 4);
++    figure.root.rotation.y = i * 0.7;
++    figure.parts.thighL?.rotation.set(-0.8, 0, 0);
++    scene.add(figure.root);
++  }
++  scene.updateMatrixWorld(true);
++  light.shadow.updateMatrices(light);
++  const frustum = light.shadow.getFrustum(), shadowCamera = light.shadow.camera;
++  const rigs = figures.map(figure => figure.rig!);
++  const before = figures.map(figure => fields(figure.root));
++  const expected = figures.map(figure => casters(figure.root));
++  // What three would draw of each caster in this pass, before the swap changes any.
++  const culled = expected.map(list => list.map(mesh => !frustum.intersectsObject(mesh)));
++  // Figures with fewer than two parts in the box are left to three (one draw or none either way).
++  const merging = culled.map(list => list.filter(out => !out).length >= 2);
++  light.shadow.map = new WebGLRenderTarget(1, 1);
++  const flats = new FlatShadows(), random = vi.spyOn(Math, 'random');
++  let parts = 0, out = 0;
++  for (let pass = 0; pass < 2; pass++) {
++    flats.swap(rigs, light, camera);
++    try {
++      expect(flats.swapped).toBe(merging.filter(Boolean).length);
++      for (const [f, figure] of figures.entries()) {
++        const list = expected[f]!, kind = figure.rig!.kind;
++        expect(list.length, kind).toBeGreaterThan(1);
++        expect(list.length, kind).toBeLessThanOrEqual(FLAT_CASTERS);
++        if (!merging[f]) {
++          expect(fields(figure.root), kind).toEqual(before[f]);
++          continue;
++        }
++        // The first part three draws carries the draw; the parts after it stop casting.
++        const at = culled[f]!.indexOf(false), carrier = list[at]!;
++        const merged = carrier.geometry, own = before[f]![before[f]!.indexOf(carrier) + 1] as BufferGeometry;
++        expect(merged, kind).not.toBe(own);
++        expect([carrier.castShadow, carrier.frustumCulled, ...list.map((mesh, k) => k === at || mesh.castShadow === k < at)], kind)
++          .toEqual([true, false, ...list.map(() => true)]);
++        // Positions bit for bit, a part index per vertex, triangles in order past the vertices before them.
++        const positions: number[] = [], part: number[] = [], corners: number[] = [];
++        list.forEach((mesh, k) => {
++          const geometry = mesh === carrier ? own : mesh.geometry, count = geometry.getAttribute('position').count;
++          for (const corner of geometry.index!.array) corners.push(corner + part.length);
++          positions.push(...(geometry.getAttribute('position').array as Float32Array).subarray(0, 3 * count));
++          for (let v = 0; v < count; v++) part.push(k);
++        });
++        expect(merged.getAttribute('position').array).toEqual(Float32Array.from(positions));
++        expect(bits(merged.getAttribute('position').array)).toEqual(bits(positions));
++        expect(Array.from(merged.getAttribute('part').array)).toEqual(part);
++        expect(Array.from(merged.index!.array)).toEqual(corners);
++        expect(merged.index!.array.constructor, kind).toBe(part.length > 0xffff ? Uint32Array : Uint16Array);
++        // At the draw: each part's model-view matrix as three uploads it (float32 of the double product), or out of view.
++        const depth = carrier.customDepthMaterial! as Material & { userData: { partMV: { value: Float32Array } } };
++        const uploaded = depth.userData.partMV.value;
++        list.forEach((mesh, k) => {
++          const want = culled[f]![k] ? OUT_OF_VIEW : new Matrix4().multiplyMatrices(shadowCamera.matrixWorldInverse, mesh.matrixWorld).elements;
++          expect(bits(uploaded.subarray(16 * k, 16 * k + 16)), `${kind} part ${k}`).toEqual(bits(want));
++          parts++;
++          if (culled[f]![k]) out++;
++        });
++      }
++    } finally {
++      flats.restore();
++    }
++    for (const [f, figure] of figures.entries()) expect(fields(figure.root), `${figure.rig!.kind} restored`).toEqual(before[f]);
++  }
++  light.shadow.map.dispose();
++  expect(random).not.toHaveBeenCalled();
++  expect(out, 'some parts out of the box').toBeGreaterThan(0);
++  expect(parts - out, 'some parts in it').toBeGreaterThan(0);
++  expect(merging.filter(Boolean).length, 'some figures merged').toBeGreaterThan(3);
++});
++
++test('figures it cannot merge exactly are left to three', () => {
++  const scene = new Scene(), camera = new PerspectiveCamera(), light = sun(9);
++  const [lent, hidden, foreign, shown] = ['grunt', 'grunt', 'heavy', 'medic'].map(figureOf) as [Figure, Figure, Figure, Figure];
++  made.push(lent, hidden, foreign, shown);
++  scene.add(light, light.target, lent.root, hidden.root, foreign.root, shown.root);
++  lent.lend(lent.parts.weapon!);
++  hidden.root.visible = false;
++  // A caster that is not a flat surface (the debris's dropped gun) sits under the figure.
++  const gun = new Mesh(new BoxGeometry(), new MeshBasicMaterial());
++  gun.castShadow = true;
++  foreign.parts.torso!.add(gun);
++  scene.updateMatrixWorld(true);
++  light.shadow.updateMatrices(light);
++  light.shadow.map = new WebGLRenderTarget(1, 1);
++  const flats = new FlatShadows(), rigs: FigureRig[] = [lent.rig!, hidden.rig!, foreign.rig!, shown.rig!];
++  flats.swap(rigs, light, camera);
++  try {
++    expect(flats.swapped).toBe(1);
++    expect(casters(shown.root).filter(mesh => mesh.castShadow)).toHaveLength(1);
++    for (const figure of [lent, hidden, foreign]) expect(casters(figure.root).every(mesh => mesh.customDepthMaterial === undefined)).toBe(true);
++  } finally {
++    flats.restore();
++  }
++});
++
++test('the merged draws give the same shadow map, one draw per flat figure', () => {
++  const renderer = new WebGLRenderer({ canvas: document.createElement('canvas') });
++  renderer.shadowMap.enabled = true;
++  renderer.shadowMap.autoUpdate = false;
++  const scene = new Scene(), camera = new PerspectiveCamera(60, 1, 0.1, 100), target = new WebGLRenderTarget(16, 16);
++  camera.position.set(0, 10, 15);
++  camera.lookAt(0, 0, 0);
++  // Cut through the rows, so culled parts are in it too.
++  const light = sun(7);
++  scene.add(light, light.target);
++  scene.overrideMaterial = new MeshBasicMaterial();
++  const figures = [...KINDS.map(figureOf), figureOf('breacher')];
++  made.push(...figures);
++  figures.at(-1)!.dropShield();
++  for (const [i, figure] of figures.entries()) {
++    figure.root.position.set((i % 6) * 2.2 - 6, 0, Math.floor(i / 6) * 2.2 - 4);
++    figure.root.rotation.y = i * 0.7;
++    figure.parts.upperR?.rotation.set(-1.5, 0, 0.4);
++    figure.parts.thighL?.rotation.set(-0.8, 0, 0);
++    scene.add(figure.root);
++  }
++  const flats = new FlatShadows(), rigs = figures.map(figure => figure.rig!);
++  const drawShadows = renderer.shadowMap.render.bind(renderer.shadowMap);
++  let merge = false, calls = 0;
++  renderer.shadowMap.render = (lights, at, from) => {
++    const before = renderer.info.render.calls;
++    if (merge) flats.swap(rigs, light, from);
++    try { drawShadows(lights, at, from); } finally { flats.restore(); }
++    calls = renderer.info.render.calls - before;
++  };
++  const shot = (merged: boolean) => {
++    merge = merged;
++    renderer.shadowMap.needsUpdate = true;
++    renderer.setRenderTarget(target);
++    renderer.render(scene, camera);
++    const map = light.shadow.map!, texels = new Uint8Array(map.width * map.height * 4);
++    renderer.readRenderTargetPixels(map, 0, 0, map.width, map.height, texels);
++    return { texels, calls };
++  };
++  try {
++    const apart = shot(false), merged = shot(true), again = shot(false);
++    let cast = 0;
++    for (let i = 0; i < apart.texels.length; i += 4) if (apart.texels[i] !== 255 || apart.texels[i + 3] !== 255) cast++;
++    expect(cast, 'the figures cast').toBeGreaterThan(10000);
++    expect(merged.texels.every((v, i) => v === apart.texels[i]), 'the same shadow map').toBe(true);
++    expect(again.texels.every((v, i) => v === apart.texels[i]), 'and after it').toBe(true);
++    // Every figure's casters that three drew, in one draw; none of those it culled whole.
++    expect(apart.calls - merged.calls).toBeGreaterThan(figures.length * 2);
++    expect(merged.calls).toBeLessThanOrEqual(figures.length);
++  } finally {
++    (scene.overrideMaterial as Material).dispose();
++    target.dispose();
++    renderer.dispose();
++  }
++});
