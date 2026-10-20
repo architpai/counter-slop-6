@@ -9,7 +9,9 @@ import {
   BAKE_UNIFORMS, GRID_UNIFORMS, OPERATOR_AO, casterGroups, fixUv, hiddenMat, levelDepthMat, realMat, realMaterials, setAoAlpha, skyMat, standInGrid,
   standInLightmap, standInMaps, surfMat, wearMaps,
 } from './materials';
-import { BAKE_FILE, LIGHTMAP_SIZE, bakeFor, bakedTriangles, layoutSteps, lightmapChartSteps, wearLightmapUVs } from './lightmap';
+import { BAKE_FILE, bakeFor, bakedTriangles, wearLightmapUVs } from './lightmap';
+import { dropLayout, postLayout } from './lightmapJob';
+import { bakeLayoutSteps, laidOut } from './lightmapLayout';
 import { ANTIALIAS_SPEC, AO_SCALE, PRESET_VALUES, SHADOW_SPEC, VIEW_SCALE, fightCpuPaths } from './quality';
 import { GpuFences, MatchClock } from './pacing';
 import { aimShadowBox, cascadeCentre, sizeShadowBox } from './shadows';
@@ -17,7 +19,7 @@ import { disposeSky, loadSky } from './sky';
 import { TEXTURE_SETS, TEXTURE_SIZE, resolveMaterial, setInfo, setsFor } from './surfaces';
 import { BakeStreamer, TextureStreamer, fetchGrid, ktx2Loader, lightmapLoader, warmCompressedUploads } from './textures';
 import { WeaponAssets, weaponTextureSize } from './weapons';
-import { FX_UNIFORMS, FxAssets, fxTemplate, fxTextureSize } from './fx';
+import { FX_UNIFORMS, FxAssets, fxLateTemplate, fxTemplate, fxTextureSize } from './fx';
 import { useOperatorSource, usePropSource } from './figure';
 import { OperatorAssets, operatorWant } from './operators';
 import { PropAssets, dressingSets, propTextureSize } from './props';
@@ -28,6 +30,7 @@ import type { SkyAssets, SkySource } from './sky';
 import type { TextureSet } from './surfaces';
 import type { BakedLight, LoadBake } from './textures';
 import type { BakeInfo, BakedTriangles, LightmapLayout } from './lightmap';
+import type { LayoutTicket } from './lightmapJob';
 import type { PropRequest } from './props';
 import type { Level, LevelSurface, Mood } from '../types';
 
@@ -113,14 +116,6 @@ export const UPLOAD_SETTLE_MS = 500;
 /** Script a slot spends laying a bake's charts out (`_layBake`): a map's layout takes several slots, no frame a long one. */
 const LAYOUT_STEP_MS = 4;
 
-/** A bake's layout as steps: the chart pass, then packing and writing `uv1` (render/lightmap.ts). */
-function* bakeLayoutSteps(surfaces: readonly LevelSurface[], bounds: Level['bounds'], triangles: BakedTriangles,
-  density: number): Generator<void, LightmapLayout | null> {
-  const charts = yield* lightmapChartSteps(surfaces, bounds, triangles);
-  yield;
-  return yield* layoutSteps(charts, LIGHTMAP_SIZE, density);
-}
-
 /**
  * A map's bake fades in over this long (eased) once it is on the GPU, so the
  * light does not pop: indoors the bake is about half the probe's light, and a
@@ -188,7 +183,10 @@ SHADOW_PROBE.castShadow = true;
 /**
  * A root whose shader work is held off a match's frames (`Renderer._compiles`,
  * `_warmups`); `valid` is false once it was freed. `inMatch`: its warm-up draw
- * may also run in a live match once its quiet start is over.
+ * may also run in a live match once its quiet start is over. `own`: work that
+ * is not the world pass's (the soft layer's sprites, the post passes), which
+ * compiles and draws itself where it draws in a frame, in place of the root
+ * compiled for the scene and drawn in it.
  */
 interface Warmup {
   root: THREE.Object3D;
@@ -196,6 +194,13 @@ interface Warmup {
   valid: () => boolean;
   inMatch: boolean;
   drawn: boolean;
+  own?: OwnWarmup;
+}
+
+/** A warm-up's own compile (returns the materials, as `three.compile` does) and its unseen draw. */
+interface OwnWarmup {
+  compile(): THREE.Material[];
+  draw(): void;
 }
 
 /** Vertex colours that have gone to the GPU (`wearColours`). */
@@ -337,10 +342,11 @@ export class Renderer {
   /**
    * The current level's lightmap layout still to make (`_layBake`): its
    * triangles, the chart pass and packing as steps (render/lightmap.ts), and
-   * the `uv1` arrays (zeros till then) they fill. Null once laid out, or
-   * with no bake.
+   * the `uv1` arrays (zeros till then) they fill, and the same layout
+   * posted to the worker (render/lightmapJob.ts; null without one). Null once
+   * laid out, or with no bake.
    */
-  _bakeLayout: { triangles: BakedTriangles; steps: Generator<void, LightmapLayout | null>; uvs: Float32Array[] } | null = null;
+  _bakeLayout: { triangles: BakedTriangles; steps: Generator<void, LightmapLayout | null>; uvs: Float32Array[]; ticket: LayoutTicket | null } | null = null;
   /** Realistic tiers: the bake streaming or on the level. Null on Low. */
   _bakes: BakeStreamer | null = null;
   /**
@@ -680,6 +686,8 @@ export class Renderer {
       }
       this._pmrem?.dispose();
       this._pmrem = null;
+      // It puts no fences (`render`): none kept from the last realistic frames for a later realistic tier to read.
+      this._fences.clear();
     }
     this.resize();
   }
@@ -1042,6 +1050,7 @@ export class Renderer {
     if (this._bakeChecked === this._surfaces) return;
     this._bakeChecked = this._surfaces;
     this._bake = null;
+    dropLayout(this._bakeLayout?.ticket ?? null);
     this._bakeLayout = null;
     const level = this._level, bake = level ? bakeFor(level) : null;
     if (!level || !bake) return;
@@ -1055,17 +1064,20 @@ export class Renderer {
       || !uvs.every((uv, i) => uv.length === 2 * triangles.surfaces[i]!.mesh.geometry.getAttribute('position').count))) uvs = null;
     if (!uvs) {
       uvs = triangles.surfaces.map(s => new Float32Array(2 * s.mesh.geometry.getAttribute('position').count));
-      this._bakeLayout = { triangles, steps: bakeLayoutSteps(this._surfaces, level.bounds, triangles, bake.info.density), uvs };
+      // The worker lays it out during the quiet start; the steps are the same layout on the main thread, if it is late.
+      const ticket = postLayout(triangles, level.bounds, bake.info.density);
+      this._bakeLayout = { triangles, steps: bakeLayoutSteps(this._surfaces, level.bounds, triangles, bake.info.density), uvs, ticket };
     }
     wearLightmapUVs(triangles.surfaces, uvs);
     this._bake = bake;
   }
 
   /**
-   * The current level's lightmap layout (render/lightmap.ts) for about
-   * `budget` ms of script, in an upload slot: its charts, then the atlas,
-   * written into the `uv1` zeros `_checkBake` put on (a map's whole layout is
-   * 30-80 ms on a desktop). True once laid out (or nothing to lay out). A
+   * The current level's lightmap layout (render/lightmap.ts) in an upload
+   * slot: the worker's, once it has answered (the same bytes), else about
+   * `budget` ms of its steps on the main thread (a map's whole layout is
+   * 30-80 ms on a desktop): its charts, then the atlas, written into the
+   * `uv1` zeros `_checkBake` put on. True once laid out (or nothing to lay out). A
    * layout that no longer matches its manifest (the map changed since its
    * bake, in a way the hash misses) takes the bake off: the level keeps the
    * probe.
@@ -1073,13 +1085,18 @@ export class Renderer {
   _layBake(budget = LAYOUT_STEP_MS): boolean {
     const pending = this._bakeLayout, bake = this._bake;
     if (!pending || !bake) return true;
-    const until = performance.now() + budget;
-    let next = pending.steps.next();
-    while (!next.done && performance.now() < until) next = pending.steps.next();
-    if (!next.done) return false;
-    const layout = next.value;
+    let layout;
+    if (pending.ticket?.done) layout = pending.ticket.layout;
+    else {
+      const until = performance.now() + budget;
+      let next = pending.steps.next();
+      while (!next.done && performance.now() < until) next = pending.steps.next();
+      if (!next.done) return false;
+      layout = laidOut(next.value);
+      dropLayout(pending.ticket);
+    }
     this._bakeLayout = null;
-    if (!layout || layout.charts.length !== bake.info.charts || layout.rows !== bake.info.rows || layout.triangles !== bake.info.triangles) {
+    if (!layout || layout.charts !== bake.info.charts || layout.rows !== bake.info.rows || layout.triangles !== bake.info.triangles) {
       // The zero `uv1` stays on: the unbaked materials never read it, and a removed attribute's buffer, drawn once
       // already, would outlive its geometry's disposal (as `shedColours` says).
       this._bakeMismatch(bake.name);
@@ -1362,8 +1379,8 @@ export class Renderer {
   }
 
   /** Queue `root` for a held compile or warm-up draw; resolves once it is done, or dropped as freed. */
-  _hold(list: Warmup[], root: THREE.Object3D, valid: () => boolean, inMatch = false): Promise<void> {
-    return new Promise<void>(done => { list.push({ root, done, valid, inMatch, drawn: false }); });
+  _hold(list: Warmup[], root: THREE.Object3D, valid: () => boolean, inMatch = false, own?: OwnWarmup): Promise<void> {
+    return new Promise<void>(done => { list.push({ root, done, valid, inMatch, drawn: false, own }); });
   }
 
   /**
@@ -1399,6 +1416,58 @@ export class Renderer {
     // The effects' programs (R5): tracers and flat decals on every look, the realistic sprites, decals, casings and flashes too.
     const fx = fxTemplate(this._quality.look, this._softFx);
     void this._hold(this._compiles, fx, () => true).then(() => this._hold(this._warmups, fx, () => true));
+    // The soft particles' sprites (High, Ultra) in the soft layer's scene, and the light shafts' passes (Ultra),
+    // which the sun out of view all through a load leaves undrawn: as their first frames draw them.
+    const late = fxLateTemplate(this._quality.look, this._softFx);
+    if (late) this._holdOwn(late, () => this._softFx, this._lateWarmup(late));
+    if (this.post.config.shafts) {
+      const post = this.post;
+      this._holdOwn(post.scene, () => post.config.shafts, { compile: () => post.compileShafts(this.three), draw: () => post.warmShafts(this.three) });
+    }
+  }
+
+  /** A held compile, then a held warm-up draw (at a menu), of work that compiles and draws itself (`Warmup.own`). */
+  _holdOwn(root: THREE.Object3D, valid: () => boolean, own: OwnWarmup): void {
+    void this._hold(this._compiles, root, valid, false, own).then(() => this._hold(this._warmups, root, valid, false, own));
+  }
+
+  /**
+   * The soft sprites' template compiled and drawn as `post.drawSoft` draws
+   * the pools: in `fxScene` (no lights) with the scene's fog, into the soft
+   * layer, which every soft frame clears before it draws and nothing reads
+   * on another frame. Only the template draws: the pools in the layer's
+   * scene are hidden for it.
+   */
+  _lateWarmup(late: THREE.Group): OwnWarmup {
+    const scene = this.fxScene;
+    return {
+      compile: () => {
+        scene.fog = this.scene.fog;
+        this.three.setRenderTarget(this.post._soft);
+        try {
+          return [...this.three.compile(late, this.camera, scene)];
+        } finally {
+          this.three.setRenderTarget(this.post.target);
+        }
+      },
+      draw: () => {
+        const shown = scene.children.filter(child => child.visible);
+        for (const child of shown) child.visible = false;
+        late.scale.setScalar(1e-5);
+        late.position.copy(this.camera.position);
+        scene.add(late);
+        scene.fog = this.scene.fog;
+        try {
+          this.three.setRenderTarget(this.post._soft);
+          this.three.render(scene, this.camera);
+        } finally {
+          scene.remove(late);
+          late.scale.setScalar(1);
+          late.position.set(0, 0, 0);
+          for (const child of shown) child.visible = true;
+        }
+      },
+    };
   }
 
   /**
@@ -1410,14 +1479,14 @@ export class Renderer {
     if (this._compiles.length === 0 || this._match.quiet(performance.now())) return;
     const target = this.three.getRenderTarget();
     this.three.setRenderTarget(this.post.target);
-    for (const { root, done, valid } of this._compiles.splice(0)) {
+    for (const { root, done, valid, own } of this._compiles.splice(0)) {
       if (!valid()) {
         done();
         continue;
       }
       // three's `compileAsync`, except that a material freed while its program links (Low, a lost
       // context) counts as done: three's own poll throws on it.
-      const materials = [...this.three.compile(root, this.camera, this.scene)];
+      const materials = own ? own.compile() : [...this.three.compile(root, this.camera, this.scene)];
       const linked = () => this._disposed || materials.every(material =>
         (this.three.properties.get(material) as { currentProgram?: { isReady(): boolean } }).currentProgram?.isReady() !== false);
       const poll = () => { if (linked()) done(); else setTimeout(poll, 10); };
@@ -1446,6 +1515,27 @@ export class Renderer {
     const live = this._match.live;
     const list = live ? this._warmups.filter(w => w.inMatch).slice(0, 1) : this._warmups;
     if (list.length === 0 || this._match.quiet(performance.now())) return;
+    const world = list.filter(w => !w.own);
+    if (world.length > 0) this._drawWorldWarmups(world, live);
+    // Then the ones that draw themselves, with no shadow work (their scenes have no lights): the frame's own
+    // render still redraws the maps if this frame does.
+    const own = list.filter(w => w.own);
+    if (own.length > 0) {
+      const shadows = this.three.shadowMap.needsUpdate;
+      this.three.shadowMap.needsUpdate = false;
+      try {
+        for (const warm of own) {
+          warm.own!.draw();
+          warm.drawn = true;
+        }
+      } finally {
+        this.three.shadowMap.needsUpdate = shadows;
+      }
+    }
+  }
+
+  /** `_drawWarmups`' roots that draw in the world pass, in one extra render of the scene. */
+  _drawWorldWarmups(list: Warmup[], live: boolean): void {
     const shown: THREE.Object3D[] = [];
     for (const { root } of list) {
       if (root === this.rig) {
@@ -1679,8 +1769,10 @@ export class Renderer {
     this.sky.position.copy(this.camera.position);
     this._drawWarmups();
     this._updateFx();
-    // The operators follow their figures' pivots and clips, and figures out of view put theirs on.
-    this.camera.updateMatrixWorld();
+    // The operators follow their figures' pivots and clips, and figures out of view put theirs on. They read the
+    // camera's matrices only: its children (the rig, every view model in it) wait for `render`'s scene walk, which
+    // computes them again from the same inputs (three's Camera override keeps `matrixWorldInverse` in step).
+    this.camera.updateWorldMatrix(false, false);
     this.operators.frame(this.camera);
     this.props.update(this.camera);
     this.three.setRenderTarget(this.post.target);
@@ -1702,7 +1794,8 @@ export class Renderer {
       this.post.drawSoft(this.three, this.fxScene, this.camera);
     }
     this.post.draw(this.three, time, fx, this.camera);
-    this._fences.mark(performance.now());
+    // Only the realistic look streams (`gpuBehind`), so only its frames put a fence (a sync object each).
+    if (this._quality.look === 'realistic') this._fences.mark(performance.now());
   }
 }
 

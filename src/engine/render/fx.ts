@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import manifest from './fx-assets.json';
-import { GRID_GLSL, GRID_UNIFORMS, surfMat, unlitMat, withGrid } from './materials';
+import { GRID_GLSL, GRID_UNIFORMS, quietly, surfMat, unlitMat, withGrid } from './materials';
 import { TONE, TONE_HEX } from './palette';
 import { TEXTURE_SIZE } from './surfaces';
 import { textureBytes } from './textures';
@@ -634,19 +634,23 @@ export function wearFx(maps: ReadonlyMap<FxAtlas, THREE.Texture> | null): void {
 // ----------------------------------------------------------------- warm-up
 
 const templates = new Map<string, THREE.Group>();
+const lateTemplates = new Map<string, THREE.Group>();
+const templateKey = (look: 'lowpoly' | 'realistic', soft: boolean): string => (look === 'realistic' ? `${look}-${soft ? 'soft' : 'dither'}` : look);
 /**
- * One mesh of every effect material a look uses (with `soft`, the soft
- * particles' sprites, else the dithered ones), instanced where the pools are,
- * for the renderer to compile and draw once at the menu (render/index.ts
+ * One mesh of every effect material a look uses in the scene pass (without
+ * `soft`, the dithered sprites too), instanced where the pools are, for the
+ * renderer to compile and draw once at the menu (render/index.ts
  * `_warmPrograms`), so a match's first shot, hole or explosion links nothing.
+ * With `soft`, the soft particles' sprites go in `fxLateTemplate` instead:
+ * they draw in the soft layer's scene (no lights, so programs of their own).
  */
 export function fxTemplate(look: 'lowpoly' | 'realistic', soft = false): THREE.Group {
-  const key = look === 'realistic' ? `${look}-${soft ? 'soft' : 'dither'}` : look;
+  const key = templateKey(look, soft);
   let group = templates.get(key);
   if (group) return group;
   group = new THREE.Group();
   group.name = `fx-template-${key}`;
-  const add = (mesh: THREE.Mesh) => { mesh.frustumCulled = false; group!.add(mesh); };
+  const add = (mesh: THREE.Mesh, into = group!) => { mesh.frustumCulled = false; into.add(mesh); };
   const trace = tracerGeometry(1);
   trace.instanceCount = 1;
   add(new THREE.Mesh(trace, tracerMaterial()));
@@ -673,10 +677,16 @@ export function fxTemplate(look: 'lowpoly' | 'realistic', soft = false): THREE.G
   };
   instanced(new THREE.PlaneGeometry(0.01, 0.01), flatDecalMaterial());
   if (look === 'realistic') {
+    // Made without a uuid draw: the template's meshes keep the random draws they had when the soft sprites sat in it.
+    const late = soft ? quietly(() => new THREE.Group()) : group;
+    if (soft) {
+      late.name = `fx-late-template-${key}`;
+      lateTemplates.set(key, late);
+    }
     for (const kind of soft ? ['fire-soft', 'soft'] as const : ['fire', 'dither'] as const) {
       const geometry = spriteGeometry(1);
       geometry.instanceCount = 1;
-      add(new THREE.Mesh(geometry, spriteMaterial(kind)));
+      add(new THREE.Mesh(geometry, spriteMaterial(kind)), late);
     }
     const plane = new THREE.PlaneGeometry(0.01, 0.01);
     plane.setAttribute('decalCell', new THREE.InstancedBufferAttribute(new Float32Array([0, 0, 1, 1]), 4));
@@ -690,6 +700,18 @@ export function fxTemplate(look: 'lowpoly' | 'realistic', soft = false): THREE.G
   }
   templates.set(key, group);
   return group;
+}
+
+/**
+ * The soft particles' sprites (`soft`: High and Ultra's realistic look), one
+ * mesh each as the pools draw them, for the renderer to compile and draw
+ * once at the menu in the soft layer's scene (`Renderer.fxScene`, postfx.ts
+ * `drawSoft`: no lights, the scene's fog), as their first smoke and fire
+ * draw there. Null where there is no soft layer.
+ */
+export function fxLateTemplate(look: 'lowpoly' | 'realistic', soft = false): THREE.Group | null {
+  fxTemplate(look, soft);
+  return lateTemplates.get(templateKey(look, soft)) ?? null;
 }
 
 // ------------------------------------------------------------------ streaming

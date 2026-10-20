@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { CHECK_SHADER_ERRORS, Renderer, roomEnvironment } from '@/engine/render/index';
 import { MATCH_QUIET_MS } from '@/engine/render/pacing';
+import { spriteGeometry, spriteMaterial } from '@/engine/render/fx';
 import { Composite, RIG_DEPTH } from '@/engine/render/postfx';
 import { PRESETS, PRESET_VALUES } from '@/engine/render/quality';
 import { aimShadowBox, cascadeCentre, sizeShadowBox } from '@/engine/render/shadows';
@@ -181,6 +182,56 @@ test('soft particles draw into their own layer; a GPU that renders MSAA straight
 }, 60_000);
 
 // About 2 s alone; beside the suite's streaming tests in the one browser it has taken 14-17 s (c2c96cf's 14).
+test('the soft sprites and the light shafts link at the menu: a first smoke, fire and look at the sun link nothing', async () => {
+  const renderer = makeRenderer(), three = renderer.three;
+  renderer.camera.position.set(0, 1.6, 0);
+  // The pools' draws: one instance of each soft sprite in front of the eye, in the soft layer's scene.
+  const pools = (['soft', 'fire-soft'] as const).map(kind => {
+    const geometry = spriteGeometry(1);
+    geometry.instanceCount = 1;
+    (geometry.getAttribute('iPos') as THREE.InstancedBufferAttribute).setXYZW(0, 0, 1.6, -3, 1);
+    (geometry.getAttribute('iColor') as THREE.InstancedBufferAttribute).setXYZW(0, 1, 1, 1, 1);
+    const mesh = new THREE.Mesh(geometry, spriteMaterial(kind));
+    mesh.frustumCulled = false;
+    mesh.visible = false;
+    renderer.fxScene.add(mesh);
+    cleanup.push(() => geometry.dispose());
+    return mesh;
+  });
+  for (const name of ['high', 'ultra'] as const) {
+    renderer.applyQuality(PRESET_VALUES[name]);
+    expect([renderer._softFx, renderer.post.config.shafts], name).toEqual([true, name === 'ultra']);
+    renderer.post.setShafts(0, new THREE.Vector3(0, 0, -1), new THREE.Color(1, 1, 1));
+    for (const mesh of pools) mesh.visible = false;
+    const targets: unknown[] = [];
+    const setTarget = three.setRenderTarget.bind(three);
+    const spy = vi.spyOn(three, 'setRenderTarget').mockImplementation((target, ...rest) => { targets.push(target); setTarget(target, ...rest); });
+    for (let i = 0; i < 100 && (i < 2 || renderer._compiles.length + renderer._warmups.length > 0); i++) {
+      renderer.render(0, fx);
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    spy.mockRestore();
+    expect(renderer._compiles.length + renderer._warmups.length, name).toBe(0);
+    // The late template drew once in the soft layer (and left its scene as it was); on Ultra the shafts into their spare target.
+    expect(targets, name).toContain(renderer.post._soft);
+    expect(targets.includes(renderer.post._shafts[1]), name).toBe(name === 'ultra');
+    expect(renderer.fxScene.children.length === pools.length && renderer.fxScene.children.every((child, i) => child === pools[i]), name).toBe(true);
+    const programs = three.info.programs!.length;
+    // A fight: smoke and fire in the soft layer, and on Ultra the sun in view with the map's shafts on. A new fog
+    // object (as a shadow relink makes) has three key the sprites' programs again, in the layer's scene.
+    renderer.scene.fog = (renderer.scene.fog as THREE.Fog).clone();
+    for (const mesh of pools) mesh.visible = true;
+    renderer.post.setShafts(1, new THREE.Vector3(0, 0, -1), new THREE.Color(1, 1, 1));
+    const pass = vi.spyOn(renderer.post, '_pass');
+    renderer.render(0, fx);
+    const drawn = pass.mock.calls.map(([, material]) => material.name);
+    pass.mockRestore();
+    expect(drawn.includes('post:shaft-mask') && drawn.includes('post:shaft-blur'), name).toBe(name === 'ultra');
+    expect(three.info.programs!.length, name).toBe(programs);
+  }
+  expect(three.getContext().getError()).toBe(three.getContext().NO_ERROR);
+}, 60_000);
+
 test('dynamic resolution only moves viewports, a pass switched off frees its targets, and dispose frees them all', () => {
   const three = new THREE.WebGLRenderer({ canvas: document.createElement('canvas') });
   cleanup.push(() => { three.dispose(); three.forceContextLoss(); });

@@ -1096,6 +1096,43 @@ export class Composite {
     return (1 - t * t * (3 - 2 * t)) * facing;
   }
 
+  /**
+   * The light shafts' programs, compiled as `_pass` draws them (the
+   * triangle in this pass scene: no lights, no fog, into a target), for the
+   * renderer to link at a menu (render/index.ts `_warmPrograms`): the sun
+   * may be out of view all through a load, so a match's first look at it
+   * would link them. Returns the materials, as `three.compile` does.
+   */
+  compileShafts(renderer: THREE.WebGLRenderer): THREE.Material[] {
+    const triangle = this.triangle, material = triangle.material, materials: THREE.Material[] = [];
+    try {
+      for (const pass of [this._shaftMask, this._shaftBlur]) {
+        triangle.material = pass;
+        materials.push(...renderer.compile(this.scene, this.camera));
+      }
+    } finally {
+      triangle.material = material;
+    }
+    return materials;
+  }
+
+  /**
+   * The shafts' passes drawn once where nothing reads them (the blur's spare
+   * target, which every shaft frame clears and writes before it reads it),
+   * so a match's first shaft frame pays no program's first draw either.
+   */
+  warmShafts(renderer: THREE.WebGLRenderer): void {
+    const [rays, spare] = this._shafts, blur = this._shaftBlurUniforms, image = blur.image.value, material = this.triangle.material;
+    try {
+      this._pass(renderer, this._shaftMask, spare);
+      blur.image.value = rays.texture;
+      this._pass(renderer, this._shaftBlur, spare);
+    } finally {
+      blur.image.value = image;
+      this.triangle.material = material;
+    }
+  }
+
   /** The realistic look's exposure (a linear multiplier); Low has none. */
   setExposure(exposure: number): void {
     this._exposure = exposure;

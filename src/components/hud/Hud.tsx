@@ -12,10 +12,10 @@ import type {
   MouseEvent as ReactMouseEvent,
   ReactNode,
 } from 'react';
-import type { DamageMark, HudStore, KillLine as KillLineState } from '@/engine/hud/store';
+import type { DamageMark, HealthState, HudStore, KillLine as KillLineState } from '@/engine/hud/store';
 import { Bold, BoardPanel, PvpPanel, Screen, SCREEN_TITLE_ID } from './Screens';
 import { InstallPrompt } from './InstallPrompt';
-import { useHud } from './useHud';
+import { useHud, useHudSelect } from './useHud';
 import { OPTIC_COLOR } from '@/engine/render/palette';
 
 declare global {
@@ -30,13 +30,20 @@ const rendered = (): void => {
 
 interface HudProps { store: HudStore; children?: ReactNode }
 
+/** The root re-renders (with its ~25 children's memo checks) only when the low-health flag flips, not on each HP change. */
+const lowHealthOf = (health: HealthState): boolean => health.low;
+
+/** One reduced-motion query for every hit, made on the first. */
+let reducedMotion: MediaQueryList | null = null;
+const prefersReducedMotion = (): boolean => (reducedMotion ??= matchMedia('(prefers-reduced-motion: reduce)')).matches;
+
 export function Hud({ store, children }: HudProps) {
   rendered();
   const rootRef = useRef<HTMLDivElement>(null);
   const gameplay = useHud(store, 'gameplay');
   const device = useHud(store, 'device');
   const mobile = useHud(store, 'mobile');
-  const health = useHud(store, 'health');
+  const lowHealth = useHudSelect(store, 'health', lowHealthOf);
   const screen = useHud(store, 'screen');
   const disposed = useSyncExternalStore(store.subscribeLifecycle, store.isDisposed, store.isDisposed);
 
@@ -50,7 +57,7 @@ export function Hud({ store, children }: HudProps) {
     !gameplay && 'no-gameplay',
     device && 'gamepad',
     mobile.active && 'touch-mode',
-    health.low && 'low-health',
+    lowHealth && 'low-health',
     screen !== null && 'screen-open',
   ].filter(Boolean).join(' ');
 
@@ -98,7 +105,7 @@ export const Crosshair = memo(function Crosshair({ store }: { store: HudStore })
   rendered();
   const state = useHud(store, 'crosshair');
   return (
-    <div className={`crosshair${state.melee ? ' melee' : ''}${state.ads ? ' ads' : ''}`} data-hud="crosshair" aria-hidden="true">
+    <div ref={store.hostRef('--spread')} className={`crosshair${state.melee ? ' melee' : ''}${state.ads ? ' ads' : ''}`} data-hud="crosshair" aria-hidden="true">
       <i className="tick top" /><i className="tick bottom" /><i className="tick left" /><i className="tick right" /><i className="dot" />
     </div>
   );
@@ -111,7 +118,7 @@ export const Health = memo(function Health({ store }: { store: HudStore }) {
   return (
     <div className="health-row">
       <span>HP</span>
-      <div className="health-track" data-hud="health" role="meter" aria-label="Health" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-valuetext={`${state.hp} of ${state.max} HP`}><div data-hud="healthFill" /></div>
+      <div className="health-track" data-hud="health" role="meter" aria-label="Health" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-valuetext={`${state.hp} of ${state.max} HP`}><div ref={store.hostRef('--health')} data-hud="healthFill" /></div>
       <strong data-hud="hp">{state.hp}</strong>
     </div>
   );
@@ -201,7 +208,7 @@ export const Boss = memo(function Boss({ store }: { store: HudStore }) {
   rendered();
   const state = useHud(store, 'boss');
   const shown = state.name !== null;
-  return <div className={`boss-bar${shown ? ' is-visible' : ''}`} data-hud="boss" aria-hidden={!shown}><div className="boss-name" data-hud="bossName">{state.name ?? ''}</div><div className="boss-track"><div data-hud="bossFill" /></div></div>;
+  return <div className={`boss-bar${shown ? ' is-visible' : ''}`} data-hud="boss" aria-hidden={!shown}><div className="boss-name" data-hud="bossName">{state.name ?? ''}</div><div className="boss-track"><div ref={store.hostRef('--boss')} data-hud="bossFill" /></div></div>;
 });
 
 export const FocusMeter = memo(function FocusMeter({ store }: { store: HudStore }) {
@@ -210,7 +217,7 @@ export const FocusMeter = memo(function FocusMeter({ store }: { store: HudStore 
   return (
     <div className={`focus-meter${state.show ? ' is-visible' : ''}${state.ready ? ' ready' : ''}`} data-hud="focusMeter" aria-hidden={!state.show}>
       <div className="focus-label" data-hud="focusLabel">{state.label}</div>
-      <div className="focus-tube"><div className="focus-fill" data-hud="focusFill" /><div className="focus-flames"><i /><i /><i /></div></div>
+      <div className="focus-tube"><div ref={store.hostRef('--focus')} className="focus-fill" data-hud="focusFill" /><div className="focus-flames"><i /><i /><i /></div></div>
       <div className="focus-ready">EXECUTE READY</div>
     </div>
   );
@@ -220,7 +227,7 @@ export const Stragglers = memo(function Stragglers({ store }: { store: HudStore 
   rendered();
   const count = useHud(store, 'stragglers');
   return <div className="stragglers" data-hud="stragglers" aria-hidden="true">
-    {Array.from({ length: count }, (_, i) => <i key={i} style={{ transform: `var(--straggler-${i})` }} />)}
+    {Array.from({ length: count }, (_, i) => <i key={i} ref={store.hostRef(`--straggler-${i}`)} style={{ transform: `var(--straggler-${i})` }} />)}
   </div>;
 });
 
@@ -228,7 +235,7 @@ export const SquadMarks = memo(function SquadMarks({ store }: { store: HudStore 
   rendered();
   const labels = useHud(store, 'marks');
   return <div className="squad-marks" data-hud="marks" aria-hidden="true">
-    {labels.map((label, i) => <i key={i} style={{ transform: `var(--mark-${i})` }}><span>{label}</span></i>)}
+    {labels.map((label, i) => <i key={i} ref={store.hostRef(`--mark-${i}`)} style={{ transform: `var(--mark-${i})` }}><span>{label}</span></i>)}
   </div>;
 });
 
@@ -237,7 +244,7 @@ export const ExecMarks = memo(function ExecMarks({ store }: { store: HudStore })
   rendered();
   const marks = useHud(store, 'execMarks');
   return <div className="exec-marks" data-hud="execMarks" aria-hidden="true">
-    {marks.map((n, i) => <div key={i} className={`exec-mark${n ? ' locked' : ''}`} style={{ transform: `var(--exec-${i})` }}>
+    {marks.map((n, i) => <div key={i} ref={store.hostRef(`--exec-${i}`)} className={`exec-mark${n ? ' locked' : ''}`} style={{ transform: `var(--exec-${i})` }}>
       <i /><i /><i /><i />{n ? <span>{n}</span> : null}
     </div>)}
   </div>;
@@ -246,7 +253,7 @@ export const ExecMarks = memo(function ExecMarks({ store }: { store: HudStore })
 export const Breath = memo(function Breath({ store }: { store: HudStore }) {
   rendered();
   const state = useHud(store, 'breath');
-  return <div className={`grapple-breath${state.low ? ' low' : ''}`} data-hud="breath" hidden={!state.shown} aria-label="Grapple breath" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={state.percent}><div data-hud="breathFill" /></div>;
+  return <div className={`grapple-breath${state.low ? ' low' : ''}`} data-hud="breath" hidden={!state.shown} aria-label="Grapple breath" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={state.percent}><div ref={store.hostRef('--breath')} data-hud="breathFill" /></div>;
 });
 
 export const Scope = memo(function Scope({ store }: { store: HudStore }) {
@@ -386,7 +393,7 @@ export const Hitmarker = memo(function Hitmarker({ store }: { store: HudStore })
   const ref = useRef<SVGSVGElement>(null), killRef = useRef<SVGSVGElement>(null);
   useEffect(() => {
     if (state.nonce === 0) return;
-    const scale = matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 1.15;
+    const scale = prefersReducedMotion() ? 1 : 1.15;
     const animation = ref.current?.animate([
       { opacity: 1, transform: `translate(-50%, -50%) scale(${scale})` },
       { opacity: 0, transform: 'translate(-50%, -50%) scale(1)' },
