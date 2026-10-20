@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { CHECK_SHADER_ERRORS, Renderer, roomEnvironment } from '@/engine/render/index';
+import { CHECK_SHADER_ERRORS, Renderer, SLOT_BYTES, UPLOAD_GAP_MS, roomEnvironment } from '@/engine/render/index';
 import { MATCH_QUIET_MS } from '@/engine/render/pacing';
 import { spriteGeometry, spriteMaterial } from '@/engine/render/fx';
 import { bladeBlood } from '@/engine/render/blade-blood';
@@ -651,6 +651,65 @@ test('a sky that lands after the map, the look or the renderer changed is freed'
   await settle();
   expect(late.freed()).toBe(true);
   expect(renderer._skyAssets).toBeNull();
+});
+
+test('an upload slot packs small items up to SLOT_BYTES across streams; a big one goes alone; a slow upload backs off', () => {
+  const renderer = makeRenderer();
+  let clock = 1000;
+  const now = vi.spyOn(performance, 'now').mockImplementation(() => clock);
+  cleanup.push(() => now.mockRestore());
+  const queue = (sizes: number[], cost = 0) => {
+    const left = [...sizes], sent: number[] = [];
+    const pump = (limit: number) => {
+      const next = left[0];
+      if (next === undefined || next > limit) return 0;
+      left.shift();
+      sent.push(next);
+      clock += cost;
+      return next;
+    };
+    return { sent, pump };
+  };
+  const small = SLOT_BYTES / 4, big = 2 * SLOT_BYTES;
+  const slot = (frame: number, ...pumps: ((limit: number) => number)[]) => {
+    renderer._frame = frame;
+    for (const pump of pumps) renderer._upload(pump);
+  };
+  renderer._uploadPace = 1;
+  renderer._uploadAt = 0;
+  // Three small maps of one stream and the first of the next fill a slot; the gap after it is one gap.
+  const a = queue([small, small, small]), b = queue([small, small, small]);
+  slot(1, a.pump, b.pump);
+  expect([a.sent.length, b.sent.length]).toEqual([3, 1]);
+  expect(renderer._uploadAt).toBe(1000 + UPLOAD_GAP_MS);
+  // Nothing more before the gap is out, in this frame or the next.
+  slot(1, b.pump);
+  slot(2, b.pump);
+  expect(b.sent.length).toBe(1);
+  // A big map goes alone at the start of a slot, the gap after it follows its bytes, and a big map
+  // behind a small one waits for the next slot.
+  const c = queue([big, small, big]);
+  clock = 2000;
+  slot(3, c.pump, b.pump);
+  expect([c.sent, b.sent.length]).toEqual([[big], 1]);
+  expect(renderer._uploadAt).toBeCloseTo(2000 + big / 6e4);
+  clock = 3000;
+  slot(4, c.pump);
+  expect(c.sent).toEqual([big, small]);
+  clock = 4000;
+  slot(5, c.pump);
+  expect(c.sent).toEqual([big, small, big]);
+  // Uploads stop joining once the slot has spent `SLOT_PACK_MS` (2 ms) uploading.
+  const d = queue([small, small, small], 1.5);
+  clock = 5000;
+  slot(6, d.pump);
+  expect(d.sent.length).toBe(2);
+  // An upload slower than 4 ms doubles the pace and closes the slot.
+  const e = queue([small, small], 5);
+  clock = 6000;
+  slot(7, e.pump, b.pump);
+  expect([e.sent.length, b.sent.length, renderer._uploadPace]).toEqual([1, 1, 2]);
+  expect(renderer._uploadAt).toBe(6000 + 2 * UPLOAD_GAP_MS);
 });
 
 test('a sky that lands in a match waits out its quiet start, then goes on a step a frame', async () => {
