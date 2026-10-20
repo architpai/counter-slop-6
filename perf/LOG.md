@@ -1656,6 +1656,65 @@ the final src/ and tests/ (second run; the first lost the pacing test above).
 **Power**: 30 W adapter, every timed job started on AC at ≥ 50 % (the measure at 47 %), none voided; battery 50 → 46 %
 per ~10 min per-map run; the other Chrome at 70-102 % CPU.
 
+## MSI step 1 — second benchmark machine (Linux, RTX 4090): setup, Round 0 → final, bottleneck survey
+
+Full report: **`perf/results/msi-s1.md`**; printed A/B output `perf/results/msi-s1-ab.md`; power and throttle samples
+`perf/results/msi-s1-power.log`; pre-state `perf/results/msi-prestate.txt`. Harness commit `36cc1aa` (Mac defaults
+unchanged). No game change.
+
+**Setup.** MSI (`ssh msi`): Ubuntu 26.04, i9-14900HX, RTX 4090 Laptop (driver 595.91.07), headless tty. Everything in
+`/home/fleet/perf-scratch-shooter` (`source perf/msi-env.sh`: HOME, TMPDIR, XDG, npm, Playwright, NVIDIA/Mesa shader
+caches, an unpacked zsh for `ab.sh`). Chrome Headless Shell 153.0.8010.12 (the Mac's build). **Backend: ANGLE GL on
+the NVIDIA EGL driver** (`PERF_GPU_ARGS='--use-gl=angle --use-angle=gl-egl'`,
+`__EGL_VENDOR_LIBRARY_FILENAMES=…/10_nvidia.json`; without it the same flags pick the Intel iGPU); `PERF_GPU_EXPECT`
+fails any cell whose WebGL renderer is not the 4090. ANGLE Vulkan (`--enable-features=VulkanFromANGLE`) also works.
+Power gate `perf/powered-linux.sh` (AC, start ≥ 50 %, void < 35 %; GPU/CPU clocks, temperatures, throttle events every
+60 s). The GPU timer fails the calibration here too.
+
+**Quality** (MSI's own baseline): two final captures byte-identical (56/56); `compare msi-baseline msi-final` PASS
+56/56, SSIM 1.0000; Low/High/Ultra byte-identical, Medium 45 px (1-3/255) in 6 images, all from Round 4 (`cad1329`;
+"AO alpha only with AO" or `g` on Medium's shadow filter; not split). Round 1, which moved Metal's pixels, is exact here.
+
+**Round 0 → final** (same protocol as Round 10 PART B; `msib-<map>` x 4, 96 pairs, `msil`, sweeps, measure):
+
+| final vs Round 0 | low | medium | high | ultra | all |
+|---|---|---|---|---|---|
+| frame mean | 0.913 → 0.819 (**-10.3 %**) | 1.481 → 1.213 (**-18.1 %**) | 1.701 → 1.363 (**-19.8 %**) | 1.959 → 1.553 (**-20.7 %**) | -17.3 % |
+| frame median / p95 / p99 | -10.2 / -11.7 / -12.5 % | -16.5 / -17.7 / -28.2 % | -17.6 / -20.0 / -16.5 % | -19.6 / -27.1 / -13.4 % | -16.0 / -19.3 / -17.9 % |
+| fight / path frame mean | -12.1 / -8.4 % | -20.4 / -15.7 % | -22.9 / -16.7 % | -23.6 / -17.7 % | -19.9 / -14.7 % |
+| final faster in | 22/24 | 24/24 | 24/24 | 24/24 | 94/96 |
+| control headB/head (mean) | -2.4 % | -1.3 % | +0.3 % | -0.9 % | -1.1 % |
+| ready | -7.9 % | -21.9 % | -21.5 % | -8.0 % | |
+| programs after ready (sweep) | 4-8 → 0 | 5-9 → 0 | 7-11 → 0 | 7-13 → 0 | |
+| first-fight max frame | ~equal (no compile) | ~equal | 34.7-37.3 → 8.3-13.5 ms | 35.5-36.9 → 8.0-17.7 ms | |
+| Mac frame mean (SUMMARY.md) | -5.4 % | -20.4 % | -17.8 % | -20.4 % | -16.2 % |
+
+Training gains most (-29 to -35 % on realistic presets). Counts and every fight state hash equal the Mac's. First
+playable gains less than on the Mac (-4 to -8 % vs -18 to -20 %): Round 0's `new AudioContext()` costs ~36 ms here, not
+~100 ms.
+
+**Bottleneck** (traced `msi-survey` and `msi-profile`, downtown + training): every fight and the training paths are
+bound by the renderer main thread (`main/frame` 0.99-1.17, no command-buffer waits; no pass ablation moves a fight);
+downtown's realistic paths by the GPU-process thread (`gpuProc/frame` 0.97-0.98). Main thread per fight frame: render
+of the main pass 0.4-0.9 ms, shadows 0.07-0.51, outside rAF ~0.5 (tasks, one style recalc, layout), enemies 0.12-0.25,
+render.pre 0.11-0.15 (realistic), GC ~0.01.
+
+**Candidates for step 2** (ranked, reasons in `msi-s1.md` section 7): cpuhm on Medium/High, matrix, HUD/outside-rAF
+(hud2 and new), low1, clips, C1, render.pre (new), fence, opaque (downtown paths), dr; Ultra slot budget (load, user's
+consent). Not here: the GPU-side ideas (A8/dsd, b-bones, GTAO trims, B4-B6, shadow formats).
+
+### Gotchas (MSI)
+
+- **Read means.** Frames are 0.3-2.7 ms and `performance.now()` is 0.1 ms-coarse: medians move in 0.1 ms steps.
+- **GL-EGL path stalls**: ~1 % of realistic outdoor path frames are 9-18 ms (main thread waiting on the command
+  buffer); ANGLE Vulkan has the same means without them. Do not judge path p99 on GL-EGL.
+- **CPU thermal throttling is constant** under load (package 82-98 °C, ~2,000-3,600 core throttle events per minute):
+  paired, interleaved runs only; the HEAD/HEAD control per preset is ±1-2.4 % on aggregates, up to ±7 % per map on Low.
+- **Cold compiles**: the NVIDIA shader disk cache persists across launches (in `$S/nv-cache`): prime it for every arm
+  before load A/Bs; set `__GL_SHADER_DISK_CACHE=0` for hitch work.
+- `apt-get download` + `dpkg -x` gives tools without installing (zsh in `$S/sysroot`); sync the repository with git
+  bundles, never by copying files.
+
 ## Tried / rejected ideas
 
 Format: round, idea, where, result numbers vs the noise floor, why rejected.
