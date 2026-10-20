@@ -1,0 +1,308 @@
+diff --git a/src/engine/render/index.ts b/src/engine/render/index.ts
+index d4a6d17..2367e65 100644
+--- a/src/engine/render/index.ts
++++ b/src/engine/render/index.ts
+@@ -21,7 +21,7 @@ import { BakeStreamer, TextureStreamer, fetchGrid, ktx2Loader, lightmapLoader, w
+ import { WeaponAssets, weaponTextureSize } from './weapons';
+ import { FX_UNIFORMS, FxAssets, fxLateTemplate, fxTemplate, fxTextureSize } from './fx';
+ import { useOperatorSource, usePropSource } from './figure';
+-import { OperatorAssets, disposeSkinnedDepthProbe, operatorWant, skinnedDepthProbe } from './operators';
++import { OperatorAssets, disposeOperatorProbe, disposeSkinnedDepthProbe, operatorProbe, operatorWant, skinnedDepthProbe } from './operators';
+ import { PropAssets, dressingSets, propTextureSize } from './props';
+ import type { PostFX } from './postfx';
+ import type { SkyUniforms } from './materials';
+@@ -292,6 +292,8 @@ export class Renderer {
+   /** This renderer's skinned depth probe (render/operators.ts `skinnedDepthProbe`): made at its first realistic menu
+    * warm-up, freed in `dispose`. Not shared, so one renderer's dispose cannot free a probe another has queued. */
+   _depthProbe: THREE.SkinnedMesh | null = null;
++  /** This renderer's operator probe (render/operators.ts `operatorProbe`): made and freed as `_depthProbe` is. */
++  _operatorProbe: THREE.Group | null = null;
+   /** Dynamic resolution's share of the render-scaled target, per axis. */
+   _dynamicScale = 1;
+   /** Shadow boxes in force; null is Low's box centred on the eye. */
+@@ -1445,7 +1447,12 @@ export class Renderer {
+     void this._hold(this._compiles, this.rig, () => true).then(() => this._hold(this._warmups, this.rig, () => true));
+     void this._hold(this._warmups, SHADOW_PROBE, () => true);
+     // The worn operators' skinned shadow program, which their glb's compile does not link (realistic tiers).
+-    if (operatorWant(this._quality) !== null) void this._hold(this._warmups, this._depthProbe ??= skinnedDepthProbe(), () => true);
++    // And their two main-pass programs (a body's, a torn-off limb's), which their glb's compile links in a match when it lands after Start.
++    if (operatorWant(this._quality) !== null) {
++      void this._hold(this._warmups, this._depthProbe ??= skinnedDepthProbe(), () => true);
++      const operators = this._operatorProbe ??= operatorProbe();
++      void this._hold(this._compiles, operators, () => true).then(() => this._hold(this._warmups, operators, () => true));
++    }
+     const probe = this._skyProbe;
+     if (this._quality.look === 'realistic') void this._hold(this._compiles, probe, () => true).then(() => this._hold(this._warmups, probe, () => true));
+     // The effects' programs (R5): tracers and flat decals on every look, the realistic sprites, decals, casings and flashes too.
+@@ -1766,6 +1773,8 @@ export class Renderer {
+     this.operators.clear();
+     if (this._depthProbe) disposeSkinnedDepthProbe(this._depthProbe);
+     this._depthProbe = null;
++    if (this._operatorProbe) disposeOperatorProbe(this._operatorProbe);
++    this._operatorProbe = null;
+     this.fx.clear();
+     this.props.clear();
+     this._setFxLights(0);
+diff --git a/src/engine/render/materials.ts b/src/engine/render/materials.ts
+index b630b47..94b2393 100644
+--- a/src/engine/render/materials.ts
++++ b/src/engine/render/materials.ts
+@@ -535,6 +535,23 @@ export function operatorMaterial(set: string): THREE.MeshStandardMaterial {
+   return material;
+ }
+ 
++/**
++ * A new material as `operatorMaterial` (the same patch, parameters and key, so the same programs) on its own 1 × 1
++ * maps, for a probe that links the worn operators' programs at the menu (render/operators.ts `operatorProbe`). Not
++ * `operatorMaterial` itself: that one wears the weapons' stand-in maps, which its first call makes (with their uuid
++ * draws). Make it under `quietly`.
++ */
++export function operatorTwin(): THREE.MeshStandardMaterial {
++  const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 1, aoMapIntensity: OPERATOR_AO.withGtao });
++  material.name = 'operator-probe';
++  material.onBeforeCompile = operatorShader;
++  material.customProgramCacheKey = operatorKey;
++  wearMaps(material, {
++    albedo: pixel(0.5, 0.5, 0.5, THREE.SRGBColorSpace), normal: pixel(0.5, 0.5, 1, THREE.NoColorSpace), orm: pixel(1, 0.6, 0, THREE.NoColorSpace),
++  });
++  return material;
++}
++
+ /** A character, operator or prop material, which a figure copies to tint (`ownMaterial`). */
+ export function tintable(material: THREE.Material): boolean {
+   return material.onBeforeCompile === characterShader || material.onBeforeCompile === propShader || material.onBeforeCompile === operatorShader;
+diff --git a/src/engine/render/operators.ts b/src/engine/render/operators.ts
+index bb51d29..ebaebba 100644
+--- a/src/engine/render/operators.ts
++++ b/src/engine/render/operators.ts
+@@ -1,6 +1,6 @@
+ import * as THREE from 'three';
+ import manifest from './operator-assets.json';
+-import { OPERATOR_AO, levelDepthMat, levelDepthSkinnedMat, levelDepthTwin, operatorMaterial, quietly, twinMaterial, wearMaps } from './materials';
++import { OPERATOR_AO, levelDepthMat, levelDepthSkinnedMat, levelDepthTwin, operatorMaterial, operatorTwin, quietly, twinMaterial, wearMaps } from './materials';
+ import { ClipLibrary, LOOPS, ONE_SHOTS, type ClipGroup, type OperatorMotion } from './operator-motion';
+ import { ANISOTROPY, TEXTURE_MAPS, TEXTURE_SIZE } from './surfaces';
+ import { textureBytes } from './textures';
+@@ -108,6 +108,52 @@ export function disposeSkinnedDepthProbe(probe: THREE.SkinnedMesh): void {
+   probe.skeleton.dispose();
+ }
+ 
++/**
++ * A probe for the menu's warm-up (render/index.ts `_warmPrograms`, realistic tiers) that links the worn operators'
++ * two main-pass programs there: a body's (skinned) and a torn-off limb's (rigid), on `operatorTwin` (the same patch,
++ * parameters and key as `operatorMaterial`). A glb that lands in a match (after Start) linked them in its held
++ * compile, in a match frame; with these linked at the menu its compile finds them. Its geometry has the glb's
++ * attributes in its quantised formats (KHR_mesh_quantization, as its loader gives them: positions normalised int16
++ * and normals normalised int8 in 4-component strides, uv normalised uint16, colours normalised uint8 RGBA, joints
++ * uint8, weights normalised uint8, `fx` float), so the warm-up's draws take a body's vertex formats too. It draws
++ * nothing: every position and skin weight is zero, so each triangle has no area (no fragment). It casts no shadow
++ * (`skinnedDepthProbe` links that program). A new one each call (each renderer owns one: `Renderer._operatorProbe`),
++ * without a uuid draw (`quietly`).
++ */
++export function operatorProbe(): THREE.Group {
++  return quietly(() => {
++    const geometry = new THREE.BufferGeometry();
++    geometry.setAttribute('position', new THREE.InterleavedBufferAttribute(new THREE.InterleavedBuffer(new Int16Array(12), 4), 3, 0, true));
++    geometry.setAttribute('normal', new THREE.InterleavedBufferAttribute(new THREE.InterleavedBuffer(new Int8Array(12), 4), 3, 0, true));
++    geometry.setAttribute('uv', new THREE.BufferAttribute(new Uint16Array(6), 2, true));
++    geometry.setAttribute('color', new THREE.BufferAttribute(new Uint8Array(12), 4, true));
++    geometry.setAttribute('skinIndex', new THREE.BufferAttribute(new Uint8Array(12), 4));
++    geometry.setAttribute('skinWeight', new THREE.BufferAttribute(new Uint8Array(12), 4, true));
++    geometry.setAttribute('fx', new THREE.BufferAttribute(new Float32Array(3), 1));
++    const material = operatorTwin();
++    const body = new THREE.SkinnedMesh(geometry, material);
++    body.name = 'operator-probe-body';
++    body.bind(new THREE.Skeleton([new THREE.Bone()]));
++    body.skeleton.computeBoneTexture();
++    const limb = new THREE.Mesh(geometry, material);
++    limb.name = 'operator-probe-limb';
++    const probe = new THREE.Group();
++    probe.name = 'operator-probe';
++    probe.add(body, limb);
++    return probe;
++  });
++}
++
++/** Frees an `operatorProbe` (render/index.ts `Renderer.dispose`, for the renderer's own probe): its geometry,
++ * material, maps and bone texture. */
++export function disposeOperatorProbe(probe: THREE.Group): void {
++  const body = probe.children[0] as THREE.SkinnedMesh, material = body.material as THREE.MeshStandardMaterial;
++  body.geometry.dispose();
++  for (const map of new Set([material.map, material.normalMap, material.roughnessMap])) map?.dispose();
++  material.dispose();
++  body.skeleton.dispose();
++}
++
+ /** What a tier downloads for its characters: its glb and every set's maps at its size. */
+ export function operatorDownloadBytes(lod: OperatorLod, size: TextureSize): number {
+   return OPERATOR_SETS.reduce((sum, set) => sum + OPERATOR_MANIFEST.sets[set]!.bytes[`${size}`]!.reduce((a, b) => a + b, 0), OPERATOR_MANIFEST.glb[lod]);
+diff --git a/tests/operator-probe.test.ts b/tests/operator-probe.test.ts
+new file mode 100644
+index 0000000..0dbe908
+--- /dev/null
++++ b/tests/operator-probe.test.ts
+@@ -0,0 +1,164 @@
++import { afterEach, expect, test, vi } from 'vitest';
++import * as THREE from 'three';
++import { Renderer } from '@/engine/render/index';
++import { operatorMaterial } from '@/engine/render/materials';
++import { operatorProbe } from '@/engine/render/operators';
++import { PRESET_VALUES } from '@/engine/render/quality';
++
++// Round 10: the worn operators' two main-pass programs (a body's, skinned; a torn-off limb's, rigid) are linked and
++// first drawn at the menu (`operatorProbe`, `_warmPrograms`), not in the held compile of a glb that lands in a match.
++
++const fx = { hurt: 0, flash: 0, slow: 0, lowHp: 0 };
++const cleanup: (() => void)[] = [];
++afterEach(() => { for (const done of cleanup.splice(0)) done(); });
++
++function makeRenderer(): Renderer {
++  const canvas = document.createElement('canvas');
++  document.body.append(canvas);
++  const renderer = new Renderer(canvas);
++  cleanup.push(() => { renderer.dispose(); canvas.remove(); });
++  return renderer;
++}
++
++/** A body's mesh and a torn-off limb's as the glb gives them (KHR_mesh_quantization's layout), on `material`. */
++function operatorMeshes(material: THREE.Material): THREE.Group {
++  const geometry = new THREE.BufferGeometry();
++  geometry.setAttribute('position', new THREE.InterleavedBufferAttribute(new THREE.InterleavedBuffer(new Int16Array([0, 0, 0, 0, 9000, 0, 0, 0, 0, 9000, 0, 0]), 4), 3, 0, true));
++  geometry.setAttribute('normal', new THREE.InterleavedBufferAttribute(new THREE.InterleavedBuffer(new Int8Array([0, 0, 127, 0, 0, 0, 127, 0, 0, 0, 127, 0]), 4), 3, 0, true));
++  geometry.setAttribute('uv', new THREE.BufferAttribute(new Uint16Array(6), 2, true));
++  geometry.setAttribute('color', new THREE.BufferAttribute(new Uint8Array(12).fill(200), 4, true));
++  geometry.setAttribute('skinIndex', new THREE.BufferAttribute(new Uint8Array(12), 4));
++  geometry.setAttribute('skinWeight', new THREE.BufferAttribute(new Uint8Array([255, 0, 0, 0, 255, 0, 0, 0, 255, 0, 0, 0]), 4, true));
++  geometry.setAttribute('fx', new THREE.BufferAttribute(new Float32Array(3), 1));
++  const body = new THREE.SkinnedMesh(geometry, material);
++  body.bind(new THREE.Skeleton([new THREE.Bone()]), new THREE.Matrix4());
++  body.castShadow = body.receiveShadow = true;
++  const limb = new THREE.Mesh(geometry, material);
++  limb.castShadow = limb.receiveShadow = true;
++  const group = new THREE.Group();
++  group.add(body, limb);
++  return group;
++}
++
++test('the operator probe: made without a random draw and with its own maps, drawn with no area, on the operators\' patch and key', () => {
++  // This file's first calls (each browser test file has its own module state): the weapons' stand-in maps are not made yet.
++  const random = vi.spyOn(Math, 'random');
++  const probe = operatorProbe();
++  const other = operatorProbe();
++  expect(other).not.toBe(probe);
++  expect(random).not.toHaveBeenCalled();
++  // `operatorMaterial`'s first call still makes the weapons' stand-in maps with their uuid draws (8 for each of its 3
++  // maps: albedo, flat normal, ORM, a texture and its source), as with no probe: its second call draws 24 fewer.
++  const real = operatorMaterial('operator');
++  const first = random.mock.calls.length;
++  operatorMaterial('operator').dispose();
++  expect(first - (random.mock.calls.length - first)).toBe(24);
++  random.mockRestore();
++  const [body, limb] = probe.children as [THREE.SkinnedMesh, THREE.Mesh];
++  expect(body).toBeInstanceOf(THREE.SkinnedMesh);
++  expect(limb).not.toBeInstanceOf(THREE.SkinnedMesh);
++  expect(limb.geometry).toBe(body.geometry);
++  const { geometry } = body;
++  const weights = geometry.getAttribute('skinWeight') as THREE.BufferAttribute;
++  expect([...weights.array].every(w => w === 0)).toBe(true);
++  // Every vertex is at the origin, skinned or not: no triangle has an area.
++  const position = geometry.getAttribute('position');
++  for (let i = 0; i < position.count; i++) {
++    const vertex = new THREE.Vector3().fromBufferAttribute(position, i);
++    expect(vertex.toArray()).toEqual([0, 0, 0]);
++    expect(body.applyBoneTransform(i, vertex.clone()).toArray()).toEqual([0, 0, 0]);
++  }
++  expect(Object.keys(geometry.attributes).sort()).toEqual(['color', 'fx', 'normal', 'position', 'skinIndex', 'skinWeight', 'uv']);
++  expect(geometry.getAttribute('color').itemSize).toBe(4);
++  const material = body.material as THREE.MeshStandardMaterial;
++  expect(limb.material).toBe(material);
++  expect(material).not.toBe(real);
++  expect(material.onBeforeCompile).toBe(real.onBeforeCompile);
++  expect(material.customProgramCacheKey).toBe(real.customProgramCacheKey);
++  expect(material.customProgramCacheKey()).toBe(real.customProgramCacheKey());
++  expect([material.vertexColors, material.side, material.normalMapType]).toEqual([real.vertexColors, real.side, real.normalMapType]);
++  // Its own maps, one ORM texture in the three slots (the packed, shared-uv key), none of the weapons' stand-ins.
++  expect(material.aoMap).toBe(material.roughnessMap);
++  expect(material.metalnessMap).toBe(material.roughnessMap);
++  for (const slot of ['map', 'normalMap', 'roughnessMap'] as const) {
++    expect(material[slot]).not.toBeNull();
++    expect(material[slot]).not.toBe(real[slot]);
++  }
++  expect([body.castShadow, limb.castShadow]).toEqual([false, false]);
++});
++
++test('the menu warm-up links the operators\' main-pass programs on the realistic tiers: a worn body and limb then link none', async () => {
++  const renderer = makeRenderer();
++  const queued = () => renderer._operatorProbe !== null
++    && [...renderer._compiles, ...renderer._warmups].some(w => w.root === renderer._operatorProbe);
++  // The held compiles resolve once their programs have linked (a timer poll), and queue the warm-up draws then.
++  const warm = async () => {
++    for (let i = 0; i < 200 && (renderer._compiles.length > 0 || renderer._warmups.length > 0 || !renderer._programsWarm || queued()); i++) {
++      renderer.render(0, fx);
++      await new Promise(resolve => setTimeout(resolve, 10));
++    }
++    expect(renderer._compiles).toEqual([]);
++    expect(renderer._warmups).toEqual([]);
++    expect(renderer._operatorProbe?.parent ?? null, 'the probe out of the scene after its draw').toBeNull();
++  };
++  renderer.applyQuality(PRESET_VALUES.low);
++  renderer._warmPrograms();
++  expect(queued(), 'Low wears no operators').toBe(false);
++  await warm();
++  renderer.applyQuality(PRESET_VALUES.high);
++  renderer._warmPrograms();
++  expect(queued(), 'High after Low').toBe(true);
++  const probe = renderer._operatorProbe!;
++  await warm();
++  const linked = renderer.three.properties.get((probe.children[0] as THREE.Mesh).material) as { programs?: Map<string, unknown> };
++  expect(linked.programs?.size ?? 0).toBe(2);
++  // A body and a limb on an operator material, as a glb that lands in the match wears them, compiled as its held compile is.
++  const before = renderer.three.info.programs!.length;
++  const real = operatorMaterial('operator');
++  const worn = operatorMeshes(real);
++  cleanup.push(() => { real.dispose(); (worn.children[0] as THREE.Mesh).geometry.dispose(); });
++  renderer.three.setRenderTarget(renderer.post.target);
++  renderer.three.compile(worn, renderer.camera, renderer.scene);
++  renderer.three.setRenderTarget(null);
++  expect(renderer.three.info.programs!.length, 'no new program').toBe(before);
++  const used = renderer.three.properties.get(real) as { programs?: Map<string, unknown> };
++  const keys = [...used.programs!.keys()];
++  expect(keys).toHaveLength(2);
++  for (const key of keys) expect(linked.programs!.has(key), `${key.slice(-40)} linked by the probe`).toBe(true);
++});
++
++test('each renderer frees only its own operator probe', async () => {
++  const make = () => {
++    const canvas = document.createElement('canvas');
++    document.body.append(canvas);
++    const renderer = new Renderer(canvas);
++    renderer.applyQuality(PRESET_VALUES.high);
++    renderer._warmPrograms();
++    return { renderer, canvas };
++  };
++  const a = make(), b = make();
++  cleanup.push(() => { a.renderer.dispose(); a.canvas.remove(); });
++  const probeA = a.renderer._operatorProbe!, probeB = b.renderer._operatorProbe!;
++  expect(probeA).not.toBe(probeB);
++  const events = (probe: THREE.Group) => {
++    const freed = vi.fn(), body = probe.children[0] as THREE.SkinnedMesh, material = body.material as THREE.MeshStandardMaterial;
++    for (const item of [body.geometry, material, material.map!, material.normalMap!, material.roughnessMap!, body.skeleton.boneTexture!]) {
++      item.addEventListener('dispose', freed);
++    }
++    return freed;
++  };
++  const freedA = events(probeA), freedB = events(probeB);
++  b.renderer.dispose();
++  b.canvas.remove();
++  expect([freedA.mock.calls.length, freedB.mock.calls.length, b.renderer._operatorProbe]).toEqual([0, 6, null]);
++  // A's queued probe still compiles and draws with its own bone texture.
++  const bones = (probeA.children[0] as THREE.SkinnedMesh).skeleton.boneTexture;
++  const left = () => [...a.renderer._compiles, ...a.renderer._warmups].some(w => w.root === probeA);
++  for (let i = 0; i < 200 && left(); i++) {
++    a.renderer.render(0, fx);
++    await new Promise(resolve => setTimeout(resolve, 10));
++  }
++  expect(left()).toBe(false);
++  expect(a.renderer._warmups).toEqual([]);
++  expect((probeA.children[0] as THREE.SkinnedMesh).skeleton.boneTexture).toBe(bones);
++});
