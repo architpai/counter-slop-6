@@ -1603,7 +1603,11 @@ measured the whole set → the worker's own evidence is the bake phase; (P2) `ab
 refuses files with more than one run; (P3) the LSB definition now names the 23/255 SMAA cluster, and Round 1's component
 runs x1-x4 as unbalanced.
 
-{{REVIEW2}}
+Round 2 (`perf-loop-r10-review-2`, on `bcd83b4` with the findings and responses above): **no P1/P2 and no game-code
+defect; the review-1 fixes are complete**; the frame, per-map, load, hitch and quality values reproduce from the raw
+files. Three P3 fixes applied: Medium ready is -23.9 % (not -24.0 %) and Round 6's Low ready -3.2 % (not -3.4 %:
+conversions from the raw ratios); the power caveat now names the exceptions (the hitch measure at 47 %, exact checks
+without the gate); Round 7's 457 ms hitch is labelled the worst observed of 3 exploratory loads at 7-26 % battery.
 
 ## Final verification — Round 0 → final (Round 10 PART B)
 
@@ -1636,7 +1640,7 @@ Medium/High (+2.3 / +2.0 %); a downtown Medium + Ultra repeat (`r10b-downtown2`,
 measured (traced mode did not fit the time and power budget).
 
 **Load** (`r10l`, load-only, 4 presets x 4 maps x 3 rounds): ready Low 502 → 398 ms (-20.8 %), Medium 6848 → 5209
-(-24.0 %), High 6802 → 5372 (-21.0 %), Ultra 8539 → 8158 (-4.5 %); Round 0 faster in 0/12 per preset; first playable
+(-23.9 %), High 6802 → 5372 (-21.0 %), Ultra 8539 → 8158 (-4.5 %); Round 0 faster in 0/12 per preset; first playable
 -18 to -20 % (~105 ms: the AudioContext frame); control ≤ 2.0 %. Load window median per-load max frame 145.1 → 72.7 ms;
 frames > 50 ms per load 2.1 → 1.0.
 

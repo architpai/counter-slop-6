@@ -97,7 +97,7 @@ paired cell-round values; change = final / Round 0 - 1.
 
 | | low | medium | high | ultra |
 |---|---|---|---|---|
-| **ready** ms, Round 0 → final | 502 → 398 (**-20.8 %**, -104 ms) | 6848 → 5209 (**-24.0 %**, -1.64 s) | 6802 → 5372 (**-21.0 %**, -1.43 s) | 8539 → 8158 (-4.5 %, -0.38 s) |
+| **ready** ms, Round 0 → final | 502 → 398 (**-20.8 %**, -104 ms) | 6848 → 5209 (**-23.9 %**, -1.64 s) | 6802 → 5372 (**-21.0 %**, -1.43 s) | 8539 → 8158 (-4.5 %, -0.38 s) |
 | first playable ms, Round 0 → final | 484 → 389 (-19.6 %) | 565 → 452 (-20.0 %) | 577 → 464 (-19.5 %) | 594 → 487 (-18.0 %) |
 | Round 0 faster in (ready / first playable, of 12) | 0 / 1 | 0 / 0 | 0 / 0 | 0 / 0 |
 | control headB/head - 1 (ready / first playable) | -2.0 / -2.0 % | +0.2 / +1.7 % | +0.2 / +0.4 % | +0.2 / +0.2 % |
@@ -202,13 +202,13 @@ High -14.7, Ultra -15.1 %.
 |---|---|---|---|---|---|---|
 | L1 | **Upload slot packing** (several items per upload slot within 1.44 MB and 2 ms; same average rate) — user decision | R8 `32799f9` (reverted `e7f3488`), R9 `e1af377` | Medium, High (Ultra ~0: its 2K maps fill a slot) | ready: without it +27.9 % (Medium) / +22.6 % (High) slower, 0/12 faster (r9pl); Medium -1.32 s, High -1.19 s (r8l); load-window stutter counts within the parent's rule | `r8-ab.md`, `r9-ab.md` | exact after ready |
 | L2 | **Bake layout in a Web Worker** | R7 `e0128de` | Medium, High; Ultra: exception, no gain counted | the worker's own effect: bake layout / bake end 381 / 395 ms earlier (r7ld medians), `bake.off` 319-418 ms earlier (r8cl). Ready Medium -6.6 %, High -4.3 % (r7ld) measures Round 7's whole set (pre + worker + hud + misc), not the worker alone | `r7-ab.md`, `r8-ab.md` | exact |
-| L3 | **Exact load trims**: `checkShaderErrors` off in production, props merge placed early, room environment compiled in parallel | R6 `52c96ba` | all | first playable Medium -2.3 %, High -5.8 %, Ultra -7.1 %; ready -1.1 to -1.4 % (realistic); Low ready -3.4 % (r7ll) | `r6-ab.md`, `r7-ab.md` | exact |
+| L3 | **Exact load trims**: `checkShaderErrors` off in production, props merge placed early, room environment compiled in parallel | R6 `52c96ba` | all | first playable Medium -2.3 %, High -5.8 %, Ultra -7.1 %; ready -1.1 to -1.4 % (realistic); Low ready -3.2 % (r7ll: the tree without it +3.4 % slower) | `r6-ab.md`, `r7-ab.md` | exact |
 
 ### Hitches (first use, quiet start)
 
 | # | change | round, commit | presets | measured effect | source | pixels |
 |---|---|---|---|---|---|---|
-| H1 | **Soft smoke/fire sprites and shafts linked at the menu** | R7 `e0128de` (pre) | High, Ultra | first-fight max frame training/high 457 → 34 ms, training/ultra 133 → 33-37 ms, house/ultra 380 / 233 → 39 / 39 ms; programs after ready on the bench path → 0; 2 fewer programs | `r7-hitch.json` | exact |
+| H1 | **Soft smoke/fire sprites and shafts linked at the menu** | R7 `e0128de` (pre) | High, Ultra | first-fight max frame over 3 loads, training/high 457 / 32.5 / 32.9 → 34.2 / 32.9 / 36.2 ms (457 ms is the worst observed load), training/ultra 133 / 116 / 132 → 32.6 / 37.3 / 35.3 ms, house/ultra 380 / 233 → 39 / 39 ms — exploratory timings at 7-26 % battery; the program counts are exact; programs after ready on the bench path → 0; 2 fewer programs | `r7-hitch.json` | exact |
 | H2 | **AudioContext output service started off the main thread** (`enumerateDevices` at mount) | R10 `eb2e359` | all (realistic loads measured) | first quiet-start frame 144.2 → 28.8 ms median (125-178 → 22-41 ms, 12/12 loads; the commit message's 147.6 → 29.2 used the upper middle value); loads with a frame > 100 ms 12/12 → 4/12 | `r10-hitch-audio.json` | exact |
 | H3 | **Quiet-start operators glb callback**: skin once, find gib bones once | R9 `4370d1b` | realistic | that frame High 142.8 → 81.0 ms, Ultra 143.4 → 81.3 ms (medians, 4 loads each); Medium under 50 ms in 3/4 — exploratory, an acceptance exception | `r9-hitch-quiet.json` | exact (bit-equal) |
 | H4 | **Sword blade-blood, air-slash wave and ban-ring programs linked at the menu** (the wave/ring relinked for every wave) | R8 `d1ba2e3` (late) | all | programs after ready in the content sweep 8 / 5 / 9 / 5 → 0 (Low / Medium / High / Ultra cells swept) | `r8-sweep*.json` | exact |
@@ -233,8 +233,10 @@ High -14.7, Ultra -15.1 %.
 - **Packing's Ultra count** passed only on a pooled rate reading of the parent's rule (> 33 ms frames over 36 loads:
   151 vs 146 / 148).
 - **Power**: Rounds 2-3 ran with the battery near empty, Rounds 5-6 on a 20 W adapter, Rounds 9-10 on a 30 W adapter
-  that did not keep up under load (power-state switches voided several arms). Every Round 10 job ran under
-  `perf/powered.sh` (AC, ≥ 50 % at start, void under 35 %); readings in `perf/results/r10-power.log`.
+  that did not keep up under load (power-state switches voided several arms). Every timed Round 10 job ran under
+  `perf/powered.sh` (AC, void under 35 %) and started at ≥ 50 %, except the first-fight hitch measure (47 %); the exact
+  checks (program sweeps, captures, tests) ran without the start gate. No job was voided. Readings in
+  `perf/results/r10-power.log`.
 - **Background load**: a "Google Chrome for Testing" from `~/.agent-browser` (not ours) used ~60-140 % CPU during
   Rounds 8-10 (logged before each job). Paired runs share it across variants; unpaired runs do not.
 - **Noise**: single cells spread 5-27 %; the paired HEAD/HEAD control moved up to ~3-8 % on one preset in some runs.

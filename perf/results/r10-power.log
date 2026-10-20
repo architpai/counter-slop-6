@@ -180,3 +180,8 @@ Note: No CPU power status has been recorded
  Adapter Name = 30W USB-C Power Adapter
  -InternalBattery-0 (id=22282339)	43%; charging; (no estimate) present: true
 other Chrome for Testing CPU%: 71.6
+== round 10 end 2026-10-20 23:14:46
+ Wattage = 30W
+ Adapter Name = 30W USB-C Power Adapter
+ -InternalBattery-0 (id=22282339)	45%; charging; 2:41 remaining present: true
+other Chrome for Testing CPU%: 77.3
