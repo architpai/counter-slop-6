@@ -1,0 +1,353 @@
+diff --git a/src/components/hud/Hud.tsx b/src/components/hud/Hud.tsx
+index 7ef49ad..059e562 100644
+--- a/src/components/hud/Hud.tsx
++++ b/src/components/hud/Hud.tsx
+@@ -12,10 +12,10 @@ import type {
+   MouseEvent as ReactMouseEvent,
+   ReactNode,
+ } from 'react';
+-import type { DamageMark, HudStore, KillLine as KillLineState } from '@/engine/hud/store';
++import type { DamageMark, HealthState, HudStore, KillLine as KillLineState } from '@/engine/hud/store';
+ import { Bold, BoardPanel, PvpPanel, Screen, SCREEN_TITLE_ID } from './Screens';
+ import { InstallPrompt } from './InstallPrompt';
+-import { useHud } from './useHud';
++import { useHud, useHudSelect } from './useHud';
+ import { OPTIC_COLOR } from '@/engine/render/palette';
+ 
+ declare global {
+@@ -30,13 +30,20 @@ const rendered = (): void => {
+ 
+ interface HudProps { store: HudStore; children?: ReactNode }
+ 
++/** The root re-renders (with its ~25 children's memo checks) only when the low-health flag flips, not on each HP change. */
++const lowHealthOf = (health: HealthState): boolean => health.low;
++
++/** One reduced-motion query for every hit, made on the first. */
++let reducedMotion: MediaQueryList | null = null;
++const prefersReducedMotion = (): boolean => (reducedMotion ??= matchMedia('(prefers-reduced-motion: reduce)')).matches;
++
+ export function Hud({ store, children }: HudProps) {
+   rendered();
+   const rootRef = useRef<HTMLDivElement>(null);
+   const gameplay = useHud(store, 'gameplay');
+   const device = useHud(store, 'device');
+   const mobile = useHud(store, 'mobile');
+-  const health = useHud(store, 'health');
++  const lowHealth = useHudSelect(store, 'health', lowHealthOf);
+   const screen = useHud(store, 'screen');
+   const disposed = useSyncExternalStore(store.subscribeLifecycle, store.isDisposed, store.isDisposed);
+ 
+@@ -50,7 +57,7 @@ export function Hud({ store, children }: HudProps) {
+     !gameplay && 'no-gameplay',
+     device && 'gamepad',
+     mobile.active && 'touch-mode',
+-    health.low && 'low-health',
++    lowHealth && 'low-health',
+     screen !== null && 'screen-open',
+   ].filter(Boolean).join(' ');
+ 
+@@ -98,7 +105,7 @@ export const Crosshair = memo(function Crosshair({ store }: { store: HudStore })
+   rendered();
+   const state = useHud(store, 'crosshair');
+   return (
+-    <div className={`crosshair${state.melee ? ' melee' : ''}${state.ads ? ' ads' : ''}`} data-hud="crosshair" aria-hidden="true">
++    <div ref={store.hostRef('--spread')} className={`crosshair${state.melee ? ' melee' : ''}${state.ads ? ' ads' : ''}`} data-hud="crosshair" aria-hidden="true">
+       <i className="tick top" /><i className="tick bottom" /><i className="tick left" /><i className="tick right" /><i className="dot" />
+     </div>
+   );
+@@ -111,7 +118,7 @@ export const Health = memo(function Health({ store }: { store: HudStore }) {
+   return (
+     <div className="health-row">
+       <span>HP</span>
+-      <div className="health-track" data-hud="health" role="meter" aria-label="Health" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-valuetext={`${state.hp} of ${state.max} HP`}><div data-hud="healthFill" /></div>
++      <div className="health-track" data-hud="health" role="meter" aria-label="Health" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-valuetext={`${state.hp} of ${state.max} HP`}><div ref={store.hostRef('--health')} data-hud="healthFill" /></div>
+       <strong data-hud="hp">{state.hp}</strong>
+     </div>
+   );
+@@ -201,7 +208,7 @@ export const Boss = memo(function Boss({ store }: { store: HudStore }) {
+   rendered();
+   const state = useHud(store, 'boss');
+   const shown = state.name !== null;
+-  return <div className={`boss-bar${shown ? ' is-visible' : ''}`} data-hud="boss" aria-hidden={!shown}><div className="boss-name" data-hud="bossName">{state.name ?? ''}</div><div className="boss-track"><div data-hud="bossFill" /></div></div>;
++  return <div className={`boss-bar${shown ? ' is-visible' : ''}`} data-hud="boss" aria-hidden={!shown}><div className="boss-name" data-hud="bossName">{state.name ?? ''}</div><div className="boss-track"><div ref={store.hostRef('--boss')} data-hud="bossFill" /></div></div>;
+ });
+ 
+ export const FocusMeter = memo(function FocusMeter({ store }: { store: HudStore }) {
+@@ -210,7 +217,7 @@ export const FocusMeter = memo(function FocusMeter({ store }: { store: HudStore
+   return (
+     <div className={`focus-meter${state.show ? ' is-visible' : ''}${state.ready ? ' ready' : ''}`} data-hud="focusMeter" aria-hidden={!state.show}>
+       <div className="focus-label" data-hud="focusLabel">{state.label}</div>
+-      <div className="focus-tube"><div className="focus-fill" data-hud="focusFill" /><div className="focus-flames"><i /><i /><i /></div></div>
++      <div className="focus-tube"><div ref={store.hostRef('--focus')} className="focus-fill" data-hud="focusFill" /><div className="focus-flames"><i /><i /><i /></div></div>
+       <div className="focus-ready">EXECUTE READY</div>
+     </div>
+   );
+@@ -220,7 +227,7 @@ export const Stragglers = memo(function Stragglers({ store }: { store: HudStore
+   rendered();
+   const count = useHud(store, 'stragglers');
+   return <div className="stragglers" data-hud="stragglers" aria-hidden="true">
+-    {Array.from({ length: count }, (_, i) => <i key={i} style={{ transform: `var(--straggler-${i})` }} />)}
++    {Array.from({ length: count }, (_, i) => <i key={i} ref={store.hostRef(`--straggler-${i}`)} style={{ transform: `var(--straggler-${i})` }} />)}
+   </div>;
+ });
+ 
+@@ -228,7 +235,7 @@ export const SquadMarks = memo(function SquadMarks({ store }: { store: HudStore
+   rendered();
+   const labels = useHud(store, 'marks');
+   return <div className="squad-marks" data-hud="marks" aria-hidden="true">
+-    {labels.map((label, i) => <i key={i} style={{ transform: `var(--mark-${i})` }}><span>{label}</span></i>)}
++    {labels.map((label, i) => <i key={i} ref={store.hostRef(`--mark-${i}`)} style={{ transform: `var(--mark-${i})` }}><span>{label}</span></i>)}
+   </div>;
+ });
+ 
+@@ -237,7 +244,7 @@ export const ExecMarks = memo(function ExecMarks({ store }: { store: HudStore })
+   rendered();
+   const marks = useHud(store, 'execMarks');
+   return <div className="exec-marks" data-hud="execMarks" aria-hidden="true">
+-    {marks.map((n, i) => <div key={i} className={`exec-mark${n ? ' locked' : ''}`} style={{ transform: `var(--exec-${i})` }}>
++    {marks.map((n, i) => <div key={i} ref={store.hostRef(`--exec-${i}`)} className={`exec-mark${n ? ' locked' : ''}`} style={{ transform: `var(--exec-${i})` }}>
+       <i /><i /><i /><i />{n ? <span>{n}</span> : null}
+     </div>)}
+   </div>;
+@@ -246,7 +253,7 @@ export const ExecMarks = memo(function ExecMarks({ store }: { store: HudStore })
+ export const Breath = memo(function Breath({ store }: { store: HudStore }) {
+   rendered();
+   const state = useHud(store, 'breath');
+-  return <div className={`grapple-breath${state.low ? ' low' : ''}`} data-hud="breath" hidden={!state.shown} aria-label="Grapple breath" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={state.percent}><div data-hud="breathFill" /></div>;
++  return <div className={`grapple-breath${state.low ? ' low' : ''}`} data-hud="breath" hidden={!state.shown} aria-label="Grapple breath" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={state.percent}><div ref={store.hostRef('--breath')} data-hud="breathFill" /></div>;
+ });
+ 
+ export const Scope = memo(function Scope({ store }: { store: HudStore }) {
+@@ -386,7 +393,7 @@ export const Hitmarker = memo(function Hitmarker({ store }: { store: HudStore })
+   const ref = useRef<SVGSVGElement>(null), killRef = useRef<SVGSVGElement>(null);
+   useEffect(() => {
+     if (state.nonce === 0) return;
+-    const scale = matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 1.15;
++    const scale = prefersReducedMotion() ? 1 : 1.15;
+     const animation = ref.current?.animate([
+       { opacity: 1, transform: `translate(-50%, -50%) scale(${scale})` },
+       { opacity: 0, transform: 'translate(-50%, -50%) scale(1)' },
+diff --git a/src/components/hud/useHud.ts b/src/components/hud/useHud.ts
+index 59b57e2..429cc25 100644
+--- a/src/components/hud/useHud.ts
++++ b/src/components/hud/useHud.ts
+@@ -12,3 +12,18 @@ export function useHud<K extends HudKey>(store: HudStore, key: K): HudState[K] {
+   const getSnapshot = useCallback(() => store.getSnapshot(key), [store, key]);
+   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+ }
++
++/**
++ * Subscribe to one primitive derived from a slice (`select` must be a stable, module-level function): the component
++ * re-renders only when the derived value changes, not on every replacement of the slice.
++ */
++export function useHudSelect<K extends HudKey, T extends string | number | boolean | null>(
++  store: HudStore, key: K, select: (state: HudState[K]) => T,
++): T {
++  const subscribe = useCallback(
++    (listener: () => void) => store.subscribe(key, listener),
++    [store, key],
++  );
++  const getSnapshot = useCallback(() => select(store.getSnapshot(key)), [store, key, select]);
++  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
++}
+diff --git a/src/engine/hud/store.ts b/src/engine/hud/store.ts
+index be35fb5..346af81 100644
+--- a/src/engine/hud/store.ts
++++ b/src/engine/hud/store.ts
+@@ -12,8 +12,11 @@
+  *
+  * 2. **Continuous values never reach React.** Spread, bar fills and the focus
+  *    mark change every frame and have no structure worth diffing. They are
+- *    written straight to CSS custom properties on the HUD root, which is what
+- *    the crosshair already did before the port. Zero renders.
++ *    written straight to CSS custom properties. Zero renders. Each per-frame
++ *    variable goes on the element that reads it (`hostRef`), not on the HUD
++ *    root: custom properties inherit, so a root write restyles the whole HUD
++ *    every frame (~70 elements, 0.2-0.4 ms of main thread in a fight), where a
++ *    host write restyles only the host's own subtree.
+  *
+  * 3. **Transient entries age in `update(dt)`.** The kill feed and damage
+  *    indicators are lists whose identity changes on add and expiry only; the
+@@ -105,6 +108,13 @@ export interface HudState {
+   qualityPrompt: string | null;
+ }
+ 
++/**
++ * The per-frame variables, written on their readers (`hostRef`) instead of the root. The root keeps their defaults
++ * (`.game-hud` in globals.css) and every other variable (`--scope-*`).
++ */
++const HOSTED = /^--(?:spread|health|breath|focus|boss|exec-\d+|straggler-\d+|mark-\d+)$/;
++export const isHostedVar = (name: string): boolean => HOSTED.test(name);
++
+ const KILL_LIFE = 1.7;
+ const DAMAGE_LIFE = 1.0;
+ const MAX_KILL_LINES = 6;
+@@ -119,6 +129,10 @@ export class HudStore implements HudView {
+   #breathMeter: HTMLElement | null = null;
+   #breathPercent = 100;
+   #vars = new Map<string, string>();
++  /** Mounted readers of each hosted variable. */
++  #hosts = new Map<string, Set<HTMLElement>>();
++  /** One stable ref callback per variable, so React does not detach and re-attach it on every render. */
++  #hostRefs = new Map<string, (el: HTMLElement | null) => () => void>();
+   #nextId = 1;
+   #messageT = 0;
+   #tipT = 0;
+@@ -165,10 +179,33 @@ export class HudStore implements HudView {
+   bindRoot(el: HTMLElement | null): void {
+     this.#root = el;
+     this.#breathMeter = el?.querySelector<HTMLElement>('[data-hud="breath"]') ?? null;
+-    if (el) for (const [name, value] of this.#vars) el.style.setProperty(name, value);
++    if (el) for (const [name, value] of this.#vars) if (!HOSTED.test(name)) el.style.setProperty(name, value);
+     this.#breathMeter?.setAttribute('aria-valuenow', String(this.#breathPercent));
+   }
+ 
++  /**
++   * Registers `el` as a reader of the hosted variable `name` until the returned cleanup runs, and writes the value
++   * remembered for it at once: a host can remount (a bar, a marker) long after the engine wrote, without `bindRoot`.
++   */
++  bindVarHost(name: string, el: HTMLElement): () => void {
++    let set = this.#hosts.get(name);
++    if (!set) this.#hosts.set(name, set = new Set());
++    set.add(el);
++    const value = this.#vars.get(name);
++    if (value !== undefined) el.style.setProperty(name, value);
++    return () => { set.delete(el); };
++  }
++
++  /** A stable React ref callback (React 19: the returned cleanup runs on detach) that hosts the variable `name`. */
++  hostRef(name: string): (el: HTMLElement | null) => () => void {
++    let ref = this.#hostRefs.get(name);
++    if (!ref) {
++      ref = (el: HTMLElement | null) => (el ? this.bindVarHost(name, el) : () => {});
++      this.#hostRefs.set(name, ref);
++    }
++    return ref;
++  }
++
+   subscribe(key: HudKey, listener: () => void): () => void {
+     let set = this.#listeners.get(key);
+     if (!set) this.#listeners.set(key, set = new Set());
+@@ -210,7 +247,9 @@ export class HudStore implements HudView {
+   #setVar(name: string, value: string): void {
+     if (this.#vars.get(name) === value) return;
+     this.#vars.set(name, value);
+-    this.#root?.style.setProperty(name, value);
++    if (!HOSTED.test(name)) { this.#root?.style.setProperty(name, value); return; }
++    const hosts = this.#hosts.get(name);
++    if (hosts) for (const el of hosts) el.style.setProperty(name, value);
+   }
+ 
+   // ------------------------------------------------------------------ frame
+diff --git a/tests/hud-vars.test.tsx b/tests/hud-vars.test.tsx
+new file mode 100644
+index 0000000..9f688c0
+--- /dev/null
++++ b/tests/hud-vars.test.tsx
+@@ -0,0 +1,106 @@
++import { afterEach, expect, test } from 'vitest';
++import { createRoot, type Root } from 'react-dom/client';
++import { flushSync } from 'react-dom';
++import { Hud } from '@/components/hud/Hud';
++import { HudStore, isHostedVar } from '@/engine/hud/store';
++import '@/app/globals.css';
++
++let root: Root | undefined, host: HTMLDivElement | undefined;
++afterEach(() => { flushSync(() => root?.unmount()); root = undefined; host?.remove(); host = undefined; });
++function mount(store: HudStore): HTMLElement {
++  host = document.createElement('div'); document.body.append(host);
++  root = createRoot(host);
++  flushSync(() => root!.render(<Hud store={store} />));
++  return host.querySelector<HTMLElement>('#hud')!;
++}
++const q = (sel: string) => host!.querySelector<HTMLElement>(sel)!;
++const inline = (el: HTMLElement, name: string) => el.style.getPropertyValue(name);
++
++test('the per-frame variables are hosted, the scope drift stays on the root', () => {
++  for (const name of ['--spread', '--health', '--breath', '--focus', '--boss', '--exec-0', '--straggler-12', '--mark-3']) expect(isHostedVar(name), name).toBe(true);
++  for (const name of ['--scope-x', '--scope-y', '--scope-scale', '--spreadx', '--mark-', '--exec-a']) expect(isHostedVar(name), name).toBe(false);
++});
++
++test('a host gets the remembered value when it binds, every write while bound, and none after', () => {
++  const store = new HudStore(), rootEl = document.createElement('div');
++  store.bindRoot(rootEl);
++  store.setSpread(7.25);
++  store.setScopeDrift(1, 2, 1.5);
++  const a = document.createElement('div'), b = document.createElement('div');
++  const unbindA = store.bindVarHost('--spread', a);
++  expect(inline(a, '--spread')).toBe('7.3px');
++  const unbindB = store.bindVarHost('--spread', b);
++  store.setSpread(12);
++  expect([inline(a, '--spread'), inline(b, '--spread')]).toEqual(['12.0px', '12.0px']);
++  unbindA();
++  store.setSpread(3);
++  expect([inline(a, '--spread'), inline(b, '--spread')]).toEqual(['12.0px', '3.0px']);
++  unbindB();
++  // Hosted values never land on the root, the others do (and a later root replays only those).
++  expect(inline(rootEl, '--spread')).toBe('');
++  expect(inline(rootEl, '--scope-x')).toBe('1.0');
++  const root2 = document.createElement('div');
++  store.bindRoot(root2);
++  expect([inline(root2, '--spread'), inline(root2, '--scope-scale')]).toEqual(['', '1.500']);
++  // A variable never written leaves the host on the inherited default.
++  const c = document.createElement('div');
++  store.bindVarHost('--boss', c)();
++  expect(inline(c, '--boss')).toBe('');
++});
++
++test('the rendered HUD reads each hosted variable on its own element, with the same computed values', () => {
++  const store = new HudStore();
++  const hud = mount(store);
++  flushSync(() => store.setGameplayVisible(true));
++  // Defaults from .game-hud before any write.
++  expect(getComputedStyle(q('.crosshair .bottom')).top).toBe('10px');
++  store.setSpread(23.5);
++  store.setHealth(40, 100);
++  store.setFocusMeter(true, 0.25, false, 'MELEE');
++  store.setBoss('Boss', 0.5);
++  store.setBreath(0.6);
++  expect(inline(q('[data-hud="crosshair"]'), '--spread')).toBe('23.5px');
++  expect(inline(hud, '--spread')).toBe('');
++  expect(inline(hud, '--health')).toBe('');
++  expect(getComputedStyle(q('.crosshair .bottom')).getPropertyValue('--spread')).toBe('23.5px');
++  expect(inline(q('[data-hud="healthFill"]'), '--health')).toBe('40.0%');
++  expect(inline(q('[data-hud="focusFill"]'), '--focus')).toBe('25.0%');
++  expect(inline(q('[data-hud="bossFill"]'), '--boss')).toBe('50%');
++  expect(inline(q('[data-hud="breathFill"]'), '--breath')).toBe('60%');
++});
++
++test('markers that mount after their places were written get them at once', () => {
++  const store = new HudStore();
++  mount(store);
++  flushSync(() => store.setGameplayVisible(true));
++  // Written while no marker exists (the count arrives with the same call, and React mounts after it).
++  flushSync(() => store.setStragglers([{ x: 10, y: 20, a: 0.5 }, { x: -4, y: 8, a: 1 }]));
++  flushSync(() => store.setMarks([{ x: 5, y: 6, label: 'A' }]));
++  flushSync(() => store.setExecMarks([{ x: 100, y: 50, n: 0 }]));
++  const arrows = [...host!.querySelectorAll<HTMLElement>('[data-hud="stragglers"] i')];
++  expect(arrows.map(el => inline(el, `--straggler-${arrows.indexOf(el)}`)))
++    .toEqual(['translate(10px, 20px) rotate(0.50rad)', 'translate(-4px, 8px) rotate(1.00rad)']);
++  expect(getComputedStyle(arrows[1]!).transform).not.toBe('none');
++  expect(inline(q('[data-hud="marks"] i'), '--mark-0')).toBe('translate(5px, 6px)');
++  expect(inline(q('.exec-mark'), '--exec-0')).toBe('translate(100px, 50px)');
++  // Down to one arrow and back to two: the remounted second arrow replays its last place.
++  flushSync(() => store.setStragglers([{ x: 1, y: 2, a: 0 }]));
++  expect(host!.querySelectorAll('[data-hud="stragglers"] i')).toHaveLength(1);
++  flushSync(() => store.setStragglers([{ x: 1, y: 2, a: 0 }, { x: -4, y: 8, a: 1 }]));
++  const again = host!.querySelectorAll<HTMLElement>('[data-hud="stragglers"] i')[1]!;
++  expect(inline(again, '--straggler-1')).toBe('translate(-4px, 8px) rotate(1.00rad)');
++});
++
++test('an HP change re-renders the health leaf only; the root re-renders when low health flips', () => {
++  const store = new HudStore();
++  const hud = mount(store);
++  const renders = () => window.__hudRenderCount ?? 0;
++  let before = renders();
++  flushSync(() => store.setHealth(80, 100));
++  expect(renders() - before).toBe(1);
++  expect(hud.classList.contains('low-health')).toBe(false);
++  before = renders();
++  flushSync(() => store.setHealth(20, 100));
++  expect(hud.classList.contains('low-health')).toBe(true);
++  expect(renders() - before).toBe(2);
++});

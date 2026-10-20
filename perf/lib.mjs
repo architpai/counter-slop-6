@@ -178,6 +178,7 @@ function digestTrace(events) {
   const gcIn = gcs.filter(x => x.ts >= lo && x.ts + x.dur <= hi);
   const gc = gcs.length === 0 ? null : { minor: gcIn.filter(x => x.name === 'MinorGC').length, major: gcIn.filter(x => x.name === 'MajorGC').length,
     ms: +(gcIn.reduce((s, x) => s + x.dur, 0) / 1000).toFixed(3), maxMs: +(Math.max(0, ...gcIn.map(x => x.dur)) / 1000).toFixed(3) };
+  const outside = digestOutside(events, inWin, main, raf, frames);
   return {
     frames: raf.length, windowMs: +((hi - lo) / 1000).toFixed(1),
     jsMs: stats(raf.map(e => (e.tdur ?? NaN) / 1000)), rafWallMs: stats(raf.map(e => e.dur / 1000)),
@@ -186,7 +187,70 @@ function digestTrace(events) {
     gpuMainCpuPerFrame: gpuPid === undefined ? null : cpuOf(gpuPid, 'CrGpuMain'),
     vizCpuPerFrame: gpuPid === undefined ? null : cpuOf(gpuPid, 'VizCompositorThread'),
     ...(gc ? { gc } : {}),
+    outside,
   };
+}
+
+/** Event names `trace.outside.byName` always reports (main thread, outside the game's rAF callbacks). */
+const OUTSIDE_NAMES = ['UpdateLayoutTree', 'RecalculateStyles', 'Layout', 'PrePaint', 'Paint', 'Layerize', 'UpdateLayer',
+  'UpdateLayerTree', 'ParseHTML', 'FunctionCall', 'EventDispatch', 'TimerFire', 'FireIdleCallback', 'RunMicrotasks',
+  'HitTest', 'ScrollLayer', 'Commit', 'ProxyMain::BeginMainFrame'];
+
+/**
+ * Where the renderer main thread's time goes OUTSIDE the game's rAF callbacks (`FireAnimationFrame`), per rAF frame:
+ * `tasksCpuMs` = thread CPU of the outermost `toplevel` tasks minus the rAF callbacks inside them (so
+ * `rendererMainCpuPerFrame` ≈ `tasksCpuMs` + `jsMs.mean`), `tasks` = outermost toplevel task count; `byName` = per
+ * event name the outermost events of that name (count, wall `ms`, thread `cpuMs`, and for style recalcs the summed
+ * `args.elementCount`); `topSelf` = the 12 names with the most self wall time outside rAF (dur minus children's).
+ */
+function digestOutside(events, inWin, main, raf, frames) {
+  const ms = t => +(t / 1000 / frames).toFixed(4);
+  const per = n => +(n / frames).toFixed(3);
+  const rafs = raf.map(e => [e.ts, e.ts + e.dur]).sort((a, b) => a[0] - b[0]);
+  const inRaf = e => {
+    let a = 0, b = rafs.length - 1, k = -1;
+    while (a <= b) { const m = (a + b) >> 1; if (rafs[m][0] <= e.ts) { k = m; a = m + 1; } else b = m - 1; }
+    return k >= 0 && e.ts + (e.dur ?? 0) <= rafs[k][1];
+  };
+  const mainEv = events.filter(e => inWin(e) && `${e.pid}:${e.tid}` === main)
+    .sort((x, y) => x.ts - y.ts || (y.dur ?? 0) - (x.dur ?? 0));
+  // Toplevel tasks (outermost only) and the rAF CPU inside them.
+  let taskCpu = 0, taskWall = 0, tasks = 0, taskEnd = -Infinity;
+  for (const e of mainEv) {
+    if (e.cat !== 'toplevel' || e.ts < taskEnd) continue;
+    tasks++; taskCpu += e.tdur ?? 0; taskWall += e.dur ?? 0; taskEnd = e.ts + (e.dur ?? 0);
+  }
+  let rafCpu = 0, rafWall = 0;
+  for (const e of raf) { rafCpu += e.tdur ?? 0; rafWall += e.dur ?? 0; }
+  // Per name: outermost events of that name outside rAF.
+  const byName = {}, endOf = {};
+  for (const e of mainEv) {
+    if (!OUTSIDE_NAMES.includes(e.name) || inRaf(e)) continue;
+    if (e.ts < (endOf[e.name] ?? -Infinity)) continue;
+    endOf[e.name] = e.ts + (e.dur ?? 0);
+    const s = byName[e.name] ??= { n: 0, ms: 0, cpuMs: 0 };
+    s.n++; s.ms += e.dur ?? 0; s.cpuMs += e.tdur ?? 0;
+    const ec = e.args?.elementCount ?? e.args?.data?.elementCount;
+    if (Number.isFinite(ec)) s.elements = (s.elements ?? 0) + ec;
+  }
+  for (const s of Object.values(byName)) {
+    s.n = per(s.n); s.ms = ms(s.ms); s.cpuMs = ms(s.cpuMs);
+    if (s.elements !== undefined) s.elements = per(s.elements);
+  }
+  // Self wall time by name outside rAF (a stack over the main thread's nested X events; rAF subtrees skipped).
+  const self = new Map(), stack = [];
+  const close = nd => { if (!nd.raf) self.set(nd.name, (self.get(nd.name) ?? 0) + Math.max(0, nd.dur - nd.child)); };
+  for (const e of mainEv) {
+    const dur = e.dur ?? 0, end = e.ts + dur;
+    while (stack.length && stack[stack.length - 1].end <= e.ts) close(stack.pop());
+    const parent = stack[stack.length - 1];
+    if (parent && end > parent.end) continue; // overlapping, not nested: skip
+    if (parent) parent.child += dur;
+    stack.push({ name: e.name, dur, end, child: 0, raf: e.name === 'FireAnimationFrame' || !!parent?.raf });
+  }
+  while (stack.length) close(stack.pop());
+  const topSelf = Object.fromEntries([...self].sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, v]) => [k, ms(v)]));
+  return { tasksCpuMs: ms(taskCpu - rafCpu), tasksWallMs: ms(taskWall - rafWall), tasks: per(tasks), byName, topSelf };
 }
 
 export function stats(values) {

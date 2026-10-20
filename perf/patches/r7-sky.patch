@@ -1,0 +1,253 @@
+diff --git a/src/engine/render/index.ts b/src/engine/render/index.ts
+index 37f7666..d136391 100644
+--- a/src/engine/render/index.ts
++++ b/src/engine/render/index.ts
+@@ -6,8 +6,8 @@ import { FOG_UNIFORMS, fogAt, setAtmosphere } from './atmosphere';
+ import { GRADE, LIGHT, SURF } from './palette';
+ import { Composite, RIG_DEPTH } from './postfx';
+ import {
+-  BAKE_UNIFORMS, GRID_UNIFORMS, OPERATOR_AO, casterGroups, fixUv, hiddenMat, levelDepthMat, realMat, realMaterials, setAoAlpha, skyMat, standInGrid,
+-  standInLightmap, standInMaps, surfMat, wearMaps,
++  BAKE_UNIFORMS, GRID_UNIFORMS, OPERATOR_AO, casterGroups, fixUv, hiddenMat, levelDepthMat, quietly, realMat, realMaterials, setAoAlpha, skyMat,
++  standInGrid, standInLightmap, standInMaps, surfMat, wearMaps,
+ } from './materials';
+ import { BAKE_FILE, LIGHTMAP_SIZE, bakeFor, bakedTriangles, layoutSteps, lightmapChartSteps, wearLightmapUVs } from './lightmap';
+ import { ANTIALIAS_SPEC, AO_SCALE, PRESET_VALUES, SHADOW_SPEC, VIEW_SCALE, fightCpuPaths } from './quality';
+@@ -279,7 +279,16 @@ export class Renderer {
+   /** Shadow boxes in force; null is Low's box centred on the eye. */
+   _boxes: readonly ShadowBox[] | null = null;
+   _mood: Mood = {};
++  /**
++   * `scene.environment` for good: the room environment's PMREM target, which also takes a landed sky's texels
++   * (`_showEnv`), so a sky landing changes no lit material's environment texture.
++   */
++  readonly _roomTarget: THREE.WebGLRenderTarget;
+   readonly _roomEnv: THREE.Texture;
++  /** The PMREM whose texels `_roomTarget` holds now: its own (the room's) or a sky's copied in. */
++  _envHolds: THREE.Texture;
++  /** The room's texels, set aside (made the first time a sky's are copied over them); freed on Low. */
++  _roomCopy: THREE.WebGLRenderTarget | null = null;
+   /**
+    * One PMREM generator for the room environment and every sky, while a
+    * realistic look is in force (Low frees it). Its blur shader, compiled for
+@@ -437,7 +446,8 @@ export class Renderer {
+     this.scene = new THREE.Scene();
+     this.scene.fog = new THREE.Fog(SURF.fog, FOG_NEAR, FOG_FAR);
+     this._pmrem = new THREE.PMREMGenerator(this.three);
+-    this.scene.environment = this._roomEnv = roomEnvironment(this.three, this._pmrem, new RoomEnvironment()).texture;
++    this._roomTarget = roomEnvironment(this.three, this._pmrem, new RoomEnvironment());
++    this.scene.environment = this._envHolds = this._roomEnv = this._roomTarget.texture;
+     this.scene.environmentIntensity = ENV_INTENSITY;
+     this._sky = {
+       horizon: { value: new THREE.Color(SURF.fog) }, zenith: { value: new THREE.Color(LIGHT.zenith) },
+@@ -680,6 +690,9 @@ export class Renderer {
+       }
+       this._pmrem?.dispose();
+       this._pmrem = null;
++      // `_applyLook` put the room's texels back.
++      this._roomCopy?.dispose();
++      this._roomCopy = null;
+     }
+     this.resize();
+   }
+@@ -835,7 +848,8 @@ export class Renderer {
+    * tier whose sky is still streaming, or failed) uses the mood's colours, the
+    * hemisphere light and the gradient dome; a realistic tier with its sky in
+    * takes the sun, the sky probe, the fog colour and the environment from the
+-   * Blender sky, in the same units. Uniform and light writes only.
++   * Blender sky, in the same units. Uniform and light writes, and the
++   * environment's texels (`_showEnv`).
+    */
+   _applyLook(): void {
+     const mood = this._mood, realistic = this._quality.look === 'realistic';
+@@ -866,8 +880,8 @@ export class Renderer {
+       this.probe.visible = true;
+       this.probe.sh.fromArray(sh.flat());
+       for (const c of this.probe.sh.coefficients) c.lerp(_grey.setScalar(0.2126 * c.x + 0.7152 * c.y + 0.0722 * c.z), 1 - PROBE_CHROMA);
+-      // Same PMREM size as the room environment, so no program changes (tools/blender/sky.py).
+-      this.scene.environment = sky.env.texture;
++      // Same PMREM size as the room environment (tools/blender/sky.py): copied into its target, no program changes.
++      this._showEnv(sky.env);
+       this.scene.environmentIntensity = REAL_ENV_INTENSITY;
+       // The physical horizon's brightness in the mood's fog hue (see HAZE_CHROMA).
+       const physical = luminance(_haze.setRGB(horizon[0], horizon[1], horizon[2], THREE.LinearSRGBColorSpace));
+@@ -891,11 +905,68 @@ export class Renderer {
+     this.hemi.intensity = mood.hemiIntensity ?? 1.0;
+     this.hemi.color.set(mood.hemiSky ?? LIGHT.sky);
+     this.hemi.groundColor.set(mood.hemiGround ?? LIGHT.ground);
+-    this.scene.environment = this._roomEnv;
++    this._showEnv(this._roomTarget);
+     this.scene.environmentIntensity = ENV_INTENSITY;
+     this._applyAtmosphere();
+   }
+ 
++  /**
++   * Put a PMREM environment on: the room's or a sky's. three re-derives a lit material's program parameters and key
++   * (WebGLRenderer.setProgram → getProgram) on the first draw after `scene.environment` becomes another texture
++   * (`materialProperties.envMap !== envMap`): every lit material in the frame a sky lands. So the room's target
++   * stays `scene.environment`, and a sky's texels are copied into it (one copyTexSubImage2D of the whole texture,
++   * same size and format: the same texels), the room's set aside first (`_roomCopy`) and copied back when the room
++   * is wanted again. Program keys, uniforms and samples are as with the sky's own texture. A PMREM of another size
++   * (not made by tools/blender/sky.py) is put on as it is: that changes the programs' `envMapCubeUVHeight` anyway.
++   */
++  _showEnv(env: THREE.WebGLRenderTarget): void {
++    const room = this._roomTarget;
++    if (!this._fitsRoom(env)) {
++      this.scene.environment = env.texture;
++      return;
++    }
++    this.scene.environment = room.texture;
++    if (this._envHolds === env.texture) return;
++    if (env === room) {
++      // Only a sky's texels moved the room's away, and they were set aside then.
++      if (this._roomCopy) this._copyEnv(this._roomCopy, room);
++    } else {
++      this._saveRoom();
++      this._copyEnv(env, room);
++    }
++    this._envHolds = env.texture;
++  }
++
++  /** A PMREM that can take the room target's place: same size, type and format (tools/blender/sky.py). */
++  _fitsRoom(env: THREE.WebGLRenderTarget): boolean {
++    const room = this._roomTarget;
++    return env.width === room.width && env.height === room.height && env.texture.type === room.texture.type
++      && env.texture.format === room.texture.format;
++  }
++
++  /** Set the room's texels aside (`_roomCopy`) while the room target still holds them, once. */
++  _saveRoom(): void {
++    if (this._roomCopy || this._envHolds !== this._roomEnv) return;
++    const room = this._roomTarget;
++    // Made where no seeded stream sees it (a render target's textures draw uuids).
++    this._roomCopy = quietly(() => new THREE.WebGLRenderTarget(room.width, room.height,
++      { type: room.texture.type, format: room.texture.format, colorSpace: room.texture.colorSpace, depthBuffer: false }));
++    this._copyEnv(room, this._roomCopy);
++  }
++
++  /**
++   * Copy one PMREM target's texels into another of the same size and format: copyTexSubImage2D from its
++   * framebuffer, exact. Not r170's copyTextureToTexture: its render-target branch passes one argument too many to
++   * copyTexSubImage2D and copies an empty rectangle.
++   */
++  _copyEnv(from: THREE.WebGLRenderTarget, to: THREE.WebGLRenderTarget): void {
++    const three = this.three, target = three.getRenderTarget(), face = three.getActiveCubeFace(), level = three.getActiveMipmapLevel();
++    three.initRenderTarget(to);
++    three.setRenderTarget(from);
++    three.copyFramebufferToTexture(to.texture);
++    three.setRenderTarget(target, face, level);
++  }
++
+   /**
+    * The map's haze and light shafts (R8, render/atmosphere.ts) on the
+    * realistic look, in the fog colour and sun in force, stretched by the view
+@@ -1596,6 +1667,8 @@ export class Renderer {
+     if (!landing.env) {
+       landing.env = this._generator().fromEquirectangular(source.hdr);
+       source.hdr.dispose();
++      // In this step's slot, so the look's frame only copies the sky's texels in (`_showEnv`).
++      if (this._fitsRoom(landing.env)) this._saveRoom();
+       // Half-float RGBA.
+       pace(source.hdr.image, 8);
+       return;
+@@ -1633,7 +1706,9 @@ export class Renderer {
+     this.post.dispose();
+     this._setBoxes(null, this.sun.shadow.mapSize.x);
+     this.sun.shadow.map?.dispose();
+-    this._roomEnv.dispose();
++    this._roomTarget.dispose();
++    this._roomCopy?.dispose();
++    this._roomCopy = null;
+     disposeSky(this._skyAssets);
+     this._skyAssets = null;
+     this._landSky();
+diff --git a/tests/render-chain.test.ts b/tests/render-chain.test.ts
+index 2b02d60..06d0894 100644
+--- a/tests/render-chain.test.ts
++++ b/tests/render-chain.test.ts
+@@ -428,6 +428,13 @@ function fakeSky(key: string): { sky: SkySource; freed: () => boolean } {
+ }
+ 
+ const settle = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 0));
++/** A PMREM target's half-float texels. */
++function texels(renderer: Renderer, target: THREE.WebGLRenderTarget): Uint16Array {
++  const out = new Uint16Array(target.width * target.height * 4);
++  renderer.three.readRenderTargetPixels(target, 0, 0, target.width, target.height, out);
++  return out;
++}
++const differing = (a: Uint16Array, b: Uint16Array): number => a.reduce((n, v, i) => n + (v !== b[i] ? 1 : 0), 0);
+ /** Render until a landed sky is on: it goes on a step a frame, in the upload slots (`_landSky`). */
+ async function land(renderer: Renderer): Promise<number> {
+   let frames = 0;
+@@ -466,6 +473,18 @@ test('a streamed sky swaps in with uniform writes only, and Low puts the mood ba
+   expect(renderer.scene.environment).toBe(renderer._roomEnv);
+   expect('SKY_MAP' in dome.defines).toBe(false);
+   const programs = new Set(renderer.three.info.programs);
++  const room = texels(renderer, renderer._roomTarget);
++  expect(room.some(v => v !== 0)).toBe(true);
++  // The lit box's program key is made once, before the sky (three re-derives it when the environment texture changes).
++  expect(renderer.three.properties.get(box.material)).toHaveProperty('currentProgram');
++  const keys = vi.spyOn(box.material, 'customProgramCacheKey');
++  // Which texels are copied where, and in which landing step.
++  const copies: string[] = [], copyEnv = renderer._copyEnv.bind(renderer);
++  const name = (target: THREE.WebGLRenderTarget) => target === renderer._roomTarget ? 'room' : target === renderer._roomCopy ? 'aside' : 'sky';
++  const copy$ = vi.spyOn(renderer, '_copyEnv').mockImplementation((from, to) => {
++    copyEnv(from, to);
++    copies.push(`${name(from)}>${name(to)}${renderer._skyLanding ? ' (environment step)' : ''}`);
++  });
+ 
+   const source = await actual.loadSky('downtown');
+   const hdrFreed = vi.spyOn(source.hdr, 'dispose');
+@@ -488,7 +507,12 @@ test('a streamed sky swaps in with uniform writes only, and Low puts the mood ba
+   const dc = renderer.probe.sh.coefficients[0]!, [r, g, b] = sky.data.sh[0]!;
+   expect(0.2126 * dc.x + 0.7152 * dc.y + 0.0722 * dc.z).toBeCloseTo(0.2126 * r + 0.7152 * g + 0.0722 * b, 5);
+   expect(dc.z - dc.x).toBeLessThan(b - r);
+-  expect(renderer.scene.environment).toBe(sky.env.texture);
++  // The sky's PMREM is copied into the room's target, which stays the environment: no lit material re-keys.
++  expect(renderer.scene.environment).toBe(renderer._roomEnv);
++  expect(differing(texels(renderer, renderer._roomTarget), texels(renderer, sky.env))).toBe(0);
++  expect(differing(texels(renderer, renderer._roomCopy!), room)).toBe(0);
++  // The room's are set aside in the environment's step, so the look's frame copies once.
++  expect(copies).toEqual(['room>aside (environment step)', 'sky>room']);
+   expect('SKY_MAP' in dome.defines).toBe(true);
+   expect(renderer._sky.skyMap.value).toBe(sky.background);
+   const fog = (renderer.scene.fog as THREE.Fog).color;
+@@ -497,6 +521,17 @@ test('a streamed sky swaps in with uniform writes only, and Low puts the mood ba
+   expect(fog.b).toBeGreaterThan(fog.r);
+   renderer.render(0, fx);
+   expect(renderer.three.info.programs!.filter(program => !programs.has(program))).toHaveLength(0);
++  expect(keys).not.toHaveBeenCalled();
++  // A map with no sky shows the room's texels again, and the sky's come back with its map (no new download).
++  renderer.setMood({ ...moods.downtown, sky: undefined });
++  expect(renderer.scene.environment).toBe(renderer._roomEnv);
++  expect(differing(texels(renderer, renderer._roomTarget), room)).toBe(0);
++  renderer.setMood(moods.downtown);
++  expect(differing(texels(renderer, renderer._roomTarget), texels(renderer, sky.env))).toBe(0);
++  renderer.render(0, fx);
++  expect(keys).not.toHaveBeenCalled();
++  keys.mockRestore();
++  expect(copies.slice(2)).toEqual(['aside>room', 'sky>room']);
+ 
+   // Low frees the sky and the PMREM generator, and restores the mood's light, fog and environment, at exposure 1.
+   renderer.applyQuality(PRESET_VALUES.low);
+@@ -505,6 +540,10 @@ test('a streamed sky swaps in with uniform writes only, and Low puts the mood ba
+   expect(renderer.hemi.intensity).toBe(0.95);
+   expect(renderer.probe.visible).toBe(false);
+   expect(renderer.scene.environment).toBe(renderer._roomEnv);
++  expect(differing(texels(renderer, renderer._roomTarget), room)).toBe(0);
++  expect(renderer._roomCopy).toBeNull();
++  expect(copies.slice(4)).toEqual(['aside>room']);
++  copy$.mockRestore();
+   // (A shadow-filter change replaces the fog object; see applyQuality.)
+   expect((renderer.scene.fog as THREE.Fog).color.equals(new THREE.Color(moods.downtown.fog))).toBe(true);
+   expect(renderer.post._exposure).toBe(1);
+@@ -587,6 +626,9 @@ test('a sky that lands in a match waits out its quiet start, then goes on a step
+   }
+   expect(steps).toEqual(['background', 'environment', 'on']);
+   expect(renderer._skyAssets?.key).toBe('house');
++  // A PMREM of another size than the room's (this 64 x 32 stand-in) is put on as it is, and nothing is set aside.
++  expect(renderer.scene.environment).toBe(renderer._skyAssets!.env.texture);
++  expect(renderer._roomCopy).toBeNull();
+   // A switch to Low halfway through frees what was made so far.
+   renderer.setMood(moods.mexico);
+   renderer.render(0, fx);

@@ -1,0 +1,1373 @@
+diff --git a/src/components/hud/Hud.tsx b/src/components/hud/Hud.tsx
+index 7ef49ad..059e562 100644
+--- a/src/components/hud/Hud.tsx
++++ b/src/components/hud/Hud.tsx
+@@ -12,10 +12,10 @@ import type {
+   MouseEvent as ReactMouseEvent,
+   ReactNode,
+ } from 'react';
+-import type { DamageMark, HudStore, KillLine as KillLineState } from '@/engine/hud/store';
++import type { DamageMark, HealthState, HudStore, KillLine as KillLineState } from '@/engine/hud/store';
+ import { Bold, BoardPanel, PvpPanel, Screen, SCREEN_TITLE_ID } from './Screens';
+ import { InstallPrompt } from './InstallPrompt';
+-import { useHud } from './useHud';
++import { useHud, useHudSelect } from './useHud';
+ import { OPTIC_COLOR } from '@/engine/render/palette';
+ 
+ declare global {
+@@ -30,13 +30,20 @@ const rendered = (): void => {
+ 
+ interface HudProps { store: HudStore; children?: ReactNode }
+ 
++/** The root re-renders (with its ~25 children's memo checks) only when the low-health flag flips, not on each HP change. */
++const lowHealthOf = (health: HealthState): boolean => health.low;
++
++/** One reduced-motion query for every hit, made on the first. */
++let reducedMotion: MediaQueryList | null = null;
++const prefersReducedMotion = (): boolean => (reducedMotion ??= matchMedia('(prefers-reduced-motion: reduce)')).matches;
++
+ export function Hud({ store, children }: HudProps) {
+   rendered();
+   const rootRef = useRef<HTMLDivElement>(null);
+   const gameplay = useHud(store, 'gameplay');
+   const device = useHud(store, 'device');
+   const mobile = useHud(store, 'mobile');
+-  const health = useHud(store, 'health');
++  const lowHealth = useHudSelect(store, 'health', lowHealthOf);
+   const screen = useHud(store, 'screen');
+   const disposed = useSyncExternalStore(store.subscribeLifecycle, store.isDisposed, store.isDisposed);
+ 
+@@ -50,7 +57,7 @@ export function Hud({ store, children }: HudProps) {
+     !gameplay && 'no-gameplay',
+     device && 'gamepad',
+     mobile.active && 'touch-mode',
+-    health.low && 'low-health',
++    lowHealth && 'low-health',
+     screen !== null && 'screen-open',
+   ].filter(Boolean).join(' ');
+ 
+@@ -98,7 +105,7 @@ export const Crosshair = memo(function Crosshair({ store }: { store: HudStore })
+   rendered();
+   const state = useHud(store, 'crosshair');
+   return (
+-    <div className={`crosshair${state.melee ? ' melee' : ''}${state.ads ? ' ads' : ''}`} data-hud="crosshair" aria-hidden="true">
++    <div ref={store.hostRef('--spread')} className={`crosshair${state.melee ? ' melee' : ''}${state.ads ? ' ads' : ''}`} data-hud="crosshair" aria-hidden="true">
+       <i className="tick top" /><i className="tick bottom" /><i className="tick left" /><i className="tick right" /><i className="dot" />
+     </div>
+   );
+@@ -111,7 +118,7 @@ export const Health = memo(function Health({ store }: { store: HudStore }) {
+   return (
+     <div className="health-row">
+       <span>HP</span>
+-      <div className="health-track" data-hud="health" role="meter" aria-label="Health" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-valuetext={`${state.hp} of ${state.max} HP`}><div data-hud="healthFill" /></div>
++      <div className="health-track" data-hud="health" role="meter" aria-label="Health" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-valuetext={`${state.hp} of ${state.max} HP`}><div ref={store.hostRef('--health')} data-hud="healthFill" /></div>
+       <strong data-hud="hp">{state.hp}</strong>
+     </div>
+   );
+@@ -201,7 +208,7 @@ export const Boss = memo(function Boss({ store }: { store: HudStore }) {
+   rendered();
+   const state = useHud(store, 'boss');
+   const shown = state.name !== null;
+-  return <div className={`boss-bar${shown ? ' is-visible' : ''}`} data-hud="boss" aria-hidden={!shown}><div className="boss-name" data-hud="bossName">{state.name ?? ''}</div><div className="boss-track"><div data-hud="bossFill" /></div></div>;
++  return <div className={`boss-bar${shown ? ' is-visible' : ''}`} data-hud="boss" aria-hidden={!shown}><div className="boss-name" data-hud="bossName">{state.name ?? ''}</div><div className="boss-track"><div ref={store.hostRef('--boss')} data-hud="bossFill" /></div></div>;
+ });
+ 
+ export const FocusMeter = memo(function FocusMeter({ store }: { store: HudStore }) {
+@@ -210,7 +217,7 @@ export const FocusMeter = memo(function FocusMeter({ store }: { store: HudStore
+   return (
+     <div className={`focus-meter${state.show ? ' is-visible' : ''}${state.ready ? ' ready' : ''}`} data-hud="focusMeter" aria-hidden={!state.show}>
+       <div className="focus-label" data-hud="focusLabel">{state.label}</div>
+-      <div className="focus-tube"><div className="focus-fill" data-hud="focusFill" /><div className="focus-flames"><i /><i /><i /></div></div>
++      <div className="focus-tube"><div ref={store.hostRef('--focus')} className="focus-fill" data-hud="focusFill" /><div className="focus-flames"><i /><i /><i /></div></div>
+       <div className="focus-ready">EXECUTE READY</div>
+     </div>
+   );
+@@ -220,7 +227,7 @@ export const Stragglers = memo(function Stragglers({ store }: { store: HudStore
+   rendered();
+   const count = useHud(store, 'stragglers');
+   return <div className="stragglers" data-hud="stragglers" aria-hidden="true">
+-    {Array.from({ length: count }, (_, i) => <i key={i} style={{ transform: `var(--straggler-${i})` }} />)}
++    {Array.from({ length: count }, (_, i) => <i key={i} ref={store.hostRef(`--straggler-${i}`)} style={{ transform: `var(--straggler-${i})` }} />)}
+   </div>;
+ });
+ 
+@@ -228,7 +235,7 @@ export const SquadMarks = memo(function SquadMarks({ store }: { store: HudStore
+   rendered();
+   const labels = useHud(store, 'marks');
+   return <div className="squad-marks" data-hud="marks" aria-hidden="true">
+-    {labels.map((label, i) => <i key={i} style={{ transform: `var(--mark-${i})` }}><span>{label}</span></i>)}
++    {labels.map((label, i) => <i key={i} ref={store.hostRef(`--mark-${i}`)} style={{ transform: `var(--mark-${i})` }}><span>{label}</span></i>)}
+   </div>;
+ });
+ 
+@@ -237,7 +244,7 @@ export const ExecMarks = memo(function ExecMarks({ store }: { store: HudStore })
+   rendered();
+   const marks = useHud(store, 'execMarks');
+   return <div className="exec-marks" data-hud="execMarks" aria-hidden="true">
+-    {marks.map((n, i) => <div key={i} className={`exec-mark${n ? ' locked' : ''}`} style={{ transform: `var(--exec-${i})` }}>
++    {marks.map((n, i) => <div key={i} ref={store.hostRef(`--exec-${i}`)} className={`exec-mark${n ? ' locked' : ''}`} style={{ transform: `var(--exec-${i})` }}>
+       <i /><i /><i /><i />{n ? <span>{n}</span> : null}
+     </div>)}
+   </div>;
+@@ -246,7 +253,7 @@ export const ExecMarks = memo(function ExecMarks({ store }: { store: HudStore })
+ export const Breath = memo(function Breath({ store }: { store: HudStore }) {
+   rendered();
+   const state = useHud(store, 'breath');
+-  return <div className={`grapple-breath${state.low ? ' low' : ''}`} data-hud="breath" hidden={!state.shown} aria-label="Grapple breath" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={state.percent}><div data-hud="breathFill" /></div>;
++  return <div className={`grapple-breath${state.low ? ' low' : ''}`} data-hud="breath" hidden={!state.shown} aria-label="Grapple breath" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={state.percent}><div ref={store.hostRef('--breath')} data-hud="breathFill" /></div>;
+ });
+ 
+ export const Scope = memo(function Scope({ store }: { store: HudStore }) {
+@@ -386,7 +393,7 @@ export const Hitmarker = memo(function Hitmarker({ store }: { store: HudStore })
+   const ref = useRef<SVGSVGElement>(null), killRef = useRef<SVGSVGElement>(null);
+   useEffect(() => {
+     if (state.nonce === 0) return;
+-    const scale = matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 1.15;
++    const scale = prefersReducedMotion() ? 1 : 1.15;
+     const animation = ref.current?.animate([
+       { opacity: 1, transform: `translate(-50%, -50%) scale(${scale})` },
+       { opacity: 0, transform: 'translate(-50%, -50%) scale(1)' },
+diff --git a/src/components/hud/useHud.ts b/src/components/hud/useHud.ts
+index 59b57e2..429cc25 100644
+--- a/src/components/hud/useHud.ts
++++ b/src/components/hud/useHud.ts
+@@ -12,3 +12,18 @@ export function useHud<K extends HudKey>(store: HudStore, key: K): HudState[K] {
+   const getSnapshot = useCallback(() => store.getSnapshot(key), [store, key]);
+   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+ }
++
++/**
++ * Subscribe to one primitive derived from a slice (`select` must be a stable, module-level function): the component
++ * re-renders only when the derived value changes, not on every replacement of the slice.
++ */
++export function useHudSelect<K extends HudKey, T extends string | number | boolean | null>(
++  store: HudStore, key: K, select: (state: HudState[K]) => T,
++): T {
++  const subscribe = useCallback(
++    (listener: () => void) => store.subscribe(key, listener),
++    [store, key],
++  );
++  const getSnapshot = useCallback(() => select(store.getSnapshot(key)), [store, key, select]);
++  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
++}
+diff --git a/src/engine/hud/store.ts b/src/engine/hud/store.ts
+index be35fb5..346af81 100644
+--- a/src/engine/hud/store.ts
++++ b/src/engine/hud/store.ts
+@@ -12,8 +12,11 @@
+  *
+  * 2. **Continuous values never reach React.** Spread, bar fills and the focus
+  *    mark change every frame and have no structure worth diffing. They are
+- *    written straight to CSS custom properties on the HUD root, which is what
+- *    the crosshair already did before the port. Zero renders.
++ *    written straight to CSS custom properties. Zero renders. Each per-frame
++ *    variable goes on the element that reads it (`hostRef`), not on the HUD
++ *    root: custom properties inherit, so a root write restyles the whole HUD
++ *    every frame (~70 elements, 0.2-0.4 ms of main thread in a fight), where a
++ *    host write restyles only the host's own subtree.
+  *
+  * 3. **Transient entries age in `update(dt)`.** The kill feed and damage
+  *    indicators are lists whose identity changes on add and expiry only; the
+@@ -105,6 +108,13 @@ export interface HudState {
+   qualityPrompt: string | null;
+ }
+ 
++/**
++ * The per-frame variables, written on their readers (`hostRef`) instead of the root. The root keeps their defaults
++ * (`.game-hud` in globals.css) and every other variable (`--scope-*`).
++ */
++const HOSTED = /^--(?:spread|health|breath|focus|boss|exec-\d+|straggler-\d+|mark-\d+)$/;
++export const isHostedVar = (name: string): boolean => HOSTED.test(name);
++
+ const KILL_LIFE = 1.7;
+ const DAMAGE_LIFE = 1.0;
+ const MAX_KILL_LINES = 6;
+@@ -119,6 +129,10 @@ export class HudStore implements HudView {
+   #breathMeter: HTMLElement | null = null;
+   #breathPercent = 100;
+   #vars = new Map<string, string>();
++  /** Mounted readers of each hosted variable. */
++  #hosts = new Map<string, Set<HTMLElement>>();
++  /** One stable ref callback per variable, so React does not detach and re-attach it on every render. */
++  #hostRefs = new Map<string, (el: HTMLElement | null) => () => void>();
+   #nextId = 1;
+   #messageT = 0;
+   #tipT = 0;
+@@ -165,10 +179,33 @@ export class HudStore implements HudView {
+   bindRoot(el: HTMLElement | null): void {
+     this.#root = el;
+     this.#breathMeter = el?.querySelector<HTMLElement>('[data-hud="breath"]') ?? null;
+-    if (el) for (const [name, value] of this.#vars) el.style.setProperty(name, value);
++    if (el) for (const [name, value] of this.#vars) if (!HOSTED.test(name)) el.style.setProperty(name, value);
+     this.#breathMeter?.setAttribute('aria-valuenow', String(this.#breathPercent));
+   }
+ 
++  /**
++   * Registers `el` as a reader of the hosted variable `name` until the returned cleanup runs, and writes the value
++   * remembered for it at once: a host can remount (a bar, a marker) long after the engine wrote, without `bindRoot`.
++   */
++  bindVarHost(name: string, el: HTMLElement): () => void {
++    let set = this.#hosts.get(name);
++    if (!set) this.#hosts.set(name, set = new Set());
++    set.add(el);
++    const value = this.#vars.get(name);
++    if (value !== undefined) el.style.setProperty(name, value);
++    return () => { set.delete(el); };
++  }
++
++  /** A stable React ref callback (React 19: the returned cleanup runs on detach) that hosts the variable `name`. */
++  hostRef(name: string): (el: HTMLElement | null) => () => void {
++    let ref = this.#hostRefs.get(name);
++    if (!ref) {
++      ref = (el: HTMLElement | null) => (el ? this.bindVarHost(name, el) : () => {});
++      this.#hostRefs.set(name, ref);
++    }
++    return ref;
++  }
++
+   subscribe(key: HudKey, listener: () => void): () => void {
+     let set = this.#listeners.get(key);
+     if (!set) this.#listeners.set(key, set = new Set());
+@@ -210,7 +247,9 @@ export class HudStore implements HudView {
+   #setVar(name: string, value: string): void {
+     if (this.#vars.get(name) === value) return;
+     this.#vars.set(name, value);
+-    this.#root?.style.setProperty(name, value);
++    if (!HOSTED.test(name)) { this.#root?.style.setProperty(name, value); return; }
++    const hosts = this.#hosts.get(name);
++    if (hosts) for (const el of hosts) el.style.setProperty(name, value);
+   }
+ 
+   // ------------------------------------------------------------------ frame
+diff --git a/src/engine/render/fx.ts b/src/engine/render/fx.ts
+index fb7b3e8..c4b3815 100644
+--- a/src/engine/render/fx.ts
++++ b/src/engine/render/fx.ts
+@@ -1,6 +1,6 @@
+ import * as THREE from 'three';
+ import manifest from './fx-assets.json';
+-import { GRID_GLSL, GRID_UNIFORMS, surfMat, unlitMat, withGrid } from './materials';
++import { GRID_GLSL, GRID_UNIFORMS, quietly, surfMat, unlitMat, withGrid } from './materials';
+ import { TONE, TONE_HEX } from './palette';
+ import { TEXTURE_SIZE } from './surfaces';
+ import { textureBytes } from './textures';
+@@ -634,19 +634,23 @@ export function wearFx(maps: ReadonlyMap<FxAtlas, THREE.Texture> | null): void {
+ // ----------------------------------------------------------------- warm-up
+ 
+ const templates = new Map<string, THREE.Group>();
++const lateTemplates = new Map<string, THREE.Group>();
++const templateKey = (look: 'lowpoly' | 'realistic', soft: boolean): string => (look === 'realistic' ? `${look}-${soft ? 'soft' : 'dither'}` : look);
+ /**
+- * One mesh of every effect material a look uses (with `soft`, the soft
+- * particles' sprites, else the dithered ones), instanced where the pools are,
+- * for the renderer to compile and draw once at the menu (render/index.ts
++ * One mesh of every effect material a look uses in the scene pass (without
++ * `soft`, the dithered sprites too), instanced where the pools are, for the
++ * renderer to compile and draw once at the menu (render/index.ts
+  * `_warmPrograms`), so a match's first shot, hole or explosion links nothing.
++ * With `soft`, the soft particles' sprites go in `fxLateTemplate` instead:
++ * they draw in the soft layer's scene (no lights, so programs of their own).
+  */
+ export function fxTemplate(look: 'lowpoly' | 'realistic', soft = false): THREE.Group {
+-  const key = look === 'realistic' ? `${look}-${soft ? 'soft' : 'dither'}` : look;
++  const key = templateKey(look, soft);
+   let group = templates.get(key);
+   if (group) return group;
+   group = new THREE.Group();
+   group.name = `fx-template-${key}`;
+-  const add = (mesh: THREE.Mesh) => { mesh.frustumCulled = false; group!.add(mesh); };
++  const add = (mesh: THREE.Mesh, into = group!) => { mesh.frustumCulled = false; into.add(mesh); };
+   const trace = tracerGeometry(1);
+   trace.instanceCount = 1;
+   add(new THREE.Mesh(trace, tracerMaterial()));
+@@ -673,10 +677,16 @@ export function fxTemplate(look: 'lowpoly' | 'realistic', soft = false): THREE.G
+   };
+   instanced(new THREE.PlaneGeometry(0.01, 0.01), flatDecalMaterial());
+   if (look === 'realistic') {
++    // Made without a uuid draw: the template's meshes keep the random draws they had when the soft sprites sat in it.
++    const late = soft ? quietly(() => new THREE.Group()) : group;
++    if (soft) {
++      late.name = `fx-late-template-${key}`;
++      lateTemplates.set(key, late);
++    }
+     for (const kind of soft ? ['fire-soft', 'soft'] as const : ['fire', 'dither'] as const) {
+       const geometry = spriteGeometry(1);
+       geometry.instanceCount = 1;
+-      add(new THREE.Mesh(geometry, spriteMaterial(kind)));
++      add(new THREE.Mesh(geometry, spriteMaterial(kind)), late);
+     }
+     const plane = new THREE.PlaneGeometry(0.01, 0.01);
+     plane.setAttribute('decalCell', new THREE.InstancedBufferAttribute(new Float32Array([0, 0, 1, 1]), 4));
+@@ -692,6 +702,18 @@ export function fxTemplate(look: 'lowpoly' | 'realistic', soft = false): THREE.G
+   return group;
+ }
+ 
++/**
++ * The soft particles' sprites (`soft`: High and Ultra's realistic look), one
++ * mesh each as the pools draw them, for the renderer to compile and draw
++ * once at the menu in the soft layer's scene (`Renderer.fxScene`, postfx.ts
++ * `drawSoft`: no lights, the scene's fog), as their first smoke and fire
++ * draw there. Null where there is no soft layer.
++ */
++export function fxLateTemplate(look: 'lowpoly' | 'realistic', soft = false): THREE.Group | null {
++  fxTemplate(look, soft);
++  return lateTemplates.get(templateKey(look, soft)) ?? null;
++}
++
+ // ------------------------------------------------------------------ streaming
+ 
+ /** How `FxAssets` reaches the network and the GPU; the renderer's in the game, stand-ins in tests. */
+diff --git a/src/engine/render/index.ts b/src/engine/render/index.ts
+index 37f7666..4640fbf 100644
+--- a/src/engine/render/index.ts
++++ b/src/engine/render/index.ts
+@@ -9,7 +9,9 @@ import {
+   BAKE_UNIFORMS, GRID_UNIFORMS, OPERATOR_AO, casterGroups, fixUv, hiddenMat, levelDepthMat, realMat, realMaterials, setAoAlpha, skyMat, standInGrid,
+   standInLightmap, standInMaps, surfMat, wearMaps,
+ } from './materials';
+-import { BAKE_FILE, LIGHTMAP_SIZE, bakeFor, bakedTriangles, layoutSteps, lightmapChartSteps, wearLightmapUVs } from './lightmap';
++import { BAKE_FILE, bakeFor, bakedTriangles, wearLightmapUVs } from './lightmap';
++import { dropLayout, postLayout } from './lightmapJob';
++import { bakeLayoutSteps, laidOut } from './lightmapLayout';
+ import { ANTIALIAS_SPEC, AO_SCALE, PRESET_VALUES, SHADOW_SPEC, VIEW_SCALE, fightCpuPaths } from './quality';
+ import { GpuFences, MatchClock } from './pacing';
+ import { aimShadowBox, cascadeCentre, sizeShadowBox } from './shadows';
+@@ -17,7 +19,7 @@ import { disposeSky, loadSky } from './sky';
+ import { TEXTURE_SETS, TEXTURE_SIZE, resolveMaterial, setInfo, setsFor } from './surfaces';
+ import { BakeStreamer, TextureStreamer, fetchGrid, ktx2Loader, lightmapLoader, warmCompressedUploads } from './textures';
+ import { WeaponAssets, weaponTextureSize } from './weapons';
+-import { FX_UNIFORMS, FxAssets, fxTemplate, fxTextureSize } from './fx';
++import { FX_UNIFORMS, FxAssets, fxLateTemplate, fxTemplate, fxTextureSize } from './fx';
+ import { useOperatorSource, usePropSource } from './figure';
+ import { OperatorAssets, operatorWant } from './operators';
+ import { PropAssets, dressingSets, propTextureSize } from './props';
+@@ -28,6 +30,7 @@ import type { SkyAssets, SkySource } from './sky';
+ import type { TextureSet } from './surfaces';
+ import type { BakedLight, LoadBake } from './textures';
+ import type { BakeInfo, BakedTriangles, LightmapLayout } from './lightmap';
++import type { LayoutTicket } from './lightmapJob';
+ import type { PropRequest } from './props';
+ import type { Level, LevelSurface, Mood } from '../types';
+ 
+@@ -113,14 +116,6 @@ export const UPLOAD_SETTLE_MS = 500;
+ /** Script a slot spends laying a bake's charts out (`_layBake`): a map's layout takes several slots, no frame a long one. */
+ const LAYOUT_STEP_MS = 4;
+ 
+-/** A bake's layout as steps: the chart pass, then packing and writing `uv1` (render/lightmap.ts). */
+-function* bakeLayoutSteps(surfaces: readonly LevelSurface[], bounds: Level['bounds'], triangles: BakedTriangles,
+-  density: number): Generator<void, LightmapLayout | null> {
+-  const charts = yield* lightmapChartSteps(surfaces, bounds, triangles);
+-  yield;
+-  return yield* layoutSteps(charts, LIGHTMAP_SIZE, density);
+-}
+-
+ /**
+  * A map's bake fades in over this long (eased) once it is on the GPU, so the
+  * light does not pop: indoors the bake is about half the probe's light, and a
+@@ -188,7 +183,10 @@ SHADOW_PROBE.castShadow = true;
+ /**
+  * A root whose shader work is held off a match's frames (`Renderer._compiles`,
+  * `_warmups`); `valid` is false once it was freed. `inMatch`: its warm-up draw
+- * may also run in a live match once its quiet start is over.
++ * may also run in a live match once its quiet start is over. `own`: work that
++ * is not the world pass's (the soft layer's sprites, the post passes), which
++ * compiles and draws itself where it draws in a frame, in place of the root
++ * compiled for the scene and drawn in it.
+  */
+ interface Warmup {
+   root: THREE.Object3D;
+@@ -196,6 +194,13 @@ interface Warmup {
+   valid: () => boolean;
+   inMatch: boolean;
+   drawn: boolean;
++  own?: OwnWarmup;
++}
++
++/** A warm-up's own compile (returns the materials, as `three.compile` does) and its unseen draw. */
++interface OwnWarmup {
++  compile(): THREE.Material[];
++  draw(): void;
+ }
+ 
+ /** Vertex colours that have gone to the GPU (`wearColours`). */
+@@ -337,10 +342,11 @@ export class Renderer {
+   /**
+    * The current level's lightmap layout still to make (`_layBake`): its
+    * triangles, the chart pass and packing as steps (render/lightmap.ts), and
+-   * the `uv1` arrays (zeros till then) they fill. Null once laid out, or
+-   * with no bake.
++   * the `uv1` arrays (zeros till then) they fill, and the same layout
++   * posted to the worker (render/lightmapJob.ts; null without one). Null once
++   * laid out, or with no bake.
+    */
+-  _bakeLayout: { triangles: BakedTriangles; steps: Generator<void, LightmapLayout | null>; uvs: Float32Array[] } | null = null;
++  _bakeLayout: { triangles: BakedTriangles; steps: Generator<void, LightmapLayout | null>; uvs: Float32Array[]; ticket: LayoutTicket | null } | null = null;
+   /** Realistic tiers: the bake streaming or on the level. Null on Low. */
+   _bakes: BakeStreamer | null = null;
+   /**
+@@ -680,6 +686,8 @@ export class Renderer {
+       }
+       this._pmrem?.dispose();
+       this._pmrem = null;
++      // It puts no fences (`render`): none kept from the last realistic frames for a later realistic tier to read.
++      this._fences.clear();
+     }
+     this.resize();
+   }
+@@ -1042,6 +1050,7 @@ export class Renderer {
+     if (this._bakeChecked === this._surfaces) return;
+     this._bakeChecked = this._surfaces;
+     this._bake = null;
++    dropLayout(this._bakeLayout?.ticket ?? null);
+     this._bakeLayout = null;
+     const level = this._level, bake = level ? bakeFor(level) : null;
+     if (!level || !bake) return;
+@@ -1055,17 +1064,20 @@ export class Renderer {
+       || !uvs.every((uv, i) => uv.length === 2 * triangles.surfaces[i]!.mesh.geometry.getAttribute('position').count))) uvs = null;
+     if (!uvs) {
+       uvs = triangles.surfaces.map(s => new Float32Array(2 * s.mesh.geometry.getAttribute('position').count));
+-      this._bakeLayout = { triangles, steps: bakeLayoutSteps(this._surfaces, level.bounds, triangles, bake.info.density), uvs };
++      // The worker lays it out during the quiet start; the steps are the same layout on the main thread, if it is late.
++      const ticket = postLayout(triangles, level.bounds, bake.info.density);
++      this._bakeLayout = { triangles, steps: bakeLayoutSteps(this._surfaces, level.bounds, triangles, bake.info.density), uvs, ticket };
+     }
+     wearLightmapUVs(triangles.surfaces, uvs);
+     this._bake = bake;
+   }
+ 
+   /**
+-   * The current level's lightmap layout (render/lightmap.ts) for about
+-   * `budget` ms of script, in an upload slot: its charts, then the atlas,
+-   * written into the `uv1` zeros `_checkBake` put on (a map's whole layout is
+-   * 30-80 ms on a desktop). True once laid out (or nothing to lay out). A
++   * The current level's lightmap layout (render/lightmap.ts) in an upload
++   * slot: the worker's, once it has answered (the same bytes), else about
++   * `budget` ms of its steps on the main thread (a map's whole layout is
++   * 30-80 ms on a desktop): its charts, then the atlas, written into the
++   * `uv1` zeros `_checkBake` put on. True once laid out (or nothing to lay out). A
+    * layout that no longer matches its manifest (the map changed since its
+    * bake, in a way the hash misses) takes the bake off: the level keeps the
+    * probe.
+@@ -1073,13 +1085,18 @@ export class Renderer {
+   _layBake(budget = LAYOUT_STEP_MS): boolean {
+     const pending = this._bakeLayout, bake = this._bake;
+     if (!pending || !bake) return true;
+-    const until = performance.now() + budget;
+-    let next = pending.steps.next();
+-    while (!next.done && performance.now() < until) next = pending.steps.next();
+-    if (!next.done) return false;
+-    const layout = next.value;
++    let layout;
++    if (pending.ticket?.done) layout = pending.ticket.layout;
++    else {
++      const until = performance.now() + budget;
++      let next = pending.steps.next();
++      while (!next.done && performance.now() < until) next = pending.steps.next();
++      if (!next.done) return false;
++      layout = laidOut(next.value);
++      dropLayout(pending.ticket);
++    }
+     this._bakeLayout = null;
+-    if (!layout || layout.charts.length !== bake.info.charts || layout.rows !== bake.info.rows || layout.triangles !== bake.info.triangles) {
++    if (!layout || layout.charts !== bake.info.charts || layout.rows !== bake.info.rows || layout.triangles !== bake.info.triangles) {
+       // The zero `uv1` stays on: the unbaked materials never read it, and a removed attribute's buffer, drawn once
+       // already, would outlive its geometry's disposal (as `shedColours` says).
+       this._bakeMismatch(bake.name);
+@@ -1362,8 +1379,8 @@ export class Renderer {
+   }
+ 
+   /** Queue `root` for a held compile or warm-up draw; resolves once it is done, or dropped as freed. */
+-  _hold(list: Warmup[], root: THREE.Object3D, valid: () => boolean, inMatch = false): Promise<void> {
+-    return new Promise<void>(done => { list.push({ root, done, valid, inMatch, drawn: false }); });
++  _hold(list: Warmup[], root: THREE.Object3D, valid: () => boolean, inMatch = false, own?: OwnWarmup): Promise<void> {
++    return new Promise<void>(done => { list.push({ root, done, valid, inMatch, drawn: false, own }); });
+   }
+ 
+   /**
+@@ -1399,6 +1416,58 @@ export class Renderer {
+     // The effects' programs (R5): tracers and flat decals on every look, the realistic sprites, decals, casings and flashes too.
+     const fx = fxTemplate(this._quality.look, this._softFx);
+     void this._hold(this._compiles, fx, () => true).then(() => this._hold(this._warmups, fx, () => true));
++    // The soft particles' sprites (High, Ultra) in the soft layer's scene, and the light shafts' passes (Ultra),
++    // which the sun out of view all through a load leaves undrawn: as their first frames draw them.
++    const late = fxLateTemplate(this._quality.look, this._softFx);
++    if (late) this._holdOwn(late, () => this._softFx, this._lateWarmup(late));
++    if (this.post.config.shafts) {
++      const post = this.post;
++      this._holdOwn(post.scene, () => post.config.shafts, { compile: () => post.compileShafts(this.three), draw: () => post.warmShafts(this.three) });
++    }
++  }
++
++  /** A held compile, then a held warm-up draw (at a menu), of work that compiles and draws itself (`Warmup.own`). */
++  _holdOwn(root: THREE.Object3D, valid: () => boolean, own: OwnWarmup): void {
++    void this._hold(this._compiles, root, valid, false, own).then(() => this._hold(this._warmups, root, valid, false, own));
++  }
++
++  /**
++   * The soft sprites' template compiled and drawn as `post.drawSoft` draws
++   * the pools: in `fxScene` (no lights) with the scene's fog, into the soft
++   * layer, which every soft frame clears before it draws and nothing reads
++   * on another frame. Only the template draws: the pools in the layer's
++   * scene are hidden for it.
++   */
++  _lateWarmup(late: THREE.Group): OwnWarmup {
++    const scene = this.fxScene;
++    return {
++      compile: () => {
++        scene.fog = this.scene.fog;
++        this.three.setRenderTarget(this.post._soft);
++        try {
++          return [...this.three.compile(late, this.camera, scene)];
++        } finally {
++          this.three.setRenderTarget(this.post.target);
++        }
++      },
++      draw: () => {
++        const shown = scene.children.filter(child => child.visible);
++        for (const child of shown) child.visible = false;
++        late.scale.setScalar(1e-5);
++        late.position.copy(this.camera.position);
++        scene.add(late);
++        scene.fog = this.scene.fog;
++        try {
++          this.three.setRenderTarget(this.post._soft);
++          this.three.render(scene, this.camera);
++        } finally {
++          scene.remove(late);
++          late.scale.setScalar(1);
++          late.position.set(0, 0, 0);
++          for (const child of shown) child.visible = true;
++        }
++      },
++    };
+   }
+ 
+   /**
+@@ -1410,14 +1479,14 @@ export class Renderer {
+     if (this._compiles.length === 0 || this._match.quiet(performance.now())) return;
+     const target = this.three.getRenderTarget();
+     this.three.setRenderTarget(this.post.target);
+-    for (const { root, done, valid } of this._compiles.splice(0)) {
++    for (const { root, done, valid, own } of this._compiles.splice(0)) {
+       if (!valid()) {
+         done();
+         continue;
+       }
+       // three's `compileAsync`, except that a material freed while its program links (Low, a lost
+       // context) counts as done: three's own poll throws on it.
+-      const materials = [...this.three.compile(root, this.camera, this.scene)];
++      const materials = own ? own.compile() : [...this.three.compile(root, this.camera, this.scene)];
+       const linked = () => this._disposed || materials.every(material =>
+         (this.three.properties.get(material) as { currentProgram?: { isReady(): boolean } }).currentProgram?.isReady() !== false);
+       const poll = () => { if (linked()) done(); else setTimeout(poll, 10); };
+@@ -1446,6 +1515,27 @@ export class Renderer {
+     const live = this._match.live;
+     const list = live ? this._warmups.filter(w => w.inMatch).slice(0, 1) : this._warmups;
+     if (list.length === 0 || this._match.quiet(performance.now())) return;
++    const world = list.filter(w => !w.own);
++    if (world.length > 0) this._drawWorldWarmups(world, live);
++    // Then the ones that draw themselves, with no shadow work (their scenes have no lights): the frame's own
++    // render still redraws the maps if this frame does.
++    const own = list.filter(w => w.own);
++    if (own.length > 0) {
++      const shadows = this.three.shadowMap.needsUpdate;
++      this.three.shadowMap.needsUpdate = false;
++      try {
++        for (const warm of own) {
++          warm.own!.draw();
++          warm.drawn = true;
++        }
++      } finally {
++        this.three.shadowMap.needsUpdate = shadows;
++      }
++    }
++  }
++
++  /** `_drawWarmups`' roots that draw in the world pass, in one extra render of the scene. */
++  _drawWorldWarmups(list: Warmup[], live: boolean): void {
+     const shown: THREE.Object3D[] = [];
+     for (const { root } of list) {
+       if (root === this.rig) {
+@@ -1679,8 +1769,10 @@ export class Renderer {
+     this.sky.position.copy(this.camera.position);
+     this._drawWarmups();
+     this._updateFx();
+-    // The operators follow their figures' pivots and clips, and figures out of view put theirs on.
+-    this.camera.updateMatrixWorld();
++    // The operators follow their figures' pivots and clips, and figures out of view put theirs on. They read the
++    // camera's matrices only: its children (the rig, every view model in it) wait for `render`'s scene walk, which
++    // computes them again from the same inputs (three's Camera override keeps `matrixWorldInverse` in step).
++    this.camera.updateWorldMatrix(false, false);
+     this.operators.frame(this.camera);
+     this.props.update(this.camera);
+     this.three.setRenderTarget(this.post.target);
+@@ -1702,7 +1794,8 @@ export class Renderer {
+       this.post.drawSoft(this.three, this.fxScene, this.camera);
+     }
+     this.post.draw(this.three, time, fx, this.camera);
+-    this._fences.mark(performance.now());
++    // Only the realistic look streams (`gpuBehind`), so only its frames put a fence (a sync object each).
++    if (this._quality.look === 'realistic') this._fences.mark(performance.now());
+   }
+ }
+ 
+diff --git a/src/engine/render/lightmapJob.ts b/src/engine/render/lightmapJob.ts
+new file mode 100644
+index 0000000..44262c2
+--- /dev/null
++++ b/src/engine/render/lightmapJob.ts
+@@ -0,0 +1,80 @@
++import { layoutRequest } from './lightmapLayout';
++import type { BakedTriangles } from './lightmap';
++import type { LaidOut, LayoutReply } from './lightmapLayout';
++import type { Bounds } from '../types';
++
++/**
++ * The renderer's side of the layout worker (render/lightmapWorker.ts, which
++ * runs `runLayoutRequest` from render/lightmapLayout.ts): one worker a
++ * session, made on the first bake to lay out, its answers matched to tickets.
++ */
++
++/** A posted layout: `layout` set once `done`; `failed` when the worker threw or died. */
++export interface LayoutTicket {
++  readonly job: number;
++  done: boolean;
++  failed: boolean;
++  layout: LaidOut | null;
++}
++
++let worker: Worker | null | undefined;
++let jobs = 0;
++const tickets = new Map<number, LayoutTicket>();
++
++function failAll(): void {
++  for (const ticket of tickets.values()) ticket.failed = true;
++  tickets.clear();
++}
++
++/** The session's layout worker, made on first use; null with no `Worker`, or once it failed. */
++function layoutWorker(): Worker | null {
++  if (worker !== undefined) return worker;
++  worker = null;
++  if (typeof Worker === 'undefined') return null;
++  try {
++    const made = new Worker(new URL('./lightmapWorker.ts', import.meta.url), { type: 'module' });
++    made.onmessage = (event: MessageEvent<LayoutReply>) => {
++      const reply = event.data, ticket = tickets.get(reply.job);
++      if (!ticket) return;
++      tickets.delete(reply.job);
++      if (reply.error !== undefined) {
++        ticket.failed = true;
++        return;
++      }
++      ticket.layout = reply.layout;
++      ticket.done = true;
++    };
++    // A worker that failed to load or died: every layout in it, and every later one, stays on the main thread.
++    made.onerror = made.onmessageerror = () => {
++      made.terminate();
++      if (worker === made) worker = null;
++      failAll();
++    };
++    worker = made;
++  } catch {
++    worker = null;
++  }
++  return worker;
++}
++
++/**
++ * Post a bake's layout to the worker. Null with no worker: the caller lays
++ * it out on the main thread. The ticket fills in on a later task.
++ */
++export function postLayout(triangles: BakedTriangles, bounds: Bounds, density: number): LayoutTicket | null {
++  const target = layoutWorker();
++  if (!target) return null;
++  const job = ++jobs, ticket: LayoutTicket = { job, done: false, failed: false, layout: null };
++  try {
++    target.postMessage(layoutRequest(job, triangles, bounds, density));
++  } catch {
++    return null;
++  }
++  tickets.set(job, ticket);
++  return ticket;
++}
++
++/** Forget a ticket whose layout is no longer wanted (the level changed, or the main thread finished first). */
++export function dropLayout(ticket: LayoutTicket | null): void {
++  if (ticket) tickets.delete(ticket.job);
++}
+diff --git a/src/engine/render/lightmapLayout.ts b/src/engine/render/lightmapLayout.ts
+new file mode 100644
+index 0000000..bb27fc9
+--- /dev/null
++++ b/src/engine/render/lightmapLayout.ts
+@@ -0,0 +1,73 @@
++import { LIGHTMAP_SIZE, layoutSteps, lightmapChartSteps, runSteps } from './lightmap';
++import type { BakedTriangles, LightmapLayout } from './lightmap';
++import type { Bounds, LevelSurface } from '../types';
++
++/**
++ * A bake's layout off the main thread (render/lightmapWorker.ts): the same
++ * chart pass and packing (`bakeLayoutSteps`, render/lightmap.ts) on the same
++ * triangles, so the same `uv1` to the bit. The renderer posts it on the
++ * level's first realistic frame (`_checkBake`), so it runs while the match's
++ * quiet start streams; `_layBake` takes the answer in its first slot, and
++ * lays the charts out itself in steps meanwhile (the old path), with no
++ * worker, or a worker that failed or is late. None of it draws `Math.random`.
++ */
++
++/** A bake's layout as steps: the chart pass, then packing and writing `uv1` (render/lightmap.ts). */
++export function* bakeLayoutSteps(surfaces: readonly LevelSurface[], bounds: Bounds, triangles: BakedTriangles,
++  density: number): Generator<void, LightmapLayout | null> {
++  const charts = yield* lightmapChartSteps(surfaces, bounds, triangles);
++  yield;
++  return yield* layoutSteps(charts, LIGHTMAP_SIZE, density);
++}
++
++/** What the worker lays out: plain arrays and numbers (structured-cloned, so the main thread keeps its own). */
++export interface LayoutRequest {
++  job: number;
++  owner: Int32Array;
++  corners: Int32Array;
++  positions: Float64Array;
++  /** Each static surface's vertex count: its `uv1` length over 2. */
++  counts: Int32Array;
++  hash: string;
++  bounds: Bounds;
++  density: number;
++}
++
++/** What `_layBake` checks against the manifest and writes: one `uv1` per static surface, and the counts. */
++export interface LaidOut {
++  uvs: Float32Array[];
++  charts: number;
++  rows: number;
++  triangles: number;
++}
++
++export interface LayoutReply {
++  job: number;
++  layout: LaidOut | null;
++  /** Set when the worker threw: the renderer lays the charts out itself. */
++  error?: string;
++}
++
++/** The parts of a layout `_layBake` reads, from either path. */
++export const laidOut = (layout: LightmapLayout | null): LaidOut | null =>
++  layout && { uvs: layout.uvs, charts: layout.charts.length, rows: layout.rows, triangles: layout.triangles };
++
++export function layoutRequest(job: number, triangles: BakedTriangles, bounds: Bounds, density: number): LayoutRequest {
++  const counts = Int32Array.from(triangles.surfaces, s => s.mesh.geometry.getAttribute('position').count);
++  const { owner, corners, positions, hash } = triangles;
++  return { job, owner, corners, positions, counts, hash, bounds: { minX: bounds.minX, maxX: bounds.maxX, minZ: bounds.minZ, maxZ: bounds.maxZ }, density };
++}
++
++/**
++ * The worker's whole job, at once: `bakeLayoutSteps` run to the end on the
++ * request's triangles. The layout reads a surface only for its vertex count
++ * (the length of its `uv1`), so each stands in as that.
++ */
++export function runLayoutRequest(request: LayoutRequest): LaidOut | null {
++  const surfaces = Array.from(request.counts, count => ({ mesh: { geometry: { getAttribute: () => ({ count }) } } }) as unknown as LevelSurface);
++  const triangles: BakedTriangles = { surfaces, owner: request.owner, corners: request.corners, positions: request.positions, hash: request.hash };
++  return laidOut(runSteps(bakeLayoutSteps(surfaces, request.bounds, triangles, request.density)));
++}
++
++/** The reply's `uv1` buffers, moved to the main thread rather than copied. */
++export const replyTransfer = (reply: LayoutReply): Transferable[] => reply.layout?.uvs.map(uv => uv.buffer) ?? [];
+diff --git a/src/engine/render/lightmapWorker.ts b/src/engine/render/lightmapWorker.ts
+new file mode 100644
+index 0000000..5cce860
+--- /dev/null
++++ b/src/engine/render/lightmapWorker.ts
+@@ -0,0 +1,19 @@
++import { replyTransfer, runLayoutRequest } from './lightmapLayout';
++import type { LayoutReply, LayoutRequest } from './lightmapLayout';
++
++/**
++ * The bake layout worker (render/lightmapJob.ts posts to it): each request's
++ * layout, at once, and its `uv1` buffers moved back.
++ */
++const scope = self as unknown as Worker;
++
++scope.onmessage = (event: MessageEvent<LayoutRequest>) => {
++  const request = event.data;
++  let reply: LayoutReply;
++  try {
++    reply = { job: request.job, layout: runLayoutRequest(request) };
++  } catch (error) {
++    reply = { job: request.job, layout: null, error: String(error) };
++  }
++  scope.postMessage(reply, replyTransfer(reply));
++};
+diff --git a/src/engine/render/postfx.ts b/src/engine/render/postfx.ts
+index 6b57336..a6a0231 100644
+--- a/src/engine/render/postfx.ts
++++ b/src/engine/render/postfx.ts
+@@ -1096,6 +1096,43 @@ export class Composite {
+     return (1 - t * t * (3 - 2 * t)) * facing;
+   }
+ 
++  /**
++   * The light shafts' programs, compiled as `_pass` draws them (the
++   * triangle in this pass scene: no lights, no fog, into a target), for the
++   * renderer to link at a menu (render/index.ts `_warmPrograms`): the sun
++   * may be out of view all through a load, so a match's first look at it
++   * would link them. Returns the materials, as `three.compile` does.
++   */
++  compileShafts(renderer: THREE.WebGLRenderer): THREE.Material[] {
++    const triangle = this.triangle, material = triangle.material, materials: THREE.Material[] = [];
++    try {
++      for (const pass of [this._shaftMask, this._shaftBlur]) {
++        triangle.material = pass;
++        materials.push(...renderer.compile(this.scene, this.camera));
++      }
++    } finally {
++      triangle.material = material;
++    }
++    return materials;
++  }
++
++  /**
++   * The shafts' passes drawn once where nothing reads them (the blur's spare
++   * target, which every shaft frame clears and writes before it reads it),
++   * so a match's first shaft frame pays no program's first draw either.
++   */
++  warmShafts(renderer: THREE.WebGLRenderer): void {
++    const [rays, spare] = this._shafts, blur = this._shaftBlurUniforms, image = blur.image.value, material = this.triangle.material;
++    try {
++      this._pass(renderer, this._shaftMask, spare);
++      blur.image.value = rays.texture;
++      this._pass(renderer, this._shaftBlur, spare);
++    } finally {
++      blur.image.value = image;
++      this.triangle.material = material;
++    }
++  }
++
+   /** The realistic look's exposure (a linear multiplier); Low has none. */
+   setExposure(exposure: number): void {
+     this._exposure = exposure;
+diff --git a/tests/fx.test.ts b/tests/fx.test.ts
+index 2546151..10392d8 100644
+--- a/tests/fx.test.ts
++++ b/tests/fx.test.ts
+@@ -5,7 +5,7 @@ import { DECAL_GREY, REAL_CAPACITY, RealEffects, holeTint } from '@/engine/effec
+ import { World } from '@/engine/physics';
+ import { LevelBuilder } from '@/engine/level/build';
+ import {
+-  FX_ATLASES, FX_MANIFEST, FxAssets, cells, decalMaterial, flatDecalMaterial, flipbookFrame, fxDownloadBytes, fxTemplate,
++  FX_ATLASES, FX_MANIFEST, FxAssets, cells, decalMaterial, flatDecalMaterial, flipbookFrame, fxDownloadBytes, fxLateTemplate, fxTemplate,
+   fxTextureSize, fxUrl, flashMaterial, hazardSmokeMaterial, lowFlashMaterial, spriteMaterial, splatMaterial, tracerMaterial,
+ } from '@/engine/render/fx';
+ import { SURFACE_FAMILY, impactFor, surfaceAt, surfaceOf } from '@/engine/render/impacts';
+@@ -209,8 +209,14 @@ test('decals are lit, offset in depth and never write it; the flat look\'s too a
+   for (const material of [decal, splat, flashMaterial(), spriteMaterial('dither'), spriteMaterial('fire')]) {
+     expect(materials('realistic').has(material), material.name).toBe(true);
+   }
+-  for (const material of [spriteMaterial('soft'), spriteMaterial('fire-soft')]) expect(materials('realistic', true).has(material), material.name).toBe(true);
++  // The soft sprites draw in the soft layer's scene (no lights: programs of their own), so they warm up there, apart.
++  const late = new Set<THREE.Material>();
++  fxLateTemplate('realistic', true)!.traverse(node => { if (node instanceof THREE.Mesh) late.add(node.material as THREE.Material); });
++  expect([...late]).toEqual([spriteMaterial('fire-soft'), spriteMaterial('soft')]);
++  for (const material of late) expect(materials('realistic', true).has(material), material.name).toBe(false);
+   expect(materials('realistic', true).has(spriteMaterial('dither'))).toBe(false);
++  expect(materials('realistic', true).has(decal)).toBe(true);
++  expect([fxLateTemplate('realistic'), fxLateTemplate('lowpoly', true), fxLateTemplate('lowpoly')]).toEqual([null, null, null]);
+   // A fight's first grenade and unlit mesh link nothing either: their programs warm at the menu on both looks.
+   for (const look of ['lowpoly', 'realistic'] as const) {
+     expect(materials(look).has(unlitMat(TONE_HEX[TONE.PRIMARY])), look).toBe(true);
+diff --git a/tests/hud-vars.test.tsx b/tests/hud-vars.test.tsx
+new file mode 100644
+index 0000000..9f688c0
+--- /dev/null
++++ b/tests/hud-vars.test.tsx
+@@ -0,0 +1,106 @@
++import { afterEach, expect, test } from 'vitest';
++import { createRoot, type Root } from 'react-dom/client';
++import { flushSync } from 'react-dom';
++import { Hud } from '@/components/hud/Hud';
++import { HudStore, isHostedVar } from '@/engine/hud/store';
++import '@/app/globals.css';
++
++let root: Root | undefined, host: HTMLDivElement | undefined;
++afterEach(() => { flushSync(() => root?.unmount()); root = undefined; host?.remove(); host = undefined; });
++function mount(store: HudStore): HTMLElement {
++  host = document.createElement('div'); document.body.append(host);
++  root = createRoot(host);
++  flushSync(() => root!.render(<Hud store={store} />));
++  return host.querySelector<HTMLElement>('#hud')!;
++}
++const q = (sel: string) => host!.querySelector<HTMLElement>(sel)!;
++const inline = (el: HTMLElement, name: string) => el.style.getPropertyValue(name);
++
++test('the per-frame variables are hosted, the scope drift stays on the root', () => {
++  for (const name of ['--spread', '--health', '--breath', '--focus', '--boss', '--exec-0', '--straggler-12', '--mark-3']) expect(isHostedVar(name), name).toBe(true);
++  for (const name of ['--scope-x', '--scope-y', '--scope-scale', '--spreadx', '--mark-', '--exec-a']) expect(isHostedVar(name), name).toBe(false);
++});
++
++test('a host gets the remembered value when it binds, every write while bound, and none after', () => {
++  const store = new HudStore(), rootEl = document.createElement('div');
++  store.bindRoot(rootEl);
++  store.setSpread(7.25);
++  store.setScopeDrift(1, 2, 1.5);
++  const a = document.createElement('div'), b = document.createElement('div');
++  const unbindA = store.bindVarHost('--spread', a);
++  expect(inline(a, '--spread')).toBe('7.3px');
++  const unbindB = store.bindVarHost('--spread', b);
++  store.setSpread(12);
++  expect([inline(a, '--spread'), inline(b, '--spread')]).toEqual(['12.0px', '12.0px']);
++  unbindA();
++  store.setSpread(3);
++  expect([inline(a, '--spread'), inline(b, '--spread')]).toEqual(['12.0px', '3.0px']);
++  unbindB();
++  // Hosted values never land on the root, the others do (and a later root replays only those).
++  expect(inline(rootEl, '--spread')).toBe('');
++  expect(inline(rootEl, '--scope-x')).toBe('1.0');
++  const root2 = document.createElement('div');
++  store.bindRoot(root2);
++  expect([inline(root2, '--spread'), inline(root2, '--scope-scale')]).toEqual(['', '1.500']);
++  // A variable never written leaves the host on the inherited default.
++  const c = document.createElement('div');
++  store.bindVarHost('--boss', c)();
++  expect(inline(c, '--boss')).toBe('');
++});
++
++test('the rendered HUD reads each hosted variable on its own element, with the same computed values', () => {
++  const store = new HudStore();
++  const hud = mount(store);
++  flushSync(() => store.setGameplayVisible(true));
++  // Defaults from .game-hud before any write.
++  expect(getComputedStyle(q('.crosshair .bottom')).top).toBe('10px');
++  store.setSpread(23.5);
++  store.setHealth(40, 100);
++  store.setFocusMeter(true, 0.25, false, 'MELEE');
++  store.setBoss('Boss', 0.5);
++  store.setBreath(0.6);
++  expect(inline(q('[data-hud="crosshair"]'), '--spread')).toBe('23.5px');
++  expect(inline(hud, '--spread')).toBe('');
++  expect(inline(hud, '--health')).toBe('');
++  expect(getComputedStyle(q('.crosshair .bottom')).getPropertyValue('--spread')).toBe('23.5px');
++  expect(inline(q('[data-hud="healthFill"]'), '--health')).toBe('40.0%');
++  expect(inline(q('[data-hud="focusFill"]'), '--focus')).toBe('25.0%');
++  expect(inline(q('[data-hud="bossFill"]'), '--boss')).toBe('50%');
++  expect(inline(q('[data-hud="breathFill"]'), '--breath')).toBe('60%');
++});
++
++test('markers that mount after their places were written get them at once', () => {
++  const store = new HudStore();
++  mount(store);
++  flushSync(() => store.setGameplayVisible(true));
++  // Written while no marker exists (the count arrives with the same call, and React mounts after it).
++  flushSync(() => store.setStragglers([{ x: 10, y: 20, a: 0.5 }, { x: -4, y: 8, a: 1 }]));
++  flushSync(() => store.setMarks([{ x: 5, y: 6, label: 'A' }]));
++  flushSync(() => store.setExecMarks([{ x: 100, y: 50, n: 0 }]));
++  const arrows = [...host!.querySelectorAll<HTMLElement>('[data-hud="stragglers"] i')];
++  expect(arrows.map(el => inline(el, `--straggler-${arrows.indexOf(el)}`)))
++    .toEqual(['translate(10px, 20px) rotate(0.50rad)', 'translate(-4px, 8px) rotate(1.00rad)']);
++  expect(getComputedStyle(arrows[1]!).transform).not.toBe('none');
++  expect(inline(q('[data-hud="marks"] i'), '--mark-0')).toBe('translate(5px, 6px)');
++  expect(inline(q('.exec-mark'), '--exec-0')).toBe('translate(100px, 50px)');
++  // Down to one arrow and back to two: the remounted second arrow replays its last place.
++  flushSync(() => store.setStragglers([{ x: 1, y: 2, a: 0 }]));
++  expect(host!.querySelectorAll('[data-hud="stragglers"] i')).toHaveLength(1);
++  flushSync(() => store.setStragglers([{ x: 1, y: 2, a: 0 }, { x: -4, y: 8, a: 1 }]));
++  const again = host!.querySelectorAll<HTMLElement>('[data-hud="stragglers"] i')[1]!;
++  expect(inline(again, '--straggler-1')).toBe('translate(-4px, 8px) rotate(1.00rad)');
++});
++
++test('an HP change re-renders the health leaf only; the root re-renders when low health flips', () => {
++  const store = new HudStore();
++  const hud = mount(store);
++  const renders = () => window.__hudRenderCount ?? 0;
++  let before = renders();
++  flushSync(() => store.setHealth(80, 100));
++  expect(renders() - before).toBe(1);
++  expect(hud.classList.contains('low-health')).toBe(false);
++  before = renders();
++  flushSync(() => store.setHealth(20, 100));
++  expect(hud.classList.contains('low-health')).toBe(true);
++  expect(renders() - before).toBe(2);
++});
+diff --git a/tests/lightmap-worker.test.ts b/tests/lightmap-worker.test.ts
+new file mode 100644
+index 0000000..de22710
+--- /dev/null
++++ b/tests/lightmap-worker.test.ts
+@@ -0,0 +1,122 @@
++import { afterEach, expect, test, vi } from 'vitest';
++import * as THREE from 'three';
++import { buildLevel, disposeLevel } from '@/engine/level';
++import { World } from '@/engine/physics';
++import { Renderer } from '@/engine/render/index';
++import { LIGHTMAP_SIZE, bakeFor, bakedTriangles, layoutLightmap, lightmapCharts, runSteps } from '@/engine/render/lightmap';
++import { postLayout } from '@/engine/render/lightmapJob';
++import { bakeLayoutSteps, laidOut, layoutRequest, replyTransfer, runLayoutRequest } from '@/engine/render/lightmapLayout';
++import { PRESET_VALUES } from '@/engine/render/quality';
++import type { LaidOut, LayoutReply } from '@/engine/render/lightmapLayout';
++import type { LayoutTicket } from '@/engine/render/lightmapJob';
++import type { Level } from '@/engine/types';
++
++/** Every map and variant with its own bake (tests/lightmaps.test.ts `MAPS`). */
++const MAPS = [['downtown', false], ['downtown', true], ['house', false], ['mexico', false], ['training', false]] as const;
++const cleanup: (() => void)[] = [];
++afterEach(() => { for (const done of cleanup.splice(0)) done(); });
++
++function build(key: string, arena = false): Level {
++  const scene = new THREE.Scene(), world = new World();
++  const level = buildLevel(scene, world, key, { arena });
++  cleanup.push(() => disposeLevel(scene, level));
++  return level;
++}
++
++const bytes = (array: Float32Array): Uint8Array => new Uint8Array(array.buffer, array.byteOffset, array.byteLength);
++
++/** Two layouts' `uv1` byte for byte, and the counts the manifest checks. */
++function expectSame(a: LaidOut | null, b: LaidOut | null, label: string): void {
++  expect(a, label).not.toBeNull();
++  expect(b, label).not.toBeNull();
++  expect([a!.charts, a!.rows, a!.triangles], label).toEqual([b!.charts, b!.rows, b!.triangles]);
++  expect(a!.uvs.length, label).toBe(b!.uvs.length);
++  a!.uvs.forEach((uv, i) => {
++    expect(uv.length, `${label} surface ${i}`).toBe(b!.uvs[i]!.length);
++    expect(bytes(uv).every((v, k) => v === bytes(b!.uvs[i]!)[k]), `${label} surface ${i}`).toBe(true);
++  });
++}
++
++async function settle(ticket: LayoutTicket): Promise<void> {
++  const until = performance.now() + 50_000;
++  while (!ticket.done && !ticket.failed && performance.now() < until) await new Promise(resolve => setTimeout(resolve, 5));
++}
++
++test('the worker\'s layout, through a structured clone each way, is the main thread\'s to the byte on every map', () => {
++  for (const [key, arena] of MAPS) {
++    const level = build(key, arena), bake = bakeFor(level)!, label = bake.name;
++    const triangles = bakedTriangles(level.surfaces);
++    // The old path: the chart pass and packing at once, and in the renderer's steps.
++    const once = laidOut(layoutLightmap(lightmapCharts(level.surfaces, level.bounds, triangles), LIGHTMAP_SIZE, bake.info.density));
++    const stepped = laidOut(runSteps(bakeLayoutSteps(level.surfaces, level.bounds, triangles, bake.info.density)));
++    expectSame(stepped, once, `${label} steps`);
++    expect([once!.charts, once!.rows, once!.triangles], label).toEqual([bake.info.charts, bake.info.rows, bake.info.triangles]);
++    // The worker's: the request cloned in, the reply's buffers moved out.
++    const request = structuredClone(layoutRequest(7, triangles, level.bounds, bake.info.density));
++    expect(request.positions).not.toBe(triangles.positions);
++    const reply: LayoutReply = { job: request.job, layout: runLayoutRequest(request) };
++    const transfer = replyTransfer(reply);
++    expect(transfer.length).toBe(triangles.surfaces.length);
++    const received = structuredClone(reply, { transfer });
++    // Moved, not copied: the sender's buffers are detached.
++    expect(reply.layout!.uvs.every(uv => uv.byteLength === 0)).toBe(true);
++    expect(received.job).toBe(7);
++    expectSame(received.layout, once, `${label} worker`);
++    // The main thread's triangles are untouched by the request.
++    expect(bakedTriangles(level.surfaces).positions).toEqual(triangles.positions);
++  }
++});
++
++// The worker's first start compiles its module (three, the manifest): seconds under a loaded suite.
++test('the real worker answers with the same bytes, and the renderer takes them in one slot without Math.random', async () => {
++  for (const [key, arena] of [['house', false], ['mexico', false]] as const) {
++    const level = build(key, arena), bake = bakeFor(level)!;
++    const triangles = bakedTriangles(level.surfaces);
++    const ticket = postLayout(triangles, level.bounds, bake.info.density);
++    expect(ticket).not.toBeNull();
++    await settle(ticket!);
++    expect(ticket!.failed).toBe(false);
++    expect(ticket!.done).toBe(true);
++    const once = laidOut(layoutLightmap(lightmapCharts(level.surfaces, level.bounds, triangles), LIGHTMAP_SIZE, bake.info.density));
++    expectSame(ticket!.layout, once, `${bake.name} worker`);
++  }
++
++  // The renderer: `_checkBake` posts it, `_layBake` takes the answer in one call, and `uv1` is the old layout's.
++  const renderer = new Renderer(document.createElement('canvas'));
++  cleanup.push(() => renderer.dispose());
++  const level = build('downtown'), bake = bakeFor(level)!;
++  renderer.setSurfaces(level.surfaces, level);
++  renderer.applyQuality(PRESET_VALUES.high);
++  const random = vi.spyOn(Math, 'random');
++  renderer._checkBake();
++  const pending = renderer._bakeLayout!;
++  expect(pending.ticket).not.toBeNull();
++  await settle(pending.ticket!);
++  expect(pending.ticket!.done).toBe(true);
++  expect(renderer._layBake()).toBe(true);
++  expect(random).not.toHaveBeenCalled();
++  random.mockRestore();
++  expect(renderer._bakeLayout).toBeNull();
++  expect(renderer._bake?.name).toBe(bake.name);
++  const uv1 = level.surfaces.filter(s => s.static).map(s => s.mesh.geometry.getAttribute('uv1').array as Float32Array);
++  const once = laidOut(layoutLightmap(lightmapCharts(level.surfaces, level.bounds), LIGHTMAP_SIZE, bake.info.density));
++  expectSame({ ...once!, uvs: uv1 }, once, 'downtown uv1');
++}, 90_000);
++
++test('with no worker answer the renderer lays the bake out in its steps, to the same bytes', () => {
++  const renderer = new Renderer(document.createElement('canvas'));
++  cleanup.push(() => renderer.dispose());
++  const level = build('house'), bake = bakeFor(level)!;
++  renderer.setSurfaces(level.surfaces, level);
++  renderer.applyQuality(PRESET_VALUES.medium);
++  renderer._checkBake();
++  // As with no Worker, or one that failed: the ticket never fills.
++  renderer._bakeLayout!.ticket = { job: -1, done: false, failed: true, layout: null };
++  let slots = 1;
++  while (!renderer._layBake()) slots++;
++  expect(slots).toBeGreaterThan(1);
++  expect(renderer._bake?.name).toBe(bake.name);
++  const uv1 = level.surfaces.filter(s => s.static).map(s => s.mesh.geometry.getAttribute('uv1').array as Float32Array);
++  const once = laidOut(layoutLightmap(lightmapCharts(level.surfaces, level.bounds), LIGHTMAP_SIZE, bake.info.density));
++  expectSame({ ...once!, uvs: uv1 }, once, 'house uv1');
++});
+diff --git a/tests/pacing.test.ts b/tests/pacing.test.ts
+index fe7af36..213075d 100644
+--- a/tests/pacing.test.ts
++++ b/tests/pacing.test.ts
+@@ -132,6 +132,38 @@ test('a GPU behind skips frames only while something streams in', () => {
+   renderer.dispose();
+ });
+ 
++test('only the realistic look puts a fence after each frame; a change to Low frees those it put', () => {
++  const canvas = document.createElement('canvas');
++  const renderer = new Renderer(canvas);
++  const fx = { hurt: 0, flash: 0, slow: 0, lowHp: 0 };
++  const marks = vi.spyOn(renderer._fences, 'mark');
++  // Low streams nothing (`streaming` is false on it), so its fences were never read.
++  renderer.applyQuality(PRESET_VALUES.low);
++  for (let i = 0; i < 3; i++) renderer.render(0, fx);
++  expect(renderer.streaming).toBe(false);
++  expect(marks).not.toHaveBeenCalled();
++  expect(renderer._fences.inFlight(performance.now())).toBe(0);
++  for (const preset of ['medium', 'high', 'ultra'] as const) {
++    renderer.applyQuality(PRESET_VALUES[preset]);
++    marks.mockClear();
++    for (let i = 0; i < 3; i++) renderer.render(0, fx);
++    expect(marks, preset).toHaveBeenCalledTimes(3);
++  }
++  // A live switch to Low drops the fences left (none to time out while it runs), and back to a realistic tier marks again.
++  const clears = vi.spyOn(renderer._fences, 'clear');
++  renderer.applyQuality(PRESET_VALUES.low);
++  expect(clears).toHaveBeenCalled();
++  expect(renderer._fences.inFlight(performance.now())).toBe(0);
++  marks.mockClear();
++  renderer.render(0, fx);
++  expect(marks).not.toHaveBeenCalled();
++  expect(renderer.gpuBehind).toBe(false);
++  renderer.applyQuality(PRESET_VALUES.high);
++  renderer.render(0, fx);
++  expect(marks).toHaveBeenCalledTimes(1);
++  renderer.dispose();
++}, 60_000);
++
+ test('in a live match past its quiet start, the weapons\' warm-up draws one a frame; the rig\'s waits for a menu', async () => {
+   const canvas = document.createElement('canvas');
+   document.body.append(canvas);
+diff --git a/tests/render-chain.test.ts b/tests/render-chain.test.ts
+index 2b02d60..862dd57 100644
+--- a/tests/render-chain.test.ts
++++ b/tests/render-chain.test.ts
+@@ -3,6 +3,7 @@ import * as THREE from 'three';
+ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+ import { CHECK_SHADER_ERRORS, Renderer, roomEnvironment } from '@/engine/render/index';
+ import { MATCH_QUIET_MS } from '@/engine/render/pacing';
++import { spriteGeometry, spriteMaterial } from '@/engine/render/fx';
+ import { Composite, RIG_DEPTH } from '@/engine/render/postfx';
+ import { PRESETS, PRESET_VALUES } from '@/engine/render/quality';
+ import { aimShadowBox, cascadeCentre, sizeShadowBox } from '@/engine/render/shadows';
+@@ -181,6 +182,56 @@ test('soft particles draw into their own layer; a GPU that renders MSAA straight
+ }, 60_000);
+ 
+ // About 2 s alone; beside the suite's streaming tests in the one browser it has taken 14-17 s (c2c96cf's 14).
++test('the soft sprites and the light shafts link at the menu: a first smoke, fire and look at the sun link nothing', async () => {
++  const renderer = makeRenderer(), three = renderer.three;
++  renderer.camera.position.set(0, 1.6, 0);
++  // The pools' draws: one instance of each soft sprite in front of the eye, in the soft layer's scene.
++  const pools = (['soft', 'fire-soft'] as const).map(kind => {
++    const geometry = spriteGeometry(1);
++    geometry.instanceCount = 1;
++    (geometry.getAttribute('iPos') as THREE.InstancedBufferAttribute).setXYZW(0, 0, 1.6, -3, 1);
++    (geometry.getAttribute('iColor') as THREE.InstancedBufferAttribute).setXYZW(0, 1, 1, 1, 1);
++    const mesh = new THREE.Mesh(geometry, spriteMaterial(kind));
++    mesh.frustumCulled = false;
++    mesh.visible = false;
++    renderer.fxScene.add(mesh);
++    cleanup.push(() => geometry.dispose());
++    return mesh;
++  });
++  for (const name of ['high', 'ultra'] as const) {
++    renderer.applyQuality(PRESET_VALUES[name]);
++    expect([renderer._softFx, renderer.post.config.shafts], name).toEqual([true, name === 'ultra']);
++    renderer.post.setShafts(0, new THREE.Vector3(0, 0, -1), new THREE.Color(1, 1, 1));
++    for (const mesh of pools) mesh.visible = false;
++    const targets: unknown[] = [];
++    const setTarget = three.setRenderTarget.bind(three);
++    const spy = vi.spyOn(three, 'setRenderTarget').mockImplementation((target, ...rest) => { targets.push(target); setTarget(target, ...rest); });
++    for (let i = 0; i < 100 && (i < 2 || renderer._compiles.length + renderer._warmups.length > 0); i++) {
++      renderer.render(0, fx);
++      await new Promise(resolve => setTimeout(resolve, 10));
++    }
++    spy.mockRestore();
++    expect(renderer._compiles.length + renderer._warmups.length, name).toBe(0);
++    // The late template drew once in the soft layer (and left its scene as it was); on Ultra the shafts into their spare target.
++    expect(targets, name).toContain(renderer.post._soft);
++    expect(targets.includes(renderer.post._shafts[1]), name).toBe(name === 'ultra');
++    expect(renderer.fxScene.children.length === pools.length && renderer.fxScene.children.every((child, i) => child === pools[i]), name).toBe(true);
++    const programs = three.info.programs!.length;
++    // A fight: smoke and fire in the soft layer, and on Ultra the sun in view with the map's shafts on. A new fog
++    // object (as a shadow relink makes) has three key the sprites' programs again, in the layer's scene.
++    renderer.scene.fog = (renderer.scene.fog as THREE.Fog).clone();
++    for (const mesh of pools) mesh.visible = true;
++    renderer.post.setShafts(1, new THREE.Vector3(0, 0, -1), new THREE.Color(1, 1, 1));
++    const pass = vi.spyOn(renderer.post, '_pass');
++    renderer.render(0, fx);
++    const drawn = pass.mock.calls.map(([, material]) => material.name);
++    pass.mockRestore();
++    expect(drawn.includes('post:shaft-mask') && drawn.includes('post:shaft-blur'), name).toBe(name === 'ultra');
++    expect(three.info.programs!.length, name).toBe(programs);
++  }
++  expect(three.getContext().getError()).toBe(three.getContext().NO_ERROR);
++}, 60_000);
++
+ test('dynamic resolution only moves viewports, a pass switched off frees its targets, and dispose frees them all', () => {
+   const three = new THREE.WebGLRenderer({ canvas: document.createElement('canvas') });
+   cleanup.push(() => { three.dispose(); three.forceContextLoss(); });
+diff --git a/tests/rig-walk.test.ts b/tests/rig-walk.test.ts
+new file mode 100644
+index 0000000..9214c82
+--- /dev/null
++++ b/tests/rig-walk.test.ts
+@@ -0,0 +1,135 @@
++import { afterEach, expect, test } from 'vitest';
++import * as THREE from 'three';
++import type { Object3D } from 'three';
++import { Renderer } from '@/engine/render/index';
++import { PRESET_VALUES } from '@/engine/render/quality';
++import type { PresetName } from '@/engine/render/quality';
++import { WeaponAssets } from '@/engine/render/weapons';
++import { Gun, Sword } from '@/engine/weapons/index';
++import type { Ctx, Player } from '@/engine/types';
++
++const cleanup: (() => void)[] = [];
++afterEach(() => { for (const done of cleanup.splice(0).reverse()) done(); });
++
++/** A number list as its float64 bits, so -0 and +0 (or any last-bit change) differ. */
++const bits = (values: ArrayLike<number>): number[] => Array.from(new Uint32Array(new Float64Array(Array.from(values)).buffer));
++
++/** A renderer with every view model in its rig, as the game holds them (the flat models: no streaming). */
++function rigged(): { renderer: Renderer; nodes: Object3D[]; held: (Gun | Sword)[]; probe: THREE.Mesh } {
++  const canvas = document.createElement('canvas');
++  document.body.append(canvas);
++  const renderer = new Renderer(canvas);
++  const weapons = new WeaponAssets({ model: () => new Promise(() => {}), texture: () => new Promise(() => {}), upload: () => {} });
++  const ctx = {
++    renderer: { rig: renderer.rig, weapons, prepareRig: (root: Object3D) => renderer.prepareRig(root) },
++    camera: renderer.camera,
++    audio: new Proxy({}, { get: () => () => {} }),
++    effects: new Proxy({ shake: 0 }, { get: (_target, key) => key === 'shake' ? 0 : () => {} }),
++    input: { rumble: () => {} },
++    enemies: null,
++    world: { raycast: () => null, lineOfSight: () => true },
++    game: { raycastPlayers: () => null, onShot: () => {}, hitstop: () => {} },
++  } as unknown as Ctx;
++  const player = { eye: new THREE.Vector3(), forward: new THREE.Vector3(0, 0, -1), right: new THREE.Vector3(1, 0, 0), headshotT: 0,
++    recoil: () => {}, kickFov: () => {}, aimDir: (_s: number, out: THREE.Vector3) => out.set(0, 0, -1) } as unknown as Player;
++  const held = [...(['r4c', 'rifle', 'shotgun', 'sniper', 'pistol', 'lmg', 'revolver'] as const).map(kind => new Gun(ctx, player, kind)), new Sword(ctx, player)];
++  // Always shown, in front of the eye: its draw records the matrices the GPU gets.
++  const probe = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.4), new THREE.MeshBasicMaterial());
++  probe.position.set(0.2, -0.2, -0.5);
++  probe.add(new THREE.Object3D());
++  renderer.rig.add(probe);
++  renderer.prepareRig(probe);
++  const nodes: Object3D[] = [];
++  renderer.rig.traverse(node => { nodes.push(node); });
++  cleanup.push(() => { for (const weapon of held) weapon.dispose(); weapons.clear(); renderer.dispose(); canvas.remove(); });
++  return { renderer, nodes, held, probe };
++}
++
++test('the frame refreshes the camera alone before the operators; every rig matrix after render, and each drawn, is the same to the bit', async () => {
++  // A: the frame as it is. B: as it was, the camera's whole subtree walked at that line (`updateMatrixWorld()`).
++  const a = rigged(), b = rigged();
++  const calls = new Map<Renderer, number>([[a.renderer, 0], [b.renderer, 0]]);
++  for (const { renderer } of [a, b]) {
++    const camera = renderer.camera, own = camera.updateWorldMatrix.bind(camera);
++    camera.updateWorldMatrix = (parents: boolean, children: boolean) => {
++      if (parents !== false || children !== false) return own(parents, children);
++      calls.set(renderer, calls.get(renderer)! + 1);
++      if (renderer === b.renderer) camera.updateMatrixWorld();
++      else own(parents, children);
++    };
++  }
++  expect(a.nodes.length).toBe(b.nodes.length);
++  expect(a.nodes.length).toBeGreaterThan(50);
++  const fx = { hurt: 0, flash: 0, slow: 0, lowHp: 0 };
++  type Record = { frame: number[][]; props: number[][]; drawn: number[][]; after: number[][]; eye: number[][]; rigAtFrame: number[][] };
++  const records = new Map<Renderer, Record>();
++  for (const { renderer, probe, nodes } of [a, b]) {
++    const record: Record = { frame: [], props: [], drawn: [], after: [], eye: [], rigAtFrame: [] };
++    records.set(renderer, record);
++    const camera = renderer.camera;
++    const view = () => [...camera.matrixWorld.elements, ...camera.matrixWorldInverse.elements, ...camera.projectionMatrix.elements];
++    // What the readers between that line and the scene walk see of the camera.
++    const frame = renderer.operators.frame.bind(renderer.operators);
++    renderer.operators.frame = (cam: THREE.Camera) => {
++      record.frame.push(view());
++      record.rigAtFrame.push(nodes.flatMap(node => node.matrixWorld.elements));
++      frame(cam);
++    };
++    const update = renderer.props.update.bind(renderer.props);
++    renderer.props.update = (cam: THREE.Camera) => { record.props.push(view()); update(cam); };
++    const depth = probe.onBeforeRender;
++    probe.onBeforeRender = function (...args) {
++      record.drawn.push([...probe.matrixWorld.elements, ...probe.modelViewMatrix.elements]);
++      depth.apply(this, args);
++    };
++  }
++  // The same moves on both: the eye, the FOV and the rig's scale (`setViewFov`), every rig node, one view model shown.
++  const move = ({ renderer, nodes, held }: ReturnType<typeof rigged>, f: number) => {
++    const camera = renderer.camera;
++    camera.position.set(Math.sin(f * 0.37) * 3, 1.6 + Math.sin(f * 0.11) * 0.2, Math.cos(f * 0.29) * 3);
++    camera.rotation.set(Math.sin(f * 0.13) * 0.4, f * 0.07, Math.sin(f * 0.5) * 0.01, 'YXZ');
++    camera.fov = 70 + (f % 5);
++    camera.updateProjectionMatrix();
++    renderer.setViewFov(60 + (f % 7));
++    nodes.forEach((node, i) => {
++      if (node === renderer.rig) return;
++      node.position.x += Math.sin(f + i) * 1e-3;
++      node.rotation.y = Math.sin(f * 0.7 + i) * 0.1;
++    });
++    held.forEach((weapon, i) => { weapon.root.visible = i === f % held.length; });
++  };
++  let f = 0;
++  // Both looks (Ultra: the realistic one with its rig-hidden shadow walk and one-render post chain), live changes between.
++  for (const preset of ['low', 'ultra', 'low'] as PresetName[]) {
++    for (const rig of [a, b]) rig.renderer.applyQuality(PRESET_VALUES[preset]);
++    for (let i = 0; i < 6; i++, f++) {
++      for (const rig of [a, b]) {
++        move(rig, f);
++        rig.renderer.render(f / 60, fx);
++        const record = records.get(rig.renderer)!, camera = rig.renderer.camera;
++        record.eye.push([...camera.matrixWorld.elements, ...camera.matrixWorldInverse.elements, ...camera.projectionMatrix.elements]);
++        record.after.push(rig.nodes.flatMap(node => node.matrixWorld.elements));
++      }
++      await new Promise(resolve => setTimeout(resolve, 0));
++    }
++  }
++  const ra = records.get(a.renderer)!, rb = records.get(b.renderer)!;
++  for (const key of ['frame', 'props', 'drawn', 'after'] as const) {
++    expect(ra[key].length, key).toBe(rb[key].length);
++    ra[key].forEach((values, i) => { expect(bits(values), `${key} ${i}`).toEqual(bits(rb[key][i]!)); });
++  }
++  expect(ra.frame.length).toBe(f);
++  expect(ra.drawn.length).toBeGreaterThanOrEqual(f);
++  expect([calls.get(a.renderer), calls.get(b.renderer)]).toEqual([f, f]);
++  // The operators and props saw this frame's camera: the one the scene walk then drew with.
++  for (const record of [ra, rb]) {
++    record.frame.forEach((values, i) => { expect(bits(values), `frame ${i}`).toEqual(bits(record.eye[i]!)); });
++    record.props.forEach((values, i) => { expect(bits(values), `props ${i}`).toEqual(bits(record.eye[i]!)); });
++  }
++  // Only B walked the rig there: A's rig waits for the scene walk (what the change saves), and nothing read it between.
++  // (A look's first frames draw its warm-ups in a render of their own before that line, which walks the rig too.)
++  rb.rigAtFrame.forEach((values, i) => { expect(bits(values), `B's rig ${i}`).toEqual(bits(rb.after[i]!)); });
++  expect(ra.rigAtFrame.filter((values, i) => bits(values).join() !== bits(ra.after[i]!).join()).length).toBeGreaterThan(f / 2);
++  // Each frame's eye and rig moved: none of these compares a matrix that stood still.
++  expect(new Set(ra.after.map(values => bits(values).join())).size).toBe(f);
++}, 240_000);

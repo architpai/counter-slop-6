@@ -1,0 +1,444 @@
+diff --git a/src/engine/render/fx.ts b/src/engine/render/fx.ts
+index fb7b3e8..521715b 100644
+--- a/src/engine/render/fx.ts
++++ b/src/engine/render/fx.ts
+@@ -786,14 +786,15 @@ export class FxAssets {
+     });
+   }
+ 
+-  /** Upload the next downloaded atlas and free its CPU copy; once all are up, put them on. Returns its GPU bytes, or 0. */
+-  pump(): number {
++  /** Upload the next downloaded atlas and free its CPU copy; once all are up, put them on. Returns its GPU bytes, or 0 (none, or over `limit` bytes). */
++  pump(limit = Infinity): number {
+     const set = this.#sets.find(s => s.size === this.#size && s !== this.#worn && s.maps !== null);
+     if (!set?.maps) return 0;
+     const atlas = FX_ATLASES[set.uploaded];
+     if (atlas === undefined) return 0;
+     const texture = set.maps.get(atlas)!;
+     const bytes = textureBytes(texture);
++    if (bytes > limit) return 0;
+     this.#loaders.upload(texture);
+     if (texture instanceof THREE.CompressedTexture) texture.mipmaps = [];
+     set.bytes += bytes;
+diff --git a/src/engine/render/index.ts b/src/engine/render/index.ts
+index 37f7666..106efa9 100644
+--- a/src/engine/render/index.ts
++++ b/src/engine/render/index.ts
+@@ -103,6 +103,16 @@ const FOG_FAR = 190;
+ export const UPLOAD_GAP_MS = 24;
+ const UPLOAD_BYTES_PER_MS = 6e4;
+ const UPLOAD_SLOW_MS = 4;
++/**
++ * A slot uploads several streamed items, from one stream or the next ones in
++ * line, as long as they sum to at most a gap's worth of the average rate
++ * (`UPLOAD_GAP_MS` × `UPLOAD_BYTES_PER_MS`, 1.44 MB: eight 512 maps, two 1K
++ * ones) and the slot has spent under `SLOT_PACK_MS` uploading; the gap after
++ * it follows the slot's sum as it follows one map's bytes. A bigger item
++ * still goes alone, first in a slot, as before.
++ */
++export const SLOT_BYTES = UPLOAD_GAP_MS * UPLOAD_BYTES_PER_MS;
++const SLOT_PACK_MS = 2;
+ /**
+  * The wait after a level load or a look change before the first upload. The
+  * GPU process is still busy with the new level's buffers and programs then,
+@@ -320,6 +330,11 @@ export class Renderer {
+   /** No upload before this time (`performance.now()`), and the current stream's slow-down factor (1, 2 or 4). */
+   _uploadAt = 0;
+   _uploadPace = 1;
++  /** This frame's upload slot once something went up in it (`_upload`): when it opened, its bytes, and whether more may join. */
++  _slotFrame = -1;
++  _slotStart = 0;
++  _slotBytes = 0;
++  _slotOpen = false;
+   /** A compressed upload has warmed the driver (`warmCompressedUploads`). */
+   _uploadsWarm = false;
+   /** The streamer's current sets are on the materials. */
+@@ -1126,6 +1141,49 @@ export class Renderer {
+     GRID_UNIFORMS.probeGridScale.value = info.probeScale * Math.PI;
+   }
+ 
++  /**
++   * Upload with `pump` in this frame's upload slot: once `_uploadAt` is past,
++   * the first item at any size, then more (from this stream, or from a later
++   * stream in the same frame) while the slot's items sum to `SLOT_BYTES` at
++   * most (`pump(limit)` leaves a bigger one for a slot of its own) and it has
++   * spent under `SLOT_PACK_MS`. The next slot is the slot's bytes at the
++   * average rate (at least `UPLOAD_GAP_MS`) times the pace; an upload slower
++   * than `UPLOAD_SLOW_MS` doubles the pace (`backOff`; not for the bake) and
++   * closes the slot. The caller checks the match's quiet start.
++   */
++  _upload(pump: (limit: number) => number, backOff = true): void {
++    let start: number, used: number;
++    if (this._slotFrame === this._frame) {
++      if (!this._slotOpen) return;
++      start = this._slotStart;
++      used = this._slotBytes;
++    } else {
++      start = performance.now();
++      if (start < this._uploadAt) return;
++      used = 0;
++    }
++    const before = used;
++    let open = true;
++    for (;;) {
++      const t = performance.now();
++      if (used > 0 && (used >= SLOT_BYTES || t - start >= SLOT_PACK_MS)) break;
++      const bytes = pump(used > 0 ? SLOT_BYTES - used : Infinity);
++      if (bytes <= 0) break;
++      used += bytes;
++      if (backOff && performance.now() - t > UPLOAD_SLOW_MS) {
++        this._uploadPace = Math.min(4, this._uploadPace * 2);
++        open = false;
++        break;
++      }
++    }
++    if (used === before) return;
++    this._slotFrame = this._frame;
++    this._slotStart = start;
++    this._slotBytes = used;
++    this._slotOpen = open;
++    this._uploadAt = start + Math.max(UPLOAD_GAP_MS, used / UPLOAD_BYTES_PER_MS) * this._uploadPace;
++  }
++
+   /**
+    * Realistic tiers: keep the level's bake streaming at the file the Textures
+    * setting shows (the AO map on low, the 1K or 2K lightmap above), uploaded
+@@ -1158,10 +1216,7 @@ export class Renderer {
+       return;
+     }
+     if (!bakes.ready) {
+-      if (now >= this._uploadAt && !this._match.quiet(now)) {
+-        const bytes = bakes.pump();
+-        if (bytes > 0) this._uploadAt = now + Math.max(UPLOAD_GAP_MS, bytes / UPLOAD_BYTES_PER_MS) * this._uploadPace;
+-      }
++      if (!this._match.quiet(now)) this._upload(limit => bakes.pump(limit), false);
+       return;
+     }
+     const light = bakes.take();
+@@ -1218,14 +1273,7 @@ export class Renderer {
+       this._uploadPace = 1;
+     }
+     if (this._texturesWorn) return;
+-    const now = performance.now();
+-    if (now >= this._uploadAt && !this._match.quiet(now)) {
+-      const bytes = streamer.pump();
+-      if (bytes > 0) {
+-        if (performance.now() - now > UPLOAD_SLOW_MS) this._uploadPace = Math.min(4, this._uploadPace * 2);
+-        this._uploadAt = now + Math.max(UPLOAD_GAP_MS, bytes / UPLOAD_BYTES_PER_MS) * this._uploadPace;
+-      }
+-    }
++    if (!this._match.quiet(performance.now())) this._upload(limit => streamer.pump(limit));
+     if (!streamer.ready) return;
+     for (const material of realMaterials()) {
+       const set = material.userData.set as TextureSet;
+@@ -1252,12 +1300,8 @@ export class Renderer {
+     if (size === null || !this.weapons.wanted) return;
+     this.weapons.want(size);
+     const now = performance.now();
+-    if (!this.weapons.pending || this.bakePending || this.texturesPending || now < this._uploadAt || this._match.quiet(now)) return;
+-    const bytes = this.weapons.pump();
+-    if (bytes > 0) {
+-      if (performance.now() - now > UPLOAD_SLOW_MS) this._uploadPace = Math.min(4, this._uploadPace * 2);
+-      this._uploadAt = now + Math.max(UPLOAD_GAP_MS, bytes / UPLOAD_BYTES_PER_MS) * this._uploadPace;
+-    }
++    if (!this.weapons.pending || this.bakePending || this.texturesPending || this._match.quiet(now)) return;
++    this._upload(limit => this.weapons.pump(limit));
+   }
+ 
+   /**
+@@ -1274,12 +1318,8 @@ export class Renderer {
+     if (want === null || this._prewarmed.size === 0) return;
+     this.operators.want(want);
+     const now = performance.now();
+-    if (!this.operators.pending || this.bakePending || this.texturesPending || now < this._uploadAt || this._match.quiet(now)) return;
+-    const bytes = this.operators.pump();
+-    if (bytes > 0) {
+-      if (performance.now() - now > UPLOAD_SLOW_MS) this._uploadPace = Math.min(4, this._uploadPace * 2);
+-      this._uploadAt = now + Math.max(UPLOAD_GAP_MS, bytes / UPLOAD_BYTES_PER_MS) * this._uploadPace;
+-    }
++    if (!this.operators.pending || this.bakePending || this.texturesPending || this._match.quiet(now)) return;
++    this._upload(limit => this.operators.pump(limit));
+   }
+ 
+   /**
+@@ -1293,12 +1333,8 @@ export class Renderer {
+     if (size === null || !this.fx.wanted) return;
+     this.fx.want(size);
+     const now = performance.now();
+-    if (!this.fx.pending || this.bakePending || this.texturesPending || now < this._uploadAt || this._match.quiet(now)) return;
+-    const bytes = this.fx.pump();
+-    if (bytes > 0) {
+-      if (performance.now() - now > UPLOAD_SLOW_MS) this._uploadPace = Math.min(4, this._uploadPace * 2);
+-      this._uploadAt = now + Math.max(UPLOAD_GAP_MS, bytes / UPLOAD_BYTES_PER_MS) * this._uploadPace;
+-    }
++    if (!this.fx.pending || this.bakePending || this.texturesPending || this._match.quiet(now)) return;
++    this._upload(limit => this.fx.pump(limit));
+   }
+ 
+   /**
+@@ -1317,13 +1353,7 @@ export class Renderer {
+     const now = performance.now();
+     if (this._match.quiet(now)) return;
+     this.props.fetch();
+-    if (this.props.pending && !this.bakePending && !this.texturesPending && now >= this._uploadAt) {
+-      const bytes = this.props.pump();
+-      if (bytes > 0) {
+-        if (performance.now() - now > UPLOAD_SLOW_MS) this._uploadPace = Math.min(4, this._uploadPace * 2);
+-        this._uploadAt = now + Math.max(UPLOAD_GAP_MS, bytes / UPLOAD_BYTES_PER_MS) * this._uploadPace;
+-      }
+-    }
++    if (this.props.pending && !this.bakePending && !this.texturesPending) this._upload(limit => this.props.pump(limit));
+     // After the slot's pump and its timing: the dressing's placements need no slot (`PropAssets.premerge`).
+     this.props.premerge();
+   }
+diff --git a/src/engine/render/operators.ts b/src/engine/render/operators.ts
+index 4a43648..d33d425 100644
+--- a/src/engine/render/operators.ts
++++ b/src/engine/render/operators.ts
+@@ -347,8 +347,8 @@ export class OperatorAssets implements OperatorSource {
+     return this.#maps.find(maps => maps.size === this.#want?.size && maps !== this.#worn && maps.sets !== null) ?? null;
+   }
+ 
+-  /** Upload the next downloaded map; once all are up and the glb is in, put them on. Returns the map's GPU bytes, or 0. */
+-  pump(): number {
++  /** Upload the next downloaded map; once all are up and the glb is in, put them on. Returns the map's GPU bytes, or 0 (none, or over `limit` bytes). */
++  pump(limit = Infinity): number {
+     const maps = this.#next();
+     if (!maps?.sets) return 0;
+     const total = OPERATOR_SETS.length * TEXTURE_MAPS.length;
+@@ -359,6 +359,7 @@ export class OperatorAssets implements OperatorSource {
+     const set = OPERATOR_SETS[Math.floor(maps.uploaded / TEXTURE_MAPS.length)]!;
+     const texture = maps.sets.get(set)![TEXTURE_MAPS[maps.uploaded % TEXTURE_MAPS.length]!];
+     const bytes = textureBytes(texture);
++    if (bytes > limit) return 0;
+     this.#loaders.upload(texture);
+     if (texture instanceof THREE.CompressedTexture) texture.mipmaps = [];
+     maps.bytes += bytes;
+diff --git a/src/engine/render/props.ts b/src/engine/render/props.ts
+index 196c8ea..e9e9060 100644
+--- a/src/engine/render/props.ts
++++ b/src/engine/render/props.ts
+@@ -763,14 +763,17 @@ export class PropAssets {
+    * and the kit is in, a step of merging the map's dressing (`MERGE_STEP_MS`
+    * of script, 0: it uploads nothing, so the next frame may step again), and
+    * once it is merged, build its meshes and hand them to be warmed (the
+-   * merged geometry's bytes). 0 too when there is nothing to do yet.
++   * merged geometry's bytes). 0 too when there is nothing to do yet. With a
++   * `limit` (a slot another upload already used) only an atlas of at most
++   * that many bytes goes up; the merge and the build wait for a slot of their own.
+    */
+-  pump(): number {
++  pump(limit = Infinity): number {
+     const atlases = this.#atlases.find(a => a.size === this.#size && a !== this.#worn && a.maps !== null);
+     if (atlases?.maps) {
+       const atlas = PROP_ATLASES[atlases.uploaded];
+       if (atlas !== undefined) {
+         const texture = atlases.maps.get(atlas)!, bytes = textureBytes(texture);
++        if (bytes > limit) return 0;
+         this.#loaders.upload(texture);
+         if (texture instanceof THREE.CompressedTexture) texture.mipmaps = [];
+         atlases.uploaded++;
+@@ -779,7 +782,7 @@ export class PropAssets {
+         return bytes;
+       }
+     }
+-    if (this.#built !== null || this.#worn === null || this.#request === null) return 0;
++    if (limit !== Infinity || this.#built !== null || this.#worn === null || this.#request === null) return 0;
+     const kit = this.#kit, dressing = this.#request.dressing;
+     if (dressing !== null && (kit === null || this.#kitFamily !== dressing.family)) return 0;
+     if (dressing !== null && kit !== null) {
+diff --git a/src/engine/render/textures.ts b/src/engine/render/textures.ts
+index 0333739..aa67073 100644
+--- a/src/engine/render/textures.ts
++++ b/src/engine/render/textures.ts
+@@ -114,12 +114,14 @@ export class TextureStreamer {
+    * Upload the next waiting map, if any has downloaded, then free its CPU
+    * copy: the GPU holds the only one from now on, so a map is never uploaded
+    * twice (after a context loss the renderer streams the sets again).
+-   * Returns the map's GPU bytes, or 0 when none was waiting.
++   * Returns the map's GPU bytes, or 0 when none was waiting (or the next is
++   * more than `limit` bytes: it waits, for a slot of its own).
+    */
+-  pump(): number {
++  pump(limit = Infinity): number {
+     const entry = this.#wanted().find(e => e.maps && e.uploaded < 3);
+     if (!entry?.maps) return 0;
+     const texture = entry.maps[TEXTURE_MAPS[entry.uploaded]!], bytes = textureBytes(texture);
++    if (bytes > limit) return 0;
+     this.#upload(texture);
+     freeCpuCopy(texture);
+     entry.bytes += bytes;
+@@ -373,12 +375,13 @@ export class BakeStreamer {
+     return this.#next === null || this.#next.failed || this.#next.uploaded === 2;
+   }
+ 
+-  /** Upload the next downloaded piece and free its CPU copy; its GPU bytes, or 0 when none waits. */
+-  pump(): number {
++  /** Upload the next downloaded piece and free its CPU copy; its GPU bytes, or 0 when none waits (or it is over `limit` bytes). */
++  pump(limit = Infinity): number {
+     const light = this.#next;
+     if (!light?.lightmap || !light.grid || light.uploaded >= 2) return 0;
+     const texture = light.uploaded === 0 ? light.lightmap : light.grid;
+     const bytes = light.uploaded === 0 ? textureBytes(texture) : light.grid.image.data?.byteLength ?? 0;
++    if (bytes > limit) return 0;
+     this.#upload(texture);
+     if (texture instanceof THREE.CompressedTexture) texture.mipmaps = [];
+     else light.grid.image.data = null as unknown as Uint8Array<ArrayBuffer>;
+diff --git a/src/engine/render/weapons.ts b/src/engine/render/weapons.ts
+index b528581..0735441 100644
+--- a/src/engine/render/weapons.ts
++++ b/src/engine/render/weapons.ts
+@@ -253,9 +253,10 @@ export class WeaponAssets {
+   /**
+    * Upload the next downloaded map and free its CPU copy; once every map of
+    * the wanted size is up (and the model is in), put them on. Returns the
+-   * map's GPU bytes, or 0 when none was waiting.
++   * map's GPU bytes, or 0 when none was waiting (or the next is more than
++   * `limit` bytes: it waits for a slot of its own).
+    */
+-  pump(): number {
++  pump(limit = Infinity): number {
+     const maps = this.#next();
+     if (!maps?.sets) return 0;
+     const total = WEAPON_SETS.length * TEXTURE_MAPS.length;
+@@ -266,6 +267,7 @@ export class WeaponAssets {
+     const set = WEAPON_SETS[Math.floor(maps.uploaded / TEXTURE_MAPS.length)]!;
+     const texture = maps.sets.get(set)![TEXTURE_MAPS[maps.uploaded % TEXTURE_MAPS.length]!];
+     const bytes = textureBytes(texture);
++    if (bytes > limit) return 0;
+     this.#loaders.upload(texture);
+     if (texture instanceof THREE.CompressedTexture) texture.mipmaps = [];
+     maps.bytes += bytes;
+diff --git a/tests/materials.test.ts b/tests/materials.test.ts
+index 7f5378f..c286804 100644
+--- a/tests/materials.test.ts
++++ b/tests/materials.test.ts
+@@ -2,7 +2,7 @@ import { afterEach, expect, test, vi } from 'vitest';
+ import * as THREE from 'three';
+ import { buildLevel, disposeLevel } from '@/engine/level';
+ import { World } from '@/engine/physics';
+-import { Renderer, UPLOAD_GAP_MS, UPLOAD_SETTLE_MS } from '@/engine/render/index';
++import { Renderer, SLOT_BYTES, UPLOAD_GAP_MS, UPLOAD_SETTLE_MS } from '@/engine/render/index';
+ import { casterGroups, hiddenMat, realMat, realMaterials, standInMaps, surfMat } from '@/engine/render/materials';
+ import { MATERIAL_COLOR, SURF } from '@/engine/render/palette';
+ import { PRESET_VALUES } from '@/engine/render/quality';
+@@ -10,7 +10,7 @@ import {
+   DEFAULT_MATERIAL, MATERIAL_SET, MATERIAL_TAGS, TEXTURE_MAPS, TEXTURE_SETS, TEXTURE_SIZE, downloadBytes, parseTextureSets,
+   planarUVs, resolveMaterial, setInfo, setsFor, textureUrl,
+ } from '@/engine/render/surfaces';
+-import { TextureStreamer } from '@/engine/render/textures';
++import { TextureStreamer, textureBytes } from '@/engine/render/textures';
+ import type { SurfKey } from '@/engine/render/palette';
+ import type { Level } from '@/engine/types';
+ 
+@@ -527,18 +527,24 @@ test('the renderer textures the level on realistic tiers, frees it all on Low, a
+   expect(saved).toBeGreaterThan(merged.length);
+   renderer.scene.remove(...merged);
+ 
+-  // A bigger texture size swaps once the new size is in, then frees the old one. One map goes
+-  // up at a time, spaced in time whatever the frame rate: the first after the settle, the rest
+-  // at least `UPLOAD_GAP_MS` apart (render/index.ts).
+-  const uploads: number[] = [], initTexture = renderer.three.initTexture.bind(renderer.three);
+-  renderer.three.initTexture = texture => { uploads.push(performance.now()); initTexture(texture); };
++  // A bigger texture size swaps once the new size is in, then frees the old one. The maps go up
++  // in slots spaced in time whatever the frame rate: the first after the settle, the rest at least
++  // `UPLOAD_GAP_MS` apart (render/index.ts); a slot holding several maps sums to `SLOT_BYTES` at most.
++  const uploads: { at: number; frame: number; bytes: number }[] = [], initTexture = renderer.three.initTexture.bind(renderer.three);
++  renderer.three.initTexture = texture => { uploads.push({ at: performance.now(), frame: renderer._frame, bytes: textureBytes(texture) }); initTexture(texture); };
+   const asked = performance.now();
+   renderer.applyQuality({ ...PRESET_VALUES.medium, textures: 'medium' });
+   await settle();
+   renderer.three.initTexture = initTexture;
+   expect(uploads.length).toBeGreaterThan(0);
+-  expect(uploads[0]! - asked).toBeGreaterThanOrEqual(UPLOAD_SETTLE_MS);
+-  for (let i = 1; i < uploads.length; i++) expect(uploads[i]! - uploads[i - 1]!).toBeGreaterThanOrEqual(UPLOAD_GAP_MS);
++  expect(uploads[0]!.at - asked).toBeGreaterThanOrEqual(UPLOAD_SETTLE_MS);
++  const slots: (typeof uploads)[] = [];
++  for (const upload of uploads) {
++    if (slots.at(-1)?.[0]!.frame === upload.frame) slots.at(-1)!.push(upload);
++    else slots.push([upload]);
++  }
++  for (let i = 1; i < slots.length; i++) expect(slots[i]![0]!.at - slots[i - 1]![0]!.at).toBeGreaterThanOrEqual(UPLOAD_GAP_MS);
++  for (const slot of slots) if (slot.length > 1) expect(slot.reduce((n, upload) => n + upload.bytes, 0)).toBeLessThanOrEqual(SLOT_BYTES);
+   expect(renderer.textureStats.textures).toBe(3 * houseSets.length);
+   expect((looksOf(house.surfaces[0]!.mesh)[0] as THREE.MeshStandardMaterial).map!.image.width).toBe(1024);
+ 
+diff --git a/tests/render-chain.test.ts b/tests/render-chain.test.ts
+index 2b02d60..88f4732 100644
+--- a/tests/render-chain.test.ts
++++ b/tests/render-chain.test.ts
+@@ -1,7 +1,7 @@
+ import { afterEach, expect, test, vi } from 'vitest';
+ import * as THREE from 'three';
+ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+-import { CHECK_SHADER_ERRORS, Renderer, roomEnvironment } from '@/engine/render/index';
++import { CHECK_SHADER_ERRORS, Renderer, SLOT_BYTES, UPLOAD_GAP_MS, roomEnvironment } from '@/engine/render/index';
+ import { MATCH_QUIET_MS } from '@/engine/render/pacing';
+ import { Composite, RIG_DEPTH } from '@/engine/render/postfx';
+ import { PRESETS, PRESET_VALUES } from '@/engine/render/quality';
+@@ -558,6 +558,65 @@ test('a sky that lands after the map, the look or the renderer changed is freed'
+   expect(renderer._skyAssets).toBeNull();
+ });
+ 
++test('an upload slot packs small items up to SLOT_BYTES across streams; a big one goes alone; a slow upload backs off', () => {
++  const renderer = makeRenderer();
++  let clock = 1000;
++  const now = vi.spyOn(performance, 'now').mockImplementation(() => clock);
++  cleanup.push(() => now.mockRestore());
++  const queue = (sizes: number[], cost = 0) => {
++    const left = [...sizes], sent: number[] = [];
++    const pump = (limit: number) => {
++      const next = left[0];
++      if (next === undefined || next > limit) return 0;
++      left.shift();
++      sent.push(next);
++      clock += cost;
++      return next;
++    };
++    return { sent, pump };
++  };
++  const small = SLOT_BYTES / 4, big = 2 * SLOT_BYTES;
++  const slot = (frame: number, ...pumps: ((limit: number) => number)[]) => {
++    renderer._frame = frame;
++    for (const pump of pumps) renderer._upload(pump);
++  };
++  renderer._uploadPace = 1;
++  renderer._uploadAt = 0;
++  // Three small maps of one stream and the first of the next fill a slot; the gap after it is one gap.
++  const a = queue([small, small, small]), b = queue([small, small, small]);
++  slot(1, a.pump, b.pump);
++  expect([a.sent.length, b.sent.length]).toEqual([3, 1]);
++  expect(renderer._uploadAt).toBe(1000 + UPLOAD_GAP_MS);
++  // Nothing more before the gap is out, in this frame or the next.
++  slot(1, b.pump);
++  slot(2, b.pump);
++  expect(b.sent.length).toBe(1);
++  // A big map goes alone at the start of a slot, the gap after it follows its bytes, and a big map
++  // behind a small one waits for the next slot.
++  const c = queue([big, small, big]);
++  clock = 2000;
++  slot(3, c.pump, b.pump);
++  expect([c.sent, b.sent.length]).toEqual([[big], 1]);
++  expect(renderer._uploadAt).toBeCloseTo(2000 + big / 6e4);
++  clock = 3000;
++  slot(4, c.pump);
++  expect(c.sent).toEqual([big, small]);
++  clock = 4000;
++  slot(5, c.pump);
++  expect(c.sent).toEqual([big, small, big]);
++  // Uploads stop joining once the slot has spent `SLOT_PACK_MS` (2 ms) uploading.
++  const d = queue([small, small, small], 1.5);
++  clock = 5000;
++  slot(6, d.pump);
++  expect(d.sent.length).toBe(2);
++  // An upload slower than 4 ms doubles the pace and closes the slot.
++  const e = queue([small, small], 5);
++  clock = 6000;
++  slot(7, e.pump, b.pump);
++  expect([e.sent.length, b.sent.length, renderer._uploadPace]).toEqual([1, 1, 2]);
++  expect(renderer._uploadAt).toBe(6000 + 2 * UPLOAD_GAP_MS);
++});
++
+ test('a sky that lands in a match waits out its quiet start, then goes on a step a frame', async () => {
+   const held = holdSkies();
+   const renderer = makeRenderer();
