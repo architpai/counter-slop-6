@@ -46,7 +46,7 @@ Commit the regenerated `public/models/weapons.glb`, `public/weapons/` and `weapo
 ### Blender on another machine
 
 The usual one is the MSI (see `AGENTS.md`): `BLENDER=tools/blender/msi.sh npm run weapons -- <set>` runs step 1 there over
-ssh on CUDA and brings the set's folder back; the manual steps below are what it does.
+ssh on CUDA (Linux, `~/cs6` scratch tree) and brings the set's folder back; the manual steps below are what it does.
 
 
 Step 1 can run on a second machine (the bakes use an NVIDIA card through OptiX or CUDA where there is no

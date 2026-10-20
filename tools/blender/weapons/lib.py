@@ -773,7 +773,7 @@ def _gpu(scene):
     scene.render.engine = 'CYCLES'
     prefs = bpy.context.preferences.addons['cycles'].preferences
     scene.cycles.device = 'CPU'
-    # Apple's GPUs first, then an NVIDIA card (the Windows build machine); a build without one bakes on the CPU.
+    # Apple's GPUs first, then an NVIDIA card (the MSI build machine, tools/blender/msi.sh); a build without one bakes on the CPU.
     # CYCLES_DEVICE=CPU (or OPTIX, CUDA, METAL) picks one: a card another job has filled bakes black.
     wanted = os.environ.get('CYCLES_DEVICE', '').upper()
     for kind in ([wanted] if wanted else ['METAL', 'OPTIX', 'CUDA']):
