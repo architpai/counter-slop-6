@@ -1,0 +1,189 @@
+diff --git a/src/engine/render/index.ts b/src/engine/render/index.ts
+index 4640fbf..31e9eb4 100644
+--- a/src/engine/render/index.ts
++++ b/src/engine/render/index.ts
+@@ -172,6 +172,34 @@ const _irradiance = new THREE.Vector3();
+ const _up = new THREE.Vector3(0, 1, 0);
+ const luminance = (c: THREE.Color): number => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+ 
++/**
++ * The canvas's WebGL2 context: three's attributes (`WebGLRenderer` asks for `alpha: true` whatever it is told), but
++ * opaque, so the compositor draws the canvas without blending it over the page. Exact: every frame's last pass
++ * writes every canvas pixel with alpha 1 (postfx.ts: Low's `_low`, the realistic `_final`, or SMAA's blend of an
++ * alpha-1 `_ldr`), and a bare canvas shows the page's colour (`Renderer._clearToPage`), as the transparent one did.
++ */
++function opaqueContext(canvas: HTMLCanvasElement): WebGL2RenderingContext {
++  const gl = canvas.getContext('webgl2', {
++    alpha: false, depth: false, stencil: false, antialias: false, premultipliedAlpha: true,
++    preserveDrawingBuffer: false, powerPreference: 'high-performance', failIfMajorPerformanceCaveat: false,
++  });
++  if (gl) return gl;
++  // three's messages for the same failures.
++  throw new Error(canvas.getContext('webgl2') ? 'Error creating WebGL context with your selected attributes.' : 'Error creating WebGL context.');
++}
++
++/**
++ * The page's colour behind the canvas (globals.css `html, body`), which a transparent bare canvas showed, as the
++ * canvas's clear values; null if it is not an opaque `rgb()`. The canvas stores bytes as written (sRGB, as the final
++ * passes encode), and a quarter step above each byte gives that byte whether the GPU rounds or truncates.
++ */
++function pageColour(canvas: HTMLCanvasElement): [number, number, number] | null {
++  const body = canvas.ownerDocument.body;
++  const m = body ? /^rgba?\((\d+), (\d+), (\d+)(?:, ([\d.]+))?\)$/.exec(getComputedStyle(body).backgroundColor) : null;
++  if (!m || (m[4] !== undefined && Number(m[4]) !== 1)) return null;
++  return [1, 2, 3].map(i => (Number(m[i]) + 0.25) / 255) as [number, number, number];
++}
++
+ /**
+  * A caster drawn with the view models' warm-up, so the shadow pass's depth
+  * program for the characters (three's own, front-faced) is linked at the menu
+@@ -265,6 +293,8 @@ export class Renderer {
+   readonly _onResize: () => void;
+   /** A restored context lost every texture; streamed maps keep no CPU copy, so stream them again. */
+   readonly _onContextRestored: () => void;
++  /** The page's colour, for a bare canvas (`_clearToPage`); null when the page has none to show. */
++  readonly _page: [number, number, number] | null;
+   _shadowRadius = 1;
+   /** Redraw the shadow map every Nth frame. */
+   _shadowEvery = 1;
+@@ -428,7 +458,8 @@ export class Renderer {
+   constructor(canvas: HTMLCanvasElement) {
+     // No depth buffer on the canvas: every draw into it is a post pass over the whole frame, with no depth test
+     // (SMAA's blend pass tests, but alone on a cleared canvas it always passes, as with no depth buffer).
+-    this.three = new THREE.WebGLRenderer({ canvas, antialias: false, depth: false, stencil: false, powerPreference: 'high-performance' });
++    this._page = pageColour(canvas);
++    this.three = new THREE.WebGLRenderer({ canvas, context: opaqueContext(canvas), antialias: false, depth: false, stencil: false, powerPreference: 'high-performance' });
+     this.three.debug.checkShaderErrors = CHECK_SHADER_ERRORS;
+     this.three.outputColorSpace = THREE.SRGBColorSpace;
+     this.three.toneMapping = THREE.NoToneMapping;
+@@ -582,6 +613,8 @@ export class Renderer {
+       this._releaseTextures();
+       this._fences.clear();
+       this._programsWarm = this._charactersHeld = false;
++      // three's own restore handler, added before this one, has set its state up again.
++      this._clearToPage();
+     };
+     canvas.addEventListener('webglcontextrestored', this._onContextRestored);
+     this.applyQuality(this._quality);
+@@ -594,6 +627,31 @@ export class Renderer {
+     this.camera.aspect = width / height;
+     this.camera.updateProjectionMatrix();
+     this._sizeTarget();
++    // `setSize` reset the canvas's buffer (even to the same size).
++    this._clearToPage();
++  }
++
++  /**
++   * A bare canvas (new, resized or restored) shows the page's colour until the next frame draws, as the transparent
++   * canvas did before the context was opaque (`opaqueContext`); a frame overwrites every pixel.
++   */
++  _clearToPage(): void {
++    const gl = this.three.getContext() as WebGL2RenderingContext, page = this._page;
++    if (page === null || gl.isContextLost()) return;
++    // Raw GL, with every state it touches put back: three's cached state, and so every later frame, stay as they were.
++    const framebuffer = gl.getParameter(gl.DRAW_FRAMEBUFFER_BINDING) as WebGLFramebuffer | null;
++    const clear = gl.getParameter(gl.COLOR_CLEAR_VALUE) as Float32Array;
++    const mask = gl.getParameter(gl.COLOR_WRITEMASK) as [boolean, boolean, boolean, boolean];
++    const scissor = gl.isEnabled(gl.SCISSOR_TEST);
++    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
++    if (scissor) gl.disable(gl.SCISSOR_TEST);
++    gl.colorMask(true, true, true, true);
++    gl.clearColor(page[0], page[1], page[2], 1);
++    gl.clear(gl.COLOR_BUFFER_BIT);
++    gl.clearColor(clear[0]!, clear[1]!, clear[2]!, clear[3]!);
++    gl.colorMask(...mask);
++    if (scissor) gl.enable(gl.SCISSOR_TEST);
++    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, framebuffer);
+   }
+ 
+   /** The post targets: canvas pixels × render scale. Dynamic resolution draws into a share of them. */
+diff --git a/tests/opaque-canvas.test.ts b/tests/opaque-canvas.test.ts
+new file mode 100644
+index 0000000..2ddf766
+--- /dev/null
++++ b/tests/opaque-canvas.test.ts
+@@ -0,0 +1,84 @@
++import { afterEach, expect, test } from 'vitest';
++import { Renderer } from '@/engine/render/index';
++import { PRESET_VALUES } from '@/engine/render/quality';
++import type { GfxValues } from '@/engine/render/quality';
++
++const fx = { hurt: 0, flash: 0, slow: 0, lowHp: 0 };
++const cleanup: (() => void)[] = [];
++afterEach(() => { for (const fn of cleanup.splice(0)) fn(); });
++
++function make(canvas = document.createElement('canvas')): Renderer {
++  canvas.width = canvas.height = 64;
++  const renderer = new Renderer(canvas);
++  cleanup.push(() => renderer.dispose());
++  return renderer;
++}
++
++/** The canvas's bytes, read in the same task as the draw (the buffer is not yet presented and cleared). */
++function canvasBytes(renderer: Renderer): Uint8Array {
++  const gl = renderer.three.getContext() as WebGL2RenderingContext;
++  const { width, height } = gl.canvas;
++  const bytes = new Uint8Array(width * height * 4);
++  const read = gl.getParameter(gl.READ_FRAMEBUFFER_BINDING) as WebGLFramebuffer | null;
++  gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
++  gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
++  gl.bindFramebuffer(gl.READ_FRAMEBUFFER, read);
++  return bytes;
++}
++
++test('the canvas context is three\'s, but opaque', () => {
++  const renderer = make();
++  const attributes = renderer.three.getContext().getContextAttributes()!;
++  expect({ ...attributes }).toMatchObject({ alpha: false, depth: false, stencil: false, antialias: false, premultipliedAlpha: true,
++    preserveDrawingBuffer: false, powerPreference: 'high-performance', failIfMajorPerformanceCaveat: false });
++  // three's own clear alpha (from the context's `alpha`, as from its default `alpha: false` before) is unchanged.
++  expect(renderer.three.getClearAlpha()).toBe(1);
++});
++
++test('every frame writes every canvas pixel with alpha 1 on every preset and on a flat look with SMAA to the canvas', () => {
++  // A transparent context made first, as three made it: the renderer takes it, and its alpha shows each frame's writes.
++  const canvas = document.createElement('canvas');
++  canvas.getContext('webgl2', { alpha: true, depth: false, stencil: false, antialias: false, premultipliedAlpha: true, powerPreference: 'high-performance' });
++  const renderer = make(canvas);
++  expect(renderer.three.getContext().getContextAttributes()!.alpha).toBe(true);
++  const looks: [string, GfxValues][] = [
++    ...(['low', 'medium', 'high', 'ultra'] as const).map(name => [name, PRESET_VALUES[name]] as [string, GfxValues]),
++    ['flat + smaa', { ...PRESET_VALUES.low, antialias: 'smaa' }],
++  ];
++  for (const [name, values] of looks) {
++    renderer.applyQuality(values);
++    for (let i = 0; i < 2; i++) renderer.render(i, fx);
++    const bytes = canvasBytes(renderer);
++    let transparent = 0;
++    for (let i = 3; i < bytes.length; i += 4) if (bytes[i] !== 255) transparent++;
++    expect(transparent, name).toBe(0);
++  }
++}, 60_000);
++
++test('a bare canvas shows the page\'s colour, and three\'s GL state is left as it was', () => {
++  const was = document.body.style.background;
++  document.body.style.background = 'rgb(17, 28, 37)';
++  cleanup.push(() => { document.body.style.background = was; });
++  const renderer = make();
++  const gl = renderer.three.getContext() as WebGL2RenderingContext;
++  const page = (bytes: Uint8Array) => bytes.every((b, i) => b === [17, 28, 37, 255][i % 4]);
++  expect(page(canvasBytes(renderer))).toBe(true);
++  renderer.render(0, fx);
++  expect(page(canvasBytes(renderer))).toBe(false);
++  // A resize resets the buffer; the page's colour is back, and the clear colour, masks, scissor and target are kept.
++  renderer.three.setRenderTarget(renderer.post.target);
++  gl.clearColor(0.1, 0.2, 0.3, 0.4);
++  gl.colorMask(true, false, true, false);
++  gl.enable(gl.SCISSOR_TEST);
++  const state = () => [[...gl.getParameter(gl.COLOR_CLEAR_VALUE)], gl.getParameter(gl.COLOR_WRITEMASK), gl.isEnabled(gl.SCISSOR_TEST),
++    gl.getParameter(gl.DRAW_FRAMEBUFFER_BINDING), gl.getParameter(gl.READ_FRAMEBUFFER_BINDING)];
++  const before = state();
++  renderer.resize();
++  expect(state()).toEqual(before);
++  gl.colorMask(true, true, true, true);
++  gl.disable(gl.SCISSOR_TEST);
++  expect(page(canvasBytes(renderer))).toBe(true);
++  // No page colour to show (a transparent page): nothing is cleared.
++  document.body.style.background = 'transparent';
++  expect(make()._page).toBeNull();
++}, 60_000);

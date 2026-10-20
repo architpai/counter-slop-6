@@ -1138,6 +1138,180 @@ runs every frame, the worker's load A/B without training. Both are lead 0. No th
 5. **Tests**: the full suite times out on 3 heavy chromium tests even on HEAD on this machine; raise their timeouts
    or split the heavy files so `npm test` is a clean gate again.
 
+## Round 8 — coverage closed (Medium), menu pre-link of sword/wave programs, upload packing (user decision); four exact candidates rejected
+
+2026-10-20, on `3763490` → game changes `d1ba2e3` (late programs) and `32799f9` (upload packing, applied by user decision
+(2026-10-20)). Survey: one read-only Opus agent (Low/Medium exact wins); implementation: five Opus agents, each in its
+own worktree, one patch each (`warm` + `late` + the hitch harness, `hud2` + `fence` + `opaque`, `clips`, the packing
+rebase); review: GPT-6.1-Sol (below). Time budget ~5 h, at most 3 frame-time A/Bs (2 used: `r8cov`, `r8f`; plus the
+load-only `r8cl` and `r8l`), no post-round bench (Round 9's pre-bench is the next reference). Wall time: 12:44 → 16:25 before the review.
+
+**Machine state** (`perf/results/r8-power.log`). The **94 W charger** all round (`pmset -g ac`: Wattage 94, "96W USB-C
+Power Adapter"); every bench of record started and ended on AC at **100 %**; gate AC and ≥ 60 % at each start, void
+under 40 % (`PERF_MIN_BATT=40`); no void, no thermal or performance warning. A "Google Chrome for Testing" from
+`~/.agent-browser` (not ours, left running as the brief said) used CPU during every bench: ~36 % at the start of job 1,
+restarted at 14:34, then **38-130 % (median 81 %) during `r8f`** and 49-144 % (median 71 %) during `r8l` (sum over its
+processes, sampled each minute). The paired A/Bs share that load across variants; unpaired runs (`r8-pre`) do not.
+Desktop Chrome open (idle), as in earlier rounds. A machine-wide lock (`/tmp/r8/heavy.sh`, one build / Chrome job /
+test run at a time) kept the agents' builds and Chrome runs off the benches and off each other.
+
+**Round baseline.** `r8-pre` (`3763490`, traced, all presets on downtown + training, as `r7-pre`):
+`perf/results/r8-pre.json`. Unpaired vs `r7-pre` (the tree before Round 7): all -0.9 % frame mean (low -5.1 %, medium
+-3.5 %, high +4.0 %, ultra +1.4 %), js +14.5 % (flagged REG). The js rise sits in the downtown cells, which ran first
+(downtown/ultra path js 0.51 → 1.38 ms) while training's cells read lower js than r7-pre; calls and triangles are
+equal and programs are Round 7's -2 on High/Ultra. Machine state (the other Chrome at ~36 % CPU then; a hypothesis), not
+a code change: compare within a machine state.
+
+### Coverage (lead 0 of Round 7)
+
+| r8cov (path + fight, all 4 maps, 4 rounds, balanced, no trace) | medium | high |
+|---|---|---|
+| **Round 7's set**: the tree before Round 7 (`noset` = 00a8411) vs HEAD, mean / median / p95 (> 0 = the set is faster) | **+3.5 / +4.7 / +3.1 %** (3.162 → 3.272 ms mean, set -0.11 ms; median -0.15, p95 -0.17 ms) | -0.7 / -0.3 / -0.9 % |
+| path / fight (mean) | +0.8 % / **+6.3 %** | -1.2 % / -0.2 % |
+| robust (median of per-cell ratios) vs head / vs headB; noset slower in | +4.4 / +8.2 %; 21/32 | -2.1 / +3.8 %; 10/32 |
+| headB / head (mean / median / p95; fitted mean) | -1.3 / -0.7 / -0.7 %; -1.3 % | -2.2 / -1.9 / -2.5 %; -2.2 % (headB faster than head in 13/16) |
+| **Round 4's set**: the tree before Round 4 (`pre4` = 2c75479) vs `noset` (Round 4 + Round 6's boot-only `load` and allocation reuse on Medium/High), mean / median / p95 | **-0.1 / -1.4 / 0.0 %** (path +1.9, fight -1.9 %); pre4 slower in 15/32 | **+5.0 / +3.7 / +3.8 %**; pre4 slower in 23/32 |
+
+| r8cl (load-only, medium/high/ultra x all 4 maps incl. training, 3 rounds) | medium | high | ultra |
+|---|---|---|---|
+| readyMs, `noset` vs HEAD (> 0 = the set is faster); set faster in | +3.4 %; 9/12 | +3.5 %; 10/12 | -0.5 %; 10/12 |
+| headB / head | +0.9 % | -0.2 % | -5.0 % (mexico/ultra head outlier: headB -16.5 %) |
+| training only (noset vs head) | -2.7 % | -1.9 % | +0.2 % |
+| downtown / house / mexico (noset vs head) | +6.2 / +3.2 / +7.3 % | +3.7 / +6.7 / +5.7 % | +3.3 / +3.6 / -8.6 % |
+
+**Verdict.**
+- **Round 7's set is confirmed on Medium** on all four maps: the tree before it is +3.5 % mean / +4.7 % median / +3.1 %
+  p95 slower, robust +4.4 % (vs headB +8.2 %), slower in 21/32, headB -1.3 %. The gain is in fights (+6.3 %); the
+  path is within noise (+0.8 %): the path scenario does not fire, so the HUD part does not act there, and the rig walk is
+  small. The worker's ready gain repeats on Medium and High (+3.4 / +3.5 %, with training) and is ~0 on training (a small
+  bake: `bake.off` 3998 vs 4016 ms medium); Ultra again shows none (-0.5 %, control -5.0 %).
+- **High: not validated for the third time** (the set -0.7 % slower than the old tree in the raw mean, but the control moved
+  -2.2 %, and the old tree is +1.5 % slower than headB): no gain and no regression shown. **Parent's decision (this
+  round's brief): Round 7's exceptions stand** — the HUD and rig changes stay on High and the worker stays on Ultra:
+  they are pixel-exact, preset-independent code, and gating them per preset would add code for no gain. Gains count
+  only where measured past the gate (Medium, Low, Ultra fights; Medium/High ready).
+- **Round 4 on Medium: not confirmed** (the third try: r5R void, r6/r7 not run, now -0.1 % mean with the control at
+  -1.3 %). Round 4's f1 (-3.3 %) and f2 (-2.8 % raw) remain the only Medium evidence. Its parts are exact,
+  preset-independent shader and CPU code; nothing is changed this round (lead 3). **Round 4 on High: confirmed again**
+  (+5.0 % mean, 23/32).
+
+### Result (this round's changes)
+
+| | low | medium | high | ultra |
+|---|---|---|---|---|
+| **readyMs, packing** (r8l, `latepack` vs head, 3 rounds, 4 maps) | 508 → 497 ms (-2.1 %: from `late`, no stream on Low) | **6634 → 5313 (-19.9 %, -1.32 s)** | **6676 → 5486 (-17.8 %, -1.19 s)** | 8627 → 8606 (-0.2 %) |
+| packing alone (`latepack` vs `late`); faster in | (none) | -19.7 %; 12/12 | -18.2 %; 12/12 | +0.1 %; 10/12 |
+| headB / head (ready) | +1.9 % | 0.0 % | +0.4 % | +0.2 % |
+| load window: median max frame, ms (head → latepack; late; headB) | 128 → 127 | 134.3 → 130.8 (132.5; 134.8) | 145.2 → 146.2 (144.3; 144.9) | 159.8 → 160.6 (160.1; 160.8) |
+| frames > 33 / > 50 ms per load (head → latepack; late; headB) | 1.0 / 1.0 = | 2.8 / 2.3 → 2.9 / 2.3 (2.9 / 2.3; 2.8 / 2.0) | 4.0 / 2.4 → 4.0 / 2.4 (3.9 / 2.5; 4.0 / 2.3) | 4.2 / 2.3 → 4.2 / 2.3 (4.3 / 2.4; 4.2 / 2.3) |
+| renderer ms in the window (sum), window frames | | 942 → 1510, 1876 → 1661 | 944 → 835, 1718 → 1404 | 1257 → 1270, 2201 → 2471 |
+| **readyMs, `late`** (vs head) | -2.6 % (headB +1.9 %) | -0.3 % | +0.5 % | -0.3 % |
+| **programs linked after ready** (`hitch.mjs sweep`: every gun and optic, sword, the 5 kinds and 6 bosses the bench never spawns, solo wave 5) | 8 → 0 (downtown) | 5 → 0 (training) | 9 → 0 (downtown) | 5 → 0 (training) |
+| programs at ready | +2 | +3 | +3 | +3 |
+| frame time after ready | no change (exact; no frame-time A/B: neither change runs after ready) | | | |
+
+Frame mean/median/p95 and js after ready are unchanged by both changes (they act before ready or on first use), so no
+per-preset frame-time delta is claimed this round.
+
+**Verdict.**
+- **`late` is kept** (all presets): the sweep found exactly three kinds of program linked after ready on HEAD, and
+  `late` links them at the menu. (1) The realistic sword's blade-blood program (Medium/High/Ultra): the blade-blood
+  patch went on the shared `sword` material only when the weapons turned ready, so the first sword draw linked a
+  program. Now `weaponMaterial('sword')` is patched when it is made, so the glb's compile links it. (2) The air-slash
+  wave and the moderator ban ring (all presets): transparent, two-sided basic materials (two programs). Each wave or
+  ring has its own material and frees it, so **both programs were linked again for every wave**, after their first
+  use too. A holder mesh in `fxTemplate` (made under `quietly()`) keeps them linked. After `late`, 0 programs appear
+  after ready in the swept cells (and in all 16 cells on the committed tree: `r8-sweep-final.json`); programs at ready +2 (Low) / +3. Ready time within noise. The hitch these
+  links cost was not timed (counts only; Round 7 measured 90-460 ms for first-use links of similar programs).
+- **Upload packing is applied by user decision (2026-10-20)**: Round 7's `r7-pack.patch`, rebased unchanged in behaviour
+  (`SLOT_BYTES` = 24 ms × 60 kB/ms = 1.44 MB, `SLOT_PACK_MS` = 2, back-off, quiet start and gap rule unchanged). Its
+  gate passes: ready -19.9 % (Medium) and -17.8 % (High), faster in 12/12 cell-rounds each, control ≤ 0.4 %; the
+  load-window counts of frames > 33 / > 50 ms are equal to its base `late` (Medium 2.9 / 2.3, High 4.0 / 2.4 →
+  2.9 / 2.3, 4.0 / 2.4) and to head within 0.1 per load; the worst loading frame is Medium -3.5 ms, High +1.0 ms
+  (Round 7's r7ld read Medium +10 ms; the user accepted ~+8 ms). Ultra unchanged (its 2K maps exceed the slot budget).
+  Streams finish earlier as in Round 7; Medium spends more renderer time in the shorter window (more dressed frames).
+- **Ultra slot budget (`latepacku`, 2 × `SLOT_BYTES` at 2K textures): not kept**: Ultra ready -2.1 % vs head (11/12,
+  headB +0.2 %), but only **-1.8 % vs packing alone** (10/12), under ~2 %; load-window counts as head
+  (4.1 / 2.4 vs 4.2 / 2.3). Lead 0 for Round 9; patch `perf/patches/r8-packu.patch` (on the packing commit).
+- **Rejected** (each not clearly past noise after one A/B, or not reproduced): `warm`, `hud2`, `fence`, `opaque`,
+  `clips` (below and *Tried / rejected*).
+
+| r8f (frame time, path + fight, all presets x downtown/training, 4 rounds, 6 variants) | low | medium | high | ultra |
+|---|---|---|---|---|
+| `opaque` mean raw / fitted / robust | +1.1 / +0.3 / +1.4 % | -0.6 / -1.3 / -0.1 % | +1.1 / +0.5 / -0.9 % | +0.8 / +1.1 / -0.7 % |
+| `fence` | +1.3 / +0.6 / -0.4 % | -0.6 / -1.5 / -0.9 % | +3.6 / +3.2 / +1.5 % | -2.7 / -0.7 / -3.8 % |
+| `clips` | +3.1 / +3.5 / +1.8 % (Low does not run it) | -0.6 / -1.0 / -0.3 % | +2.9 / +3.4 / -0.6 % | -1.3 / +1.3 / -2.2 % |
+| `hud2` | +4.8 / +5.2 / +0.8 % | -0.4 / -0.4 / +1.1 % | +1.0 / +1.4 / +1.0 % | -0.3 / +1.0 / -1.2 % |
+| headB / head (raw / fitted) | +0.2 / +0.2 % | -0.6 / -1.3 % | 0.0 / +0.4 % | +2.2 / +5.4 % |
+
+Fight summaries and state trails are equal across all variants in every cell-round of `r8f` and `r8cov` (HEAD-code
+arms). All A/B notes: `perf/results/r8-ab.md`.
+
+### Changes kept (commits `d1ba2e3`, `32799f9`; patches `perf/patches/r8-late.patch`, `r8-late-docs.patch`, `r8-pack.patch`)
+
+| change | where | evidence | pixels |
+|---|---|---|---|
+| **late**: the sword's blade-blood patch at material creation (`blade-blood.ts` moved from `weapons/` to `render/`); a hidden holder of the air-slash wave and ban-ring materials in `fxTemplate` (under `quietly()`) keeps their two programs linked from the menu on | `render/blade-blood.ts`, `render/fx.ts`, `render/materials.ts`, `weapons/models.ts`, `tests/render-chain.test.ts`, `tests/fx.test.ts`, `docs/spec/blood.md` (path) | sweep: programs after ready → 0; r8l ready within noise | exact (56/56 byte-identical vs r7) |
+| **pack** (user decision): an upload slot holds several items within `SLOT_BYTES` and 2 ms; gap = max(`UPLOAD_GAP_MS`, slot bytes / rate) × pace | `render/index.ts`, `textures.ts`, `weapons.ts`, `operators.ts`, `props.ts`, `fx.ts`, `tests/render-chain.test.ts`, `tests/materials.test.ts` | r8l ready Medium -19.9 %, High -17.8 % | exact after ready (56/56 byte-identical vs r7) |
+
+### Quality gate
+
+`node perf/quality.mjs compare baseline r8`: **PASS, 56/56, every SSIM 1.0000** (the changed pixels are Round 1/4's
+known LSBs). `compare r7 r8` (the tree before the round): **56/56 byte-identical, 0 changed pixels** (also `cmp` on all
+56 PNGs). Each candidate alone was 56/56 byte-identical vs `r7` too (`scratch-r8-warm`, `-late`, `-hud2`, `-fence`,
+`-opaque`, `-clips`, by the agents). **Math.random**: `late`'s holder is made under `quietly()`, packing makes no three
+object; the fight views of the capture are byte-identical, and fight summaries and state trails are equal across all
+variants of `r8f` and `r8cov`. **Programs**: `hitch.mjs sweep --check zero` on the committed tree, all 16 cells:
+**0 programs after ready, PASS** (`perf/results/r8-sweep-final.json`; at ready Low 22-24, Medium 52-55, High 54-57,
+Ultra 56-59). `npm run typecheck` passes (also on the `late` commit alone). **`npm test -- --maxWorkers=2`: not clean**:
+404/405, then 403/405 on a second run; the failures are the two render-chain sky tests ("a streamed sky swaps in …",
+"a sky that lands in a match …"), whose `land()` helper renders until the sky lands within a **5 s wall-clock cap**.
+Run as one file alone they fail on **HEAD `3763490` too** (2 of 13), on HEAD + `late` (1 of 14) and on the committed
+tree (1 of 15); the first passes alone with `-t`. They depend on machine load (the other Chrome used 0.5-1.4 cores all
+afternoon; Round 7's 403/403 was on a quiet machine), not on this round's code (lead 7).
+
+### Harness (kept)
+
+- `perf/hitch.mjs load` (one cold load at a time, alternating builds: every frame from the match start to 60 frames
+  past ready with its interval, render time, sky step, upload slot, compiles, warm-up draws and new programs; flags a
+  warm-up sharing a frame with a slot or sky step) and `sweep` (after ready, one step at a time: every loadout gun and
+  both rifle optics, the sword with blood, waves and an execution, the five enemy kinds and six bosses the bench never
+  spawns, solo wave 5; `--check zero` fails a step that adds a program, `--expect FILE` compares counts with an earlier
+  sweep). `find` and `measure` unchanged. Results: `perf/results/r8-hitch-load.json`, `r8-sweep.json`,
+  `r8-sweep-final.json`.
+- `perf/ab-pair.mjs <tag> <x> <y> [mean|med|p95]` (any two variants of an A/B, per preset and scenario, with the
+  headB/head control), used for pre4 vs noset.
+
+### Review (GPT-6.1-Sol, high effort)
+
+Pending (`perf-loop-r8-review-1`).
+
+### Hot spot leads (refreshed)
+
+0. **Ultra slot budget** (`r8-packu.patch`): -1.8 % ready vs packing alone (10/12), -2.1 % vs head, stutter counts as
+   head. Re-measure with more rounds (it is one setting), or a rule that lets two 2K maps share a slot (that would send
+   more than the ~2.8 MB HEAD already sends in one frame: a pacing choice for the user).
+1. **The first match frames on realistic presets**: every realistic load has 1-2 intervals of 103-170 ms in the first
+   0.25 s of the quiet start (at -3.01 s and -2.78 s from its end) with ≤ 3 ms of renderer work, no slot, sky step,
+   compile, warm-up or new program (`r8-hitch-load.json`). Trace the main thread there (glb parse, KTX2 transcode,
+   the realistic look's first-frame setup after Start; a guess). This, not a warm-up collision, is what Round 7's lead 2
+   saw.
+2. **One shadow-depth program linked in an in-match warm-up** (46/48 loads; that frame ~35 ms on High/Ultra, 17-18 ms
+   on Medium, after the quiet end): `three.compile` links no shadow programs, so a glb template's (probably the
+   operators') shadow-depth program links at its first shadow draw. Pre-link it at the menu (a shadow-only warm-up),
+   after logging programs from the match start (`hitchInit` logs only after ready).
+3. **Round 4 on Medium** is not confirmed (r8cov -0.1 %): the user may decide whether its exact, preset-independent code
+   stays on Medium (as with Round 7's High exception).
+4. **Main thread outside rAF**: what is left is the crosshair's four `top`/`left` transitions restarting every frame
+   (`--spread`); the exact cuts (`hud2`) did not move the time. A non-exact change (one `@property` transition, or
+   transform) would need the user's consent for sub-pixel differences.
+5. **Small CPU trims below one A/B's resolution** (`clips`, Round 6's `matrix`, walk + D on High/Medium, `fence`): only a
+   bundled, traced (`AB_TRACE=1`) retry on training/mexico fights could show them; each alone reads ≤ 2 %.
+6. **Background load**: the other Chrome used up to 1.4 cores during this round's A/Bs; ask the user to close it before
+   Round 9's pre-bench.
+7. **Tests**: the two render-chain sky tests time out against `land()`'s 5 s wall-clock cap under load, on HEAD too; give
+   `land()` a frame budget instead of wall time (or a longer cap) so `npm test` is a clean gate again (Round 7 lead 5).
+
 ## Tried / rejected ideas
 
 Format: round, idea, where, result numbers vs the noise floor, why rejected.
@@ -1261,3 +1435,34 @@ Format: round, idea, where, result numbers vs the noise floor, why rejected.
   Exact (same code as the Ultra path). r7f: medium -2.6 % raw fight frame mean (robust -2.7 % vs head, -5.1 % vs
   headB, 7/8), high -2.0 % (robust -1.0 / -2.2 %); same-code arms in that run spread -5.4 to +2.8 %. Not clearly past
   noise (High: second A/B without validation; Medium: first valid arm). Rejected.
+- **r8, warm: hold compiles and in-match warm-ups off frames with an upload slot or a sky step** (`render/index.ts`
+  `_heldOff`/`_heldWait`, Round 7 lead 2). Exact (56/56 vs r7). `hitch.mjs load`, 48 alternating loads
+  (downtown/house x medium/high/ultra): **no warm-up shared a frame with a slot or sky step on HEAD either** (0/24 per
+  build); the long load frames (103-170 ms) are the first match frames of the quiet start with ≤ 3 ms of renderer work
+  (lead 1), not a collision. Its only effect: the sky-background frame's render 12.8 → 6.4 ms; ready -17 to +53 ms
+  (noise). Not reproduced, no gain. Rejected; patch `perf/patches/r8-warm.patch`.
+- **r8, hud2: HUD transition/animation events stopped at the window (React no longer runs on them), `--spread` on the
+  four ticks, `contain: size layout` on the crosshair, the mobile weapon label as its own memo leaf**
+  (`components/hud`, `tests/hud-vars.test.tsx`). Exact (56/56). Traced (agent, 4 alternating runs): FunctionCall 15.5
+  → 7.1 per frame (about -0.015 / -0.02 ms Low / Medium), restyled elements -1.2 per frame, but outside-rAF CPU and
+  `UpdateLayoutTree` ms unchanged (downtown/medium ULT higher in 4/4). r8f mean: low +4.8 % (fitted +5.2 %, robust
+  +0.8 %), medium -0.4 %, high +1.0 %, ultra -0.3 %. Rejected; patch `perf/patches/r8-hud2.patch`.
+- **r8, fence: GPU fences only while streaming** (`render/index.ts` render end, `tests/pacing.test.ts`). Exact in pixels;
+  pacing differs for up to 6 frames at a stream's start (empty ring). Traced: one main-thread task fewer per Medium
+  frame, outside CPU unchanged. r8f mean: low +1.3 %, medium -0.6 %, high +3.6 %, ultra -2.7 % raw / -0.7 % fitted /
+  -3.8 % robust with the Ultra control at +2.2 % raw / +5.4 % fitted. Not clearly past noise. Rejected; patch
+  `perf/patches/r8-fence.patch`.
+- **r8, opaque: an opaque canvas** (`alpha: false` context passed to three; the bare canvas cleared to the page colour
+  `#111c25` on construction and resize so nothing shows black). Exact (56/56; every canvas write has alpha 1). Traced:
+  the display compositor's CPU fell on downtown (0.48 → 0.19 ms Low, 0.36 → 0.08 ms Medium, but HEAD's own value swings
+  0.07-1.2 ms). r8f mean: low +1.1 %, medium -0.6 %, high +1.1 %, ultra +0.8 %. Rejected; patch
+  `perf/patches/r8-opaque.patch`.
+- **r8, clips: active animation clips listed once per figure, bone-indexed tracks** (`operator-motion.ts`,
+  `operators.ts`, `tests/operator-clips.test.ts`: every bone bit-equal over 46 figures × 1000 frames, same `evaluate`
+  call sequence). Exact (56/56). r8f mean: medium -0.6 %, high +2.9 %, ultra -1.3 % raw / -2.2 % robust (headB +2.2 %).
+  Rejected; patch `perf/patches/r8-clips.patch`.
+- **r8, Ultra upload slot budget 2 × `SLOT_BYTES`** (`latepacku`). Ultra ready -1.8 % vs packing alone (10/12), under
+  ~2 %. Not kept; lead 0. Patch `perf/patches/r8-packu.patch` (on the packing commit).
+- **r8, not built (survey)**: a per-frame `getProgram` probe (no live material/variant flip found by reading; a probe
+  would confirm); compiling out Low's unused aerial-fog and probe-grid varyings (≤ 0.02 ms on a presentation-bound
+  preset, and any shader text edit risks Metal LSBs).

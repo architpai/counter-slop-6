@@ -109,6 +109,8 @@ targets, flags no **REG** elsewhere, and `quality.mjs compare baseline <label>` 
 | `ab.sh`, `ab-agg.mjs` | per-cell interleaved A/B of patches vs HEAD, and its paired aggregate |
 | `ab-load.mjs` | load times of an A/B run (best with `AB_ARGS="--load-only --repeat N"`): paired ratios, phase deltas, load-window frames |
 | `ab-posfit.mjs` | diagnostic fit of an A/B run: variant effects corrected for run position |
+| `ab-pair.mjs` | any two variants of an A/B run against each other (geomean/median paired ratio, slower count), with the headB/head control |
+| `hitch.mjs` | programs linked after ready (`find`, `sweep` with `--check zero` / `--expect`), first-fight hitch (`measure`), per-frame load timeline with warm-up/slot/sky-step collisions (`load`) |
 | `quality.mjs` | screenshot capture and SSIM gate |
 | `image.mjs` | PNG decode/encode (node:zlib), SSIM, diff heat maps |
 | `results/` | bench JSONs (≈185 kB, committed; `scratch-*` and `*-raw*` ignored); `baseline-1..3` are the reference, `baseline-profile` the profile |

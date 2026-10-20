@@ -1,0 +1,182 @@
+diff --git a/src/engine/weapons/blade-blood.ts b/src/engine/render/blade-blood.ts
+similarity index 93%
+rename from src/engine/weapons/blade-blood.ts
+rename to src/engine/render/blade-blood.ts
+index f9bc460..959ee11 100644
+--- a/src/engine/weapons/blade-blood.ts
++++ b/src/engine/render/blade-blood.ts
+@@ -1,5 +1,5 @@
+ import * as THREE from 'three';
+-import { BLOOD } from '../render/palette';
++import { BLOOD } from './palette';
+ 
+ /**
+  * Blood on the sword's blade, drawn in its own material: it coats the blade
+@@ -12,6 +12,8 @@ import { BLOOD } from '../render/palette';
+  * The mask works in the blade's own frame (`frame`): the shader takes the
+  * fragment's world position into it, so a material shared by the guard and
+  * grip (the realistic set's) shows blood only between the guard and the tip.
++ * That set's material is made with it (materials.ts `weaponMaterial`), so the
++ * weapons' warm-up links the program the sword draws with.
+  */
+ 
+ interface BloodUniforms {
+@@ -73,8 +75,8 @@ roughnessFactor = mix(roughnessFactor, 0.2, bloodAmount);`;
+ const FRAGMENT_METAL = /* glsl */`
+ metalnessFactor = mix(metalnessFactor, 0.0, bloodAmount);`;
+ 
+-/** Patch `material` (once) to draw blade blood; the uniforms live with it. */
+-function patch(material: THREE.Material, realistic: boolean): BloodUniforms {
++/** Patch `material` (once) to draw blade blood; the uniforms live with it, and the first call's colours stay. */
++export function patchBladeBlood(material: THREE.Material, realistic: boolean): BloodUniforms {
+   const known = patched.get(material);
+   if (known) return known;
+   const uniforms: BloodUniforms = {
+@@ -111,7 +113,7 @@ function patch(material: THREE.Material, realistic: boolean): BloodUniforms {
+  */
+ export function bladeBlood(material: THREE.Material, frame: THREE.Object3D, guard: number, tip: number,
+   centre: number, half: number, realistic: boolean, rise = 0): BladeBlood {
+-  const uniforms = patch(material, realistic);
++  const uniforms = patchBladeBlood(material, realistic);
+   const axis = new THREE.Vector4(guard, tip, centre, Math.max(1e-4, half));
+   return {
+     get amount() { return uniforms.uBlood.value; },
+diff --git a/src/engine/render/fx.ts b/src/engine/render/fx.ts
+index c4b3815..7285621 100644
+--- a/src/engine/render/fx.ts
++++ b/src/engine/render/fx.ts
+@@ -698,6 +698,12 @@ export function fxTemplate(look: 'lowpoly' | 'realistic', soft = false): THREE.G
+     instanced(hull, shellMaterial('shotshell'), false);
+     add(new THREE.Mesh(new THREE.PlaneGeometry(0.01, 0.01), flashMaterial()));
+   }
++  // The sword's air-slash wave and the moderator's ban ring (weapons/wave.ts, enemies/hazards.ts): unlit,
++  // see-through and two-sided, so three draws their back faces and then their front faces, a program each. Each
++  // wears a material of its own, freed with it: this one links both at the menu and holds them, so no wave or ring
++  // links or frees one. Made without a uuid draw: the template's other meshes keep the ones they had.
++  add(quietly(() => new THREE.Mesh(new THREE.PlaneGeometry(0.01, 0.01),
++    new THREE.MeshBasicMaterial({ name: 'fx:see-through', transparent: true, side: THREE.DoubleSide, depthWrite: false }))));
+   templates.set(key, group);
+   return group;
+ }
+diff --git a/src/engine/render/materials.ts b/src/engine/render/materials.ts
+index 4da2a77..3bc310a 100644
+--- a/src/engine/render/materials.ts
++++ b/src/engine/render/materials.ts
+@@ -1,5 +1,6 @@
+ import * as THREE from 'three';
+ import { FOG_UNIFORMS } from './atmosphere';
++import { patchBladeBlood } from './blade-blood';
+ import { OPTIC_COLOR, SURF, TONE, TONE_HEX, TOON_STEPS } from './palette';
+ import type { SurfKey } from './palette';
+ import type { MaterialTag, RealMaterial, SetInfo, TextureSet } from './surfaces';
+@@ -1016,6 +1017,9 @@ export function weaponMaterial(name: string): { material: THREE.Material; set: s
+   const material = gridLit(new THREE.MeshStandardMaterial({ color: tint ?? 0xffffff, roughness: 1, metalness: 1 }), true);
+   material.name = name;
+   wearMaps(material, weaponStandIns());
++  // The sword's blade, guard and grip draw its blood in this material (weapons/models.ts `makeRealSwordModel`):
++  // patched from the start, so the template's compile links that program, not the sword's first draw in a match.
++  if (name === 'sword') patchBladeBlood(material, true);
+   return { material, set: tint !== undefined ? 'optics' : name };
+ }
+ 
+diff --git a/src/engine/weapons/models.ts b/src/engine/weapons/models.ts
+index 2b15554..ccf8195 100644
+--- a/src/engine/weapons/models.ts
++++ b/src/engine/weapons/models.ts
+@@ -5,8 +5,8 @@ import type { GunKind, ScopeKind, Triple } from './stats';
+ import { tacticalPart } from '../render/tactical';
+ import { OPTIC_COLOR } from '../render/palette';
+ import type { WeaponAssets } from '../render/weapons';
+-import { bladeBlood } from './blade-blood';
+-import type { BladeBlood } from './blade-blood';
++import { bladeBlood } from '../render/blade-blood';
++import type { BladeBlood } from '../render/blade-blood';
+ 
+ const PRIMARY = TONE.PRIMARY, DARK = TONE.DARK, SIGHT = TONE.HOSTILE;
+ /** The flat models are built in their own units at this scale; the Blender models are in metres. */
+@@ -58,7 +58,7 @@ export interface WeaponModel {
+   parts: ModelParts;
+   /** Gun: the barrel end. Sword: the blade tip. */
+   muzzle: THREE.Object3D;
+-  /** The sword's blade blood (weapons/blade-blood.ts); absent on the guns. */
++  /** The sword's blade blood (render/blade-blood.ts); absent on the guns. */
+   blood?: BladeBlood | null;
+   /** Scales the procedural part offsets: 1 on the flat models (their own units), `LOW_SCALE` on the Blender models (metres). */
+   unit: number;
+diff --git a/tests/fx.test.ts b/tests/fx.test.ts
+index 10392d8..4cc1923 100644
+--- a/tests/fx.test.ts
++++ b/tests/fx.test.ts
+@@ -227,7 +227,9 @@ test('decals are lit, offset in depth and never write it; the flat look\'s too a
+   // A blended two-sided effect draws once a frame: three draws such a material twice (back, then front) unless told not to.
+   const all = new Set([...materials('lowpoly'), ...materials('realistic'), ...materials('realistic', true), lowFlashMaterial()]);
+   for (const material of all) {
+-    if (material.transparent && material.side === THREE.DoubleSide) expect(material.forceSinglePass, material.name).toBe(true);
++    // But the holder of the slash wave's and ban ring's programs: those draw twice, so it links both (back, front).
++    if (material.name === 'fx:see-through') expect([material.transparent, material.side, material.forceSinglePass]).toEqual([true, THREE.DoubleSide, false]);
++    else if (material.transparent && material.side === THREE.DoubleSide) expect(material.forceSinglePass, material.name).toBe(true);
+   }
+   expect([flashMaterial().forceSinglePass, lowFlashMaterial().forceSinglePass, tracerMaterial().forceSinglePass]).toEqual([true, true, true]);
+ });
+diff --git a/tests/render-chain.test.ts b/tests/render-chain.test.ts
+index 862dd57..e5fb115 100644
+--- a/tests/render-chain.test.ts
++++ b/tests/render-chain.test.ts
+@@ -4,6 +4,8 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+ import { CHECK_SHADER_ERRORS, Renderer, roomEnvironment } from '@/engine/render/index';
+ import { MATCH_QUIET_MS } from '@/engine/render/pacing';
+ import { spriteGeometry, spriteMaterial } from '@/engine/render/fx';
++import { bladeBlood } from '@/engine/render/blade-blood';
++import { weaponMaterial } from '@/engine/render/materials';
+ import { Composite, RIG_DEPTH } from '@/engine/render/postfx';
+ import { PRESETS, PRESET_VALUES } from '@/engine/render/quality';
+ import { aimShadowBox, cascadeCentre, sizeShadowBox } from '@/engine/render/shadows';
+@@ -232,6 +234,48 @@ test('the soft sprites and the light shafts link at the menu: a first smoke, fir
+   expect(three.getContext().getError()).toBe(three.getContext().NO_ERROR);
+ }, 60_000);
+ 
++test('a first air-slash wave or ban ring, and the Blender sword\'s blade, link nothing after the menu', async () => {
++  const renderer = makeRenderer(), three = renderer.three;
++  renderer.camera.position.set(0, 1.6, 0);
++  // The Blender sword's set material as the weapons' glb makes it, compiled as their warm-up compiles it.
++  const { material: steel } = weaponMaterial('sword');
++  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.8), steel);
++  blade.position.set(0, 1.6, -2);
++  cleanup.push(() => { blade.geometry.dispose(); steel.dispose(); });
++  for (const name of ['low', 'ultra'] as const) {
++    renderer.applyQuality(PRESET_VALUES[name]);
++    for (let i = 0; i < 100 && (i < 2 || renderer._compiles.length + renderer._warmups.length > 0); i++) {
++      renderer.render(0, fx);
++      await new Promise(resolve => setTimeout(resolve, 10));
++    }
++    expect(renderer._compiles.length + renderer._warmups.length, name).toBe(0);
++    renderer.scene.add(blade);
++    three.compile(blade, renderer.camera, renderer.scene);
++    renderer.render(0, fx);
++    const programs = three.info.programs!.length;
++    // Two waves (or rings) in turn, each in a material of its own that goes with it (weapons/wave.ts, enemies/hazards.ts).
++    for (let k = 0; k < 2; k++) {
++      const wave = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0xd2ecff, transparent: true,
++        opacity: 0.95, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false }));
++      wave.position.set(0, 1.6, -2);
++      renderer.scene.add(wave);
++      renderer.render(0, fx);
++      expect(three.info.programs!.length, `${name} wave ${k}`).toBe(programs);
++      wave.removeFromParent();
++      wave.geometry.dispose();
++      wave.material.dispose();
++      renderer.render(0, fx);
++      expect(three.info.programs!.length, `${name} wave ${k} gone`).toBe(programs);
++    }
++    // The sword built on the weapons' ready (weapons/models.ts `makeRealSwordModel`) puts its blood on: no relink.
++    bladeBlood(steel, blade, 0, -0.8, 0, 0.02, true).update(0.5);
++    renderer.render(0, fx);
++    expect(three.info.programs!.length, `${name} sword`).toBe(programs);
++    blade.removeFromParent();
++  }
++  expect(three.getContext().getError()).toBe(three.getContext().NO_ERROR);
++}, 60_000);
++
+ test('dynamic resolution only moves viewports, a pass switched off frees its targets, and dispose frees them all', () => {
+   const three = new THREE.WebGLRenderer({ canvas: document.createElement('canvas') });
+   cleanup.push(() => { three.dispose(); three.forceContextLoss(); });

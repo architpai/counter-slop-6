@@ -1,0 +1,13 @@
+diff --git a/docs/spec/blood.md b/docs/spec/blood.md
+index 56f2418..1eff984 100644
+--- a/docs/spec/blood.md
++++ b/docs/spec/blood.md
+@@ -40,7 +40,7 @@ Blood no longer uses `TONE.HOSTILE` (#FF4757, the HUD's alarm pink, which read a
+ - **Low tier:** the flat blob discs in the Low colour. A spatter streaks along its throw with satellite drops, and a drip runs down.
+ - **Pools** under bodies and the trails and splats of bloody gibs use the same colours and follow the gore setting.
+ 
+-## Blood on the sword (`weapons/blade-blood.ts`)
++## Blood on the sword (`render/blade-blood.ts`)
+ 
+ The blade's blood is drawn in its own material, not by quads. The old knife's six smear quads were flat, unlit HUD pink, and on the long sword they stood off its edge.
+ - **Mask:** each fragment's world position is taken into the blade's frame. On the realistic tier that frame is the glb's `smears` socket at the blade's root to the `tip` socket, which also gives the curved blade's rise; there, blade, guard and grip are one mesh in one material. On Low it is the flat model's root, and the blade gets its own material, separate from the shared cache.

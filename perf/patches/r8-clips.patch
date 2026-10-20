@@ -1,0 +1,549 @@
+diff --git a/src/engine/render/operator-motion.ts b/src/engine/render/operator-motion.ts
+index 7465d0e..86c6035 100644
+--- a/src/engine/render/operator-motion.ts
++++ b/src/engine/render/operator-motion.ts
+@@ -155,6 +155,11 @@ export class OperatorMotion {
+   #meleeProgress: number | null = null;
+   /** `loopWeights`' output, reused each step. */
+   readonly #target: Record<LoopClip, number> = { idle: 1, walk: 0, run: 0, strafeL: 0, strafeR: 0, crouch: 0, aim: 0 };
++  /** The clips playing this frame (`playing`), the first `#playing`: each one's tracks by bone, its time and its weight. */
++  readonly #tracks: (readonly (THREE.Interpolant | null)[])[] = [];
++  readonly #times: number[] = [];
++  readonly #amounts: number[] = [];
++  #playing = 0;
+ 
+   constructor(group: ClipGroup) {
+     this.group = group;
+@@ -199,34 +204,72 @@ export class OperatorMotion {
+   }
+ 
+   /**
+-   * A bone's rotation from the clips at their weights, into `out`
+-   * (identity when none moves it). Loops at their clocks, each slerped from
+-   * identity by its weight; one-shots on top.
++   * The clips that play this frame, from a kind's clips bound to its bones
++   * (`bindClips`): each one's tracks, time and weight, loops then one-shots,
++   * in the order `boneDelta` applies them. Once per figure per frame, before
++   * `boneDelta` for each of its bones (render/operators.ts `OperatorBody.sync`).
+    */
+-  delta(library: ClipLibrary, bone: string, out: THREE.Quaternion): THREE.Quaternion {
+-    out.identity();
+-    for (const name of LOOPS) {
+-      const weight = this.weights[name];
++  playing(binding: ClipBinding): void {
++    let n = 0;
++    for (let c = 0; c < LOOPS.length; c++) {
++      const name = LOOPS[c]!, weight = this.weights[name];
+       if (weight < 0.01) continue;
+-      const clip = library.get(this.group, name);
+-      const track = clip?.tracks.get(bone);
+-      if (!clip || !track) continue;
+-      const t = name === 'idle' ? this.idleTime % clip.duration : name === 'crouch' || name === 'aim' ? 0 : this.cycle * clip.duration;
+-      out.multiply(sample(track, t, weight));
++      const clip = binding.clips[c];
++      if (!clip) continue;
++      this.#tracks[n] = binding.tracks[c]!;
++      this.#times[n] = name === 'idle' ? this.idleTime % clip.duration : name === 'crouch' || name === 'aim' ? 0 : this.cycle * clip.duration;
++      this.#amounts[n++] = weight;
+     }
+-    for (const name of ONE_SHOTS) {
+-      const shot = this.shots.get(name);
++    for (let s = 0; s < ONE_SHOTS.length; s++) {
++      const name = ONE_SHOTS[s]!, shot = this.shots.get(name);
+       if (!shot) continue;
+-      const clip = library.get(this.group, name);
+-      const track = clip?.tracks.get(bone);
+-      if (!clip || !track) continue;
+-      const t = name === 'melee' ? shot.t * clip.duration : Math.min(shot.t, clip.duration);
+-      out.multiply(sample(track, t, Math.min(1, shot.weight)));
++      const c = LOOPS.length + s, clip = binding.clips[c];
++      if (!clip) continue;
++      this.#tracks[n] = binding.tracks[c]!;
++      this.#times[n] = name === 'melee' ? shot.t * clip.duration : Math.min(shot.t, clip.duration);
++      this.#amounts[n++] = Math.min(1, shot.weight);
++    }
++    this.#playing = n;
++  }
++
++  /**
++   * A bone's rotation from the clips `playing` found, by the bone's index in
++   * that binding, into `out` (identity when none moves it). Loops at their
++   * clocks, each slerped from identity by its weight; one-shots on top.
++   */
++  boneDelta(bone: number, out: THREE.Quaternion): THREE.Quaternion {
++    out.identity();
++    for (let k = 0; k < this.#playing; k++) {
++      const track = this.#tracks[k]![bone];
++      if (!track) continue;
++      out.multiply(sample(track, this.#times[k]!, this.#amounts[k]!));
+     }
+     return out;
+   }
+ }
+ 
++/** Every clip, loops then one-shots: a `ClipBinding`'s order. */
++export const CLIPS: readonly ClipName[] = [...LOOPS, ...ONE_SHOTS];
++
++/**
++ * A kind's clips bound to its bones (`bindClips`), for one library and clip
++ * group: per clip in `CLIPS` order, the clip (null where the library has
++ * none) and each bone's track by the bone's index (null where the clip does
++ * not move it), so a frame's bones look nothing up by name.
++ */
++export interface ClipBinding {
++  readonly library: ClipLibrary;
++  readonly group: ClipGroup;
++  readonly clips: readonly (Clip | null)[];
++  readonly tracks: readonly (readonly (THREE.Interpolant | null)[])[];
++}
++
++/** A kind's clips in a library for a group, bound to its bones (in the kind's bone order, by name). */
++export function bindClips(library: ClipLibrary, group: ClipGroup, bones: readonly { readonly name: string }[]): ClipBinding {
++  const clips = CLIPS.map(name => library.get(group, name));
++  return { library, group, clips, tracks: clips.map(clip => bones.map(({ name }) => clip?.tracks.get(name) ?? null)) };
++}
++
+ const _sample = new THREE.Quaternion();
+ const _identity = new THREE.Quaternion();
+ function sample(track: THREE.Interpolant, t: number, weight: number): THREE.Quaternion {
+diff --git a/src/engine/render/operators.ts b/src/engine/render/operators.ts
+index 4a43648..33dbc07 100644
+--- a/src/engine/render/operators.ts
++++ b/src/engine/render/operators.ts
+@@ -1,7 +1,7 @@
+ import * as THREE from 'three';
+ import manifest from './operator-assets.json';
+ import { OPERATOR_AO, levelDepthMat, levelDepthSkinnedMat, operatorMaterial, quietly, twinMaterial, wearMaps } from './materials';
+-import { ClipLibrary, LOOPS, ONE_SHOTS, type ClipGroup, type OperatorMotion } from './operator-motion';
++import { ClipLibrary, LOOPS, ONE_SHOTS, bindClips, type ClipBinding, type ClipGroup, type OperatorMotion } from './operator-motion';
+ import { ANISOTROPY, TEXTURE_MAPS, TEXTURE_SIZE } from './surfaces';
+ import { textureBytes } from './textures';
+ import type { FigureRig, OperatorSource } from './figure';
+@@ -93,6 +93,8 @@ export interface KindTemplate {
+    * kind of one mesh.
+    */
+   shadow: THREE.BufferGeometry | null;
++  /** Its clips bound to its bones, for the library and clip group its figures last played (`OperatorBody.sync`). */
++  clips: ClipBinding | null;
+ }
+ 
+ /** How far the trunk may move inside the figure (the hips sinking and sliding back in a death fall, a lean), metres of figure space. */
+@@ -298,7 +300,7 @@ export class OperatorAssets implements OperatorSource {
+       });
+       const template: KindTemplate = {
+         kind, group: clipGroup(kind, scene), bones, boneInverses: skeleton.boneInverses, meshes, gibs: new Map(), bounds: new THREE.Sphere(),
+-        shadow: null,
++        shadow: null, clips: null,
+       };
+       template.gibs = gibGeometries(template);
+       template.bounds = restBounds(template);
+@@ -742,11 +744,14 @@ export class OperatorBody {
+   #prop: THREE.Object3D | null = null;
+   /** The kind's shared twins of the set materials, per mesh, for the skinned meshes or the rigid gibs (`OperatorAssets.#twins`). */
+   readonly #twins: (rigid: boolean) => readonly THREE.Material[];
++  /** Per bone, how a drone's rotor spins (+1 with the spin, -1 against it), 0 for a bone that is not a rotor. */
++  readonly #rotors: readonly number[];
+ 
+   constructor(rig: FigureRig, template: KindTemplate, twins: (rigid: boolean) => readonly THREE.Material[]) {
+     this.rig = rig;
+     this.template = template;
+     this.#twins = twins;
++    this.#rotors = template.bones.map(({ name }) => (!name.includes('-rotor') ? 0 : name.endsWith('F') === name.includes('wingL') ? 1 : -1));
+     this.armature.name = 'operator';
+     this.bones = template.bones.map(({ name, position }) => {
+       const bone = new THREE.Bone();
+@@ -848,8 +853,14 @@ export class OperatorBody {
+   /** Follow the pivots (and nodes), times the clips' deltas; a bone whose source left the figure folds to nothing. */
+   sync(clips: ClipLibrary | null): void {
+     const { rig, template } = this, motion: OperatorMotion = rig.motion;
++    const playing = clips !== null && motion.group !== 'drone';
++    if (playing) {
++      let binding = template.clips;
++      if (!binding || binding.library !== clips || binding.group !== motion.group) binding = template.clips = bindClips(clips, motion.group, template.bones);
++      motion.playing(binding);
++    }
+     for (let i = 0; i < template.bones.length; i++) {
+-      const { name, position } = template.bones[i]!, bone = this.bones[i]!, source = this.sources[i];
++      const { position } = template.bones[i]!, bone = this.bones[i]!, source = this.sources[i];
+       if (source) {
+         if (!attached(source, rig.root) || !source.visible) {
+           bone.scale.setScalar(1e-4);
+@@ -863,10 +874,11 @@ export class OperatorBody {
+         bone.quaternion.identity();
+         bone.scale.setScalar(1);
+       }
+-      if (name.includes('-rotor')) {
+-        bone.quaternion.multiply(_q.setFromAxisAngle(_up, name.endsWith('F') === name.includes('wingL') ? motion.spin : -motion.spin));
+-      } else if (clips && motion.group !== 'drone') {
+-        bone.quaternion.multiply(motion.delta(clips, name, _q));
++      const rotor = this.#rotors[i]!;
++      if (rotor !== 0) {
++        bone.quaternion.multiply(_q.setFromAxisAngle(_up, rotor > 0 ? motion.spin : -motion.spin));
++      } else if (playing) {
++        bone.quaternion.multiply(motion.boneDelta(i, _q));
+       }
+     }
+     if (motion.group === 'humanoid' && this.#prop && (motion.carry === 'long' || motion.carry === 'pistol') && motion.aim > 0.02) this.#reach(motion);
+diff --git a/tests/operator-clips.test.ts b/tests/operator-clips.test.ts
+new file mode 100644
+index 0000000..6ddfa95
+--- /dev/null
++++ b/tests/operator-clips.test.ts
+@@ -0,0 +1,357 @@
++import { expect, test } from 'vitest';
++import { DataTexture, Group, MeshStandardMaterial, Quaternion, Vector3 } from 'three';
++import type { Interpolant, Object3D, Texture } from 'three';
++import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
++import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
++import { OPERATOR_GLB, OPERATOR_MANIFEST, OperatorAssets, OperatorBody } from '@/engine/render/operators';
++import type { OperatorLod } from '@/engine/render/operators';
++import { CLIPS, ClipLibrary, LOOPS, ONE_SHOTS, STILL } from '@/engine/render/operator-motion';
++import type { Carry, MotionInput, OperatorMotion } from '@/engine/render/operator-motion';
++import { makeFigure } from '@/engine/render/figure';
++import type { Figure } from '@/engine/render/figure';
++import { TACTICAL_MODELS } from '@/engine/render/tactical';
++import { makeModel } from '@/engine/enemies/model';
++import { TYPES } from '@/engine/enemies/types';
++import type { EnemyKind } from '@/engine/types';
++
++/**
++ * `OperatorBody.sync` reads the clips through a kind's bone-indexed binding and a per-figure list of the clips
++ * playing (Round 8 of perf/LOG.md). The reference below is the code it replaced (by-name lookups per bone and clip),
++ * kept verbatim: both must give every bone the same position, rotation and scale to the bit, from the same
++ * interpolant calls with the same times in the same order.
++ */
++
++const loaders = {
++  model: (url: string) => new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(url),
++  texture: async (url: string): Promise<Texture> => {
++    const texture = new DataTexture(new Uint8Array(4), 1, 1);
++    texture.name = url;
++    return texture;
++  },
++  upload: () => {},
++};
++
++async function stream(assets: OperatorAssets): Promise<void> {
++  for (let i = 0; i < 3000; i++) {
++    assets.pump();
++    if (!assets.pending) return;
++    await new Promise(resolve => setTimeout(resolve, 10));
++  }
++  throw new Error('timed out waiting for the operators to stream');
++}
++
++const LOOP_NAMES = new Set(Object.entries(OPERATOR_MANIFEST.clips).filter(([, clip]) => clip.loop).map(([name]) => name));
++const GROUPS = ['humanoid', 'machine', 'drone'] as const;
++
++// ---- The reference: OperatorMotion.delta and OperatorBody.sync's bone loop as they were at 3763490. ----
++
++const _refSample = new Quaternion(), _refIdentity = new Quaternion(), _refQ = new Quaternion(), _refUp = new Vector3(0, 1, 0);
++function refSample(track: Interpolant, t: number, weight: number): Quaternion {
++  const v = track.evaluate(t);
++  _refSample.set(v[0]!, v[1]!, v[2]!, v[3]!);
++  return weight >= 0.999 ? _refSample : _refSample.slerp(_refIdentity, 1 - weight);
++}
++
++function refDelta(motion: OperatorMotion, library: ClipLibrary, bone: string, out: Quaternion): Quaternion {
++  out.identity();
++  for (const name of LOOPS) {
++    const weight = motion.weights[name];
++    if (weight < 0.01) continue;
++    const clip = library.get(motion.group, name);
++    const track = clip?.tracks.get(bone);
++    if (!clip || !track) continue;
++    const t = name === 'idle' ? motion.idleTime % clip.duration : name === 'crouch' || name === 'aim' ? 0 : motion.cycle * clip.duration;
++    out.multiply(refSample(track, t, weight));
++  }
++  for (const name of ONE_SHOTS) {
++    const shot = motion.shots.get(name);
++    if (!shot) continue;
++    const clip = library.get(motion.group, name);
++    const track = clip?.tracks.get(bone);
++    if (!clip || !track) continue;
++    const t = name === 'melee' ? shot.t * clip.duration : Math.min(shot.t, clip.duration);
++    out.multiply(refSample(track, t, Math.min(1, shot.weight)));
++  }
++  return out;
++}
++
++function attached(part: Object3D, root: Object3D): boolean {
++  for (let node: Object3D | null = part; node; node = node.parent) if (node === root) return true;
++  return false;
++}
++
++/** The old bone loop (the support hand's reach after it is unchanged code on its output: not repeated). */
++function refSync(body: OperatorBody, clips: ClipLibrary | null): void {
++  const { rig, template } = body, motion = rig.motion;
++  for (let i = 0; i < template.bones.length; i++) {
++    const { name, position } = template.bones[i]!, bone = body.bones[i]!, source = body.sources[i];
++    if (source) {
++      if (!attached(source, rig.root) || !source.visible) {
++        bone.scale.setScalar(1e-4);
++        continue;
++      }
++      bone.position.copy(source.position);
++      bone.quaternion.copy(source.quaternion);
++      bone.scale.copy(source.scale);
++    } else {
++      bone.position.copy(position);
++      bone.quaternion.identity();
++      bone.scale.setScalar(1);
++    }
++    if (name.includes('-rotor')) {
++      bone.quaternion.multiply(_refQ.setFromAxisAngle(_refUp, name.endsWith('F') === name.includes('wingL') ? motion.spin : -motion.spin));
++    } else if (clips && motion.group !== 'drone') {
++      bone.quaternion.multiply(refDelta(motion, clips, name, _refQ));
++    }
++  }
++}
++
++// ---- Harness. ----
++
++/** Every bone's position, rotation and scale, as numbers. */
++function pose(body: OperatorBody): number[] {
++  const out: number[] = [];
++  for (const bone of body.bones) {
++    out.push(bone.position.x, bone.position.y, bone.position.z, bone.quaternion.x, bone.quaternion.y, bone.quaternion.z, bone.quaternion.w,
++      bone.scale.x, bone.scale.y, bone.scale.z);
++  }
++  return out;
++}
++
++/** The same numbers to the bit (Object.is: -0 is not +0). */
++function same(a: readonly number[], b: readonly number[], what: () => string): void {
++  if (a.length !== b.length) throw new Error(`${what()}: ${a.length} values vs ${b.length}`);
++  for (let i = 0; i < a.length; i++) {
++    if (!Object.is(a[i], b[i])) throw new Error(`${what()}: value ${i} is ${a[i]} (new) vs ${b[i]} (reference)`);
++  }
++}
++
++/** Log every evaluate of a library's tracks as (track id, time); ids by `<group>.<clip>.<bone>`, shared between libraries. */
++const trackIds = new Map<string, number>();
++function logEvaluates(library: ClipLibrary, log: number[]): void {
++  for (const group of GROUPS) {
++    for (const name of CLIPS) {
++      const clip = library.get(group, name);
++      if (!clip) continue;
++      for (const [bone, track] of clip.tracks) {
++        const key = `${group}.${name}.${bone}`;
++        if (!trackIds.has(key)) trackIds.set(key, trackIds.size);
++        const id = trackIds.get(key)!, evaluate = track.evaluate.bind(track);
++        track.evaluate = (t: number) => {
++          log.push(id, t);
++          return evaluate(t);
++        };
++      }
++    }
++  }
++}
++
++function mulberry32(seed: number): () => number {
++  let a = seed >>> 0;
++  return () => {
++    a = (a + 0x6d2b79f5) >>> 0;
++    let t = a;
++    t = Math.imul(t ^ (t >>> 15), t | 1);
++    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
++    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
++  };
++}
++
++const KINDS = Object.keys(TACTICAL_MODELS) as (keyof typeof TACTICAL_MODELS)[];
++const CARRIES: Carry[] = ['long', 'pistol', 'blade', 'none'];
++
++function figureOf(kind: string): Figure {
++  if (kind === 'player') return makeFigure({ kind: 'humanoid', tactical: 'player', color: 0x4c7dff, weapon: 'r4c', bodyWidth: 1, limbR: 0.033, hat: 'cap' });
++  const stats = TYPES[kind as EnemyKind];
++  const { figure } = makeModel(stats);
++  figure.root.scale.setScalar(stats.scale);
++  return figure;
++}
++
++/** A figure, its operator (made here, not by the assets, so the test holds the body) and its scripted state. */
++interface Subject {
++  kind: string;
++  figure: Figure;
++  body: OperatorBody;
++  rand: () => number;
++  input: MotionInput;
++  dt: number;
++  melee: number | null;
++  /** The frame it dies from (STILL), and the frame a limb is torn off (-1: never). */
++  dies: number;
++  tears: number;
++  torn: string;
++  hidden: Object3D | null;
++  returns: (() => void)[];
++  /** What the run reached, for the coverage checks: frames with the support hand's reach, with a folded bone. */
++  reached: number;
++  folded: number;
++}
++
++/** The one-shots seen in flight on a frame a body synced. */
++const shotsSeen = new Set<string>();
++
++const material = new MeshStandardMaterial();
++
++function subject(assets: OperatorAssets, kind: string, seed: number): Subject {
++  const figure = figureOf(kind), rig = figure.rig!, template = assets.kind(rig.kind)!;
++  const body = new OperatorBody(rig, template, () => template.meshes.map(() => material));
++  const rand = mulberry32(seed);
++  const carry = CARRIES[seed % CARRIES.length]!;
++  const limbs = ['head', 'upperL', 'foreR', 'thighL', 'wingL', 'torso'].filter(name => figure.parts[name as keyof typeof figure.parts]);
++  return {
++    kind, figure, body, rand, dt: 1 / 60, melee: null, hidden: null, returns: [], reached: 0, folded: 0,
++    input: { speed: 0, phase: 0, lateral: 0, aim: 0, carry, onGround: true, crouch: false, flinch: 0, melee: null },
++    dies: seed % 3 === 0 ? 200 + (seed % 50) : -1,
++    tears: seed % 4 === 1 ? 100 + (seed % 70) : -1,
++    torn: limbs[seed % limbs.length] ?? 'head',
++  };
++}
++
++/** One step of a figure's owner: speeds, sideways motion, crouch, aim, carry, jumps, shots, reloads, hits, throws, melee, death. */
++function drive(s: Subject, frame: number): void {
++  const { rand, input, figure } = s, motion = s.figure.rig!.motion;
++  if (frame % 60 === 0) s.dt = [1 / 60, 1 / 60, 1 / 30, 1 / 144, 1 / 20][Math.floor(rand() * 5)]!;
++  if (rand() < 0.02) input.speed = [0, 0, 0.1, 0.8, 1.2, 3, 4.2, 5, 6.2, 8][Math.floor(rand() * 10)]!;
++  if (rand() < 0.02) input.lateral = [0, 0, 0.3, -0.3, 1, -1, rand() * 2 - 1][Math.floor(rand() * 7)]!;
++  if (rand() < 0.01) input.crouch = !input.crouch;
++  if (rand() < 0.02) input.aim = [0, 1, 1, 0.5, rand()][Math.floor(rand() * 5)]!;
++  if (rand() < 0.003) input.carry = CARRIES[Math.floor(rand() * 4)]!;
++  input.onGround = !(rand() < 0.01) && (input.onGround || rand() < 0.1);
++  input.phase += input.speed * s.dt * 4;
++  input.flinch = Math.max(0, input.flinch - s.dt * 3);
++  if (rand() < 0.04) motion.trigger('fire');
++  if (rand() < 0.006) motion.trigger('reload');
++  if (rand() < 0.01) { motion.trigger('hit'); input.flinch = 1; }
++  if (rand() < 0.005) motion.trigger('throw');
++  if (s.melee === null && rand() < 0.006) s.melee = 0;
++  if (s.melee !== null) {
++    s.melee += s.dt / 0.55;
++    if (s.melee > 1) s.melee = null;
++  }
++  input.melee = s.melee;
++  const dead = s.dies >= 0 && frame >= s.dies;
++  motion.update(s.dt, dead ? STILL : input);
++  // Weights and shots at the edges of the skip and slerp tests.
++  if (frame % 37 === 5) {
++    const name = LOOPS[Math.floor(rand() * LOOPS.length)]!;
++    motion.weights[name] = [0.01, 0.0099999, 1, 0.999, 0.9989, 0, -0.001, 1.2][Math.floor(rand() * 8)]!;
++    const shot = motion.shots.get(ONE_SHOTS[Math.floor(rand() * ONE_SHOTS.length)]!);
++    if (shot) shot.weight = [1.5, 1, 0.999, 0.9989, 0.5, 0.001][Math.floor(rand() * 6)]!;
++  }
++  // The pivots, as the owner turns them; one hidden for a while; a limb torn off.
++  for (const source of s.body.sources) {
++    if (!source || rand() < 0.3) continue;
++    source.rotation.set((rand() - 0.5) * 1.2, (rand() - 0.5) * 1.2, (rand() - 0.5) * 0.6);
++    if (rand() < 0.05) source.scale.setScalar(0.5 + rand());
++  }
++  if (frame % 150 === 40 && !s.hidden) {
++    const sources = s.body.sources.filter((source): source is Object3D => source !== null);
++    s.hidden = sources[Math.floor(rand() * sources.length)] ?? null;
++    if (s.hidden) s.hidden.visible = false;
++  } else if (frame % 150 === 90 && s.hidden) {
++    s.hidden.visible = true;
++    s.hidden = null;
++  }
++  if (frame === s.tears) {
++    const part = figure.parts[s.torn as keyof typeof figure.parts];
++    if (part && part.parent) {
++      new Group().attach(part);
++      s.returns.push(figure.lend(part));
++    }
++  }
++}
++
++/**
++ * Drive every subject `frames` frames; each frame the reference syncs all of them on `ref(frame)`'s library, then
++ * the new code on `next(frame)`'s, figure by figure as `OperatorAssets.frame` does. Every bone must match after the
++ * bone loop (before the support hand's reach), and the libraries' interpolants must see the same calls.
++ */
++function run(subjects: Subject[], frames: number, next: (frame: number) => ClipLibrary, ref: (frame: number) => ClipLibrary,
++  logs: { next: number[]; ref: number[] }, label: string): void {
++  const random = Math.random;
++  let draws = 0;
++  for (let frame = 0; frame < frames; frame++) {
++    for (const s of subjects) drive(s, frame);
++    const expected = subjects.map(s => {
++      refSync(s.body, ref(frame));
++      return pose(s.body);
++    });
++    subjects.forEach((s, f) => {
++      const root = s.figure.root, update = root.updateWorldMatrix;
++      const hook: { loop: number[] | null } = { loop: null };
++      // The reach starts by updating the root's world matrix: the bone loop's output is the pose then.
++      root.updateWorldMatrix = function (this: Object3D, parents: boolean, children: boolean) {
++        hook.loop ??= pose(s.body);
++        update.call(this, parents, children);
++      };
++      Math.random = () => { draws++; return random(); };
++      try {
++        s.body.sync(next(frame));
++      } finally {
++        Math.random = random;
++        root.updateWorldMatrix = update;
++      }
++      if (hook.loop) s.reached++;
++      if (s.body.bones.some(bone => bone.scale.x < 1e-3)) s.folded++;
++      for (const name of s.figure.rig!.motion.shots.keys()) shotsSeen.add(`${s.figure.rig!.motion.group}.${name}`);
++      same(hook.loop ?? pose(s.body), expected[f]!, () => `${label} frame ${frame}, ${s.kind} #${f}`);
++    });
++    same(logs.next, logs.ref, () => `${label} frame ${frame}: interpolant calls`);
++    logs.next.length = logs.ref.length = 0;
++  }
++  expect(draws, 'sync draws no random numbers (makes no three object)').toBe(0);
++}
++
++async function scenario(lod: OperatorLod, frames: number): Promise<void> {
++  const assets = new OperatorAssets(loaders);
++  const subjects: Subject[] = [];
++  try {
++    assets.want({ lod, size: lod === 0 ? 1024 : 512 });
++    await stream(assets);
++    const next = assets.clips!;
++    // The reference's own library from the same glb: its interpolants (their cached keys) see only its calls.
++    const gltf = await loaders.model(OPERATOR_GLB[lod]);
++    const ref = new ClipLibrary(gltf.animations, LOOP_NAMES), next2 = new ClipLibrary(gltf.animations, LOOP_NAMES);
++    const ref2 = new ClipLibrary(gltf.animations, LOOP_NAMES);
++    const logs = { next: [] as number[], ref: [] as number[] };
++    logEvaluates(next, logs.next);
++    logEvaluates(next2, logs.next);
++    logEvaluates(ref, logs.ref);
++    logEvaluates(ref2, logs.ref);
++    // Two figures of every kind (they share their kind's binding), each on its own script.
++    KINDS.forEach((kind, k) => { subjects.push(subject(assets, kind, 2 * k + 1), subject(assets, kind, 2 * k + 2)); });
++    // A sync without clips (the body's first, and any before the glb's clips are in) leaves the clips out.
++    for (const s of subjects) {
++      refSync(s.body, null);
++      const expected = pose(s.body);
++      s.body.sync(null);
++      same(pose(s.body), expected, () => `LOD${lod} no clips, ${s.kind}`);
++    }
++    run(subjects, frames, () => next, () => ref, logs, `LOD${lod}`);
++    // A body synced with another library (the binding is per library: made again) matches as well.
++    run(subjects, 40, frame => (frame % 2 ? next2 : next), frame => (frame % 2 ? ref2 : ref), logs, `LOD${lod} two libraries`);
++    // Coverage: every clip group, every one-shot (and the machines' shots that have no clip), the reach, folded limbs.
++    for (const group of GROUPS) expect(subjects.some(s => s.figure.rig!.motion.group === group), group).toBe(true);
++    for (const name of ONE_SHOTS) expect(shotsSeen.has(`humanoid.${name}`), `humanoid.${name} played`).toBe(true);
++    expect(shotsSeen.has('machine.fire'), 'a machine shot with no clip').toBe(true);
++    expect(subjects.some(s => s.reached > 0), 'the support hand reached on some frames').toBe(true);
++    expect(subjects.filter(s => s.folded > 0).length, 'figures with a torn or hidden limb').toBeGreaterThan(5);
++  } finally {
++    for (const s of subjects) {
++      s.body.dispose();
++      for (const back of s.returns) back();
++      s.figure.dispose();
++    }
++    assets.clear();
++  }
++}
++
++test('the clips through bone-indexed bindings pose every operator bone as the by-name lookups did, to the bit', async () => {
++  await scenario(1, 700);
++  await scenario(0, 300);
++}, 240_000);
++
++test('a binding lists the loops, then the one-shots, in the order the clips apply', () => {
++  expect([...CLIPS]).toEqual([...LOOPS, ...ONE_SHOTS]);
++});

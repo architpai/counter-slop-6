@@ -1,0 +1,87 @@
+diff --git a/src/engine/render/index.ts b/src/engine/render/index.ts
+index 4640fbf..acca115 100644
+--- a/src/engine/render/index.ts
++++ b/src/engine/render/index.ts
+@@ -1794,8 +1794,11 @@ export class Renderer {
+       this.post.drawSoft(this.three, this.fxScene, this.camera);
+     }
+     this.post.draw(this.three, time, fx, this.camera);
+-    // Only the realistic look streams (`gpuBehind`), so only its frames put a fence (a sync object each).
+-    if (this._quality.look === 'realistic') this._fences.mark(performance.now());
++    // Only `gpuBehind` reads the fences, and only while something streams (only the realistic look does): a frame puts
++    // one (a sync object, a GPU query and a main-thread task for its status) only then, and the ring is let go when
++    // the stream ends. A new stream starts with an empty ring, which reads "not behind", as a drained one does.
++    if (!this.streaming) this._fences.clear();
++    else if (this._quality.look === 'realistic') this._fences.mark(performance.now());
+   }
+ }
+ 
+diff --git a/tests/pacing.test.ts b/tests/pacing.test.ts
+index 213075d..980cd94 100644
+--- a/tests/pacing.test.ts
++++ b/tests/pacing.test.ts
+@@ -132,35 +132,55 @@ test('a GPU behind skips frames only while something streams in', () => {
+   renderer.dispose();
+ });
+ 
+-test('only the realistic look puts a fence after each frame; a change to Low frees those it put', () => {
++test('only a streaming realistic look puts a fence after each frame; the ring is let go when the stream ends', () => {
+   const canvas = document.createElement('canvas');
+   const renderer = new Renderer(canvas);
+   const fx = { hurt: 0, flash: 0, slow: 0, lowHp: 0 };
+   const marks = vi.spyOn(renderer._fences, 'mark');
+-  // Low streams nothing (`streaming` is false on it), so its fences were never read.
++  const clears = vi.spyOn(renderer._fences, 'clear');
++  let streaming = false;
++  Object.defineProperty(renderer, 'streaming', { get: () => streaming });
++  // Low streams nothing (`streaming` is false on it), so its fences would never be read.
+   renderer.applyQuality(PRESET_VALUES.low);
+   for (let i = 0; i < 3; i++) renderer.render(0, fx);
+-  expect(renderer.streaming).toBe(false);
+   expect(marks).not.toHaveBeenCalled();
+   expect(renderer._fences.inFlight(performance.now())).toBe(0);
+   for (const preset of ['medium', 'high', 'ultra'] as const) {
+     renderer.applyQuality(PRESET_VALUES[preset]);
++    // Nothing streaming: no fence; every frame lets the (empty) ring go.
+     marks.mockClear();
++    clears.mockClear();
++    streaming = false;
++    for (let i = 0; i < 3; i++) renderer.render(0, fx);
++    expect(marks, preset).not.toHaveBeenCalled();
++    expect(clears, preset).toHaveBeenCalledTimes(3);
++    // Streaming: one fence a frame, none let go, and `gpuBehind` reads them.
++    clears.mockClear();
++    streaming = true;
+     for (let i = 0; i < 3; i++) renderer.render(0, fx);
+     expect(marks, preset).toHaveBeenCalledTimes(3);
++    expect(clears, preset).not.toHaveBeenCalled();
++    const behind = vi.spyOn(renderer._fences, 'behind');
++    void renderer.gpuBehind;
++    expect(behind, preset).toHaveBeenCalledTimes(1);
++    behind.mockRestore();
++    // The stream ends: the next frame lets the ring go and puts none.
++    streaming = false;
++    renderer.render(0, fx);
++    expect(marks, preset).toHaveBeenCalledTimes(3);
++    expect(clears, preset).toHaveBeenCalledTimes(1);
++    expect(renderer._fences.inFlight(performance.now()), preset).toBe(0);
+   }
+-  // A live switch to Low drops the fences left (none to time out while it runs), and back to a realistic tier marks again.
+-  const clears = vi.spyOn(renderer._fences, 'clear');
++  // A live switch to Low drops any fences left; Low puts none even if a stream were reported.
++  streaming = true;
++  renderer.render(0, fx);
++  clears.mockClear();
+   renderer.applyQuality(PRESET_VALUES.low);
+   expect(clears).toHaveBeenCalled();
+   expect(renderer._fences.inFlight(performance.now())).toBe(0);
+   marks.mockClear();
+   renderer.render(0, fx);
+   expect(marks).not.toHaveBeenCalled();
+-  expect(renderer.gpuBehind).toBe(false);
+-  renderer.applyQuality(PRESET_VALUES.high);
+-  renderer.render(0, fx);
+-  expect(marks).toHaveBeenCalledTimes(1);
+   renderer.dispose();
+ }, 60_000);
+ 
