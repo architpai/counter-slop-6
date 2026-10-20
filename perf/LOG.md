@@ -1138,13 +1138,14 @@ runs every frame, the worker's load A/B without training. Both are lead 0. No th
 5. **Tests**: the full suite times out on 3 heavy chromium tests even on HEAD on this machine; raise their timeouts
    or split the heavy files so `npm test` is a clean gate again.
 
-## Round 8 — coverage closed (Medium), menu pre-link of sword/wave programs, upload packing (user decision); four exact candidates rejected
+## Round 8 — coverage closed (Medium), menu pre-link of sword/wave programs; upload packing committed by user decision, then reverted pending a repeat; five exact candidates rejected
 
-2026-10-20, on `3763490` → game changes `d1ba2e3` (late programs) and `32799f9` (upload packing, applied by user decision
-(2026-10-20)). Survey: one read-only Opus agent (Low/Medium exact wins); implementation: five Opus agents, each in its
+2026-10-20, on `3763490` → game change `d1ba2e3` (late programs) kept; `32799f9` (upload packing, applied by user decision
+(2026-10-20)) **reverted in `e7f3488` after review 2** (its Medium stutter-count gate was not established and the repeat
+could not run: below). Survey: one read-only Opus agent (Low/Medium exact wins); implementation: five Opus agents, each in its
 own worktree, one patch each (`warm` + `late` + the hitch harness, `hud2` + `fence` + `opaque`, `clips`, the packing
 rebase); review: GPT-6.1-Sol (below). Time budget ~5 h, at most 3 frame-time A/Bs (2 used: `r8cov`, `r8f`; plus the
-load-only `r8cl` and `r8l`), no post-round bench (Round 9's pre-bench is the next reference). Wall time: 12:44 → ~16:50 (both reviews included).
+load-only `r8cl` and `r8l`), no post-round bench (Round 9's pre-bench is the next reference). Wall time: 12:44 → ~16:45 (both reviews and the revert included; about 4 h).
 
 **Machine state** (`perf/results/r8-power.log`). The **94 W charger** all round (`pmset -g ac`: Wattage 94, "96W USB-C
 Power Adapter"); every bench of record started and ended on AC at **100 %**; gate AC and ≥ 60 % at each start, void
@@ -1209,7 +1210,7 @@ a code change: compare within a machine state.
 
 | | low | medium | high | ultra |
 |---|---|---|---|---|
-| **readyMs, packing** (r8l, `latepack` vs head, 3 rounds, 4 maps) | 508 → 497 ms (-2.1 %: from `late`, no stream on Low) | **6634 → 5313 (-19.9 %, -1.32 s)** | **6676 → 5486 (-17.8 %, -1.19 s)** | 8627 → 8606 (-0.2 %) |
+| **readyMs, packing** (reverted pending a repeat; r8l, `latepack` vs head, 3 rounds, 4 maps) | 508 → 497 ms (-2.1 %: from `late`, no stream on Low) | **6634 → 5313 (-19.9 %, -1.32 s)** | **6676 → 5486 (-17.8 %, -1.19 s)** | 8627 → 8606 (-0.2 %) |
 | packing alone (`latepack` vs `late`); faster in | (none) | -19.7 %; 12/12 | -18.2 %; 12/12 | +0.1 %; 10/12 |
 | headB / head (ready) | +1.9 % | 0.0 % | +0.4 % | +0.2 % |
 | load window: median of the per-load maximum frame, ms (head → latepack; late; headB) | 128 → 127 | 134.3 → 130.8 (132.5; 134.8) | 145.2 → 146.2 (144.3; 144.9) | 159.8 → 160.6 (160.1; 160.8) |
@@ -1234,7 +1235,15 @@ per-preset frame-time delta is claimed this round.
   use too. A holder mesh in `fxTemplate` (made under `quietly()`) keeps them linked. After `late`, 0 programs appear
   after ready in the swept cells (and in all 16 cells on the committed tree: `r8-sweep-final.json`); programs at ready +2 (Low) / +3. Ready time within noise. The hitch these
   links cost was not timed (counts only; Round 7 measured 90-460 ms for first-use links of similar programs).
-- **Upload packing is applied by user decision (2026-10-20)**: Round 7's `r7-pack.patch`, rebased unchanged in behaviour
+- **Upload packing: applied by user decision (2026-10-20) in `32799f9`, then reverted in `e7f3488` pending a repeat.**
+  Review 2 (P2): on Medium the count of frames > 33 ms over the 12 loads is 35 with packing vs **34 on head and 34 on
+  headB** (the two HEAD copies agree in every matched load on that count; e.g. training/medium round 1: head 2, headB 2,
+  latepack 3), so "not worse past the control" is not established; the > 50 ms count (27 / 27, headB 24) does not set a
+  tolerance for > 33 ms. It is not a demonstrated regression either: packing's base `late` also has 35, so packing alone
+  adds 0 on Medium (and +1 / -1 on High vs `late`). The repeat (`r8l2`: head vs HEAD without packing, Medium/High x 4
+  maps, 3 balanced rounds, ~10 min) could not run: the machine was off AC from 16:03:56. Under the brief's rule (a failed
+  gate: do not commit, log why, leave it to Round 9) it is reverted; `perf/patches/r8-pack.patch` (on `d1ba2e3`)
+  re-applies as is. The numbers of the committed-then-reverted version: Round 7's `r7-pack.patch`, rebased unchanged in behaviour
   (`SLOT_BYTES` = 24 ms × 60 kB/ms = 1.44 MB, `SLOT_PACK_MS` = 2, back-off, quiet start and gap rule unchanged). Its
   gate (vs HEAD with the headB control) passes: ready -19.9 % (Medium) and -17.8 % (High), faster in 12/12
   cell-rounds each, control ≤ 0.4 %. Load-window counts over the 12 loads per preset (> 33 / > 50 ms): High 48 / 29 →
@@ -1261,12 +1270,12 @@ per-preset frame-time delta is claimed this round.
 Fight summaries and state trails are equal across all variants in every cell-round of `r8f` and `r8cov` (HEAD-code
 arms). All A/B notes: `perf/results/r8-ab.md`.
 
-### Changes kept (commits `d1ba2e3`, `32799f9`; patches `perf/patches/r8-late.patch`, `r8-late-docs.patch`, `r8-pack.patch`)
+### Changes kept (commit `d1ba2e3`; patches `perf/patches/r8-late.patch`, `r8-late-docs.patch`; packing `32799f9` reverted in `e7f3488`, patch `r8-pack.patch`)
 
 | change | where | evidence | pixels |
 |---|---|---|---|
 | **late**: the sword's blade-blood patch at material creation (`blade-blood.ts` moved from `weapons/` to `render/`); a hidden holder of the air-slash wave and ban-ring materials in `fxTemplate` (under `quietly()`) keeps their two programs linked from the menu on | `render/blade-blood.ts`, `render/fx.ts`, `render/materials.ts`, `weapons/models.ts`, `tests/render-chain.test.ts`, `tests/fx.test.ts`, `docs/spec/blood.md` (path) | sweep: programs after ready → 0; r8l ready within noise | exact (56/56 byte-identical vs r7) |
-| **pack** (user decision): an upload slot holds several items within `SLOT_BYTES` and 2 ms; gap = max(`UPLOAD_GAP_MS`, slot bytes / rate) × pace | `render/index.ts`, `textures.ts`, `weapons.ts`, `operators.ts`, `props.ts`, `fx.ts`, `tests/render-chain.test.ts`, `tests/materials.test.ts` | r8l ready Medium -19.9 %, High -17.8 % | exact after ready (56/56 byte-identical vs r7) |
+| ~~**pack**~~ (user decision; **reverted** in `e7f3488`, pending the repeat): an upload slot holds several items within `SLOT_BYTES` and 2 ms; gap = max(`UPLOAD_GAP_MS`, slot bytes / rate) × pace | `render/index.ts`, `textures.ts`, `weapons.ts`, `operators.ts`, `props.ts`, `fx.ts`, `tests/render-chain.test.ts`, `tests/materials.test.ts` | r8l ready Medium -19.9 %, High -17.8 % | exact after ready (56/56 byte-identical vs r7) |
 
 ### Quality gate
 
@@ -1319,9 +1328,24 @@ the worker's own part given as the bake phase (319-418 ms earlier); (P3) robust 
 (P3) "worst loading frame" was the median per-load maximum → relabelled, the highest single frames added; the A/B note's
 CPU range corrected (37.6-130.1 %, 460.4 % start sample).
 
+Round 2 (`perf-loop-r8-review-2`, on `4e48d87` with the findings and responses above): no P1 and no new P3; the new
+load-count totals, highest frames, `bake.off` ranges (318.9-417.6 ms; training 17.8-135.9 ms), the `zeroFails` logic
+(all 16 saved cells pass) and the power record (last r8l result 15:54:40, AC lost 16:03:56) check out; coverage, robust
+labels, sky-test wording and the rejected entries have no further material issue. **One P2 remained: Medium's packing
+gate is not established** (> 33 ms: 35 vs head 34 = headB 34; the > 50 ms spread does not set a > 33 ms tolerance), and
+keeping packing needed more evidence or the user's explicit acceptance. The repeat could not run (off AC), so packing is
+**reverted** (`e7f3488`) and left to Round 9 (lead 0). The full-suite gate and Round 7's acceptance exceptions stay open,
+as stated. After the revert: `npm run typecheck` passes; `npm test -- --maxWorkers=2` 403/404 (the same render-chain sky
+test that fails on HEAD); the tree's `src/` and `tests/` equal `d1ba2e3`, whose capture (the `late` patch,
+`scratch-r8-late`) is 56/56 byte-identical vs r7 (the `r8` capture above was of late + packing, also 56/56).
+
 ### Hot spot leads (refreshed)
 
-0. **Ultra slot budget** (`r8-packu.patch`): -1.8 % ready vs packing alone (10/12), -2.1 % vs head, stutter counts as
+0. **Upload packing repeat (first thing in Round 9, on AC)**: re-apply `perf/patches/r8-pack.patch` and run the balanced
+   load-only A/B the review asked for (HEAD with packing vs without, headB, Medium/High x 4 maps, ≥ 3 rounds; or more
+   loads, since the question is one frame > 33 ms in 12 loads). Commit it if Medium/High ready improve and the > 33 / > 50
+   ms counts are not worse past the control; or ask the user to accept a ±1-frame-per-12-loads tolerance explicitly.
+0b. **Ultra slot budget** (`r8-packu.patch`, on top of packing): -1.8 % ready vs packing alone (10/12), -2.1 % vs head, stutter counts as
    head. Re-measure with more rounds (it is one setting), or a rule that lets two 2K maps share a slot (that would send
    more than the ~2.8 MB HEAD already sends in one frame: a pacing choice for the user).
 1. **The first match frames on realistic presets**: every realistic load has 1-2 intervals of 103-170 ms in the first
