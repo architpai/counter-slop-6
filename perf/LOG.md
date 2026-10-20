@@ -1533,11 +1533,11 @@ but not of this random flake (lead 5). Seeding the test would hide what may be a
 3. **The template's in-match warm-up draw (~35 ms on High/Ultra)**: the two `operator` main-pass programs compile at
    +11 ms and first draw in that frame. A probe like `skinnedDepthProbe` with `operatorMaterial` could move that first
    draw to the menu. Check the keys first.
+4. **Do not retry**: cpuhm (walk + D on Medium/High: three A/Bs without a gain), `hud2`, `fence`, `opaque`, `clips`,
+   `low1`, `matrix`, the Ultra slot budget (`r8-packu`).
 5. **`tests/blood.test.ts` stair-pool flake**: `bloodPool`'s random size/offset sometimes reaches over a step edge
    (-0.31 m seen). Find whether the clamp misses a case (a game fix, outside perf scope unless tiny), or seed the
    test only if the case is shown to be acceptable.
-4. **Do not retry**: cpuhm (walk + D on Medium/High: three A/Bs without a gain), `hud2`, `fence`, `opaque`, `clips`,
-   `low1`, `matrix`, the Ultra slot budget (`r8-packu`).
 
 ## Tried / rejected ideas
 
