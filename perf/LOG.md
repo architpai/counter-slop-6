@@ -1864,7 +1864,7 @@ Against head alone (ab-agg): matrix -2.0 / -2.2 / -1.9 / -0.7 %, all -1.7 % (1.1
 matrix -1.97 / -3.07 / -0.94 / -1.23 %, medfcp Medium -2.07 %, ops Ultra -1.90 %. Every fight state hash equal (20/20
 per preset and arm); draw calls and programs equal.
 
-**Mac A/B** (`macr2`, 05:28-06:31, head, headB, matrix, prer1, 4 rounds, 256 runs, 30 W adapter, 100 → 79 %, not
+**Mac A/B** (`macr2`, 05:28-06:27, head, headB, matrix, prer1, 4 rounds, 256 runs, 30 W adapter, 100 → 79 %, not
 void). vs the pooled head + headB (raw = posfit): matrix -0.57 / -0.49 / +0.08 / -0.03 %, all -0.25 %; prer1 -0.08 /
 -0.02 / **+0.28** / -0.11 %, all +0.02 %; control headB/head +0.12 / -0.73 / -0.12 / -0.08 %; line 2 %.
 Median and p95 within ±1.8 %. Fight hashes 16/16.
@@ -1884,7 +1884,7 @@ gate). Final tree (matrix) vs prer1 = both MSI rounds together, frame mean: low 
 **-2.0 %**, ultra **-2.2 %**, all **-1.9 %** (1.201 → 1.178 ms; faster in 86/128 pairs; fight -2.5 / -1.7 / -2.6 /
 -1.3 %); control headB/head +0.7 / +1.9 / -1.2 / +0.3 %. Round 1 alone (head vs prer1): -0.9 / -1.3 / -0.7 / -0.6 %,
 High -0.7 % (round 1's own A/Bs read -3.1 % twice). matrix vs the pooled HEAD copies there: -1.45 / -0.93 / -0.73 /
--1.79 %: negative on every preset again, but Medium under the line this time (it does not change msir2a's verdict, as
+-1.79 %: negative on every preset again, but Medium under the line this time (0.0 % against head alone) (it does not change msir2a's verdict, as
 the addendum set). Hashes 16/16, counts equal.
 
 **Gates (kept tree = HEAD + matrix).** Typecheck; `npx vitest run --maxWorkers=2` 410/410 (also 412/412 on the tree with
@@ -1896,6 +1896,15 @@ the same 42 images and values as `msi-r1-keep`'s (Round 1/4 Metal LSBs). MSI cap
 **Noise and machine.** MSI: AC all the time, battery 79 % (held), package 58-96 °C, ~265,000 core thermal-throttle
 events over 105 samples (constant under load). HEAD-copy pairs within ±1.9 % per preset in both jobs. Mac: controls
 within 0.73 %.
+
+**Review 1 (GPT-6.1-Sol, high)** on `2770a61`: no P1, no P2. No missed stale-matrix writer (root/parent changes force a
+full child update; the armature is always walked; the High/Ultra shadow pruning hides nodes after the scene update);
+no new production `Math.random`; `ab-pool.mjs`'s rotation, pools, fits and N_p checked (Mac pooled numbers reproduced
+from the JSONs); the verdicts follow the rule. P3s fixed: a mislabelled table in `msi-r2-ab.md`, the Mac end time
+(06:27), and the cleanup file SUMMARY cites (added with the cleanup). No second review (nothing open).
+
+**Cleanup.** The MSI scratch folder `/home/fleet/perf-scratch-shooter` was deleted at the end of this step; the
+listing against `perf/results/msi-prestate.txt` and `ps -u fleet` are in `perf/results/msi-cleanup.txt`.
 
 ### Gotchas (MSI round 2)
 

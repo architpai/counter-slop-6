@@ -1,0 +1,133 @@
+# MSI cleanup after MSI round 2 (the last MSI step), 2026-10-21 06:39 JST
+
+Result: the scratch folder /home/fleet/perf-scratch-shooter (4.3 GB: repo copy, builds, Playwright browsers, npm and
+shader caches, the unpacked zsh, logs) is deleted; nothing else of ours is left; no process of ours runs.
+
+Comparison with perf/results/msi-prestate.txt (taken 2026-10-21 00:03, before any of our work):
+- Names in ~, ~/.cache, ~/.config, ~/.local/share, /tmp and /dev/shm: the same set as in the pre-state, no name added,
+  none missing (~/.nv/ComputeCache, also in the pre-state, listed at the end). Every job pointed HOME, TMPDIR, XDG,
+  npm, Playwright and the NVIDIA/Mesa shader caches into the scratch folder (perf/msi-env.sh), so nothing was made
+  outside it.
+- Entries with a newer mtime are not ours and were not touched: ~/.claude.json and ~/.codex (00:08:51) and
+  /tmp/claude-1000 (00:08:50) belong to the Claude Code / Codex installs on the MSI (all in the pre-state);
+  the /tmp folder mtime (04:16) has no new or missing entry under it; ~ mtime is the scratch folder's removal (06:39:15).
+- Processes of user fleet: systemd --user, sd-pam, the T3 service launcher / t3 serve / t3-resource-monitor, a login
+  bash, dbus-daemon and at-spi-bus-launcher (all ~16 h old, before our work), plus this listing's own ssh, bash and ps.
+  llama-server (pid 85592, another user's service on the GPU) runs as before; we did not touch it.
+- No apt, no sudo, no setting or governor changed.
+
+Raw listing:
+
+== MSI CLEANUP 2026-10-21T06:39:15+09:00 (prestate: perf/results/msi-prestate.txt, taken 2026-10-21T00:03)
+== du before delete
+4.3G	/home/fleet/perf-scratch-shooter
+rm rc=0
+== test -e /home/fleet/perf-scratch-shooter
+gone
+== ls -la --time-style=+%F_%T /home/fleet
+total 172
+drwxr-x--- 20 fleet fleet  4096 2026-10-21_06:39:15 .
+drwxr-xr-x  3 root  root   4096 2026-10-19_18:22:36 ..
+drwxrwxr-x  3 fleet fleet  4096 2026-10-20_14:43:53 .agent-browser
+drwxrwxr-x  2 fleet fleet  4096 2026-10-20_11:39:36 .agents
+drwxrwxr-x  5 fleet fleet  4096 2026-10-20_11:46:16 .azure
+-rw-------  1 fleet fleet    33 2026-10-20_11:33:04 .bash_history
+-rw-r--r--  1 fleet fleet   220 2026-02-13_21:16:08 .bash_logout
+-rw-r--r--  1 fleet fleet  3888 2026-10-20_13:20:48 .bashrc
+drwx------  9 fleet fleet  4096 2026-10-20_17:26:56 .cache
+drwxrwxr-x  9 fleet fleet  4096 2026-10-20_22:10:16 .claude
+-rw-------  1 fleet fleet 66937 2026-10-21_00:08:51 .claude.json
+drwxrwxr-x 10 fleet fleet  4096 2026-10-21_00:08:51 .codex
+drwxrwxr-x  5 fleet fleet  4096 2026-10-20_14:44:13 .config
+-rw-rw-r--  1 fleet fleet   336 2026-10-20_11:40:40 .gitconfig
+drwxrwxr-x  5 fleet fleet  4096 2026-10-20_11:17:10 .local
+drwxrwxr-x  4 fleet fleet  4096 2026-10-20_11:19:17 .npm
+drwxrwxr-x  4 fleet fleet  4096 2026-10-20_11:28:00 .npm-global
+-rw-------  1 fleet fleet    31 2026-10-20_11:19:14 .npmrc
+drwx------  3 fleet fleet  4096 2026-10-20_12:31:13 .nv
+-rw-r--r--  1 fleet fleet   807 2026-02-13_21:16:08 .profile
+drwx------  2 fleet fleet  4096 2026-10-20_11:39:37 .ssh
+drwxrwxr-x  6 fleet fleet  4096 2026-10-20_11:34:47 .t3
+drwxrwxr-x  7 fleet fleet  4096 2026-10-20_11:47:00 Developer
+drwxr-xr-x  6 fleet fleet  4096 2026-10-20_16:03:19 bench
+drwxr-xr-x  4 fleet fleet  4096 2026-10-20_14:46:51 bench-turbo
+drwxr-xr-x  2 fleet fleet  4096 2026-10-20_11:05:50 files
+drwxrwxr-x  2 fleet fleet  4096 2026-10-20_17:29:22 render
+== ls -la --time-style=+%F_%T /home/fleet/.cache
+total 36
+drwx------  9 fleet fleet 4096 2026-10-20_17:26:56 .
+drwxr-x--- 20 fleet fleet 4096 2026-10-21_06:39:15 ..
+drwxrwxr-x  3 fleet fleet 4096 2026-10-20_11:40:40 Microsoft
+drwxrwxr-x  3 fleet fleet 4096 2026-10-20_17:26:56 blender
+drwxrwxr-x  3 fleet fleet 4096 2026-10-20_11:17:10 claude
+drwxrwxr-x  3 fleet fleet 4096 2026-10-20_11:31:38 claude-cli-nodejs
+drwxr-xr-x  2 fleet fleet 4096 2026-10-20_14:44:44 fontconfig
+-rw-r--r--  1 fleet fleet    0 2026-10-19_18:32:49 motd.legal-displayed
+drwx------  3 fleet fleet 4096 2026-10-20_17:26:49 nvidia
+drwxrwxr-x  4 fleet fleet 4096 2026-10-20_17:26:44 thumbnails
+== ls -la --time-style=+%F_%T /home/fleet/.config
+total 24
+drwxrwxr-x  5 fleet fleet 4096 2026-10-20_14:44:13 .
+drwxr-x--- 20 fleet fleet 4096 2026-10-21_06:39:15 ..
+drwxrwxr-x  2 fleet fleet 4096 2026-10-20_13:20:48 environment.d
+drwx------  3 fleet fleet 4096 2026-10-20_14:44:13 google-chrome-for-testing
+-rw-------  1 fleet fleet   49 2026-10-20_11:35:50 llama-api-key
+drwxrwxr-x  3 fleet fleet 4096 2026-10-20_11:34:47 systemd
+== ls -la --time-style=+%F_%T /home/fleet/.local/share
+total 16
+drwxrwxr-x 4 fleet fleet 4096 2026-10-20_14:44:45 .
+drwxrwxr-x 5 fleet fleet 4096 2026-10-20_11:17:10 ..
+drwxrwxr-x 3 fleet fleet 4096 2026-10-20_11:17:10 claude
+drwx------ 3 fleet fleet 4096 2026-10-20_14:44:45 pki
+== ls -la --time-style=+%F_%T /tmp
+total 20
+drwxrwxrwt 16 root  root   420 2026-10-21_04:16:35 .
+drwxr-xr-x 20 root  root  4096 2026-10-19_18:20:46 ..
+drwxrwxrwt  2 root  root    40 2026-10-20_14:30:29 .ICE-unix
+drwxrwxrwt  2 root  root    40 2026-10-20_14:30:29 .X11-unix
+drwxrwxrwt  2 root  root    40 2026-10-20_14:30:29 .XIM-unix
+drwxrwxrwt  2 root  root    40 2026-10-20_14:30:29 .font-unix
+-rw-rw-r--  1 fleet fleet    0 2026-10-20_17:29:02 blender-render.lock
+drwx------  2 fleet fleet   40 2026-10-21_00:08:50 claude-1000
+-rw-rw-r--  1 fleet fleet  509 2026-10-20_22:11:35 es.txt
+-rw-r--r--  1 fleet fleet 1538 2026-10-20_22:14:06 llama-server.service
+drwxrwxr-x  3 fleet fleet   60 2026-10-20_14:41:17 node-compile-cache
+-rw-rw-r--  1 fleet fleet 3011 2026-10-20_22:14:20 sleep.log
+-rw-rw-r--  1 fleet fleet 2049 2026-10-20_15:31:43 smoke.log
+drwx------  2 root  root    40 2026-10-20_14:30:29 snap-private-tmp
+drwx------  3 root  root    60 2026-10-20_14:30:31 systemd-private-7447491c3e7a4c03885a087b8a4a6586-ModemManager.service-CVtVS3
+drwx------  3 root  root    60 2026-10-20_14:30:31 systemd-private-7447491c3e7a4c03885a087b8a4a6586-bolt.service-0nuxvH
+drwx------  3 root  root    60 2026-10-20_14:30:30 systemd-private-7447491c3e7a4c03885a087b8a4a6586-chrony.service-ijmDjQ
+drwx------  3 root  root    60 2026-10-20_14:54:31 systemd-private-7447491c3e7a4c03885a087b8a4a6586-fwupd.service-cDjmDk
+drwx------  3 root  root    60 2026-10-20_14:30:30 systemd-private-7447491c3e7a4c03885a087b8a4a6586-polkit.service-s2i2KB
+drwx------  3 root  root    60 2026-10-20_14:30:30 systemd-private-7447491c3e7a4c03885a087b8a4a6586-systemd-logind.service-kzr0NV
+drwx------  3 root  root    60 2026-10-20_14:30:31 systemd-private-7447491c3e7a4c03885a087b8a4a6586-upower.service-PFoiIn
+== ls -la --time-style=+%F_%T /dev/shm
+total 0
+drwxrwxrwt  2 root root   40 2026-10-20_14:30:26 .
+drwxr-xr-x 21 root root 4900 2026-10-20_14:30:31 ..
+== find files newer than 2026-10-21 00:03 in those folders (depth 2, not ~/.t3 ~/.claude ~/.codex runtime)
+/home/fleet
+/tmp
+/tmp/claude-1000
+== ps -u fleet
+    PID     ELAPSED COMMAND
+   2432    16:08:37 /usr/lib/systemd/systemd --user
+   2442    16:08:37 (sd-pam)
+   2462    16:08:37 /home/fleet/.t3/runtime/versions/0.1.1-nightly.20261020.3386/t3 __service-launcher
+   2514    16:08:36 /home/fleet/.t3/runtime/versions/0.1.1-nightly.20261020.3386/t3 serve
+   2555    16:08:35 /home/fleet/.t3/runtime/versions/0.1.1-nightly.20261020.3386/resource-monitor/linux-x64/t3-resource-monitor
+   3295    16:08:05 -bash
+   5947    15:54:30 /usr/bin/dbus-daemon --session --address=systemd: --nofork --nopidfile --systemd-activation --syslog-only
+   6011    15:54:30 /usr/libexec/at-spi-bus-launcher
+ 504550       00:00 sshd-session: fleet@notty
+ 504551       00:00 bash -s
+ 504597       00:00 ps -u fleet -o pid,etime,args
+ 504598       00:00 cut -c1-150
+== nvidia-smi compute apps
+pid, process_name, used_gpu_memory [MiB]
+85592, /opt/llama.cpp/current/llama-server, 262 MiB
+total 12
+drwx------  3 fleet fleet 4096 2026-10-20_12:31:13 .
+drwxr-x--- 20 fleet fleet 4096 2026-10-21_06:39:15 ..
+drwx------  2 fleet fleet 4096 2026-10-20_12:31:13 ComputeCache

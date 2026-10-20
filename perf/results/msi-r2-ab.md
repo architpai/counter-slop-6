@@ -196,7 +196,7 @@ low     headB=0.7%  matrix=-1.1%  prer1=0.9%  | pos1..: -0.1 0.2 -0.8
 medium  headB=1.9%  matrix=0.0%  prer1=1.3%  | pos1..: 1.6 -0.3 -0.5
 high    headB=-1.2%  matrix=-1.3%  prer1=0.7%  | pos1..: -0.3 0.5 1.3
 ultra   headB=0.3%  matrix=-1.6%  prer1=0.6%  | pos1..: 1.3 -0.6 0.5
-== matrix (final) vs prer1
+== head (round 1 only) vs prer1
 base prer1, tags msir2b: 128 cell-scenario-rounds, control headB
 
 ## path + fight: prer1 → FINAL (head); change = head/prer1 - 1 (control: headB/head - 1)
@@ -260,7 +260,7 @@ ultra   -1.3 % / -1.3 % / -1.2 %  9/16
 all     -2.0 % / -1.7 % / -1.2 %  42/64
 ```
 
-## macr2 (Mac: head, headB, matrix, prer1; 4 x 4 x 4 rounds; 05:28-06:31, perf/powered.sh, PERF_MIN_BATT=50)
+## macr2 (Mac: head, headB, matrix, prer1; 4 x 4 x 4 rounds; 05:28-06:27, perf/powered.sh, PERF_MIN_BATT=50)
 
 ```
 macr2 mean both: vs pooled HEAD (raw / posfit); HEAD copies headB
