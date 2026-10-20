@@ -288,12 +288,13 @@ Medium 45 px (1-3/255) from Round 4.
 
 - **Kept: the fight-CPU paths on High** (`fightCpuPaths`: shadow-walk pruning and the post chain in one render, until
   now Ultra only). MSI High frame mean -3.1 % in both A/Bs (posfit -3.5 / -2.7 %; ~-0.04 ms of 1.40 ms; noise line 2.0 %).
-  Mac: no slowdown (the A/B of a superset read High -0.3 %, control +0.1 %). Byte-identical on both machines.
+  Mac: **not A/B'd alone** (an exception to the keep rule): the one Mac A/B measured a superset (High -0.3 %, control
+  +0.1 %), and Rounds 6/7/9 read this High code -2.0 to -2.9 % on the Mac. Byte-identical on both machines.
 - Rejected: Medium for the same paths (-3.2 then -2.5 %, not confirmed), matrix (-2 % over all presets twice, but never
   past the line on the same preset twice), low1 (Low -2.9 then -1.2 %), the HUD (hud2) and C1 (inside noise).
 - Screened only: ops (operator clip/bone sync, the renderer's pre-step: `sync` 6.9 → 3.9 µs per figure; Ultra -2.0 %).
-- Round 2 leads: matrix, ops and Medium's fight-CPU paths together read -3.5 % over all presets in one arm (-4.3 /
-  -5.0 % Medium / High), unconfirmed per part; crosshair ticks by `transform` (not byte-exact: user's call).
+- Round 2 leads: matrix, ops and Medium's fight-CPU paths. The one arm with everything (fight-CPU paths on Medium +
+  High, matrix, low1 before its fix, ops) read -3.5 % over all presets (-4.3 / -5.0 % Medium / High), unconfirmed per part; crosshair ticks by `transform` (not byte-exact: user's call).
 
 ## 6. How to reproduce
 

@@ -1793,11 +1793,13 @@ parts add up, but the set is not in the rule.
 - fence: not measured (job 1 had room for 7 variants in 75 min).
 
 **Mac** (`macr1`, 03:17-03:51, head / headB / set, 4 maps x 4 presets x 3 rounds, 144 runs, `PERF_MIN_BATT=50`, on AC,
-100 → 93 %, none void). It measured the **set** (a superset of the kept change: it was chosen before job 2 ended):
+100 → 90 %, none void). It measured the **set** (a superset of the kept change: it was chosen before job 2 ended):
 frame mean raw / posfit low -0.8 / -0.8 %, medium -0.7 / -0.7 %, **high -0.3 / -0.3 %**, ultra +0.1 / +0.1 %, all -0.4 %;
-control +0.1 to +0.2 %; median -1.4 / +0.5 / +0.2 / +0.5 %, p95 -0.3 to -0.6 %. No preset slower past noise, and the
+control +0.1 to +0.2 %; median -1.4 / +0.5 / +0.2 / +0.5 %, p95 -0.6 to +0.2 %. No preset slower past noise, and the
 kept code runs on High in that arm. Earlier Mac A/Bs of the same High code: r6 -2.9 % raw, r7 -2.0 %, r9 -2.4 %: never
-slower. Fight hashes 12/12; Low fight calls 213.75 → 199.75 (low1).
+slower. **Condition (b) is an exception, not met as written**: the kept change alone (High only) was never A/B'd on
+the Mac against HEAD, and the other parts of the set could hide a High slowdown. Review 2 (P2) asked to record it so;
+the parent decides whether the four Mac High readings suffice or a Mac A/B of the kept tree is needed. Fight hashes 12/12; Low fight calls 213.75 → 199.75 (low1).
 
 **Kept tree, gates.** Typecheck; `npx vitest run --maxWorkers=2` 408/408. Mac capture `msi-r1-keep`: 0 px vs
 `msi-r1-pre`; vs `baseline` PASS 56/56, the same 42 images and values as HEAD's own (Round 1/4 Metal LSBs). MSI capture
@@ -1808,6 +1810,11 @@ match (the live branch of `_warmPrograms` warms characters only): fixed in the s
 merge only after the menu warm-up drew the probe for the look in force; a renderer test). The A/Bs measured the
 version before the fix; the fix only gates the merge and does not run in the bench. P2 ops had no job 1 screen and P3
 matrix's scope: answered by the amendment. It confirmed job 1's decisions and found no output fault in the set.
+
+**Review 2 (GPT-6.1-Sol, high)** on `7e80e01`: no P1 and no fault in the kept code (High keeps 2x MSAA and two
+cascades; no stale "Ultra only" assumption; no new random draw); every MSI number and verdict matches the printed
+tables. P2: Mac condition (b) was met on a superset only: now recorded as an exception (above), SUMMARY reworded.
+P3: the set's combination named in full in SUMMARY; Mac p95 range and battery corrected.
 
 **Noise and machine.** MSI: AC all the time, battery 79-80 % (held), package 58-98 °C, ~252,000 core thermal-throttle
 events over 112 samples (constant under load, as in step 1); controls -2.0 to +1.7 % per preset. Mac: 30 W adapter,
