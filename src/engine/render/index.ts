@@ -289,6 +289,9 @@ export class Renderer {
    * itself.
    */
   _fightCpu = false;
+  /** This renderer's skinned depth probe (render/operators.ts `skinnedDepthProbe`): made at its first realistic menu
+   * warm-up, freed in `dispose`. Not shared, so one renderer's dispose cannot free a probe another has queued. */
+  _depthProbe: THREE.SkinnedMesh | null = null;
   /** Dynamic resolution's share of the render-scaled target, per axis. */
   _dynamicScale = 1;
   /** Shadow boxes in force; null is Low's box centred on the eye. */
@@ -1442,7 +1445,7 @@ export class Renderer {
     void this._hold(this._compiles, this.rig, () => true).then(() => this._hold(this._warmups, this.rig, () => true));
     void this._hold(this._warmups, SHADOW_PROBE, () => true);
     // The worn operators' skinned shadow program, which their glb's compile does not link (realistic tiers).
-    if (operatorWant(this._quality) !== null) void this._hold(this._warmups, skinnedDepthProbe(), () => true);
+    if (operatorWant(this._quality) !== null) void this._hold(this._warmups, this._depthProbe ??= skinnedDepthProbe(), () => true);
     const probe = this._skyProbe;
     if (this._quality.look === 'realistic') void this._hold(this._compiles, probe, () => true).then(() => this._hold(this._warmups, probe, () => true));
     // The effects' programs (R5): tracers and flat decals on every look, the realistic sprites, decals, casings and flashes too.
@@ -1761,7 +1764,8 @@ export class Renderer {
     this._landSky();
     this.weapons.clear();
     this.operators.clear();
-    disposeSkinnedDepthProbe();
+    if (this._depthProbe) disposeSkinnedDepthProbe(this._depthProbe);
+    this._depthProbe = null;
     this.fx.clear();
     this.props.clear();
     this._setFxLights(0);

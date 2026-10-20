@@ -60,7 +60,6 @@ export function operatorWant(values: Pick<GfxValues, 'look' | 'textures'>): { lo
   return { lod: size <= 512 ? 1 : 0, size };
 }
 
-let depthProbe: THREE.SkinnedMesh | null = null;
 /**
  * A caster for the menu's warm-up draw (render/index.ts `_warmPrograms`, realistic tiers) that links the worn
  * operators' shadow-pass program there: no glb's compile links a shadow program, so a glb that lands in a match
@@ -69,10 +68,11 @@ let depthProbe: THREE.SkinnedMesh | null = null;
  * attribute that keys a program), with a twin of that material (`levelDepthTwin`: the same patch and key) as its
  * depth and its own material, so the warm-up's main pass draws it on that program too. It draws nothing: its one
  * triangle's skin weights are zero, so every vertex skins to its origin and the triangle has no area (no fragment in
- * the shadow maps or the frame). Made once, without a uuid draw (`quietly`), its bone texture too.
+ * the shadow maps or the frame). A new one each call (each renderer owns one: `Renderer._depthProbe`), without a uuid
+ * draw (`quietly`), its bone texture too.
  */
 export function skinnedDepthProbe(): THREE.SkinnedMesh {
-  return depthProbe ??= quietly(() => {
+  return quietly(() => {
     // The glb's quantised layout (KHR_mesh_quantization, as its loader gives it): positions normalised int16 in
     // 8-byte strides, uv normalised uint16, joints uint8, weights normalised uint8, so the pass's draw takes the
     // same vertex formats as a body's (ANGLE Metal keys its pipelines on them too).
@@ -98,16 +98,14 @@ export function skinnedDepthProbe(): THREE.SkinnedMesh {
   });
 }
 
-/** Frees the probe (render/index.ts `Renderer.dispose`): its geometry, material, map and bone texture. The next
- * `skinnedDepthProbe` makes a new one (under `quietly`). */
-export function disposeSkinnedDepthProbe(): void {
-  if (!depthProbe) return;
-  const material = depthProbe.material as THREE.MeshDepthMaterial;
-  depthProbe.geometry.dispose();
+/** Frees a probe (render/index.ts `Renderer.dispose`, for the renderer's own probe): its geometry, material, map and
+ * bone texture. */
+export function disposeSkinnedDepthProbe(probe: THREE.SkinnedMesh): void {
+  const material = probe.material as THREE.MeshDepthMaterial;
+  probe.geometry.dispose();
   material.map?.dispose();
   material.dispose();
-  depthProbe.skeleton.dispose();
-  depthProbe = null;
+  probe.skeleton.dispose();
 }
 
 /** What a tier downloads for its characters: its glb and every set's maps at its size. */

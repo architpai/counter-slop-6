@@ -42,9 +42,11 @@ test('the skinned depth probe: made without a random draw, drawn with no area, a
   // This file's first call (each browser test file has its own module state).
   const random = vi.spyOn(Math, 'random');
   const probe = skinnedDepthProbe();
+  // A new probe each call (each renderer owns its own), none with a random draw.
+  const other = skinnedDepthProbe();
+  expect(other).not.toBe(probe);
   expect(random).not.toHaveBeenCalled();
   random.mockRestore();
-  expect(skinnedDepthProbe()).toBe(probe);
   const { geometry } = probe;
   const weights = geometry.getAttribute('skinWeight') as THREE.BufferAttribute;
   expect([...weights.array].every(w => w === 0)).toBe(true);
@@ -66,12 +68,11 @@ test('the skinned depth probe: made without a random draw, drawn with no area, a
 
 test('the menu warm-up links the bodies\' skinned shadow program on the realistic tiers, again after a preset change', () => {
   const renderer = makeRenderer();
-  const probe = skinnedDepthProbe();
-  const queued = () => renderer._warmups.some(w => w.root === probe);
+  const queued = () => renderer._depthProbe !== null && renderer._warmups.some(w => w.root === renderer._depthProbe);
   const warm = () => {
     for (let i = 0; i < 20 && (renderer._compiles.length > 0 || renderer._warmups.length > 0 || !renderer._programsWarm); i++) renderer.render(0, fx);
     expect(renderer._warmups).toEqual([]);
-    expect(probe.parent, 'the probe out of the scene after its draw').toBeNull();
+    expect(renderer._depthProbe?.parent ?? null, 'the probe out of the scene after its draw').toBeNull();
   };
   renderer.applyQuality(PRESET_VALUES.low);
   renderer._warmPrograms();
@@ -80,6 +81,7 @@ test('the menu warm-up links the bodies\' skinned shadow program on the realisti
   renderer.applyQuality(PRESET_VALUES.high);
   renderer._warmPrograms();
   expect(queued(), 'High after Low').toBe(true);
+  const probe = renderer._depthProbe!;
   warm();
   // The program the probe's shadow draw linked is a body's: a body cast after the warm-up links no depth program.
   const depthKeys = () => new Set(renderer.three.info.programs!.filter(p => p.cacheKey.startsWith('depth,')).map(p => p.cacheKey));
@@ -100,19 +102,32 @@ test('the menu warm-up links the bodies\' skinned shadow program on the realisti
   expect([...depthKeys()].filter(key => !known.has(key))).toEqual([]);
 });
 
-test('a disposed renderer frees the probe, and the next one gets a new probe without a Math.random draw', () => {
-  const canvas = document.createElement('canvas');
-  document.body.append(canvas);
-  const renderer = new Renderer(canvas);
-  const probe = skinnedDepthProbe(), material = probe.material as THREE.MeshDepthMaterial;
-  const freed = vi.fn();
-  for (const item of [probe.geometry, material, material.map!, probe.skeleton.boneTexture!]) item.addEventListener('dispose', freed);
-  renderer.dispose();
-  canvas.remove();
-  expect(freed).toHaveBeenCalledTimes(4);
-  const random = vi.spyOn(Math, 'random');
-  const next = skinnedDepthProbe();
-  expect(next).not.toBe(probe);
-  expect(random).not.toHaveBeenCalled();
-  random.mockRestore();
+test('each renderer frees only its own probe, and another renderer\'s queued probe stays whole', () => {
+  const make = () => {
+    const canvas = document.createElement('canvas');
+    document.body.append(canvas);
+    const renderer = new Renderer(canvas);
+    renderer.applyQuality(PRESET_VALUES.high);
+    renderer._warmPrograms();
+    return { renderer, canvas };
+  };
+  const a = make(), b = make();
+  cleanup.push(() => { a.renderer.dispose(); a.canvas.remove(); });
+  const probeA = a.renderer._depthProbe!, probeB = b.renderer._depthProbe!;
+  expect(probeA).not.toBe(probeB);
+  expect(a.renderer._warmups.some(w => w.root === probeA)).toBe(true);
+  const events = (probe: THREE.SkinnedMesh) => {
+    const freed = vi.fn(), material = probe.material as THREE.MeshDepthMaterial;
+    for (const item of [probe.geometry, material, material.map!, probe.skeleton.boneTexture!]) item.addEventListener('dispose', freed);
+    return freed;
+  };
+  const freedA = events(probeA), freedB = events(probeB);
+  b.renderer.dispose();
+  b.canvas.remove();
+  expect([freedA.mock.calls.length, freedB.mock.calls.length, b.renderer._depthProbe]).toEqual([0, 4, null]);
+  // A's queued probe draws with its own bone texture: no new texture (made outside `quietly`) at its warm-up.
+  const bones = probeA.skeleton.boneTexture;
+  for (let i = 0; i < 20 && a.renderer._warmups.length > 0; i++) a.renderer.render(0, fx);
+  expect(a.renderer._warmups).toEqual([]);
+  expect(probeA.skeleton.boneTexture).toBe(bones);
 });

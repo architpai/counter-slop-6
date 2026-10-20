@@ -46,8 +46,8 @@ ultra x 4 maps, 6 balanced rounds (24 loads per arm). `node perf/ab-load.mjs r9p
 | nopack ready faster than head | | 1/24 | headB 10/24 |
 
 **Verdict (the pre-registered rule):** head's pooled Ultra > 33 ms total is +5 vs nopack and +3 vs headB (limit: more
-than 6 above both); > 50 ms is below both. **The rule passes: packing stays.** r9pl's +3/+4 on 12 loads was one-load
-spread (head and headB are the same code; r9pu alone reads head 99 vs headB 100). The 249.7 ms head maximum is one r9pl
+than 6 above both); > 50 ms is below both. **The rule passes: packing stays.** This is a rate reading of the rule (review 1). That r9pl's +3/+4 on 12 loads was only
+load-to-load spread is not proven (head and headB are the same code and differ by 4 there; r9pu alone reads head 99 vs headB 100). The 249.7 ms head maximum is one r9pl
 load; headB (same code) has 251.2 ms.
 
 ## r9f result (18:08:54-18:56:45, on AC 30 W, battery 87 -> ~66 %; agent-browser Chrome 82-87 % CPU at start/end)

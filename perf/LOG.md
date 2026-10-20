@@ -1371,7 +1371,7 @@ test that fails on HEAD); the tree's `src/` and `tests/` equal `d1ba2e3`, whose 
    `land()` a frame budget instead of wall time and make the second test wait on state, not on a fixed frame count, so
    `npm test` is a clean gate again (Round 7 lead 5).
 
-## Round 9 — packing confirmed (stays), quiet-start glb callback halved (exact), shadow-depth program pre-linked, `npm test` clean again; cpuhm rejected a third time
+## Round 9 — packing confirmed (stays), quiet-start glb callback halved (exact), shadow-depth program pre-linked, sky-test faults fixed (one older random flake left); cpuhm rejected a third time
 
 2026-10-20, on `264559e` → `e1af377` (upload packing re-applied by user decision) → `51dd4d4` (sky tests) → this round's
 game commit (quiet + shadow). Time budget ~3.5 h after a restart, at most 3 frame-time A/Bs (**1 used**: `r9f`; plus the
@@ -1474,8 +1474,8 @@ its line, with the control within 2 %. Neither preset passes.
 |---|---|---|---|
 | **pack** (user decision, re-applied in `e1af377`) | `render/index.ts`, `textures.ts`, `weapons.ts`, `operators.ts`, `props.ts`, `fx.ts`, tests | r9pl ready Medium -22 % / High -18 % (nopack +27.9 / +22.6 %); counts pass (Ultra by the pooled rule) | exact after ready |
 | **quiet**: `restBounds` skins once with per-bone matrices made once (`skinnedPositions`); `gibGeometries` heaviest bones once | `render/operators.ts` | quiet-start B frame: High 142.8 → 81.0 ms, Ultra 143.4 → 81.3 ms medians; Medium under 50 ms in 3/4 | exact (bit-equal bounds and gibs; 56/56) |
-| **shadow**: `skinnedDepthProbe` held for the menu warm-up on realistic tiers; `levelDepthTwin`; freed in `Renderer.dispose` (`disposeSkinnedDepthProbe`, review 1) | `render/operators.ts`, `materials.ts`, `index.ts`, `tests/shadow-probe.test.ts` | in-match depth link 12/12 → 0/12, nothing in its place | exact (56/56) |
-| **sky tests**: `land()` caps a hang only (3000 frames / 60 s), the in-match landing test starts each of its five frames in a quiet start, and the sky still resolves in a live match (restored after review 1) | `tests/render-chain.test.ts` (`51dd4d4`, review fix) | file 3/3, full suite clean | n/a |
+| **shadow**: `skinnedDepthProbe` held for the menu warm-up on realistic tiers; `levelDepthTwin`; one per renderer, freed in its `dispose` (`Renderer._depthProbe`, `disposeSkinnedDepthProbe`; reviews 1-2) | `render/operators.ts`, `materials.ts`, `index.ts`, `tests/shadow-probe.test.ts` | in-match depth link 12/12 → 0/12, nothing in its place | exact (56/56) |
+| **sky tests**: `land()` caps a hang only (3000 frames / 60 s), the in-match landing test starts each of its five frames in a quiet start, and the sky still resolves in a live match (restored after review 1) | `tests/render-chain.test.ts` (`51dd4d4`, review fix) | the file passed in 3 of 3 runs (15 tests each); full suite 407/407 before the review fixes | n/a |
 
 ### Quality gate
 
@@ -1484,7 +1484,8 @@ known LSBs, as in r8). `compare r8 r9`: **56/56, 0 changed pixels**, and `cmp` f
 `late` + packing, the same packing code as now). Each candidate alone was 56/56 byte-identical vs r8 too (`scratch-r9-shadow`,
 `scratch-r9-quiet`, by the agents). **Math.random**: the probe is made under `quietly()` (a test counts 0 draws); the quiet
 change makes no uuid object (equal counts per kind). `npm run typecheck` passes. **`npm test -- --maxWorkers=2`: 49 files,
-407/407 PASS** on the round tree (the sky agent: 405/405 on e1af377 + the sky fix; the render-chain file 3/3).
+407/407 PASS** on the round tree before the review fixes (the sky agent: 405/405 on e1af377 + the sky fix; the
+render-chain file passed in 3 of 3 runs, 15 tests each). After the review fixes: see Review.
 
 **Test-suite health (Round 8 lead 7, settled).** **main (`be47535`) fails both sky tests too** (3/3 runs of the file,
 `/tmp/r9/t4-main-*.log`); HEAD failed one in 1/3 runs. So the fault is older than the loop. Causes:
@@ -1517,9 +1518,26 @@ depth-link times are +57.5-94.3 ms → corrected. After the fixes: typecheck, th
 a build and the `r9b` capture: `compare baseline r9b` PASS (56/56), all 56 PNGs byte-identical to `r9`. **Full suite
 after the fixes: 407/408**: `tests/blood.test.ts` "a pool on a stair keeps to its step" failed (a pool at z - size/2 =
 -0.309 < -0.01), and alone it passed 1 of 2 runs. It is not a wall-clock fault: `Effects.bloodPool` draws unseeded
-`Math.random` (the test seeds nothing), so some draws give a pool that hangs over the step edge. Neither that code nor
+`Math.random` (the test seeds nothing), so the result varies run to run. Whether the failing pool hangs over the edge
+or sits correctly on the upper step (a satellite can move up to 0.65 m, and the test rejects any pool whose -z extent
+passes z = 0) is not known (review 2): record the pool's height and both extents first. Neither that code nor
 that test changed since Round 1 (`221ffb1`), and no round change touches it. So `npm test` is clean of the sky faults,
 but not of this random flake (lead 5). Seeding the test would hide what may be a real (rare) pool-placement bug.
+
+Round 2 (`perf-loop-r9-review-2`, on `4370d1b..6d74622` with the findings and responses above): **no P1**; the round-1
+fixes for the sky test, the quiet exception and the depth-link range are complete, no test is weakened, and the
+tables reproduce (packing totals and ready, cpuhm, hitch medians, depth link 12/12 → 0/12 with no key in its place;
+r9 vs r8 0 changed pixels). Findings, all addressed: (P2) the module-level probe could be freed by one renderer while
+another had it queued (its bone texture then re-made outside `quietly()`: 4 uuid draws) → **each renderer owns its
+probe** (`Renderer._depthProbe`, made at its first realistic warm-up, freed in its `dispose`; `skinnedDepthProbe()`
+makes a new one each call), and a test with two live renderers (B's dispose frees only B's probe, 4 events; A's
+queued probe draws with its own bone texture); (P3) the blood failure's cause was stated too strongly (a satellite pool
+can sit correctly on the upper step) → reworded, lead 5; (P3) the headline and table still said the suite was clean →
+corrected, and "3/3" now reads "3 of 3 runs (15 tests each)"; (P3) `r9-ab.md` kept "one-load spread" → reworded.
+**After review 2:** typecheck passes; `tests/shadow-probe.test.ts` 3/3; build; `r9c` capture: `compare baseline r9c`
+PASS, all 56 PNGs byte-identical to `r9`; a hitch check (downtown, medium/high/ultra, 1 load each): no in-match
+shadow link, programs at the match start 44 / 46 / 48 (the probe's +1); **`npm test -- --maxWorkers=2`: 49 files,
+408/408 PASS** (the blood flake did not fire in this run).
 
 ### Hot spot leads for Round 10 (the last round: small, safe items only)
 
@@ -1535,9 +1553,9 @@ but not of this random flake (lead 5). Seeding the test would hide what may be a
    draw to the menu. Check the keys first.
 4. **Do not retry**: cpuhm (walk + D on Medium/High: three A/Bs without a gain), `hud2`, `fence`, `opaque`, `clips`,
    `low1`, `matrix`, the Ultra slot budget (`r8-packu`).
-5. **`tests/blood.test.ts` stair-pool flake**: `bloodPool`'s random size/offset sometimes reaches over a step edge
-   (-0.31 m seen). Find whether the clamp misses a case (a game fix, outside perf scope unless tiny), or seed the
-   test only if the case is shown to be acceptable.
+5. **`tests/blood.test.ts` stair-pool flake**: with unseeded `Math.random`, one pool's -z extent reached -0.31 m.
+   Log the failing pool's height and extents: a satellite on the upper step is correct and the assertion too strict;
+   a pool on the lower step past the edge is a clamp bug (a game fix, outside perf scope unless tiny).
 
 ## Tried / rejected ideas
 
