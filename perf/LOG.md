@@ -946,6 +946,161 @@ line on low1 said the rest of the bundle is kept → "kept on Ultra only".
 5. **Fight CPU**: what is left after walk + D is submission; `matrix` (exact, `r6-matrix.patch`) could be retried in
    a bundle with other figure-CPU work on a stable charger.
 
+## Round 7 — first-use compiles, bake layout worker, HUD style recalc (exact set kept); upload packing for the user
+
+2026-10-20, on `00a8411` → harness `1fba3a6`, game change `e0128de`. Survey: one read-only Opus agent (Low/Medium
+exact wins); implementation: six Opus agents, each in its own worktree, one patch each (`pre`, `sky`, `worker`,
+`pack`, `hud`, `misc`); review: GPT-6.1-Sol (below). Time budget ~4-5 h, at most 3 A/Bs (2 used: `r7ld`, `r7f`;
+`r7ll` is a load-only A/B under 10 min), no post-round bench (Round 8's pre-bench is the next reference). Wall time:
+06:54 → about 12:30 plus the review (over budget: ~2.5 h waiting for the power gate).
+
+**Machine state** (`perf/results/r7-power.log`). The round started on the **20 W adapter** at 32 %. The six agents'
+builds, tests and Chrome runs drew more than it gave: the battery fell to 6-8 % by 08:00-09:30 (no bench of record
+ran then; the agents' own measurements in that window are marked as such). Around 10:00-10:30 the laptop ran on
+battery while the user swapped chargers; from ~10:30 the **94 W charger** was connected (`pmset -g ac`: Wattage 94).
+Every bench of record ran on the 94 W charger, gate AC and ≥ 50 %, void under 35 % (`PERF_MIN_BATT=35`): job 1a
+(`r7-pre`, `r7ll`, `r7ld`) 10:52-11:18, 56 → 70 %; job 1b (`r7f`) 11:18-11:45, 70 → 83 %. No void, no thermal or
+performance warning. Desktop Chrome open (idle), as in earlier rounds. `r7f` still caught power-state jumps inside
+cells (below), perhaps from charging under load (a hypothesis).
+
+**Round baseline.** `r7-pre` (`1fba3a6`, src = `00a8411`, traced, all presets on downtown + training, as
+`r6-pre`): `perf/results/r7-pre.json`. Unpaired vs `r6-pre`: all -1.6 % frame mean, **ultra -3.5 % (IMP)**, which is
+Round 6's Ultra-only walk + D; low -2.6 %, medium +1.0 %, high -1.3 %; medium js +11.1 % (flagged REG) on unchanged
+Medium code: machine state (20 W at ~50 % then, 94 W at 56 % now; a hypothesis), not a change. Calls, triangles and
+programs equal.
+
+### Result
+
+| paired, kept set vs HEAD | low | medium | high | ultra |
+|---|---|---|---|---|
+| **fight frame mean** (r7f, 4 rounds, balanced, training + mexico) | 1.891 → 1.820 ms (-3.8 %, -0.07) | 2.979 → 2.696 (-9.5 %, -0.28) * | 3.646 → 3.528 (-3.2 %, -0.12) | 4.408 → 4.401 (-0.2 %, -0.01) |
+| fight frame median | 1.799 → 1.708 (-5.0 %, -0.09) | 2.917 → 2.606 (-10.7 %, -0.31) | 3.606 → 3.468 (-3.8 %, -0.14) | 4.218 → 4.270 (+1.2 %, +0.05) |
+| fight frame p95 | 3.058 → 2.929 (-4.2 %, -0.13) | 4.363 → 3.969 (-9.0 %, -0.39) | 5.155 → 4.980 (-3.4 %, -0.18) | 6.283 → 6.246 (-0.6 %, -0.04) |
+| headB / head (mean / med / p95) | +2.8 / +1.8 / +3.9 % | +1.5 / +0.7 / +2.1 % | -1.6 / -2.1 / +0.2 % | -2.5 / -1.1 / -2.9 % |
+| cpuhm / head where it is HEAD's code (mean) | +2.1 % | (candidate) | (candidate) | -5.4 % |
+| **robust** (median of per-cell ratios, mean): set vs head / vs headB, faster than headB | -4.4 / -4.6 %, 7/8 | -6.8 / -5.7 %, 8/8 | -5.2 / -3.3 %, 5/8 | -0.1 / +0.9 %, 3/8 |
+| fight callback cpu mean (wall, GPU waits included) | +2.1 % | -3.8 % | +3.3 % | +6.0 % |
+| **readyMs** (r7ld, 4 rounds, balanced, downtown/house/mexico) | (no bake) | 7805 → 7292 ms (-6.6 %, -513) | 7590 → 7263 (-4.3 %, -327) | 9925 → 9767 (-1.6 %, -158) |
+| readyMs headB/head; set faster in (headB) | | -0.5 %; 11/12 (7/12) | +0.2 %; 10/12 (3/12) | +0.9 %; 11/12 (7/12) |
+| load window: median max frame, mean > 33 ms per load (head → set; headB) | | 122 → 119 ms, 3.0 → 3.0 (124, 3.0) | 151 → 151, 4.1 → 4.2 (143, 4.0) | 151 → 162, 4.3 → 4.0 (162, 4.3) |
+| **first-fight hitch** (perf/hitch.mjs, 3 loads each) | none | none | training: 458 / 90 ms callbacks at the first smoke / grenade → ~20 ms; max frame 457 → 34 ms | training 124 ms → ~20; house 201-367 ms → max frame 39 ms |
+| programs (path = fight now) | = | = | -2 (51-54) | -2 (53-56) |
+
+\* Medium's geomean is inflated by one HEAD outlier (medium/mexico round 4: HEAD 3.74 ms against 2.5-2.8 in its other
+rounds); the robust row is the better size estimate. r7f had several such jumps (high/training round 2 HEAD 6.29 ms
+vs ~3.4; round 4 set/headB +42/+53 %); all per-cell ratios: `perf/results/r7-ab.md` (`node perf/ab-robust.mjs r7f
+mean --cells`). Fight state hashes and summaries are equal across variants in every cell. The traced fight js and the
+max frame were not part of r7f (no trace); the `hud` agent's traced runs (below) show the main-thread effect.
+
+**Verdict.**
+- **`pre` is kept** (all presets; it acts on High/Ultra). On HEAD every High/Ultra cell linked two programs in the
+  fight (soft smoke at the first shot, soft fire at the first grenade: one-frame spikes of 90-460 ms on a fresh load),
+  and house/ultra two more (the shaft passes, at the first look at the sun). With `pre` no program is created after
+  ready on any of the 16 cells, the spike is gone (max frame over the first 120 fight frames training/high 457 / 32.5 /
+  32.9 → 34.2 / 32.9 / 36.2 ms, ultra 133 / 116 / 132 → 32.6 / 37.3 / 35.3, house/ultra 380 / 233 → 39 / 39), p99
+  unchanged, and High/Ultra hold two programs fewer (the lit sprite programs HEAD made at load were never used). The
+  bench never saw it: its warm-ups link these programs before the recorded runs. Readiness: compiles/warm-ups end at
+  the same time (±0.2 s); `deferredWarmups` 5 → 6 (High) / 7 (Ultra). Measured by the agent at 7-8 % battery on the
+  20 W adapter (alternating builds, 3 loads each); the effect is 5-20x the spread.
+- **`worker` is kept** (realistic presets; Low has no bake). Ready -6.6 / -4.3 / -1.6 % (medium / high / ultra),
+  faster in 32/36 cell-rounds (headB 17/36, headB within ±0.9 %); `bakeLayout` ends 381 ms earlier and the bake 395 ms
+  earlier (median), at the sky landing instead of 0.3-0.5 s of slots after it. Medium and High pass ~2 %; Ultra is
+  -1.6 % (its ready waits on later streams) but faster in 11/12; it is the same preset-independent load code, kept as
+  Round 6 kept `load`. Load-window long frames as HEAD within the control's spread.
+- **`hud` + `misc` are kept as one measured set** (in `set` with `pre` and `worker`, which do not touch steady-state
+  fight frames). Medium passes clearly (robust -6.8 % vs head, -5.7 % vs headB, faster than headB in 8/8). Low is past
+  ~2 % against all three HEAD-code arms (-4.4 % vs head, -4.6 % vs headB, faster in 7/8), but those arms differ by
+  up to 3.3 % among themselves, so Low's size is not pinned down. **High: not validated** (-3.2 % raw with headB
+  -1.6 %; robust vs headB -3.3 %, 5/8). **Ultra: no gain** (-0.2 %, controls -2.5 / -5.4 %). **Stated exception to
+  the one-A/B rule**, as Round 6's `load`: the HUD change and the rig walk are preset-independent exact code (DOM and
+  a matrix walk), so a preset gate would add preset logic to the HUD for no pixel reason; they stay on High/Ultra with
+  no gain counted there. The fence part runs on Low only. The parts were not measured one by one.
+- **Round 6's `load` on Low: confirmed on ready** (lead 1d, r7ll): the tree without it is +3.4 % slower to ready
+  (484 → 500 ms, +16 ms; HEAD faster in 10/12 cell-rounds), headB -0.7 %; first playable +1.6 % (under ~2 %).
+- **Lead 3 (walk + D on High/Medium) rejected again**: `cpuhm` (r7f) medium -2.6 % raw mean (robust -2.7 % vs head,
+  -5.1 % vs headB, 7/8), high -2.0 % (robust -1.0 / -2.2 %); same-code arms spread -5.4 to +2.8 % in this run: not
+  clearly past noise. The **Medium confirmation for Round 4** was not run (time: the charger came at 10:30).
+
+### Changes kept (commit `e0128de`; patches `perf/patches/r7-pre.patch`, `r7-worker.patch`, `r7-hud.patch`, `r7-misc.patch`, together `r7-set.patch`)
+
+| change | where | evidence | pixels |
+|---|---|---|---|
+| **pre**: with soft particles on, the soft smoke/fire sprite meshes go in a late template (`fxLateTemplate`, made under `quietly()`) compiled with `three.compile(late, camera, fxScene)` (no lights, the fog of the scene) and warmed by one draw into `post._soft` with the effect pools hidden; on Ultra the shaft passes compile and draw once into `_shafts[1]` (cleared and rewritten before every read); no shadow redraw in these warm-ups | `fx.ts`, `index.ts` (`Warmup.own`), `postfx.ts` (`compileShafts`, `warmShafts`), `tests/render-chain.test.ts` (no program on a first smoke, fire, fog swap and sun look on High/Ultra; fails on HEAD), `tests/fx.test.ts` | hitch above; programs -2 | exact |
+| **worker**: the bake layout (`bakeLayoutSteps`, moved verbatim to `lightmapLayout.ts`) runs in a module Web Worker started on the level's first realistic frame (structured clone in, transferred `uv1` out); the answer is applied in the same upload slot `_layBake` used; the main-thread steps stay as the fallback (no Worker, load error, thrown job, late answer: first to finish wins; after an error the session stays on the main thread). Turbopack bundles `new Worker(new URL('./lightmapWorker.ts', import.meta.url), { type: 'module' })` in the static export and in `next dev` | `index.ts`, `lightmapLayout.ts`, `lightmapJob.ts`, `lightmapWorker.ts` (new), `tests/lightmap-worker.test.ts` (5 bakes byte-equal across the old, stepped and worker paths; real worker; fallback) | r7ld ready | exact (no `Math.random` in the layout; same bytes) |
+| **hud**: each per-frame CSS variable (`--spread`, `--health`, `--breath`, `--focus`, `--boss`, `--exec-N`, `--straggler-N`, `--mark-N`) is written on the element that reads it (`bindVarHost`/`hostRef` registry, values replayed on mount), not on the HUD root (`--scope-*` and the defaults stay on the root); the root re-renders only on `health.low` (`useHudSelect`); one lazily made reduced-motion `MediaQueryList` | `hud/store.ts`, `components/hud/Hud.tsx`, `useHud.ts`, `tests/hud-vars.test.tsx` | traced downtown fights (agent, 2 alternating runs each, 26 % battery): style recalc 70.7 → 6.8 elements per frame, `UpdateLayoutTree` 0.23-0.34 → 0.13-0.21 ms, main thread outside rAF low 0.52-0.55 → 0.41, medium 0.77-0.78 → 0.66 ms; r7f above | exact (same computed values) |
+| **misc fence**: GPU fences marked only on the realistic look (their only reader, `gpuBehind`, needs streaming, which Low never does); the ring is cleared on a change to Low | `index.ts`, `tests/pacing.test.ts` | in r7f's set (Low) | exact |
+| **misc rig**: `camera.updateWorldMatrix(false, false)` instead of `updateMatrixWorld()` before the operators: the rig's children are walked once (by the render's scene walk), not twice; nothing between reads their matrices | `index.ts`, `tests/rig-walk.test.ts` (camera, rig and drawn matrices bit-equal to HEAD's walk on Low → Ultra → Low) | in r7f's set | exact |
+
+### Upload packing — for the user to decide (not committed; `perf/patches/r7-pack.patch`, on `00a8411`)
+
+An upload slot may hold several items: the first item goes at any size (as HEAD); more join while the slot stays
+within `SLOT_BYTES` = 24 ms × 60 kB/ms = 1.44 MB and 2 ms of upload time; an item larger than the space left waits
+for its own slot; the bake, textures, fx, weapons, operators and props streams share slots in their usual order; the
+gap after a slot is `max(UPLOAD_GAP_MS, slot bytes / rate) × pace` (HEAD's rule on the slot total, so the average
+rate stays ≤ 60 MB/s); back-off, quiet start, fade, layout, sky landing and warm-ups unchanged. Exact after ready
+(56/56 byte-identical vs `r6c`).
+
+| r7ld, pack vs HEAD (4 rounds, balanced) | medium | high | ultra |
+|---|---|---|---|
+| readyMs | 7805 → 5744 ms (-26.4 %, -2.06 s) | 7590 → 5980 (-21.2 %, -1.61 s) | 9925 → 9754 (-1.7 %, -0.17 s) |
+| faster cell-rounds (headB) | 12/12 (7/12) | 12/12 (3/12) | 10/12 (7/12) |
+| load window: median max frame (headB) | 122 → 132 ms (124) | 151 → 143 (143) | 151 → 161 (162) |
+| frames > 33 / > 50 ms per load | 3.0 / 2.2 → 3.0 / 2.2 | 4.1 / 2.3 → 3.9 / 2.3 | 4.3 / 2.4 → 4.1 / 2.6 |
+| renderer ms in the window (sum), window frames | 923 → 1445, 2186 → 1691 | 1018 → 762, 1888 → 1486 | 1271 → 1319, 2341 → 2497 |
+
+Streams finish earlier (median over all cells): textures -0.94 s, weapons -1.49 s, props -1.72 s. What a player would
+see: on Medium/High the level textures, effects, weapons, operators and props appear 1-2 s sooner; one frame may
+upload up to ~8 512² maps (≤ ~2 ms plus one item) instead of one. The long frames in the window stay about the same
+(Medium's median max frame +10 ms vs HEAD, +8 vs headB; counts unchanged); Medium spends more renderer time before
+ready (more fully dressed frames in the shorter window). Ultra barely changes: its 2K maps (~2.8 MB) exceed the slot
+budget and still go one per slot; a larger slot budget (e.g. the 2.8 MB HEAD already sends in one frame for one 2K
+map) is a further choice. The agent's own interleaved check (2 rounds, low battery) read Medium -16.8 %, Ultra -2.6 %.
+
+### Quality gate
+
+`node perf/quality.mjs compare baseline r7`: **PASS, 56/56, every SSIM 1.0000** (the changed pixels are Round 1/4's
+known LSBs). `compare r6c r7`: **56/56 byte-identical, 0 changed pixels** (also `cmp` on every PNG). Each patch alone
+was 56/56 byte-identical vs `r6c` (`scratch-r7-pre`, `-sky`, `-worker`, `-pack`, `-hud`, `-misc`; `misc` with both
+parts), and the merged set before the commit (`r7set`). Fight state hashes equal in all `r7f` cells and in the
+captures. `npm run typecheck` passes. `npm test`: the full suite on this machine times out on 3 tests **on HEAD too**
+(`1fba3a6`: render-chain "a streamed sky…", shadow-walk, weapon-assets; 389/392); with the set the full runs lost
+3-6 tests, all to timeouts (two "expected" assertions in one earlier loaded run were timing-dependent sky/bake waits
+and passed alone), and every failing file passes alone (blood 5, lightmap-worker 3, render-chain 13, shadow-walk 3,
+sky 3, weapon-assets 14). 48 files, 403 tests.
+
+### Harness (kept, commit `1fba3a6` and this round's log commit)
+
+- `trace.outside` in traced results (`perf/lib.mjs` `digestTrace`): main-thread CPU of top-level tasks minus the rAF
+  callbacks inside them, per frame, with counts/wall/CPU/`elementCount` per event name and the top self-time names.
+  Existing fields unchanged.
+- `perf/hitch.mjs find` lists every program created after ready (bench order or straight into the fight) with its
+  frame and asker; `measure` gives the first-fight frame times, programs at ready/after the fight, per build,
+  alternating (`--outs head=DIR,new=DIR`).
+- `perf/ab-robust.mjs <tag> [mean|med|p95] [--cells]` (median of per-cell ratios vs head and vs headB, faster counts,
+  per-cell table) and `perf/ab-load-count.mjs <tag>` (faster-than-head counts in a load A/B).
+
+### Review (GPT-6.1-Sol, high effort)
+
+REVIEW_PLACEHOLDER
+
+### Hot spot leads (refreshed)
+
+0. **Charger**: the 94 W charger is in. Bench on a charged machine (r7f caught power-state jumps while charging at
+   70-83 %). Open: the Medium confirmation for Round 4 (2c75479 vs HEAD, ≥ 4 rounds), and if wanted the split of
+   the kept set (hud / rig / fence) with traces (`AB_TRACE=1`, `trace.outside`) to size High/Ultra.
+1. **Upload packing**: the user's decision (above). If accepted, decide Ultra's slot budget.
+2. **Load-time spikes**: in ~1 of 6 loads (both variants) a warm-up draw lands on the sky-landing frame (120-230 ms,
+   sometimes one new program); the landing frame itself is ~5-8 ms, mostly the bake stream's first step (~4-5 ms) and
+   props (~3 ms on downtown). Find why that warm-up slips past the quiet start (`warmups.off` past it in 7/16 head
+   loads in the pack agent's runs).
+3. **Main thread outside rAF in fights** (still 0.41 ms Low, 0.66 ms Medium per frame after `hud`): `UpdateLayoutTree`
+   0.13-0.21 ms on ~7 elements (the crosshair's `top`/`left` transitions: moving them to `transform` may change
+   pixels), task self time 0.14-0.23 ms, paint 0.08-0.12 ms.
+4. **Other first-use compiles**: only the path and fight scripts were checked (`perf/hitch.mjs find`); the sword,
+   other guns, other modes and maps' rare effects were not.
+5. **Tests**: the full suite times out on 3 heavy chromium tests even on HEAD on this machine; raise their timeouts
+   or split the heavy files so `npm test` is a clean gate again.
+
 ## Tried / rejected ideas
 
 Format: round, idea, where, result numbers vs the noise floor, why rejected.
@@ -1057,3 +1212,15 @@ Format: round, idea, where, result numbers vs the noise floor, why rejected.
   -2.9 % raw mean (fitted -1.6 %) and js -7.6 %, but its control moved past ~2 % (fitted mean +2.6 %, js -2.8 %):
   not validated after one A/B (review 2). Gated off by
   `fightCpuPaths` (`render/quality.ts`).
+- **r7, sky: keep one environment texture through the sky landing** (`render/index.ts`: the room PMREM target stays
+  `scene.environment`; the sky's PMREM texels are copied into it, the room's saved in a spare target made under
+  `quietly()` and restored for a map without a sky and on Low; `setRenderTarget` + `copyFramebufferToTexture`
+  because three r170's `copyTextureToTexture` between render-target textures copies nothing). Exact (56/56 vs
+  `r6c`). Program-key rebuilds on the landing frame 30 → 1 (downtown) / 10 → 1 (training), no program change; the
+  landing frame drops only ~0.3-0.5 ms of its 5-8 ms (agent, 3 unpaired loads per cell at low battery; the frame is
+  mostly the bake stream's first step and props); ready time and load-window max frame unchanged; +6.3 MB GPU memory
+  on realistic presets. Not measured past noise and small. Rejected; patch `perf/patches/r7-sky.patch`.
+- **r7, walk + D on High and Medium again** (`perf/patches/r7-cpuhm.patch`: `fightCpuPaths` on Medium/High/Ultra).
+  Exact (same code as the Ultra path). r7f: medium -2.6 % raw fight frame mean (robust -2.7 % vs head, -5.1 % vs
+  headB, 7/8), high -2.0 % (robust -1.0 / -2.2 %); same-code arms in that run spread -5.4 to +2.8 %. Not clearly past
+  noise (High: second A/B without validation; Medium: first valid arm). Rejected.
