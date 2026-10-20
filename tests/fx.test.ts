@@ -227,7 +227,9 @@ test('decals are lit, offset in depth and never write it; the flat look\'s too a
   // A blended two-sided effect draws once a frame: three draws such a material twice (back, then front) unless told not to.
   const all = new Set([...materials('lowpoly'), ...materials('realistic'), ...materials('realistic', true), lowFlashMaterial()]);
   for (const material of all) {
-    if (material.transparent && material.side === THREE.DoubleSide) expect(material.forceSinglePass, material.name).toBe(true);
+    // But the holder of the slash wave's and ban ring's programs: those draw twice, so it links both (back, front).
+    if (material.name === 'fx:see-through') expect([material.transparent, material.side, material.forceSinglePass]).toEqual([true, THREE.DoubleSide, false]);
+    else if (material.transparent && material.side === THREE.DoubleSide) expect(material.forceSinglePass, material.name).toBe(true);
   }
   expect([flashMaterial().forceSinglePass, lowFlashMaterial().forceSinglePass, tracerMaterial().forceSinglePass]).toEqual([true, true, true]);
 });

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { BLOOD } from '../render/palette';
+import { BLOOD } from './palette';
 
 /**
  * Blood on the sword's blade, drawn in its own material: it coats the blade
@@ -12,6 +12,8 @@ import { BLOOD } from '../render/palette';
  * The mask works in the blade's own frame (`frame`): the shader takes the
  * fragment's world position into it, so a material shared by the guard and
  * grip (the realistic set's) shows blood only between the guard and the tip.
+ * That set's material is made with it (materials.ts `weaponMaterial`), so the
+ * weapons' warm-up links the program the sword draws with.
  */
 
 interface BloodUniforms {
@@ -73,8 +75,8 @@ roughnessFactor = mix(roughnessFactor, 0.2, bloodAmount);`;
 const FRAGMENT_METAL = /* glsl */`
 metalnessFactor = mix(metalnessFactor, 0.0, bloodAmount);`;
 
-/** Patch `material` (once) to draw blade blood; the uniforms live with it. */
-function patch(material: THREE.Material, realistic: boolean): BloodUniforms {
+/** Patch `material` (once) to draw blade blood; the uniforms live with it, and the first call's colours stay. */
+export function patchBladeBlood(material: THREE.Material, realistic: boolean): BloodUniforms {
   const known = patched.get(material);
   if (known) return known;
   const uniforms: BloodUniforms = {
@@ -111,7 +113,7 @@ function patch(material: THREE.Material, realistic: boolean): BloodUniforms {
  */
 export function bladeBlood(material: THREE.Material, frame: THREE.Object3D, guard: number, tip: number,
   centre: number, half: number, realistic: boolean, rise = 0): BladeBlood {
-  const uniforms = patch(material, realistic);
+  const uniforms = patchBladeBlood(material, realistic);
   const axis = new THREE.Vector4(guard, tip, centre, Math.max(1e-4, half));
   return {
     get amount() { return uniforms.uBlood.value; },

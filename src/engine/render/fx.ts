@@ -698,6 +698,12 @@ export function fxTemplate(look: 'lowpoly' | 'realistic', soft = false): THREE.G
     instanced(hull, shellMaterial('shotshell'), false);
     add(new THREE.Mesh(new THREE.PlaneGeometry(0.01, 0.01), flashMaterial()));
   }
+  // The sword's air-slash wave and the moderator's ban ring (weapons/wave.ts, enemies/hazards.ts): unlit,
+  // see-through and two-sided, so three draws their back faces and then their front faces, a program each. Each
+  // wears a material of its own, freed with it: this one links both at the menu and holds them, so no wave or ring
+  // links or frees one. Made without a uuid draw: the template's other meshes keep the ones they had.
+  add(quietly(() => new THREE.Mesh(new THREE.PlaneGeometry(0.01, 0.01),
+    new THREE.MeshBasicMaterial({ name: 'fx:see-through', transparent: true, side: THREE.DoubleSide, depthWrite: false }))));
   templates.set(key, group);
   return group;
 }

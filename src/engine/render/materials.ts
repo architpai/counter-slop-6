@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { FOG_UNIFORMS } from './atmosphere';
+import { patchBladeBlood } from './blade-blood';
 import { OPTIC_COLOR, SURF, TONE, TONE_HEX, TOON_STEPS } from './palette';
 import type { SurfKey } from './palette';
 import type { MaterialTag, RealMaterial, SetInfo, TextureSet } from './surfaces';
@@ -1016,6 +1017,9 @@ export function weaponMaterial(name: string): { material: THREE.Material; set: s
   const material = gridLit(new THREE.MeshStandardMaterial({ color: tint ?? 0xffffff, roughness: 1, metalness: 1 }), true);
   material.name = name;
   wearMaps(material, weaponStandIns());
+  // The sword's blade, guard and grip draw its blood in this material (weapons/models.ts `makeRealSwordModel`):
+  // patched from the start, so the template's compile links that program, not the sword's first draw in a match.
+  if (name === 'sword') patchBladeBlood(material, true);
   return { material, set: tint !== undefined ? 'optics' : name };
 }
 

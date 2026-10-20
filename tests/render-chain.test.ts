@@ -4,6 +4,8 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { CHECK_SHADER_ERRORS, Renderer, roomEnvironment } from '@/engine/render/index';
 import { MATCH_QUIET_MS } from '@/engine/render/pacing';
 import { spriteGeometry, spriteMaterial } from '@/engine/render/fx';
+import { bladeBlood } from '@/engine/render/blade-blood';
+import { weaponMaterial } from '@/engine/render/materials';
 import { Composite, RIG_DEPTH } from '@/engine/render/postfx';
 import { PRESETS, PRESET_VALUES } from '@/engine/render/quality';
 import { aimShadowBox, cascadeCentre, sizeShadowBox } from '@/engine/render/shadows';
@@ -228,6 +230,48 @@ test('the soft sprites and the light shafts link at the menu: a first smoke, fir
     pass.mockRestore();
     expect(drawn.includes('post:shaft-mask') && drawn.includes('post:shaft-blur'), name).toBe(name === 'ultra');
     expect(three.info.programs!.length, name).toBe(programs);
+  }
+  expect(three.getContext().getError()).toBe(three.getContext().NO_ERROR);
+}, 60_000);
+
+test('a first air-slash wave or ban ring, and the Blender sword\'s blade, link nothing after the menu', async () => {
+  const renderer = makeRenderer(), three = renderer.three;
+  renderer.camera.position.set(0, 1.6, 0);
+  // The Blender sword's set material as the weapons' glb makes it, compiled as their warm-up compiles it.
+  const { material: steel } = weaponMaterial('sword');
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.8), steel);
+  blade.position.set(0, 1.6, -2);
+  cleanup.push(() => { blade.geometry.dispose(); steel.dispose(); });
+  for (const name of ['low', 'ultra'] as const) {
+    renderer.applyQuality(PRESET_VALUES[name]);
+    for (let i = 0; i < 100 && (i < 2 || renderer._compiles.length + renderer._warmups.length > 0); i++) {
+      renderer.render(0, fx);
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    expect(renderer._compiles.length + renderer._warmups.length, name).toBe(0);
+    renderer.scene.add(blade);
+    three.compile(blade, renderer.camera, renderer.scene);
+    renderer.render(0, fx);
+    const programs = three.info.programs!.length;
+    // Two waves (or rings) in turn, each in a material of its own that goes with it (weapons/wave.ts, enemies/hazards.ts).
+    for (let k = 0; k < 2; k++) {
+      const wave = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0xd2ecff, transparent: true,
+        opacity: 0.95, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false }));
+      wave.position.set(0, 1.6, -2);
+      renderer.scene.add(wave);
+      renderer.render(0, fx);
+      expect(three.info.programs!.length, `${name} wave ${k}`).toBe(programs);
+      wave.removeFromParent();
+      wave.geometry.dispose();
+      wave.material.dispose();
+      renderer.render(0, fx);
+      expect(three.info.programs!.length, `${name} wave ${k} gone`).toBe(programs);
+    }
+    // The sword built on the weapons' ready (weapons/models.ts `makeRealSwordModel`) puts its blood on: no relink.
+    bladeBlood(steel, blade, 0, -0.8, 0, 0.02, true).update(0.5);
+    renderer.render(0, fx);
+    expect(three.info.programs!.length, `${name} sword`).toBe(programs);
+    blade.removeFromParent();
   }
   expect(three.getContext().getError()).toBe(three.getContext().NO_ERROR);
 }, 60_000);
