@@ -5,6 +5,7 @@ import { Body, seeThrough } from '../physics';
 import { TONE, unlitMat } from '../render/index';
 import type { Figure, FigureAnchorName, FigurePartName } from '../render/figure';
 import { raycastFigure } from '../render/figure';
+import { staleFigure } from '../render/fresh';
 import type { ToneId } from '../render/palette';
 import type { NavPath } from '../nav';
 import type { Ctx, Enemy, EnemyKind, EnemyState, HitInfo, Target } from '../types';
@@ -207,6 +208,7 @@ export class EnemyManager {
     badge.name = 'mutation marker'; badge.position.set(0, 1.1, -0.38);
     if (e.stats.flying) { badge.position.set(0, 0.3, 0.1); e.payload = true; }
     e.root.add(badge);
+    staleFigure(e.root);
   }
 
   spawn(type: EnemyKind, position: Vector3, id?: number): EnemyRecord;
@@ -242,6 +244,7 @@ export class EnemyManager {
       const arc = e.nodes.arc = new ThreeGroup(); arc.name = 'sentry arc';
       const mesh = new ThreeMesh(new RingGeometry(3.8, 4, 24, 1, -3 * Math.PI / 4, Math.PI / 2), unlitMat(0xffb020));
       mesh.rotation.x = -Math.PI / 2; mesh.position.y = 0.04; arc.add(mesh); root.add(arc);
+      staleFigure(root);
     }
     if (!this.mirror) this.onSpawn?.(e);
     if (this.ctx.game.mode !== 'training') {

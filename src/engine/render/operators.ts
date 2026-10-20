@@ -4,6 +4,7 @@ import { OPERATOR_AO, levelDepthMat, levelDepthSkinnedMat, levelDepthTwin, opera
 import { ClipLibrary, LOOPS, ONE_SHOTS, type ClipGroup, type OperatorMotion } from './operator-motion';
 import { ANISOTROPY, TEXTURE_MAPS, TEXTURE_SIZE } from './surfaces';
 import { textureBytes } from './textures';
+import { staleFigure } from './fresh';
 import type { FigureRig, OperatorSource } from './figure';
 import type { GfxValues } from './quality';
 import type { TextureMap, TextureSize } from './surfaces';
@@ -872,6 +873,8 @@ export class OperatorBody {
       this.armature.add(mesh);
       return mesh;
     });
+    // The prop leaves the weapon group for the hand (`#holdProp`): the next scene update walks the whole figure.
+    staleFigure(rig.root);
     rig.root.add(this.armature);
     rig.worn = true; rig.armature = this.armature;
     for (const mesh of rig.low) mesh.layers.set(HIT_LAYER);
@@ -1037,6 +1040,8 @@ export class OperatorBody {
 
   /** Back to the flat model: its surfaces drawn again, the prop in its weapon group, the operator's pieces gone. */
   dispose(): void {
+    // The prop goes back to its weapon group, under the figure's pivots.
+    staleFigure(this.rig.root);
     this.#returnProp();
     for (const mesh of this.rig.low) mesh.layers.set(0);
     for (const gib of this.#gibs) gib.removeFromParent();

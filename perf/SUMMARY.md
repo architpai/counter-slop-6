@@ -249,8 +249,8 @@ High -14.7, Ultra -15.1 %.
 
 Shadow depth invalidate (A8, dsd: twice ~0); fog/macro-noise run-time skips (B4-B6: Metal LSBs); allocation-free A*
 and effect pooling (C1/C2: no frame or GC effect; GC ~0.01 ms/frame); bone upload timing; rig matrix walks
-(c-matrix, matrix); Low shadow double-buffer (e-low2) and merged Low shadow draws (low1, twice); GTAO trims (LSBs);
-view-model depthRange per run (dr); walk + D on Medium (three Mac A/Bs and two MSI A/Bs: cpuhm; High kept in MSI round 1); sky environment reuse; warm-up
+(c-matrix; matrix kept on the MSI in MSI round 2); Low shadow double-buffer (e-low2) and merged Low shadow draws (low1, twice); GTAO trims (LSBs);
+view-model depthRange per run (dr); walk + D on Medium (three Mac A/Bs and three MSI A/Bs: cpuhm; High kept in MSI round 1); ops (clip/bone sync); sky environment reuse; warm-up
 collision hold (warm); hud2, fence, opaque canvas, clip lists; Ultra slot budget; Round 10's operator main-pass probe
 (exact, removes 2 in-match compiles, the 35 ms warm-up frame did not shorten).
 
@@ -267,8 +267,8 @@ collision hold (warm); hud2, fence, opaque canvas, clip lists; Ultra slot budget
 
 ## 5a. Second platform (MSI: Linux, RTX 4090)
 
-Setup and full numbers: `perf/results/msi-s1.md` (step 1) and `perf/LOG.md` *MSI round 1* (tables in
-`perf/results/msi-r1-ab.md`). Headless Chrome 153 on ANGLE GL-EGL on the NVIDIA driver, i9-14900HX; there every fight
+Setup and full numbers: `perf/results/msi-s1.md` (step 1) and `perf/LOG.md` *MSI round 1* and *MSI round 2*
+(tables in `perf/results/msi-r1-ab.md` and `msi-r2-ab.md`; MSI cleanup proof `perf/results/msi-cleanup.txt`). Headless Chrome 153 on ANGLE GL-EGL on the NVIDIA driver, i9-14900HX; there every fight
 frame is bound by the renderer main thread, not the GPU.
 
 **Round 0 → final on the MSI** (step 1, same protocol as section 1: 96 pairs, path + fight, frame mean):
@@ -284,17 +284,27 @@ frame is bound by the renderer main thread, not the GPU.
 Controls within ±2.4 %; programs after ready 4-13 → 0 (the Mac's counts); quality: Low/High/Ultra byte-identical,
 Medium 45 px (1-3/255) from Round 4.
 
-**MSI round 1** (CPU-side retries on the MSI, two paired MSI A/Bs + one Mac A/B, keep rule written before the numbers):
+**MSI rounds 1 and 2** (CPU-side retries on the MSI: four paired MSI A/Bs and two Mac A/Bs, each keep rule written
+before its numbers; tables in `perf/results/msi-r1-ab.md` and `msi-r2-ab.md`):
 
-- **Kept: the fight-CPU paths on High** (`fightCpuPaths`: shadow-walk pruning and the post chain in one render, until
-  now Ultra only). MSI High frame mean -3.1 % in both A/Bs (posfit -3.5 / -2.7 %; ~-0.04 ms of 1.40 ms; noise line 2.0 %).
-  Mac: **not A/B'd alone** (an exception to the keep rule): the one Mac A/B measured a superset (High -0.3 %, control
-  +0.1 %), and Rounds 6/7/9 read this High code -2.0 to -2.9 % on the Mac. Byte-identical on both machines.
-- Rejected: Medium for the same paths (-3.2 then -2.5 %, not confirmed), matrix (-2 % over all presets twice, but never
-  past the line on the same preset twice), low1 (Low -2.9 then -1.2 %), the HUD (hud2) and C1 (inside noise).
-- Screened only: ops (operator clip/bone sync, the renderer's pre-step: `sync` 6.9 → 3.9 µs per figure; Ultra -2.0 %).
-- Round 2 leads: matrix, ops and Medium's fight-CPU paths. The one arm with everything (fight-CPU paths on Medium +
-  High, matrix, low1 before its fix, ops) read -3.5 % over all presets (-4.3 / -5.0 % Medium / High), unconfirmed per part; crosshair ticks by `transform` (not byte-exact: user's call).
+- **Kept (round 1): the fight-CPU paths on High** (`fightCpuPaths`: shadow-walk pruning and the post chain in one
+  render, until then Ultra only). MSI High frame mean -3.1 % in both round-1 A/Bs (posfit -3.5 / -2.7 %; noise line
+  2.0 %). Round 1 kept it without a Mac A/B of its own (an exception); **round 2 settled it**: the Mac A/B with a
+  "pre-r1" arm (HEAD with the paths back to Ultra only) reads head vs pre-r1 on High -0.2 % (pre-r1 +0.28 % vs the
+  pooled HEAD copies; line 2 %): not slower, so it stays. The Mac sees ~0 there now (Rounds 6/7/9 read -2.0 to -2.9 %).
+- **Kept (round 2): matrix** (skip three's second world-matrix walk for figures `syncModel` updated, `render/fresh.ts`;
+  Round 6's patch). MSI Medium -3.01 % vs the pooled HEAD copies (line 2.00 %; round 1 read Medium -3.4 / -3.1 %), the
+  other presets -1.4 to -1.5 %, all -1.9 %; Mac -0.57 / -0.49 / +0.08 / -0.03 % (no slowdown).
+- Both kept changes are byte-identical on both machines (0 changed px vs the tree before each round; vs each
+  machine's baseline the same images and values as before) with every fight state hash equal.
+- **Final on the MSI, both rounds together** (`msir2b`: final tree vs `5423a85`'s game tree, 4 maps x 4 presets x 4
+  rounds, path + fight, frame mean): low -2.0 %, medium -1.3 %, high -2.0 %, ultra -2.2 %, all **-1.9 %** (1.201 →
+  1.178 ms; 86/128 pairs faster; control headB/head -1.2 to +1.9 %). Small: about the size of one job's HEAD/HEAD
+  spread per preset, but negative on every preset, and the part readings agree in sign.
+- Rejected: Medium for the same paths (five A/Bs: -3.2, -2.5, then -1.84 % in round 2; never confirmed), ops
+  (operator clip/bone sync, the renderer's pre-step: round 2 -1.76 % at best, High +0.87 %), low1 (Low -2.9 then -1.2
+  %), the HUD (hud2) and C1 (inside noise). Not run: fence (no time), the crosshair ticks by `transform` (not
+  byte-exact: user's call), the Ultra slot budget (parent's decision).
 
 ## 6. How to reproduce
 

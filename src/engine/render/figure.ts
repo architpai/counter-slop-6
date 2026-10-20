@@ -7,6 +7,7 @@ import { boxGeo, cylGeo, sphereGeo, coneGeo, torusGeo } from './prims';
 import { tacticalPart, tacticalTemplate, TACTICAL_MODELS, type TacticalKind } from './tactical';
 import { OperatorMotion, type ClipGroup } from './operator-motion';
 import { HIT_LAYER } from './operators';
+import { staleFigure } from './fresh';
 
 const DARK = TONE_HEX[TONE.DARK], ACCENT = TONE_HEX[TONE.ACCENT];
 
@@ -914,6 +915,7 @@ export function makeFigure(o: FigureOpts): Figure {
     setWeapon(kind) {
       const mount = parts.gunMount;
       if (!mount) return;
+      staleFigure(root);
       if (weapon) {
         // Taken out of the tree (a lent arm's too), the old prop is never drawn again.
         release(weapon);
@@ -944,6 +946,7 @@ export function makeFigure(o: FigureOpts): Figure {
     dropShield() {
       const shield = parts.shield;
       if (!shield) return null;
+      staleFigure(root);
       shield.updateWorldMatrix(true, false);
       const world = shield.matrixWorld.clone();
       shield.removeFromParent();
@@ -953,6 +956,7 @@ export function makeFigure(o: FigureOpts): Figure {
       return shield;
     },
     lend(part) {
+      staleFigure(root);
       if (part === root) rootLent = true;
       // The debris moves it from now on (effects.ts `debris`, called with this lend's return): it composes again.
       part.matrixAutoUpdate = true;
@@ -970,6 +974,7 @@ export function makeFigure(o: FigureOpts): Figure {
     dispose() {
       if (disposed) return;
       disposed = true;
+      staleFigure(root);
       if (rig) rig.disposed = true;
       unsubscribe?.();
       if (!rootLent) release(root);

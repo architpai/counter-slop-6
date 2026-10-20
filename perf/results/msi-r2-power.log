@@ -1,0 +1,149 @@
+== msir2a start
+Wed Oct 21 04:25:05 AM JST 2026
+04:25:05 ac=1 bat=79% Not_charging I=0mA | gpu P8 43C gr=210 sm=210 mem=405 MHz 2.85W util=0% reasons=0x0000000000000001 | cpu 909/1982 MHz pkg=58C throttle core+0 pkg+0 | llama-server[85592] cpu=0.7% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P8, 43, 210 MHz, 3105 MHz, 405 MHz, 2.85 W, [N/A], 0x0000000000000001, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 0.00 0.08 0.68
+USER         PID %CPU COMMAND
+fleet     373066  100 ps
+root        1895  2.2 nvidia-powerd
+fleet     372934  1.4 bash
+root      372841  1.1 sshd-session
+llama      85592  0.7 llama-server
+04:26:06 ac=1 bat=79% Not_charging I=0mA | gpu P0 52C gr=1455 sm=1455 mem=9001 MHz 32.43W util=1% reasons=0x0000000000000001 | cpu 1990/5283 MHz pkg=77C throttle core+744 pkg+372 | llama-server[85592] cpu=0.7% gpumem=262MiB
+04:27:06 ac=1 bat=79% Not_charging I=0mA | gpu P0 58C gr=2340 sm=2340 mem=9001 MHz 106.94W util=55% reasons=0x0000000000000000 | cpu 1946/5200 MHz pkg=85C throttle core+1040 pkg+520 | llama-server[85592] cpu=0.7% gpumem=262MiB
+04:28:07 ac=1 bat=79% Not_charging I=0mA | gpu P0 61C gr=2340 sm=2340 mem=9001 MHz 98.68W util=34% reasons=0x0000000000000000 | cpu 2038/5200 MHz pkg=93C throttle core+1667 pkg+827 | llama-server[85592] cpu=0.7% gpumem=262MiB
+04:29:07 ac=1 bat=79% Not_charging I=0mA | gpu P0 56C gr=1485 sm=1485 mem=9001 MHz 46.77W util=1% reasons=0x0000000000000001 | cpu 1804/5200 MHz pkg=87C throttle core+1493 pkg+734 | llama-server[85592] cpu=0.7% gpumem=262MiB
+04:30:08 ac=1 bat=79% Not_charging I=0mA | gpu P0 65C gr=2025 sm=2025 mem=9001 MHz 166.85W util=100% reasons=0x0000000000000004 | cpu 1794/5201 MHz pkg=84C throttle core+1030 pkg+512 | llama-server[85592] cpu=0.7% gpumem=262MiB
+04:31:08 ac=1 bat=79% Not_charging I=0mA | gpu P0 67C gr=2070 sm=2070 mem=9001 MHz 155.78W util=98% reasons=0x0000000000000004 | cpu 2294/4862 MHz pkg=91C throttle core+1992 pkg+999 | llama-server[85592] cpu=0.7% gpumem=262MiB
+04:32:09 ac=1 bat=79% Not_charging I=0mA | gpu P0 68C gr=2010 sm=2010 mem=9001 MHz 152.51W util=100% reasons=0x0000000000000004 | cpu 1942/5071 MHz pkg=87C throttle core+2514 pkg+1245 | llama-server[85592] cpu=0.7% gpumem=262MiB
+04:33:09 ac=1 bat=79% Not_charging I=0mA | gpu P0 59C gr=2340 sm=2340 mem=9001 MHz 105.98W util=44% reasons=0x0000000000000000 | cpu 2231/4902 MHz pkg=89C throttle core+4514 pkg+2252 | llama-server[85592] cpu=0.7% gpumem=262MiB
+04:34:10 ac=1 bat=79% Not_charging I=0mA | gpu P0 67C gr=1965 sm=1965 mem=9001 MHz 174.49W util=100% reasons=0x0000000000000004 | cpu 2239/5200 MHz pkg=96C throttle core+1674 pkg+836 | llama-server[85592] cpu=0.7% gpumem=262MiB
+04:35:10 ac=1 bat=79% Not_charging I=0mA | gpu P0 60C gr=2340 sm=2340 mem=9001 MHz 94.10W util=0% reasons=0x0000000000000000 | cpu 2258/5372 MHz pkg=94C throttle core+3601 pkg+1768 | llama-server[85592] cpu=0.7% gpumem=262MiB
+04:36:11 ac=1 bat=79% Not_charging I=0mA | gpu P0 64C gr=2340 sm=2340 mem=9001 MHz 123.52W util=59% reasons=0x0000000000000000 | cpu 1627/5355 MHz pkg=76C throttle core+3411 pkg+1674 | llama-server[85592] cpu=0.7% gpumem=262MiB
+04:37:12 ac=1 bat=79% Not_charging I=0mA | gpu P0 60C gr=2340 sm=2340 mem=9001 MHz 57.03W util=26% reasons=0x0000000000000000 | cpu 2301/4000 MHz pkg=79C throttle core+3634 pkg+1795 | llama-server[85592] cpu=0.7% gpumem=262MiB
+04:38:12 ac=1 bat=79% Not_charging I=0mA | gpu P0 55C gr=2025 sm=2025 mem=9001 MHz 40.15W util=77% reasons=0x0000000000000001 | cpu 2217/5000 MHz pkg=84C throttle core+3190 pkg+1587 | llama-server[85592] cpu=0.7% gpumem=262MiB
+04:39:12 ac=1 bat=79% Not_charging I=0mA | gpu P0 62C gr=2025 sm=2025 mem=9001 MHz 174.18W util=96% reasons=0x0000000000000004 | cpu 1983/5006 MHz pkg=86C throttle core+1128 pkg+562 | llama-server[85592] cpu=0.7% gpumem=262MiB
+04:40:13 ac=1 bat=79% Not_charging I=0mA | gpu P0 57C gr=2340 sm=2340 mem=9001 MHz 45.30W util=15% reasons=0x0000000000000000 | cpu 2052/4900 MHz pkg=93C throttle core+1856 pkg+924 | llama-server[85592] cpu=0.7% gpumem=262MiB
+04:41:13 ac=1 bat=79% Not_charging I=0mA | gpu P0 67C gr=2250 sm=2250 mem=9001 MHz 172.13W util=81% reasons=0x0000000000000004 | cpu 2217/4900 MHz pkg=87C throttle core+1188 pkg+583 | llama-server[85592] cpu=0.7% gpumem=262MiB
+04:42:14 ac=1 bat=79% Not_charging I=0mA | gpu P0 56C gr=2055 sm=2055 mem=9001 MHz 48.43W util=42% reasons=0x0000000000000001 | cpu 2196/5201 MHz pkg=96C throttle core+3724 pkg+1864 | llama-server[85592] cpu=0.7% gpumem=262MiB
+04:43:14 ac=1 bat=79% Not_charging I=0mA | gpu P0 62C gr=2325 sm=2325 mem=9001 MHz 87.11W util=70% reasons=0x0000000000000000 | cpu 1995/5200 MHz pkg=72C throttle core+1752 pkg+859 | llama-server[85592] cpu=0.7% gpumem=262MiB
+04:44:15 ac=1 bat=79% Not_charging I=0mA | gpu P0 58C gr=2340 sm=2340 mem=9001 MHz 67.18W util=1% reasons=0x0000000000000000 | cpu 1774/5307 MHz pkg=90C throttle core+2702 pkg+1348 | llama-server[85592] cpu=0.7% gpumem=262MiB
+04:45:15 ac=1 bat=79% Not_charging I=0mA | gpu P0 60C gr=2340 sm=2340 mem=9001 MHz 89.95W util=36% reasons=0x0000000000000000 | cpu 1814/5249 MHz pkg=93C throttle core+4424 pkg+2196 | llama-server[85592] cpu=0.7% gpumem=262MiB
+04:46:16 ac=1 bat=79% Not_charging I=0mA | gpu P0 64C gr=2325 sm=2325 mem=9001 MHz 154.09W util=95% reasons=0x0000000000000004 | cpu 1982/5385 MHz pkg=92C throttle core+1203 pkg+600 | llama-server[85592] cpu=0.7% gpumem=262MiB
+04:47:16 ac=1 bat=79% Not_charging I=0mA | gpu P0 64C gr=2340 sm=2340 mem=9001 MHz 124.93W util=52% reasons=0x0000000000000000 | cpu 1084/2366 MHz pkg=72C throttle core+2677 pkg+1317 | llama-server[85592] cpu=0.7% gpumem=262MiB
+04:48:17 ac=1 bat=79% Not_charging I=0mA | gpu P0 66C gr=2340 sm=2340 mem=9001 MHz 123.67W util=47% reasons=0x0000000000000000 | cpu 1674/5229 MHz pkg=73C throttle core+3120 pkg+1553 | llama-server[85592] cpu=0.7% gpumem=262MiB
+04:49:17 ac=1 bat=79% Not_charging I=0mA | gpu P0 60C gr=2340 sm=2340 mem=9001 MHz 100.48W util=0% reasons=0x0000000000000000 | cpu 2000/5400 MHz pkg=74C throttle core+4062 pkg+2002 | llama-server[85592] cpu=0.7% gpumem=262MiB
+04:50:18 ac=1 bat=79% Not_charging I=0mA | gpu P0 57C gr=2340 sm=2340 mem=9001 MHz 53.62W util=1% reasons=0x0000000000000000 | cpu 2079/4900 MHz pkg=85C throttle core+6458 pkg+3226 | llama-server[85592] cpu=0.7% gpumem=262MiB
+04:51:18 ac=1 bat=79% Not_charging I=0mA | gpu P4 52C gr=1455 sm=1455 mem=6001 MHz 20.76W util=9% reasons=0x0000000000000001 | cpu 1436/4200 MHz pkg=73C throttle core+1088 pkg+542 | llama-server[85592] cpu=0.7% gpumem=262MiB
+04:52:19 ac=1 bat=79% Not_charging I=0mA | gpu P0 62C gr=2340 sm=2340 mem=9001 MHz 108.31W util=46% reasons=0x0000000000000000 | cpu 1664/5025 MHz pkg=74C throttle core+772 pkg+383 | llama-server[85592] cpu=0.7% gpumem=262MiB
+04:53:19 ac=1 bat=79% Not_charging I=0mA | gpu P0 63C gr=2340 sm=2340 mem=9001 MHz 142.78W util=85% reasons=0x0000000000000000 | cpu 2144/5000 MHz pkg=91C throttle core+2006 pkg+993 | llama-server[85592] cpu=0.7% gpumem=262MiB
+04:54:20 ac=1 bat=79% Not_charging I=0mA | gpu P0 59C gr=2340 sm=2340 mem=9001 MHz 88.02W util=28% reasons=0x0000000000000000 | cpu 2067/5200 MHz pkg=89C throttle core+1780 pkg+885 | llama-server[85592] cpu=0.7% gpumem=262MiB
+04:55:20 ac=1 bat=79% Not_charging I=0mA | gpu P0 60C gr=2340 sm=2340 mem=9001 MHz 116.01W util=55% reasons=0x0000000000000004 | cpu 1296/5673 MHz pkg=69C throttle core+2182 pkg+1087 | llama-server[85592] cpu=0.7% gpumem=262MiB
+04:56:21 ac=1 bat=79% Not_charging I=0mA | gpu P0 63C gr=2340 sm=2340 mem=9001 MHz 119.65W util=52% reasons=0x0000000000000000 | cpu 1327/4093 MHz pkg=71C throttle core+2184 pkg+1089 | llama-server[85592] cpu=0.7% gpumem=262MiB
+04:57:21 ac=1 bat=79% Not_charging I=0mA | gpu P0 66C gr=2340 sm=2340 mem=9001 MHz 137.03W util=61% reasons=0x0000000000000000 | cpu 1316/4504 MHz pkg=84C throttle core+3054 pkg+1521 | llama-server[85592] cpu=0.7% gpumem=262MiB
+04:58:22 ac=1 bat=79% Not_charging I=0mA | gpu P0 56C gr=2340 sm=2340 mem=9001 MHz 43.16W util=20% reasons=0x0000000000000000 | cpu 1545/5000 MHz pkg=85C throttle core+5655 pkg+2827 | llama-server[85592] cpu=0.7% gpumem=262MiB
+04:59:22 ac=1 bat=79% Not_charging I=0mA | gpu P0 63C gr=2340 sm=2340 mem=9001 MHz 117.60W util=57% reasons=0x0000000000000000 | cpu 1698/5282 MHz pkg=70C throttle core+2175 pkg+1075 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:00:23 ac=1 bat=79% Not_charging I=0mA | gpu P0 64C gr=2340 sm=2340 mem=9001 MHz 127.28W util=55% reasons=0x0000000000000000 | cpu 1987/4900 MHz pkg=87C throttle core+2671 pkg+1316 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:01:23 ac=1 bat=79% Not_charging I=0mA | gpu P0 64C gr=2340 sm=2340 mem=9001 MHz 105.98W util=62% reasons=0x0000000000000000 | cpu 2461/5200 MHz pkg=90C throttle core+4187 pkg+2055 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:02:24 ac=1 bat=79% Not_charging I=0mA | gpu P0 61C gr=2325 sm=2325 mem=9001 MHz 100.21W util=39% reasons=0x0000000000000001 | cpu 1907/4899 MHz pkg=84C throttle core+4358 pkg+2148 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:03:24 ac=1 bat=79% Not_charging I=0mA | gpu P0 53C gr=1455 sm=1455 mem=9001 MHz 46.89W util=0% reasons=0x0000000000000001 | cpu 1619/4628 MHz pkg=77C throttle core+1048 pkg+523 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:04:25 ac=1 bat=79% Not_charging I=0mA | gpu P0 65C gr=2190 sm=2190 mem=9001 MHz 148.28W util=98% reasons=0x0000000000000004 | cpu 2183/5200 MHz pkg=93C throttle core+1131 pkg+565 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:05:25 ac=1 bat=79% Not_charging I=0mA | gpu P0 65C gr=2340 sm=2340 mem=9001 MHz 107.85W util=50% reasons=0x0000000000000004 | cpu 1550/5010 MHz pkg=77C throttle core+1621 pkg+804 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:06:26 ac=1 bat=79% Not_charging I=0mA | gpu P0 68C gr=2220 sm=2220 mem=9001 MHz 154.17W util=84% reasons=0x0000000000000004 | cpu 2106/5202 MHz pkg=84C throttle core+1378 pkg+685 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:07:26 ac=1 bat=79% Not_charging I=0mA | gpu P0 58C gr=1980 sm=1980 mem=9001 MHz 46.08W util=9% reasons=0x0000000000000001 | cpu 2181/3899 MHz pkg=75C throttle core+3022 pkg+1507 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:08:27 ac=1 bat=79% Not_charging I=0mA | gpu P0 64C gr=2340 sm=2340 mem=9001 MHz 114.88W util=44% reasons=0x0000000000000000 | cpu 1784/5643 MHz pkg=70C throttle core+2042 pkg+1010 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:09:27 ac=1 bat=79% Not_charging I=0mA | gpu P0 64C gr=2340 sm=2340 mem=9001 MHz 115.04W util=79% reasons=0x0000000000000004 | cpu 1923/5237 MHz pkg=82C throttle core+2642 pkg+1308 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:10:28 ac=1 bat=79% Not_charging I=0mA | gpu P0 60C gr=2340 sm=2340 mem=9001 MHz 89.64W util=33% reasons=0x0000000000000000 | cpu 1884/4900 MHz pkg=84C throttle core+3010 pkg+1496 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:11:28 ac=1 bat=79% Not_charging I=0mA | gpu P0 63C gr=2340 sm=2340 mem=9001 MHz 117.20W util=46% reasons=0x0000000000000000 | cpu 1525/4703 MHz pkg=71C throttle core+2246 pkg+1120 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:12:29 ac=1 bat=79% Not_charging I=0mA | gpu P0 65C gr=2340 sm=2340 mem=9001 MHz 135.73W util=48% reasons=0x0000000000000000 | cpu 1912/5377 MHz pkg=93C throttle core+3228 pkg+1593 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:13:29 ac=1 bat=79% Not_charging I=0mA | gpu P0 66C gr=2295 sm=2295 mem=9001 MHz 128.13W util=42% reasons=0x0000000000000004 | cpu 1470/4132 MHz pkg=73C throttle core+3672 pkg+1784 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:14:30 ac=1 bat=79% Not_charging I=0mA | gpu P0 63C gr=2340 sm=2340 mem=9001 MHz 106.19W util=40% reasons=0x0000000000000000 | cpu 1965/5244 MHz pkg=96C throttle core+4802 pkg+2378 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:15:30 ac=1 bat=79% Not_charging I=0mA | gpu P0 56C gr=2340 sm=2340 mem=9001 MHz 56.76W util=0% reasons=0x0000000000000000 | cpu 1488/5578 MHz pkg=94C throttle core+2304 pkg+1149 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:16:31 ac=1 bat=79% Not_charging I=0mA | gpu P2 52C gr=1455 sm=1455 mem=8001 MHz 30.15W util=15% reasons=0x0000000000000001 | cpu 1734/4603 MHz pkg=76C throttle core+1976 pkg+986 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:17:31 ac=1 bat=79% Not_charging I=0mA | gpu P0 66C gr=2100 sm=2100 mem=9001 MHz 112.44W util=44% reasons=0x0000000000000000 | cpu 1965/5566 MHz pkg=93C throttle core+920 pkg+458 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:18:32 ac=1 bat=79% Not_charging I=0mA | gpu P0 61C gr=2340 sm=2340 mem=9001 MHz 97.55W util=29% reasons=0x0000000000000000 | cpu 1877/5093 MHz pkg=91C throttle core+2116 pkg+1049 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:19:32 ac=1 bat=79% Not_charging I=0mA | gpu P0 58C gr=2340 sm=2340 mem=9001 MHz 77.39W util=31% reasons=0x0000000000000000 | cpu 1945/5114 MHz pkg=91C throttle core+2102 pkg+1046 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:20:32 ac=1 bat=79% Not_charging I=0mA | gpu P0 66C gr=2160 sm=2160 mem=9001 MHz 134.17W util=61% reasons=0x0000000000000000 | cpu 2131/4900 MHz pkg=84C throttle core+2082 pkg+1033 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:21:33 ac=1 bat=79% Not_charging I=0mA | gpu P0 64C gr=2340 sm=2340 mem=9001 MHz 119.46W util=29% reasons=0x0000000000000000 | cpu 1160/2300 MHz pkg=70C throttle core+1544 pkg+760 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:22:33 ac=1 bat=79% Not_charging I=0mA | gpu P0 63C gr=2340 sm=2340 mem=9001 MHz 113.07W util=46% reasons=0x0000000000000000 | cpu 1842/5200 MHz pkg=92C throttle core+3984 pkg+1967 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:23:34 ac=1 bat=79% Not_charging I=0mA | gpu P0 65C gr=1965 sm=1965 mem=9001 MHz 174.53W util=100% reasons=0x0000000000000004 | cpu 1770/5374 MHz pkg=92C throttle core+2069 pkg+1031 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:24:34 ac=1 bat=79% Not_charging I=0mA | gpu P0 66C gr=2340 sm=2340 mem=9001 MHz 126.42W util=58% reasons=0x0000000000000004 | cpu 1285/3100 MHz pkg=72C throttle core+2717 pkg+1342 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:25:35 ac=1 bat=79% Not_charging I=0mA | gpu P0 65C gr=2340 sm=2340 mem=9001 MHz 121.50W util=46% reasons=0x0000000000000004 | cpu 1842/5600 MHz pkg=72C throttle core+3090 pkg+1512 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:26:35 ac=1 bat=79% Not_charging I=0mA | gpu P0 64C gr=2340 sm=2340 mem=9001 MHz 127.02W util=50% reasons=0x0000000000000000 | cpu 2009/5353 MHz pkg=93C throttle core+3730 pkg+1830 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:27:36 ac=1 bat=79% Not_charging I=0mA | gpu P0 61C gr=2340 sm=2340 mem=9001 MHz 97.29W util=39% reasons=0x0000000000000000 | cpu 1837/4600 MHz pkg=79C throttle core+3950 pkg+1953 | llama-server[85592] cpu=0.7% gpumem=262MiB
+== msir2a end
+Wed Oct 21 05:27:51 AM JST 2026
+05:27:51 ac=1 bat=79% Not_charging I=0mA | gpu P0 57C gr=2340 sm=2340 mem=9001 MHz 47.93W util=0% reasons=0x0000000000000000 | cpu 836/1574 MHz pkg=69C throttle core+134 pkg+67 | llama-server[85592] cpu=0.7% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P0, 57, 2340 MHz, 3105 MHz, 9001 MHz, 47.93 W, [N/A], 0x0000000000000000, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 1.87 2.15 2.23
+USER         PID %CPU COMMAND
+root        1895  2.5 nvidia-powerd
+llama      85592  0.7 llama-server
+root        1909  0.2 tailscaled
+fleet       2514  0.2 node-MainThread
+root        1464  0.0 nvidia-modeset/kthread_q
+== msir2b start
+Wed Oct 21 05:29:07 AM JST 2026
+05:29:07 ac=1 bat=79% Not_charging I=0mA | gpu P8 45C gr=210 sm=210 mem=405 MHz 2.94W util=0% reasons=0x0000000000000001 | cpu 833/1662 MHz pkg=58C throttle core+0 pkg+0 | llama-server[85592] cpu=0.7% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P8, 45, 210 MHz, 3105 MHz, 405 MHz, 2.94 W, [N/A], 0x0000000000000001, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 0.56 1.68 2.06
+USER         PID %CPU COMMAND
+root        1895  2.5 nvidia-powerd
+root      452868  1.7 sshd-session
+fleet     452954  1.3 bash
+llama      85592  0.7 llama-server
+root        1909  0.2 tailscaled
+05:30:08 ac=1 bat=79% Not_charging I=0mA | gpu P5 51C gr=945 sm=945 mem=810 MHz 28.98W util=16% reasons=0x0000000000000001 | cpu 1935/5318 MHz pkg=73C throttle core+1210 pkg+605 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:31:09 ac=1 bat=79% Not_charging I=0mA | gpu P0 62C gr=2340 sm=2340 mem=9001 MHz 113.35W util=41% reasons=0x0000000000000000 | cpu 1440/3949 MHz pkg=71C throttle core+1338 pkg+667 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:32:09 ac=1 bat=79% Not_charging I=0mA | gpu P0 69C gr=2025 sm=2025 mem=9001 MHz 150.74W util=100% reasons=0x0000000000000004 | cpu 1823/4768 MHz pkg=84C throttle core+4174 pkg+2072 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:33:10 ac=1 bat=79% Not_charging I=0mA | gpu P0 62C gr=2340 sm=2340 mem=9001 MHz 104.95W util=44% reasons=0x0000000000000000 | cpu 1555/4978 MHz pkg=73C throttle core+4066 pkg+2029 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:34:10 ac=1 bat=79% Not_charging I=0mA | gpu P0 59C gr=2340 sm=2340 mem=9001 MHz 104.36W util=36% reasons=0x0000000000000000 | cpu 1509/4100 MHz pkg=72C throttle core+2326 pkg+1160 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:35:11 ac=1 bat=79% Not_charging I=0mA | gpu P0 61C gr=2340 sm=2340 mem=9001 MHz 105.81W util=48% reasons=0x0000000000000000 | cpu 2215/5316 MHz pkg=84C throttle core+3620 pkg+1799 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:36:11 ac=1 bat=79% Not_charging I=0mA | gpu P0 65C gr=2340 sm=2340 mem=9001 MHz 119.78W util=51% reasons=0x0000000000000004 | cpu 1093/2269 MHz pkg=71C throttle core+1570 pkg+778 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:37:12 ac=1 bat=79% Not_charging I=0mA | gpu P0 66C gr=2340 sm=2340 mem=9001 MHz 120.01W util=46% reasons=0x0000000000000000 | cpu 1633/4473 MHz pkg=73C throttle core+2880 pkg+1424 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:38:12 ac=1 bat=79% Not_charging I=0mA | gpu P0 65C gr=2340 sm=2340 mem=9001 MHz 157.17W util=62% reasons=0x0000000000000000 | cpu 2079/5200 MHz pkg=88C throttle core+3398 pkg+1646 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:39:13 ac=1 bat=79% Not_charging I=0mA | gpu P0 64C gr=2340 sm=2340 mem=9001 MHz 161.99W util=65% reasons=0x0000000000000000 | cpu 2069/4799 MHz pkg=84C throttle core+3820 pkg+1899 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:40:13 ac=1 bat=79% Not_charging I=0mA | gpu P0 53C gr=1140 sm=1140 mem=9001 MHz 51.94W util=9% reasons=0x0000000000000000 | cpu 1671/5268 MHz pkg=82C throttle core+1598 pkg+803 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:41:14 ac=1 bat=79% Not_charging I=0mA | gpu P0 66C gr=2250 sm=2250 mem=9001 MHz 166.73W util=100% reasons=0x0000000000000004 | cpu 1808/4900 MHz pkg=82C throttle core+620 pkg+307 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:42:14 ac=1 bat=79% Not_charging I=0mA | gpu P0 59C gr=2325 sm=2325 mem=9001 MHz 67.99W util=1% reasons=0x0000000000000001 | cpu 2020/5319 MHz pkg=85C throttle core+2380 pkg+1184 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:43:15 ac=1 bat=79% Not_charging I=0mA | gpu P0 65C gr=1995 sm=1995 mem=9001 MHz 175.30W util=97% reasons=0x0000000000000004 | cpu 2041/5200 MHz pkg=84C throttle core+2530 pkg+1260 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:44:15 ac=1 bat=79% Not_charging I=0mA | gpu P0 67C gr=2070 sm=2070 mem=9001 MHz 147.39W util=100% reasons=0x0000000000000004 | cpu 2453/4703 MHz pkg=85C throttle core+2625 pkg+1299 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:45:16 ac=1 bat=79% Not_charging I=0mA | gpu P0 62C gr=2340 sm=2340 mem=9001 MHz 111.53W util=45% reasons=0x0000000000000000 | cpu 1784/5100 MHz pkg=94C throttle core+3253 pkg+1609 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:46:16 ac=1 bat=79% Not_charging I=0mA | gpu P0 61C gr=2340 sm=2340 mem=9001 MHz 110.71W util=56% reasons=0x0000000000000004 | cpu 1334/5200 MHz pkg=69C throttle core+2438 pkg+1211 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:47:17 ac=1 bat=79% Not_charging I=0mA | gpu P0 64C gr=2340 sm=2340 mem=9001 MHz 119.44W util=47% reasons=0x0000000000000000 | cpu 1582/4372 MHz pkg=71C throttle core+2504 pkg+1243 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:48:18 ac=1 bat=79% Not_charging I=0mA | gpu P0 60C gr=2340 sm=2340 mem=9001 MHz 65.36W util=1% reasons=0x0000000000000000 | cpu 2065/5500 MHz pkg=94C throttle core+4100 pkg+2018 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:49:18 ac=1 bat=79% Not_charging I=0mA | gpu P0 61C gr=2340 sm=2340 mem=9001 MHz 100.41W util=50% reasons=0x0000000000000000 | cpu 1687/4700 MHz pkg=76C throttle core+3558 pkg+1766 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:50:18 ac=1 bat=79% Not_charging I=0mA | gpu P3 51C gr=1455 sm=1455 mem=7001 MHz 20.77W util=1% reasons=0x0000000000000001 | cpu 2032/5076 MHz pkg=84C throttle core+1398 pkg+699 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:51:19 ac=1 bat=79% Not_charging I=0mA | gpu P0 60C gr=2340 sm=2340 mem=9001 MHz 87.96W util=29% reasons=0x0000000000000000 | cpu 1894/4500 MHz pkg=78C throttle core+872 pkg+431 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:52:20 ac=1 bat=79% Not_charging I=0mA | gpu P0 61C gr=2190 sm=2190 mem=9001 MHz 84.87W util=39% reasons=0x0000000000000001 | cpu 1935/4800 MHz pkg=90C throttle core+1726 pkg+853 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:53:20 ac=1 bat=79% Not_charging I=0mA | gpu P0 61C gr=2340 sm=2340 mem=9001 MHz 127.54W util=49% reasons=0x0000000000000000 | cpu 1673/5481 MHz pkg=96C throttle core+3188 pkg+1585 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:54:21 ac=1 bat=79% Not_charging I=0mA | gpu P0 62C gr=2340 sm=2340 mem=9001 MHz 121.92W util=40% reasons=0x0000000000000000 | cpu 2167/5380 MHz pkg=91C throttle core+2282 pkg+1139 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:55:21 ac=1 bat=79% Not_charging I=0mA | gpu P0 63C gr=2340 sm=2340 mem=9001 MHz 129.72W util=62% reasons=0x0000000000000000 | cpu 1908/4502 MHz pkg=78C throttle core+3972 pkg+1980 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:56:22 ac=1 bat=79% Not_charging I=0mA | gpu P0 61C gr=2340 sm=2340 mem=9001 MHz 116.80W util=53% reasons=0x0000000000000000 | cpu 1736/5729 MHz pkg=70C throttle core+2106 pkg+1040 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:57:22 ac=1 bat=79% Not_charging I=0mA | gpu P0 68C gr=1995 sm=1995 mem=9001 MHz 174.79W util=100% reasons=0x0000000000000004 | cpu 2029/5155 MHz pkg=93C throttle core+2805 pkg+1391 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:58:23 ac=1 bat=79% Not_charging I=0mA | gpu P0 65C gr=2340 sm=2340 mem=9001 MHz 145.00W util=66% reasons=0x0000000000000000 | cpu 1663/4481 MHz pkg=73C throttle core+2895 pkg+1415 | llama-server[85592] cpu=0.7% gpumem=262MiB
+05:59:23 ac=1 bat=79% Not_charging I=0mA | gpu P0 59C gr=2340 sm=2340 mem=9001 MHz 54.10W util=52% reasons=0x0000000000000000 | cpu 1944/4800 MHz pkg=85C throttle core+1714 pkg+851 | llama-server[85592] cpu=0.7% gpumem=262MiB
+06:00:24 ac=1 bat=79% Not_charging I=0mA | gpu P0 53C gr=2145 sm=2145 mem=9001 MHz 57.26W util=20% reasons=0x0000000000000001 | cpu 2033/4900 MHz pkg=82C throttle core+1986 pkg+992 | llama-server[85592] cpu=0.7% gpumem=262MiB
+06:01:24 ac=1 bat=79% Not_charging I=0mA | gpu P0 63C gr=2340 sm=2340 mem=9001 MHz 57.24W util=68% reasons=0x0000000000000001 | cpu 1921/4222 MHz pkg=75C throttle core+1094 pkg+544 | llama-server[85592] cpu=0.7% gpumem=262MiB
+06:02:24 ac=1 bat=79% Not_charging I=0mA | gpu P0 61C gr=2100 sm=2100 mem=9001 MHz 78.08W util=37% reasons=0x0000000000000001 | cpu 1770/4300 MHz pkg=81C throttle core+2338 pkg+1167 | llama-server[85592] cpu=0.7% gpumem=262MiB
+06:03:25 ac=1 bat=79% Not_charging I=0mA | gpu P0 63C gr=2310 sm=2310 mem=9001 MHz 100.33W util=40% reasons=0x0000000000000000 | cpu 1780/5200 MHz pkg=73C throttle core+3124 pkg+1561 | llama-server[85592] cpu=0.7% gpumem=262MiB
+06:04:25 ac=1 bat=79% Not_charging I=0mA | gpu P0 58C gr=2340 sm=2340 mem=9001 MHz 59.92W util=1% reasons=0x0000000000000000 | cpu 1476/4121 MHz pkg=78C throttle core+1698 pkg+833 | llama-server[85592] cpu=0.7% gpumem=262MiB
+06:05:26 ac=1 bat=79% Not_charging I=0mA | gpu P0 60C gr=2340 sm=2340 mem=9001 MHz 88.59W util=33% reasons=0x0000000000000000 | cpu 1404/4600 MHz pkg=76C throttle core+5024 pkg+2483 | llama-server[85592] cpu=0.7% gpumem=262MiB
+06:06:26 ac=1 bat=79% Not_charging I=0mA | gpu P0 61C gr=2340 sm=2340 mem=9001 MHz 120.84W util=55% reasons=0x0000000000000004 | cpu 1666/4086 MHz pkg=70C throttle core+2544 pkg+1267 | llama-server[85592] cpu=0.8% gpumem=262MiB
+06:07:27 ac=1 bat=79% Not_charging I=0mA | gpu P0 68C gr=2145 sm=2145 mem=9001 MHz 168.50W util=97% reasons=0x0000000000000004 | cpu 2001/5100 MHz pkg=91C throttle core+2854 pkg+1411 | llama-server[85592] cpu=0.8% gpumem=262MiB
+06:08:27 ac=1 bat=79% Not_charging I=0mA | gpu P0 63C gr=2340 sm=2340 mem=9001 MHz 120.49W util=57% reasons=0x0000000000000000 | cpu 1796/5471 MHz pkg=73C throttle core+3894 pkg+1919 | llama-server[85592] cpu=0.8% gpumem=262MiB
+== msir2b end
+Wed Oct 21 06:09:25 AM JST 2026
+06:09:25 ac=1 bat=79% Not_charging I=0mA | gpu P0 58C gr=2340 sm=2340 mem=9001 MHz 71.28W util=0% reasons=0x0000000000000000 | cpu 800/800 MHz pkg=70C throttle core+4482 pkg+2216 | llama-server[85592] cpu=0.8% gpumem=262MiB
+name, driver_version, pstate, temperature.gpu, clocks.current.graphics [MHz], clocks.max.graphics [MHz], clocks.current.memory [MHz], power.draw [W], power.limit [W], clocks_event_reasons.active, clocks_event_reasons.sw_power_cap, clocks_event_reasons.sw_thermal_slowdown, clocks_event_reasons.hw_thermal_slowdown, clocks_event_reasons.hw_slowdown, clocks_event_reasons.hw_power_brake_slowdown
+NVIDIA GeForce RTX 4090 Laptop GPU, 595.91.07, P0, 57, 2340 MHz, 3105 MHz, 9001 MHz, 62.10 W, [N/A], 0x0000000000000000, Not Active, Not Active, Not Active, Not Active, Not Active
+governor powersave epp balance_performance no_turbo 0 load 2.65 2.41 2.30
+USER         PID %CPU COMMAND
+fleet     500796  100 ps
+root        1895  2.6 nvidia-powerd
+llama      85592  0.8 llama-server
+root        1909  0.2 tailscaled
+fleet       2514  0.2 node-MainThread

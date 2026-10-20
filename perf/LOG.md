@@ -1829,6 +1829,83 @@ controls ≤ 0.2 %.
 - The perf port is fixed (4173): agents running browsers in parallel need another port in their worktree's `lib.mjs`.
 - Turbopack does not build with a symlinked `node_modules` in a worktree (vitest and tsc work).
 
+## MSI round 2 — matrix kept (MSI Medium -3.0 % vs the pooled HEAD copies; Mac no slowdown); ops and Medium's fight-CPU paths rejected; round 1's High exception settled (kept)
+
+The last MSI step. Printed tables and the keep rule: **`perf/results/msi-r2-ab.md`** (rule written 04:25 and
+committed in `216bbb8` before any round-2 number existed; addendum `eafa732` after msir2a, before macr2/msir2b);
+power and throttle samples `perf/results/msi-r2-power.log` (MSI), `perf/results/msi-r2-mac-power.log` (Mac); pooled
+reading `perf/ab-pool.mjs` (new). Base `1384bf1` (game tree = round 1's kept tree). Parent decisions: no crosshair
+`transform` change, no Ultra slot budget; settle round 1's Mac exception with a "pre-r1" arm.
+
+**Candidates** (patches on HEAD): matrix (`r6-matrix.patch`), ops (`msi-r1-ops.patch`), medfcp (`fightCpuPaths` on
+Medium too; the A/B used the one-line form, the kept form with comments and tests is `perf/patches/msi-r2-medfcp.patch`),
+prer1 (HEAD with `fightCpuPaths` back to Ultra only = `5423a85`'s game tree; Mac and verification only). A second HEAD
+copy (6 arms, ~90 min) and fence did not fit the 75 min cap.
+
+**Keep rule** (summary): frame mean, path + fight, per preset, against the **pooled HEAD copies** (head, headB; also
+medfcp on Low/High/Ultra, where it is the same code), raw paired geomean and posfit; N_p = max(2 %, the largest
+pairwise HEAD-copy difference); control clean = every copy pair within 2.4 %; pass = raw and posfit ≤ -N_p with equal
+fight hashes; a pass on a preset that also read negative in round 1 counts as confirmed; matrix/ops kept whole
+(a confirmed pass on ≥ 1 preset and no preset slower than +N_p), medfcp judged on Medium. Mac: the winners no slower
+than max(2 %, |control|) on any preset; round 1's High change reverted if head reads slower than prer1 past that line.
+
+**MSI A/B** (`msir2a`, 04:25-05:28, head, headB, matrix, ops, medfcp, 4 maps x 4 presets x 5 rounds = 400 runs; the
+design is balanced, so raw = posfit to 0.01 %). Frame mean vs the pooled HEAD copies:
+
+| preset | N_p | HEAD copies (pairwise) | matrix | ops | medfcp |
+|---|---|---|---|---|---|
+| low | 2.00 | -1.03, -0.82, +0.20 | -1.39 | -0.06 | (copy) |
+| medium | 2.00 | +1.70 | **-3.01** (pass; round 1 -3.4 / -3.1) | -1.76 | -1.84 |
+| high | 2.00 | -0.48, -0.99, -0.51 | -1.46 | +0.87 | (copy) |
+| ultra | 2.00 | +1.29, +1.37, +0.08 | -1.54 | -1.13 | (copy) |
+| all | | +0.36 | -1.88 | -0.55 | -0.55 |
+
+Against head alone (ab-agg): matrix -2.0 / -2.2 / -1.9 / -0.7 %, all -1.7 % (1.192 → 1.172 ms). Fight only (pooled):
+matrix -1.97 / -3.07 / -0.94 / -1.23 %, medfcp Medium -2.07 %, ops Ultra -1.90 %. Every fight state hash equal (20/20
+per preset and arm); draw calls and programs equal.
+
+**Mac A/B** (`macr2`, 05:28-06:31, head, headB, matrix, prer1, 4 rounds, 256 runs, 30 W adapter, 100 → 79 %, not
+void). vs the pooled head + headB (raw = posfit): matrix -0.57 / -0.49 / +0.08 / -0.03 %, all -0.25 %; prer1 -0.08 /
+-0.02 / **+0.28** / -0.11 %, all +0.02 %; control headB/head +0.12 / -0.73 / -0.12 / -0.08 %; line 2 %.
+Median and p95 within ±1.8 %. Fight hashes 16/16.
+
+**Verdict.**
+- **matrix: KEPT** (MSI Medium -3.01 % past N_p 2.00, confirmed by round 1's Medium readings; no preset slower; Mac no
+  slowdown). Code: `render/fresh.ts`, `enemies/model.ts`, `enemies/index.ts`, `render/figure.ts`,
+  `render/operators.ts`, `tests/figure-matrix-skip.test.ts` (the Round 6 patch unchanged; one comment notes the keep).
+- **ops: rejected** (no preset past -2 %: Medium -1.76, Ultra -1.13, High +0.87 %).
+- **medfcp (fight-CPU paths on Medium): rejected** (Medium -1.84 % under 2.00; the fifth A/B without a confirmed Medium gain).
+- **Round 1's High exception: settled, kept.** On the Mac head is not slower than prer1 on High (prer1 +0.28 % vs the
+  pool; ab-final head vs prer1 High -0.2 %), so no revert. The Mac reads it as ~0, not the -2.0 to -2.9 % of Rounds
+  6/7/9.
+
+**Final MSI verification** (`msir2b`, 05:29-06:09, head, headB, matrix, prer1, 4 rounds, 256 runs; a report, not a
+gate). Final tree (matrix) vs prer1 = both MSI rounds together, frame mean: low **-2.0 %**, medium **-1.3 %**, high
+**-2.0 %**, ultra **-2.2 %**, all **-1.9 %** (1.201 → 1.178 ms; faster in 86/128 pairs; fight -2.5 / -1.7 / -2.6 /
+-1.3 %); control headB/head +0.7 / +1.9 / -1.2 / +0.3 %. Round 1 alone (head vs prer1): -0.9 / -1.3 / -0.7 / -0.6 %,
+High -0.7 % (round 1's own A/Bs read -3.1 % twice). matrix vs the pooled HEAD copies there: -1.45 / -0.93 / -0.73 /
+-1.79 %: negative on every preset again, but Medium under the line this time (it does not change msir2a's verdict, as
+the addendum set). Hashes 16/16, counts equal.
+
+**Gates (kept tree = HEAD + matrix).** Typecheck; `npx vitest run --maxWorkers=2` 410/410 (also 412/412 on the tree with
+all three candidates). Mac capture `msi-r2-keep`: 0 changed px vs `msi-r1-keep` (56/56 identical); vs `baseline` PASS,
+the same 42 images and values as `msi-r1-keep`'s (Round 1/4 Metal LSBs). MSI capture `msi-r2-keep`: 0 px vs
+`msi-r1-keep`; vs `msi-baseline` PASS, 45 px in the same 6 Medium images (Round 4). All three candidates together
+(Mac) were also 0 px vs `msi-r1-keep`.
+
+**Noise and machine.** MSI: AC all the time, battery 79 % (held), package 58-96 °C, ~265,000 core thermal-throttle
+events over 105 samples (constant under load). HEAD-copy pairs within ±1.9 % per preset in both jobs. Mac: controls
+within 0.73 %.
+
+### Gotchas (MSI round 2)
+
+- A balanced design (rounds = arms) makes posfit equal the raw paired geomean: the position effects cancel. The
+  pooled reading still matters: Medium's headB read +1.7 % vs head in msir2a and +1.9 % in msir2b.
+- Readings of the same code move by ~2 % between MSI jobs (matrix Medium -3.0 then -0.9 %; round 1's High -3.1 then
+  -0.7 %): one job's pass near the line is weak evidence. The kept gains are small (≤ ~2 % per preset).
+- `ssh msi 'setsid nohup … &'` keeps the ssh session open (the remote shell waits): start jobs as
+  `(setsid nohup bash job.sh > log 2>&1 < /dev/null &)`.
+
 ## Tried / rejected ideas
 
 Format: round, idea, where, result numbers vs the noise floor, why rejected.
@@ -1930,7 +2007,7 @@ Format: round, idea, where, result numbers vs the noise floor, why rejected.
   every writer marks the figure stale; `tests/figure-matrix-skip.test.ts` compares 678,876 node matrices bit-equal to
   three's full walk). Exact (56/56 with the other candidates). r6cpu: low js -1.7 % (fitted -1.8 %, headB +0.7 %),
   ultra js -2.9 % (headB -0.2 %), high mean +1.4 %; ~1,050 matrix products per training frame. Not clearly past
-  noise. Rejected; patch `perf/patches/r6-matrix.patch`.
+  noise. Rejected; patch `perf/patches/r6-matrix.patch` (kept in MSI round 2).
 - **r6, not tried (by analysis)**: allocation pooling for GC (GC is ~0.01 ms per fight frame); freeing CPU copies of
   level geometry after upload (read later by `wearColours`, lightmap UVs and context restore; changes RSS only);
   upload pacing constants, the quiet start and the bake fade (in-match pacing / visible design, not exact); bake
@@ -1999,6 +2076,7 @@ Format: round, idea, where, result numbers vs the noise floor, why rejected.
 - **msi-r1, matrix** (`perf/patches/r6-matrix.patch`, MSI). Exact on both machines. Job 1 low -1.2 / medium -3.4 / high -0.7 /
   ultra -2.2 %, job 2 -1.7 / -3.1 / -3.5 / -1.1 % (raw; posfit in `msi-r1-ab.md`): past the line on Medium + Ultra, then
   High, never one preset twice. Rejected under the rule; the strongest Round 2 candidate (-2 % over all presets twice).
+  **Kept in MSI round 2** (Medium -3.0 % vs the pooled HEAD copies; above).
 - **msi-r1, low1** (`perf/patches/msi-r1-low1.patch`, rebased, with the live-match guard of review 1). Exact. Low -2.9 / -3.1
   % in job 1, -1.2 / -0.5 % in job 2. Rejected (third Low A/B without a confirmed gain).
 - **msi-r1, hud** (`perf/patches/msi-r1-hud.patch` = hud2 + a test). Exact. Job 1 -0.3 to -1.4 % raw on every preset, inside
@@ -2008,3 +2086,7 @@ Format: round, idea, where, result numbers vs the noise floor, why rejected.
 - **msi-r1, ops** (`perf/patches/msi-r1-ops.patch`: clips rebased + one quaternion write per bone + trimmed `#reach`). Exact.
   Screen only (job 2): ultra -2.0 / -2.0 %, high -1.5 / -2.0 %, medium -0.8 %, low 0.0 %. Not kept this round (no
   confirmation job left); Round 2 candidate.
+- **msi-r2, ops** (`perf/patches/msi-r1-ops.patch`). Exact. MSI vs the pooled HEAD copies: low -0.06 / medium -1.76 / high
+  +0.87 / ultra -1.13 % (N 2.00 %). Rejected (with round 1's screen: never past the line twice).
+- **msi-r2, medfcp: fight-CPU paths on Medium (fifth A/B)** (`perf/patches/msi-r2-medfcp.patch`). Exact. MSI Medium
+  -1.84 % vs the pooled HEAD copies (N 2.00 %). Rejected.

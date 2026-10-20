@@ -1,0 +1,14 @@
+== macr2 start
+Wed Oct 21 05:28:18 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	100%; charged; 0:00 remaining present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded
+== macr2 end
+Wed Oct 21 06:27:28 JST 2026
+Now drawing from 'AC Power'
+ -InternalBattery-0 (id=22282339)	79%; charging; (no estimate) present: true
+Note: No thermal warning level has been recorded
+Note: No performance warning level has been recorded
+Note: No CPU power status has been recorded

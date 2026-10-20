@@ -2,6 +2,7 @@ import { Vector3, Mesh, Quaternion, SphereGeometry } from 'three';
 import type { Group, Object3D } from 'three';
 import { makeFigure, TONE_HEX, unlitMat } from '../render/index';
 import { boundFigure, flashAmount, unboundFigure } from '../render/figure';
+import { freshFigure, staleFigure } from '../render/fresh';
 import { STILL, type MotionInput } from '../render/operator-motion';
 import type { Figure, FigureAnchorName, FigureAnchors, FigureParts, WeaponPropKind } from '../render/figure';
 import { clamp, damp, rand, wrapAngle } from '../util';
@@ -148,16 +149,19 @@ export function makeModel(stats: EnemyType): { figure: Figure; root: Group; hits
  * date before it draws (render/operators.ts `frame`, three's scene update),
  * its own reach does as well, and a ray that tests the whole tree updates it
  * first (`raycastFigure`); nothing else reads it. Then the hit surfaces are
- * bounded for `raycastFigure`.
+ * bounded for `raycastFigure`, and the renderer's scene update that follows
+ * leaves the tree as it is (render/fresh.ts), the armature aside.
  */
 export function syncModel(e: EnemyRecord): void {
-  const root = e.root, skip = e.figure.rig?.armature;
+  const root = e.root, rig = e.figure.rig, skip = rig?.armature;
+  staleFigure(root);
   root.parent?.updateWorldMatrix(true, false);
   if (skip?.parent === root) updateBut(root, skip);
   else root.updateMatrixWorld(true);
   for (const hit of e.hits) worldPosition(hit.obj, root, hit.center);
   worldPosition((e.figure.anchors as EyeAnchors).torso, root, e.center);
   boundFigure(root);
+  freshFigure(root, rig);
 }
 
 /** three's `updateMatrixWorld(true)` on `root` (a plain group), less the subtree `skip`. */
@@ -403,6 +407,7 @@ export function planDeath(world: DeathRays, e: Pick<EnemyRecord, 'id' | 'yaw' | 
  * left alone.
  */
 export function deathPose(e: Pick<EnemyRecord, 'root' | 'figure' | 'stats'>, death: Death, t: number): void {
+  staleFigure(e.root);
   const { root, stats } = e, scale = stats.scale, side = death.seed < 0.5 ? -1 : 1;
   const x = clamp(t / DEATH_FALL, 0, 1), knock = easeOut(t / DEATH_KNOCK, 2);
   const fall = x ** 1.6, limbs = easeOut(x, 2), buckle = Math.sin(Math.PI * x);
