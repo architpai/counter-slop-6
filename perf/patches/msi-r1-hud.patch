@@ -1,0 +1,240 @@
+diff --git a/src/app/globals.css b/src/app/globals.css
+index 4df8e27..0cc50e9 100644
+--- a/src/app/globals.css
++++ b/src/app/globals.css
+@@ -35,7 +35,10 @@ html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background:
+ .game-hud.gamepad .pad-only { display: initial; }
+ .game-hud.gamepad .keyboard-only { display: none; }
+ 
+-.crosshair { position: absolute; left: 50%; top: 50%; color: var(--hot); filter: drop-shadow(0 0 1px var(--fg)); }
++/* Size and layout containment make the crosshair a relayout boundary, so its ticks' moves lay out the crosshair
++   alone. Exact: its box is 0x0 either way (all its children are absolute), and it already contains them and stacks
++   them (absolute, filter). No paint containment: the ticks lie outside that 0x0 box. */
++.crosshair { position: absolute; left: 50%; top: 50%; color: var(--hot); filter: drop-shadow(0 0 1px var(--fg)); contain: size layout; }
+ .crosshair .tick, .crosshair .dot { position: absolute; display: block; background: currentColor; border-radius: 2px; }
+ .crosshair .tick { transition: top .06s, left .06s; }
+ .crosshair .top, .crosshair .bottom { width: 3px; height: 12px; left: -1.5px; }
+diff --git a/src/components/hud/Hud.tsx b/src/components/hud/Hud.tsx
+index 059e562..a3509dd 100644
+--- a/src/components/hud/Hud.tsx
++++ b/src/components/hud/Hud.tsx
+@@ -33,6 +33,15 @@ interface HudProps { store: HudStore; children?: ReactNode }
+ /** The root re-renders (with its ~25 children's memo checks) only when the low-health flag flips, not on each HP change. */
+ const lowHealthOf = (health: HealthState): boolean => health.low;
+ 
++/**
++ * The CSS transition and animation events. Nothing in the HUD listens to them, but React listens to every one on the
++ * document (capture and bubble), so each would run React's dispatch twice: in a fight the crosshair ticks retarget
++ * their `top`/`left` transitions on most frames (a cancel, a run and a start event each). The HUD stops them at the
++ * window, before the document. A HUD component that needs `onTransition*` or `onAnimation*` must change this filter.
++ */
++const QUIET_EVENTS = ['transitionrun', 'transitionstart', 'transitioncancel', 'transitionend',
++  'animationstart', 'animationiteration', 'animationend', 'animationcancel'] as const;
++
+ /** One reduced-motion query for every hit, made on the first. */
+ let reducedMotion: MediaQueryList | null = null;
+ const prefersReducedMotion = (): boolean => (reducedMotion ??= matchMedia('(prefers-reduced-motion: reduce)')).matches;
+@@ -52,6 +61,17 @@ export function Hud({ store, children }: HudProps) {
+     return () => store.bindRoot(null);
+   }, [store]);
+ 
++  useEffect(() => {
++    const root = rootRef.current;
++    if (!root) return;
++    const stop = (event: Event): void => {
++      const target = event.target;
++      if (target instanceof Node && root.contains(target)) event.stopImmediatePropagation();
++    };
++    for (const type of QUIET_EVENTS) window.addEventListener(type, stop, true);
++    return () => { for (const type of QUIET_EVENTS) window.removeEventListener(type, stop, true); };
++  }, []);
++
+   const className = [
+     'game-hud',
+     !gameplay && 'no-gameplay',
+@@ -101,12 +121,17 @@ export function Hud({ store, children }: HudProps) {
+   );
+ }
+ 
++/**
++ * `--spread` is hosted on the four ticks, its only readers, not on the crosshair: a write then restyles the ticks
++ * alone, not the crosshair and its dot as well.
++ */
+ export const Crosshair = memo(function Crosshair({ store }: { store: HudStore }) {
+   rendered();
+   const state = useHud(store, 'crosshair');
++  const spread = store.hostRef('--spread');
+   return (
+-    <div ref={store.hostRef('--spread')} className={`crosshair${state.melee ? ' melee' : ''}${state.ads ? ' ads' : ''}`} data-hud="crosshair" aria-hidden="true">
+-      <i className="tick top" /><i className="tick bottom" /><i className="tick left" /><i className="tick right" /><i className="dot" />
++    <div className={`crosshair${state.melee ? ' melee' : ''}${state.ads ? ' ads' : ''}`} data-hud="crosshair" aria-hidden="true">
++      <i ref={spread} className="tick top" /><i ref={spread} className="tick bottom" /><i ref={spread} className="tick left" /><i ref={spread} className="tick right" /><i className="dot" />
+     </div>
+   );
+ });
+diff --git a/src/components/hud/MobileControls.tsx b/src/components/hud/MobileControls.tsx
+index f637fb1..e6e6307 100644
+--- a/src/components/hud/MobileControls.tsx
++++ b/src/components/hud/MobileControls.tsx
+@@ -1,6 +1,6 @@
+ 'use client';
+ 
+-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
++import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
+ import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
+ import type { GameHandle } from '@/engine/boot';
+ import type { HudStore } from '@/engine/hud/store';
+@@ -27,9 +27,14 @@ function Icon({ control }: { control: string }) {
+   </svg>;
+ }
+ 
++/** The weapon button's text: its own leaf, so a shot re-renders it, not every touch control. */
++const WeaponLabel = memo(function WeaponLabel({ store }: { store: HudStore }) {
++  const ammo = useHud(store, 'ammo'), weapon = useHud(store, 'weapon');
++  return <><span><strong>{weapon.name}</strong><b>{ammo.magazine}<small> {ammo.reserve}</small></b></span><small>{ammo.reloading ? 'RELOADING' : 'TAP TO SWITCH →'}</small></>;
++});
++
+ export function MobileControls({ store, game }: { store: HudStore; game: GameHandle }) {
+   const mobile = useHud(store, 'mobile'), screen = useHud(store, 'screen'), gameplay = useHud(store, 'gameplay');
+-  const ammo = useHud(store, 'ammo'), weapon = useHud(store, 'weapon');
+   const root = useRef<HTMLDivElement>(null), safe = useRef<HTMLDivElement>(null);
+   const interruption = useRef<HTMLDialogElement>(null);
+   const [layout, setLayout] = useState(loadTouchLayout);
+@@ -104,7 +109,7 @@ export function MobileControls({ store, game }: { store: HudStore; game: GameHan
+             if (touch.start(-1, control, r.x + r.width / 2, r.y + r.height / 2, r)) touch.end(-1);
+           }}>
+           {control === 'move' ? <><i className="touch-knob" /><span className="touch-move-label">MOVE / SPRINT</span></>
+-            : control === 'weapon' ? <><span><strong>{weapon.name}</strong><b>{ammo.magazine}<small> {ammo.reserve}</small></b></span><small>{ammo.reloading ? 'RELOADING' : 'TAP TO SWITCH →'}</small></>
++            : control === 'weapon' ? <WeaponLabel store={store} />
+             : <><Icon control={control} /><span>{control === 'jump' && mobile.attached ? 'LAUNCH'
+               : control === 'slide' && mobile.airborne ? 'DASH' : names[control]}</span></>}
+         </button>;
+diff --git a/tests/hud-vars.test.tsx b/tests/hud-vars.test.tsx
+index 9f688c0..3a0d5e6 100644
+--- a/tests/hud-vars.test.tsx
++++ b/tests/hud-vars.test.tsx
+@@ -59,7 +59,10 @@ test('the rendered HUD reads each hosted variable on its own element, with the s
+   store.setFocusMeter(true, 0.25, false, 'MELEE');
+   store.setBoss('Boss', 0.5);
+   store.setBreath(0.6);
+-  expect(inline(q('[data-hud="crosshair"]'), '--spread')).toBe('23.5px');
++  // `--spread` lands on the four ticks, its only readers; the crosshair and its dot keep the root's default.
++  for (const tick of ['top', 'bottom', 'left', 'right']) expect(inline(q(`.crosshair .${tick}`), '--spread'), tick).toBe('23.5px');
++  expect(inline(q('[data-hud="crosshair"]'), '--spread')).toBe('');
++  expect(inline(q('.crosshair .dot'), '--spread')).toBe('');
+   expect(inline(hud, '--spread')).toBe('');
+   expect(inline(hud, '--health')).toBe('');
+   expect(getComputedStyle(q('.crosshair .bottom')).getPropertyValue('--spread')).toBe('23.5px');
+@@ -104,3 +107,80 @@ test('an HP change re-renders the health leaf only; the root re-renders when low
+   expect(hud.classList.contains('low-health')).toBe(true);
+   expect(renders() - before).toBe(2);
+ });
++
++test('the ticks sit where the spread puts them, and the contained crosshair stays a 0x0 box', () => {
++  const store = new HudStore();
++  mount(store);
++  flushSync(() => store.setGameplayVisible(true));
++  const box = q('[data-hud="crosshair"]').getBoundingClientRect();
++  store.setSpread(23.5);
++  // Settle the ticks' transitions to read their end values.
++  for (const animation of document.getAnimations()) animation.finish();
++  const at = (tick: string) => { const s = getComputedStyle(q(`.crosshair .${tick}`)); return [s.top, s.left]; };
++  expect([at('top'), at('bottom'), at('left'), at('right')])
++    .toEqual([['-35.5px', '-1.5px'], ['23.5px', '-1.5px'], ['-1.5px', '-35.5px'], ['-1.5px', '23.5px']]);
++  flushSync(() => store.setCrosshairMode('melee'));
++  for (const animation of document.getAnimations()) animation.finish();
++  expect(at('top')).toEqual(['-39.5px', '-1.5px']);
++  const after = q('[data-hud="crosshair"]').getBoundingClientRect();
++  expect([box.width, box.height, after.width, after.height, after.left, after.top]).toEqual([0, 0, 0, 0, box.left, box.top]);
++  // The ticks are placed from the crosshair's centre point.
++  const top = q('.crosshair .top').getBoundingClientRect();
++  expect([top.left - after.left, top.top - after.top, top.width, top.height]).toEqual([-1.5, -39.5, 3, 16]);
++});
++
++test('transition and animation events from the HUD stop at the window; others still reach the document', () => {
++  const store = new HudStore();
++  mount(store);
++  const seen: string[] = [];
++  const capture = (e: Event) => seen.push(`capture ${e.type}`), bubble = (e: Event) => seen.push(`bubble ${e.type}`);
++  const types = ['transitionrun', 'transitionstart', 'transitioncancel', 'transitionend'];
++  for (const type of types) { document.addEventListener(type, capture, true); document.addEventListener(type, bubble); }
++  document.addEventListener('animationiteration', bubble);
++  const outside = document.createElement('div');
++  document.body.append(outside);
++  try {
++    for (const type of types) q('.crosshair .top').dispatchEvent(new TransitionEvent(type, { bubbles: true, propertyName: 'top' }));
++    q('.crosshair .dot').dispatchEvent(new AnimationEvent('animationiteration', { bubbles: true }));
++    expect(seen).toEqual([]);
++    outside.dispatchEvent(new TransitionEvent('transitionend', { bubbles: true }));
++    expect(seen).toEqual(['capture transitionend', 'bubble transitionend']);
++    // Unmounted, the HUD no longer filters.
++    const tick = q('.crosshair .top');
++    flushSync(() => root!.unmount());
++    root = undefined;
++    seen.length = 0;
++    host!.append(tick);
++    tick.dispatchEvent(new TransitionEvent('transitionrun', { bubbles: true }));
++    expect(seen).toEqual(['capture transitionrun', 'bubble transitionrun']);
++  } finally {
++    for (const type of types) { document.removeEventListener(type, capture, true); document.removeEventListener(type, bubble); }
++    document.removeEventListener('animationiteration', bubble);
++    outside.remove();
++  }
++});
++
++test('for a run of spread, melee and ADS inputs the ticks compute the positions and classes HEAD computed', () => {
++  const store = new HudStore();
++  store.setSpread(14.04); // written before the HUD mounts: each tick replays it when it binds
++  mount(store);
++  flushSync(() => store.setGameplayVisible(true));
++  const settle = () => { for (const animation of document.getAnimations()) animation.finish(); };
++  const tick = (name: string) => { const s = getComputedStyle(q(`.crosshair .${name}`)); return [s.top, s.left, s.display]; };
++  // HEAD's values: `--spread` on the crosshair, inherited by the ticks (globals.css .crosshair rules).
++  const expected = (s: number, melee: boolean) => [
++    [`${-s - (melee ? 16 : 12)}px`, '-1.5px', 'block'], [`${s}px`, '-1.5px', 'block'],
++    ['-1.5px', `${-s - 12}px`, melee ? 'none' : 'block'], ['-1.5px', `${s}px`, melee ? 'none' : 'block'],
++  ];
++  settle();
++  expect(['top', 'bottom', 'left', 'right'].map(tick)).toEqual(expected(14, false));
++  const steps: [number, boolean, boolean][] = [[3.26, false, false], [3.26, true, false], [0, true, true], [41.95, false, true], [-5, false, false]];
++  for (const [spread, melee, ads] of steps) {
++    flushSync(() => { store.setSpread(spread); store.setCrosshairMode(melee ? 'melee' : ''); store.setAds(ads); });
++    settle();
++    const s = Number(Math.max(0, spread).toFixed(1));
++    expect(['top', 'bottom', 'left', 'right'].map(tick), `${spread} ${melee} ${ads}`).toEqual(expected(s, melee));
++    expect(q('[data-hud="crosshair"]').className).toBe(`crosshair${melee ? ' melee' : ''}${ads ? ' ads' : ''}`);
++    expect(getComputedStyle(q('[data-hud="crosshair"]')).opacity).toBe(ads ? '0' : '1');
++  }
++});
+diff --git a/tests/mobile-weapon-label.test.tsx b/tests/mobile-weapon-label.test.tsx
+new file mode 100644
+index 0000000..4afdc97
+--- /dev/null
++++ b/tests/mobile-weapon-label.test.tsx
+@@ -0,0 +1,26 @@
++import { afterEach, expect, test } from 'vitest';
++import { createRoot, type Root } from 'react-dom/client';
++import { flushSync } from 'react-dom';
++import { MobileControls } from '@/components/hud/MobileControls';
++import { HudStore } from '@/engine/hud/store';
++import { TouchInput } from '@/engine/touch';
++import type { GameHandle } from '@/engine/boot';
++
++let root: Root | undefined, host: HTMLDivElement | undefined;
++afterEach(() => { flushSync(() => root?.unmount()); root = undefined; host?.remove(); host = undefined; });
++
++test('the touch weapon button shows the weapon and ammo from its own leaf, with the same markup', () => {
++  const store = new HudStore();
++  const game = { input: { touch: new TouchInput(), clearTouch() {} }, pause() {}, resume() {} } as unknown as GameHandle;
++  host = document.createElement('div'); document.body.append(host);
++  root = createRoot(host);
++  flushSync(() => root!.render(<MobileControls store={store} game={game} />));
++  const button = host.querySelector<HTMLElement>('[data-touch="weapon"]')!;
++  const markup = (name: string, mag: string, reserve: string, note: string) =>
++    `<span><strong>${name}</strong><b>${mag}<small> ${reserve}</small></b></span><small>${note}</small>`;
++  expect(button.innerHTML).toBe(markup('R4-C', '30', '/120', 'TAP TO SWITCH →'));
++  flushSync(() => store.setAmmo(29, 90, 30, false));
++  expect(button.innerHTML).toBe(markup('R4-C', '29', '/90', 'TAP TO SWITCH →'));
++  flushSync(() => { store.setAmmo(0, 90, 30, true); store.setWeapon('MP5', ''); });
++  expect(button.innerHTML).toBe(markup('MP5', '0', '/90', 'RELOADING'));
++});

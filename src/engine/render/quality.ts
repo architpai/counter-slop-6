@@ -140,12 +140,13 @@ export function presetOf(values: Readonly<GfxValues>): PresetName | null {
 }
 
 /**
- * The fight-CPU paths that were measured as faster on Ultra only (perf/LOG.md, Round 6: the shadow walk's hidden
- * subtrees and the post chain in one render; High's gain was not validated). Low, Medium, High and custom values keep
- * the old paths.
+ * The fight-CPU paths (perf/LOG.md, Round 6: the shadow walk's hidden subtrees and the post chain in one render), on
+ * Ultra (Round 6) and High (MSI round 1: faster on the MSI's main-thread-bound fights in two A/Bs). Low, Medium and
+ * custom values keep the old paths (Medium's gain was not confirmed).
  */
 export function fightCpuPaths(values: Readonly<GfxValues>): boolean {
-  return presetOf(values) === 'ultra';
+  const preset = presetOf(values);
+  return preset === 'ultra' || preset === 'high';
 }
 
 // ------------------------------------------------------------------ storage

@@ -493,7 +493,7 @@ export class OperatorAssets implements OperatorSource {
    * its first mesh on its kind's merged geometry (`KindTemplate.shadow`), the others out of the pass; off, back. The
    * meshes are siblings with one skeleton, bind matrix, sphere and depth material, drawn one after another, so the
    * one draw runs the same program on the same vertices and triangles in the same order. Also, `on` with `walk`
-   * (Ultra only: render/index.ts `_fightCpu`), every worn figure's subtrees that hold no caster are hidden
+   * (High and Ultra: render/index.ts `_fightCpu`), every worn figure's subtrees that hold no caster are hidden
    * (`OperatorBody.bare`): three walks every shown node once per cascade, and a hidden one ends the walk there. Its
    * casters are drawn as before, in the same order. Off shows again whatever was hidden. No allocation.
    */

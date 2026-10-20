@@ -47,7 +47,7 @@ function passes(renderer: Renderer): string[] {
 
 /**
  * One frame's renders of the post scene, and its passes (SMAA's render their own quad). Ultra runs the chain inside
- * one render (`Composite._oneRender`); Low, Medium and High render each pass. No hook stays on the scene.
+ * one render (`Composite._oneRender`) on High and Ultra; Low and Medium render each pass. No hook stays on the scene.
  */
 function postRenders(renderer: Renderer): { renders: number; passes: number } {
   const post = renderer.post, render = vi.spyOn(renderer.three, 'render'), pass = vi.spyOn(post, '_pass');
@@ -92,8 +92,8 @@ test('each preset reaches the renderer: passes, tone mapping, MSAA, AO depth, ca
     // The pass chain, which also names the tone mapper: the soft shoulder lives in the
     // composite (Low), AgX in its own pass (realistic).
     expect(passes(renderer), name).toEqual(want.chain);
-    // The post chain in one render on Ultra only; Low, Medium and High render each pass, as before Round 6.
-    const fast = name === 'ultra';
+    // The post chain in one render on High and Ultra; Low and Medium render each pass, as before Round 6.
+    const fast = name === 'ultra' || name === 'high';
     expect([renderer._fightCpu, renderer.post._oneRender], name).toEqual([fast, fast]);
     const { renders, passes: count } = postRenders(renderer);
     expect(count, name).toBe(want.chain.filter(pass => pass !== 'smaa').length);
@@ -113,10 +113,10 @@ test('each preset reaches the renderer: passes, tone mapping, MSAA, AO depth, ca
     const failed = programs.filter(program => program.diagnostics && !program.diagnostics.runnable);
     expect(failed.map(program => program.name), name).toEqual([]);
   }
-  // Ultra to Medium and Ultra to High mid-session: back to a render per pass at the next frame, nothing left set; and
+  // Ultra to Medium and Ultra to Low mid-session: back to a render per pass at the next frame, nothing left set; and
   // back to one render on Ultra each time.
   const perPass = (preset: PresetName) => expected[preset].chain.filter(pass => pass !== 'smaa').length;
-  for (const name of ['medium', 'high'] as const) {
+  for (const name of ['medium', 'low'] as const) {
     renderer.applyQuality(PRESET_VALUES[name]);
     expect([renderer._fightCpu, renderer.post._oneRender], name).toEqual([false, false]);
     expect(postRenders(renderer), name).toEqual({ renders: perPass(name), passes: perPass(name) });
@@ -388,7 +388,7 @@ test('the chain inside one render draws exactly what a render per pass did', () 
     three.clear();
     three.render(scene, camera);
     three.info.reset();
-    // `draw` with every pass rendering itself (Low, Medium, High: the path before Round 6), or in one render (Ultra).
+    // `draw` with every pass rendering itself (Low, Medium: the path before Round 6), or in one render (High, Ultra).
     post._oneRender = !perPass;
     post.draw(three, 0.5, fx, camera);
     expect(post.scene.onAfterRender).toBe(THREE.Object3D.prototype.onAfterRender);

@@ -1715,6 +1715,113 @@ consent). Not here: the GPU-side ideas (A8/dsd, b-bones, GTAO trims, B4-B6, shad
 - `apt-get download` + `dpkg -x` gives tools without installing (zsh in `$S/sysroot`); sync the repository with git
   bundles, never by copying files.
 
+## MSI round 1 — cpuhm kept on High (the MSI's main-thread-bound fights); matrix, low1, cpuhm on Medium, hud and C1 rejected; ops screened
+
+Step 1's ranked list (`perf/results/msi-s1.md` section 7), measured on the MSI, where every fight frame is renderer
+main-thread time. Printed tables: **`perf/results/msi-r1-ab.md`** (both MSI jobs, the Mac job, the keep rule); power
+and throttle samples `perf/results/msi-r1-power.log` (MSI), `perf/results/msi-r1-mac-power.log` (Mac). Base
+`5423a85` (game tree = `0447e97`, the final tree). The parent allowed retries of the Mac's "do not retry" list.
+
+**Candidates** (each a patch on HEAD; agents in worktrees, one per file set):
+
+| name | what | patch |
+|---|---|---|
+| cpuhm | `fightCpuPaths` (shadow-walk pruning + post chain in one render) on Medium and High as well as Ultra | `r9-cpuhm.patch` |
+| matrix | skip three's second world-matrix walk for figures `syncModel` updated | `r6-matrix.patch` |
+| hud | hud2 + one more DOM-equality test; the restyle survey found no further exact cut (below) | `msi-r1-hud.patch` |
+| low1 | one shadow draw per flat Low figure, rebased (the warm-up probe now keys on the look in force) | `msi-r1-low1.patch` |
+| c1 | allocation-free A\*, boolean rays | `r2-c1-nav.patch` |
+| ops | **new** (render pre-step): r8-clips rebased + one quaternion write per bone + `#reach` reads only the chains it needs | `msi-r1-ops.patch` |
+| set | cpuhm + matrix + low1 + ops (one comment conflict resolved) | `msi-r1-set.patch` |
+
+**The render pre-step** (`render.pre`, 0.11-0.15 ms per realistic fight frame in step 1) is `operators.frame` almost
+entirely: a profile with every pre-step method wrapped (MSI, training + downtown fights, scratch only):
+`operators.frame` 0.094-0.142 ms of `render.pre` 0.108-0.155 ms on Medium/High/Ultra; every `_stream*`, `_warmPrograms`,
+`_runCompiles`, `_aimBoxes`, `_updateFx`, `props.update` ≤ 0.002 ms; Low 0.009-0.011 ms in all. So the pre-step
+candidate is the clip/bone sync: micro-benchmark (46 figures, 600 frames, Chromium vitest) `OperatorBody.sync` 6.9 →
+3.9 µs per figure (clips alone 5.3).
+
+**HUD restyle survey** (agent; `disabled-by-default-devtools.timeline.invalidationTracking`, Mac, medium fight, 300
+frames): per frame, elements restyled downtown 5.88 → 4.69 / training 7.48 → 6.32 with hud2, `UpdateLayoutTree` 0.94 /
+1.00 and Layout 0.70 / 0.92 unchanged, FunctionCall outside rAF 15.1 → 6.6. What remains is visible motion: the four
+crosshair ticks' `top`/`left` transitions (main-thread animations, a 3-object layout per frame), the kill/hit
+marker WAAPI animations (restyled each frame though composited), training's health/boss bar `width` transition and
+kill-line animation. Hiding the crosshair (diagnostic) cut restyles 4.7 → 1.2 and Layout 0.70 → 0.11 per frame: moving
+the ticks with `transform` is the lead, but it is not byte-exact (sub-pixel), so it needs the user's consent.
+
+**Exactness (all byte-identical).** Mac `quality.mjs` vs this round's HEAD capture `msi-r1-pre` (itself 0 px vs
+`final`): cpuhm, matrix, c1, fence, hud, low1, ops, set: 56/56, 0 changed pixels each. MSI vs `msi-final` (= HEAD's
+game tree): cpuhm, matrix, c1, fence, hud, low1, ops: 0 px each. Every fight state hash equal to head's in every arm
+of every job (12/12 per preset). low1: `hitch.mjs sweep --presets low --check zero` PASS (0 programs after ready; +1 at
+ready, the flat depth program); Low fight calls 213.75 → 199.75.
+
+**Keep rule** (in `msi-r1-ab.md`, written at 02:20 before job 1's numbers; amended at 03:25 after review 1, before job
+2's and the Mac's): frame mean, path + fight, paired geomean vs head (`ab-agg`) **and** `ab-posfit`; noise line
+N_p = max(2 %, the largest |change| of the same-code arms on that preset: headB everywhere, cpuhm on Low/Ultra, low1 on
+Medium/High/Ultra); KEEP = both raw and posfit ≤ -N_p **on the same preset in both MSI jobs**, the control within
+2.4 %, no Mac slowdown past max(2 %, |Mac control|), pixels exact on both machines. ops (not in job 1) can only be
+screened. Per-preset keeping only where a switch exists (`fightCpuPaths`).
+
+**MSI job 1** (`msir1a`, 02:15-03:08, 7 variants, 4 maps x 4 presets x 3 rounds, path + fight, 336 runs) and **job 2**
+(`msir1b`, 03:11-04:04, head, headB, cpuhm, matrix, low1, ops, set; same matrix). Frame mean, change vs head, raw /
+posfit; **bold** = raw and posfit both past N_p:
+
+| preset | N_p job 1 / 2 | control headB 1 / 2 | cpuhm 1 / 2 | matrix 1 / 2 | low1 1 / 2 | hud (1) | c1 (1) | ops (2) | set (2) |
+|---|---|---|---|---|---|---|---|---|---|
+| low | 2.0 / 2.0 | -1.4/-1.5 / -2.0/-1.8 | (same code) | -1.2/-1.6 / -1.7/-0.9 | **-2.9/-3.1** / -1.2/-0.5 | -1.1/-1.4 | +0.2/+0.1 | 0.0/+0.5 | -3.9/-3.8 |
+| medium | 2.7 / 2.6 | -2.0/-1.7 / +0.5/+0.9 | **-3.2/-2.9** / -2.5/-1.7 | **-3.4/-3.3** / -3.1/-2.2 | (same code) | -1.0/-1.2 | -0.6/-0.8 | -0.8/-0.5 | -4.3/-4.3 |
+| high | 2.0 / 2.0 | +1.7/+1.7 / -1.6/-1.2 | **-3.1/-3.5** / **-3.1/-2.7** | -0.7/-1.5 / **-3.5/-3.3** | (same code) | -0.3/-1.4 | +0.7/+0.4 | -1.5/-2.0 | -5.0/-5.3 |
+| ultra | 2.0 / 2.0 | -0.1/+0.1 / +1.3/+1.4 | (same code) | **-2.2/-2.1** / -1.1/-0.8 | (same code) | -1.4/-1.5 | -0.5/-0.7 | **-2.0/-2.0** | -0.8/-0.8 |
+| all | | -0.4/-0.4 / -0.4/-0.4 | -1.7/-1.7 / -1.2/-1.0 | -1.9/-2.0 / -2.4/-2.2 | -1.1/-1.2 / -1.0/-0.9 | -0.9/-1.1 | 0.0/-0.1 | -1.1/-1.0 | -3.5/-3.5 |
+
+In ms (head → candidate, frame mean geomean): cpuhm High job 1 1.390 → 1.347, job 2 1.400 → 1.357 (-0.04 ms).
+Fight only (posfit): cpuhm High -3.0 / -2.1 %. Job 2's Ultra same-code arms all read slower than head (+0.8 to +2.0 %):
+head ran fast on Ultra there, which makes every Ultra candidate of job 2 look worse by about that much (a caveat, not
+used). The set arm (all four together) reads -3.5 % over all presets in job 2, -4.3 / -5.0 % on Medium / High: the
+parts add up, but the set is not in the rule.
+
+**Verdict.**
+- **cpuhm: KEPT on High** (past N_p in both jobs, raw and posfit; the control clean). `fightCpuPaths` is now High and
+  Ultra (`render/quality.ts`; comments in `render/index.ts`, `operators.ts`, `postfx.ts`; tests
+  `render-chain`/`shadow-walk` expect Medium on the old paths). **Medium rejected** (job 2 -2.5 / -1.7 % under 2.6 %; the
+  fourth A/B without a confirmed Medium gain).
+- **matrix: rejected** under the rule (Medium and Ultra in job 1, High in job 2: never the same preset twice), although
+  all 8 preset readings are negative and it reads -1.9 / -2.4 % over all presets in the two jobs: the first Round 2 candidate.
+- **low1: rejected** (Low -2.9 % in job 1, -1.2 / -0.5 % in job 2; the third Low A/B without a confirmed gain).
+- **hud, c1: rejected** in job 1 (inside noise on every preset).
+- **ops: screen only** (Ultra -2.0 / -2.0 %, High -1.5 / -2.0 %, Medium/Low ~0): a Round 2 candidate.
+- fence: not measured (job 1 had room for 7 variants in 75 min).
+
+**Mac** (`macr1`, 03:17-03:51, head / headB / set, 4 maps x 4 presets x 3 rounds, 144 runs, `PERF_MIN_BATT=50`, on AC,
+100 → 93 %, none void). It measured the **set** (a superset of the kept change: it was chosen before job 2 ended):
+frame mean raw / posfit low -0.8 / -0.8 %, medium -0.7 / -0.7 %, **high -0.3 / -0.3 %**, ultra +0.1 / +0.1 %, all -0.4 %;
+control +0.1 to +0.2 %; median -1.4 / +0.5 / +0.2 / +0.5 %, p95 -0.3 to -0.6 %. No preset slower past noise, and the
+kept code runs on High in that arm. Earlier Mac A/Bs of the same High code: r6 -2.9 % raw, r7 -2.0 %, r9 -2.4 %: never
+slower. Fight hashes 12/12; Low fight calls 213.75 → 199.75 (low1).
+
+**Kept tree, gates.** Typecheck; `npx vitest run --maxWorkers=2` 408/408. Mac capture `msi-r1-keep`: 0 px vs
+`msi-r1-pre`; vs `baseline` PASS 56/56, the same 42 images and values as HEAD's own (Round 1/4 Metal LSBs). MSI capture
+`msi-r1-keep`: 0 px vs `msi-final`; vs `msi-baseline` PASS, the same 6 Medium images and values as `msi-final`'s.
+
+**Review 1 (GPT-6.1-Sol, high)**: P1 low1 could link its program in play after a realistic → Low switch in a live
+match (the live branch of `_warmPrograms` warms characters only): fixed in the saved `msi-r1-low1.patch` (`_flatWarm`:
+merge only after the menu warm-up drew the probe for the look in force; a renderer test). The A/Bs measured the
+version before the fix; the fix only gates the merge and does not run in the bench. P2 ops had no job 1 screen and P3
+matrix's scope: answered by the amendment. It confirmed job 1's decisions and found no output fault in the set.
+
+**Noise and machine.** MSI: AC all the time, battery 79-80 % (held), package 58-98 °C, ~252,000 core thermal-throttle
+events over 112 samples (constant under load, as in step 1); controls -2.0 to +1.7 % per preset. Mac: 30 W adapter,
+controls ≤ 0.2 %.
+
+### Gotchas (MSI round 1)
+
+- **The same-code arms are the real noise floor**: on the MSI, head itself drifts (job 1 Medium: every arm -1 to -3 %
+  vs head; job 2 Ultra: every same-code arm +0.8 to +2.0 %). A pooled HEAD reference (head, headB and same-code arms)
+  would read steadier than head alone; set that rule before the next job.
+- `ab.sh`'s cleanup resets src/ and tests/: edit in a separate worktree while a Mac A/B runs.
+- The perf port is fixed (4173): agents running browsers in parallel need another port in their worktree's `lib.mjs`.
+- Turbopack does not build with a symlinked `node_modules` in a worktree (vitest and tsc work).
+
 ## Tried / rejected ideas
 
 Format: round, idea, where, result numbers vs the noise floor, why rejected.
@@ -1880,4 +1987,17 @@ Format: round, idea, where, result numbers vs the noise floor, why rejected.
   17.4 → 17.8, high 35.1 → 34.7, ultra 34.5 → 35.3 ms (4 loads each). No frame gain; more code. Rejected.
 - **r10, the 9-11 held compiles after the match start** (not built): ~6 ms of a 13-16 ms sky-landing frame and 2-3 ms of
   an ~8 ms dressing frame; linking earlier needs the glbs before Start (a load-order change).
-
+- **msi-r1, cpuhm on Medium (fourth A/B)** (`r9-cpuhm.patch`, MSI). Exact. Job 1 -3.2 / -2.9 % (N 2.7 %), job 2 -2.5
+  / -1.7 % (N 2.6 %). Not confirmed; High kept (above).
+- **msi-r1, matrix** (`perf/patches/r6-matrix.patch`, MSI). Exact on both machines. Job 1 low -1.2 / medium -3.4 / high -0.7 /
+  ultra -2.2 %, job 2 -1.7 / -3.1 / -3.5 / -1.1 % (raw; posfit in `msi-r1-ab.md`): past the line on Medium + Ultra, then
+  High, never one preset twice. Rejected under the rule; the strongest Round 2 candidate (-2 % over all presets twice).
+- **msi-r1, low1** (`perf/patches/msi-r1-low1.patch`, rebased, with the live-match guard of review 1). Exact. Low -2.9 / -3.1
+  % in job 1, -1.2 / -0.5 % in job 2. Rejected (third Low A/B without a confirmed gain).
+- **msi-r1, hud** (`perf/patches/msi-r1-hud.patch` = hud2 + a test). Exact. Job 1 -0.3 to -1.4 % raw on every preset, inside
+  N. Rejected. The rest of the per-frame restyles are visible motion (crosshair `top`/`left` transitions, marker
+  animations); moving the ticks with `transform` is not byte-exact.
+- **msi-r1, c1** (`perf/patches/r2-c1-nav.patch`). Exact. Job 1 +0.2 / -0.6 / +0.7 / -0.5 %. Rejected.
+- **msi-r1, ops** (`perf/patches/msi-r1-ops.patch`: clips rebased + one quaternion write per bone + trimmed `#reach`). Exact.
+  Screen only (job 2): ultra -2.0 / -2.0 %, high -1.5 / -2.0 %, medium -0.8 %, low 0.0 %. Not kept this round (no
+  confirmation job left); Round 2 candidate.
