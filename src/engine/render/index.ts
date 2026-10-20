@@ -21,7 +21,7 @@ import { BakeStreamer, TextureStreamer, fetchGrid, ktx2Loader, lightmapLoader, w
 import { WeaponAssets, weaponTextureSize } from './weapons';
 import { FX_UNIFORMS, FxAssets, fxLateTemplate, fxTemplate, fxTextureSize } from './fx';
 import { useOperatorSource, usePropSource } from './figure';
-import { OperatorAssets, operatorWant, skinnedDepthProbe } from './operators';
+import { OperatorAssets, disposeSkinnedDepthProbe, operatorWant, skinnedDepthProbe } from './operators';
 import { PropAssets, dressingSets, propTextureSize } from './props';
 import type { PostFX } from './postfx';
 import type { SkyUniforms } from './materials';
@@ -1761,6 +1761,7 @@ export class Renderer {
     this._landSky();
     this.weapons.clear();
     this.operators.clear();
+    disposeSkinnedDepthProbe();
     this.fx.clear();
     this.props.clear();
     this._setFxLights(0);

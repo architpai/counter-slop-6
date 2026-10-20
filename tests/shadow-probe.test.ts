@@ -99,3 +99,20 @@ test('the menu warm-up links the bodies\' skinned shadow program on the realisti
   expect(linked.programs!.has(used!.cacheKey), 'by the probe').toBe(true);
   expect([...depthKeys()].filter(key => !known.has(key))).toEqual([]);
 });
+
+test('a disposed renderer frees the probe, and the next one gets a new probe without a Math.random draw', () => {
+  const canvas = document.createElement('canvas');
+  document.body.append(canvas);
+  const renderer = new Renderer(canvas);
+  const probe = skinnedDepthProbe(), material = probe.material as THREE.MeshDepthMaterial;
+  const freed = vi.fn();
+  for (const item of [probe.geometry, material, material.map!, probe.skeleton.boneTexture!]) item.addEventListener('dispose', freed);
+  renderer.dispose();
+  canvas.remove();
+  expect(freed).toHaveBeenCalledTimes(4);
+  const random = vi.spyOn(Math, 'random');
+  const next = skinnedDepthProbe();
+  expect(next).not.toBe(probe);
+  expect(random).not.toHaveBeenCalled();
+  random.mockRestore();
+});

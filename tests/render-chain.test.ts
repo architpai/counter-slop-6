@@ -722,6 +722,7 @@ test('a sky that lands in a match waits out its quiet start, then goes on a step
   renderer.applyQuality(PRESET_VALUES.medium);
   renderer.setMood(moods.house);
   renderer.render(0, fx);
+  renderer.setLive(true);
   const house = fakeSky('house');
   held.shift()!.resolve(house.sky);
   await settle();

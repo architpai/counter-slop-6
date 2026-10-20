@@ -1407,8 +1407,9 @@ Medium and High pass. **Ultra > 33 ms tripped the rule** (+3 vs nopack, +4 vs he
 Before more data, the rule for an extension was written down (`r9-ab.md`): pool r9pl with an Ultra-only load A/B
 (`r9pu`, 6 balanced rounds) and fail only if head's pooled total is more than 6 (2 per 12) above both. Pooled over 36
 loads: **> 33 ms head 151 / nopack 146 / headB 148** (+5 / +3), **> 50 ms 87 / 89 / 90**; r9pu alone 99 / 97 / 100;
-r9pu ready nopack +2.7 % (faster 1/24). **The rule passes: packing stays** (`e1af377`). The r9pl Ultra excess was the
-spread between loads. The 249.7 ms maximum is one load, and headB (the same code) has 251.2 ms.
+r9pu ready nopack +2.7 % (faster 1/24). **The rule passes: packing stays** (`e1af377`), on a rate reading of "2 per 12 loads" (6 over 36 loads, the r9pl
+loads kept in the pool; review 1 accepts this reading). That the r9pl excess was only load-to-load spread is not proven;
+the two same-code arms differ by 4 there. The 249.7 ms maximum is one load; headB (the same code) has 251.2 ms.
 
 ### Result (this round's changes)
 
@@ -1417,7 +1418,7 @@ spread between loads. The 249.7 ms maximum is one load, and headB (the same code
 | **quiet start: the operators glb callback** (`hitch.mjs load`, head = e1af377 vs the round tree, downtown + house, 2 rounds, 4 loads per preset per build; checks, not benches of record) | not run (no realistic figures) | the ~-2.8 s frame 92-95 ms → **under 50 ms in 3/4 loads** (64 ms in one) | 142-177 ms (median 142.8) → **73-89 ms (median 81.0)** | 143-160 ms (median 143.4) → **73-91 ms (median 81.3)** |
 | median per-load maximum frame of the window | | 115.9 → 107.5 ms | 142.8 → 112.8 ms | 143.4 → 113.0 ms |
 | the ~-3.0 s frame (AudioContext constructor: not changed) | | 115.9 → 107.5 | 116.4 → 112.8 | 110.2 → 113.0 |
-| **shadow-depth program linked in the match** (the operators' skinned depth program at its first shadow draw, +66-94 ms after the quiet end) | none (Low has no worn operators) | 4/4 → **0/4** | 4/4 → **0/4** | 4/4 → **0/4** |
+| **shadow-depth program linked in the match** (the operators' skinned depth program at its first shadow draw, +57.5-94.3 ms after the quiet end) | none (Low has no worn operators) | 4/4 → **0/4** | 4/4 → **0/4** | 4/4 → **0/4** |
 | programs created from the match start / at ready | | 12 → 11 / equal (55) | 12 → 11 / equal (57) | 12 → 11 / equal (59) |
 | readyMs (median) | | 5304 → 5295 | 5627 → 5606 | 9726 → 9708 (noise) |
 | frame time after ready | no change (neither change runs after ready; no frame-time claim) | | | |
@@ -1429,7 +1430,10 @@ warm-up frame it shared (`warm:Scene +shadows`, ~35 ms on High/Ultra) is mostly 
 38.9 → 33.4 ms, Ultra unchanged (4 loads each; not established).
 
 **Verdict.**
-- **quiet (kept, realistic tiers):** Round 8 lead 1 traced (three existing head traces). The quiet start's two long
+- **quiet (kept, realistic tiers; an acceptance exception to the measurement rule, review 1):** the evidence is an
+  observed hitch reduction in rAF intervals over 4 exploratory loads per preset per build (two maps), not a gain
+  validated under `NOISE.md` (no noise threshold exists for this metric, and the callback's CPU time was not timed
+  after the change). It is kept because it is bit-exact and removes work. Round 8 lead 1 traced (three existing head traces). The quiet start's two long
   intervals are two main-thread tasks. (A, ~-3.0 s) a rAF task of 108-124 ms, 89-99 ms of it blocked in
   `new AudioContext()` (`Audio.init` from `beginSolo`: a sync IPC for the output device; the game decodes no audio).
   (B, ~-2.8 s) the realistic operators glb callback, 96-173 ms of CPU: `restBounds` skinned every vertex twice
@@ -1470,8 +1474,8 @@ its line, with the control within 2 %. Neither preset passes.
 |---|---|---|---|
 | **pack** (user decision, re-applied in `e1af377`) | `render/index.ts`, `textures.ts`, `weapons.ts`, `operators.ts`, `props.ts`, `fx.ts`, tests | r9pl ready Medium -22 % / High -18 % (nopack +27.9 / +22.6 %); counts pass (Ultra by the pooled rule) | exact after ready |
 | **quiet**: `restBounds` skins once with per-bone matrices made once (`skinnedPositions`); `gibGeometries` heaviest bones once | `render/operators.ts` | quiet-start B frame: High 142.8 → 81.0 ms, Ultra 143.4 → 81.3 ms medians; Medium under 50 ms in 3/4 | exact (bit-equal bounds and gibs; 56/56) |
-| **shadow**: `skinnedDepthProbe` held for the menu warm-up on realistic tiers; `levelDepthTwin` | `render/operators.ts`, `materials.ts`, `index.ts`, `tests/shadow-probe.test.ts` | in-match depth link 12/12 → 0/12, nothing in its place | exact (56/56) |
-| **sky tests**: `land()` caps a hang only (3000 frames / 60 s), the in-match landing test starts each of its five frames in a quiet start | `tests/render-chain.test.ts` (`51dd4d4`) | file 3/3, full suite clean | n/a |
+| **shadow**: `skinnedDepthProbe` held for the menu warm-up on realistic tiers; `levelDepthTwin`; freed in `Renderer.dispose` (`disposeSkinnedDepthProbe`, review 1) | `render/operators.ts`, `materials.ts`, `index.ts`, `tests/shadow-probe.test.ts` | in-match depth link 12/12 → 0/12, nothing in its place | exact (56/56) |
+| **sky tests**: `land()` caps a hang only (3000 frames / 60 s), the in-match landing test starts each of its five frames in a quiet start, and the sky still resolves in a live match (restored after review 1) | `tests/render-chain.test.ts` (`51dd4d4`, review fix) | file 3/3, full suite clean | n/a |
 
 ### Quality gate
 
@@ -1500,7 +1504,22 @@ set live before `settle()`, and the same stall used up the 3 s quiet start, so t
 
 ### Review (GPT-6.1-Sol, high effort)
 
-(pending)
+Round 1 (`perf-loop-r9-review-1`, on `264559e..4370d1b`): **no P1.** `skinnedPositions` keeps r170's matrix products,
+weight order and float operations (bit-exact as claimed); the probe can draw no visible fragment, no shadow texel and
+no `Math.random`; packing totals (151/146/148, 87/89/90), the cpuhm rejection, the hitch medians and the program-key
+differences reproduce from the raw files. Findings, all addressed: (P2) the module-level probe was never freed, so
+renderer remounts could keep three's dispose listeners → `disposeSkinnedDepthProbe()` in `Renderer.dispose` and a test
+(4 dispose events; the next probe is new and draws no Math.random); (P2) the sky test lost one condition (the sky
+resolving in a live match) → `setLive(true)` before the resolve is back, with the per-frame resets kept; (P2) the quiet
+timing is exploratory → logged as an acceptance exception (an observed hitch reduction, not a `NOISE.md` gain); (P2,
+in the notes) the packing pool is a rate reading, and "the excess was spread" was too certain → reworded; (P3) the
+depth-link times are +57.5-94.3 ms → corrected. After the fixes: typecheck, the two test files (18/18), the full suite,
+a build and the `r9b` capture: `compare baseline r9b` PASS (56/56), all 56 PNGs byte-identical to `r9`. **Full suite
+after the fixes: 407/408**: `tests/blood.test.ts` "a pool on a stair keeps to its step" failed (a pool at z - size/2 =
+-0.309 < -0.01), and alone it passed 1 of 2 runs. It is not a wall-clock fault: `Effects.bloodPool` draws unseeded
+`Math.random` (the test seeds nothing), so some draws give a pool that hangs over the step edge. Neither that code nor
+that test changed since Round 1 (`221ffb1`), and no round change touches it. So `npm test` is clean of the sky faults,
+but not of this random flake (lead 5). Seeding the test would hide what may be a real (rare) pool-placement bug.
 
 ### Hot spot leads for Round 10 (the last round: small, safe items only)
 
@@ -1514,6 +1533,9 @@ set live before `settle()`, and the same stall used up the 3 s quiet start, so t
 3. **The template's in-match warm-up draw (~35 ms on High/Ultra)**: the two `operator` main-pass programs compile at
    +11 ms and first draw in that frame. A probe like `skinnedDepthProbe` with `operatorMaterial` could move that first
    draw to the menu. Check the keys first.
+5. **`tests/blood.test.ts` stair-pool flake**: `bloodPool`'s random size/offset sometimes reaches over a step edge
+   (-0.31 m seen). Find whether the clamp misses a case (a game fix, outside perf scope unless tiny), or seed the
+   test only if the case is shown to be acceptable.
 4. **Do not retry**: cpuhm (walk + D on Medium/High: three A/Bs without a gain), `hud2`, `fence`, `opaque`, `clips`,
    `low1`, `matrix`, the Ultra slot budget (`r8-packu`).
 

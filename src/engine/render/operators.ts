@@ -98,6 +98,18 @@ export function skinnedDepthProbe(): THREE.SkinnedMesh {
   });
 }
 
+/** Frees the probe (render/index.ts `Renderer.dispose`): its geometry, material, map and bone texture. The next
+ * `skinnedDepthProbe` makes a new one (under `quietly`). */
+export function disposeSkinnedDepthProbe(): void {
+  if (!depthProbe) return;
+  const material = depthProbe.material as THREE.MeshDepthMaterial;
+  depthProbe.geometry.dispose();
+  material.map?.dispose();
+  material.dispose();
+  depthProbe.skeleton.dispose();
+  depthProbe = null;
+}
+
 /** What a tier downloads for its characters: its glb and every set's maps at its size. */
 export function operatorDownloadBytes(lod: OperatorLod, size: TextureSize): number {
   return OPERATOR_SETS.reduce((sum, set) => sum + OPERATOR_MANIFEST.sets[set]!.bytes[`${size}`]!.reduce((a, b) => a + b, 0), OPERATOR_MANIFEST.glb[lod]);
