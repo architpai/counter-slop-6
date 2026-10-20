@@ -2,7 +2,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 import * as THREE from 'three';
 import { buildLevel, disposeLevel } from '@/engine/level';
 import { World } from '@/engine/physics';
-import { Renderer, UPLOAD_GAP_MS, UPLOAD_SETTLE_MS } from '@/engine/render/index';
+import { Renderer, SLOT_BYTES, UPLOAD_GAP_MS, UPLOAD_SETTLE_MS } from '@/engine/render/index';
 import { casterGroups, hiddenMat, realMat, realMaterials, standInMaps, surfMat } from '@/engine/render/materials';
 import { MATERIAL_COLOR, SURF } from '@/engine/render/palette';
 import { PRESET_VALUES } from '@/engine/render/quality';
@@ -10,7 +10,7 @@ import {
   DEFAULT_MATERIAL, MATERIAL_SET, MATERIAL_TAGS, TEXTURE_MAPS, TEXTURE_SETS, TEXTURE_SIZE, downloadBytes, parseTextureSets,
   planarUVs, resolveMaterial, setInfo, setsFor, textureUrl,
 } from '@/engine/render/surfaces';
-import { TextureStreamer } from '@/engine/render/textures';
+import { TextureStreamer, textureBytes } from '@/engine/render/textures';
 import type { SurfKey } from '@/engine/render/palette';
 import type { Level } from '@/engine/types';
 
@@ -527,18 +527,24 @@ test('the renderer textures the level on realistic tiers, frees it all on Low, a
   expect(saved).toBeGreaterThan(merged.length);
   renderer.scene.remove(...merged);
 
-  // A bigger texture size swaps once the new size is in, then frees the old one. One map goes
-  // up at a time, spaced in time whatever the frame rate: the first after the settle, the rest
-  // at least `UPLOAD_GAP_MS` apart (render/index.ts).
-  const uploads: number[] = [], initTexture = renderer.three.initTexture.bind(renderer.three);
-  renderer.three.initTexture = texture => { uploads.push(performance.now()); initTexture(texture); };
+  // A bigger texture size swaps once the new size is in, then frees the old one. The maps go up
+  // in slots spaced in time whatever the frame rate: the first after the settle, the rest at least
+  // `UPLOAD_GAP_MS` apart (render/index.ts); a slot holding several maps sums to `SLOT_BYTES` at most.
+  const uploads: { at: number; frame: number; bytes: number }[] = [], initTexture = renderer.three.initTexture.bind(renderer.three);
+  renderer.three.initTexture = texture => { uploads.push({ at: performance.now(), frame: renderer._frame, bytes: textureBytes(texture) }); initTexture(texture); };
   const asked = performance.now();
   renderer.applyQuality({ ...PRESET_VALUES.medium, textures: 'medium' });
   await settle();
   renderer.three.initTexture = initTexture;
   expect(uploads.length).toBeGreaterThan(0);
-  expect(uploads[0]! - asked).toBeGreaterThanOrEqual(UPLOAD_SETTLE_MS);
-  for (let i = 1; i < uploads.length; i++) expect(uploads[i]! - uploads[i - 1]!).toBeGreaterThanOrEqual(UPLOAD_GAP_MS);
+  expect(uploads[0]!.at - asked).toBeGreaterThanOrEqual(UPLOAD_SETTLE_MS);
+  const slots: (typeof uploads)[] = [];
+  for (const upload of uploads) {
+    if (slots.at(-1)?.[0]!.frame === upload.frame) slots.at(-1)!.push(upload);
+    else slots.push([upload]);
+  }
+  for (let i = 1; i < slots.length; i++) expect(slots[i]![0]!.at - slots[i - 1]![0]!.at).toBeGreaterThanOrEqual(UPLOAD_GAP_MS);
+  for (const slot of slots) if (slot.length > 1) expect(slot.reduce((n, upload) => n + upload.bytes, 0)).toBeLessThanOrEqual(SLOT_BYTES);
   expect(renderer.textureStats.textures).toBe(3 * houseSets.length);
   expect((looksOf(house.surfaces[0]!.mesh)[0] as THREE.MeshStandardMaterial).map!.image.width).toBe(1024);
 
