@@ -347,8 +347,8 @@ export class OperatorAssets implements OperatorSource {
     return this.#maps.find(maps => maps.size === this.#want?.size && maps !== this.#worn && maps.sets !== null) ?? null;
   }
 
-  /** Upload the next downloaded map; once all are up and the glb is in, put them on. Returns the map's GPU bytes, or 0 (none, or over `limit` bytes). */
-  pump(limit = Infinity): number {
+  /** Upload the next downloaded map; once all are up and the glb is in, put them on. Returns the map's GPU bytes, or 0. */
+  pump(): number {
     const maps = this.#next();
     if (!maps?.sets) return 0;
     const total = OPERATOR_SETS.length * TEXTURE_MAPS.length;
@@ -359,7 +359,6 @@ export class OperatorAssets implements OperatorSource {
     const set = OPERATOR_SETS[Math.floor(maps.uploaded / TEXTURE_MAPS.length)]!;
     const texture = maps.sets.get(set)![TEXTURE_MAPS[maps.uploaded % TEXTURE_MAPS.length]!];
     const bytes = textureBytes(texture);
-    if (bytes > limit) return 0;
     this.#loaders.upload(texture);
     if (texture instanceof THREE.CompressedTexture) texture.mipmaps = [];
     maps.bytes += bytes;

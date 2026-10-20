@@ -814,15 +814,14 @@ export class FxAssets {
     });
   }
 
-  /** Upload the next downloaded atlas and free its CPU copy; once all are up, put them on. Returns its GPU bytes, or 0 (none, or over `limit` bytes). */
-  pump(limit = Infinity): number {
+  /** Upload the next downloaded atlas and free its CPU copy; once all are up, put them on. Returns its GPU bytes, or 0. */
+  pump(): number {
     const set = this.#sets.find(s => s.size === this.#size && s !== this.#worn && s.maps !== null);
     if (!set?.maps) return 0;
     const atlas = FX_ATLASES[set.uploaded];
     if (atlas === undefined) return 0;
     const texture = set.maps.get(atlas)!;
     const bytes = textureBytes(texture);
-    if (bytes > limit) return 0;
     this.#loaders.upload(texture);
     if (texture instanceof THREE.CompressedTexture) texture.mipmaps = [];
     set.bytes += bytes;

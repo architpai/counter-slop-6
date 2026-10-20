@@ -253,10 +253,9 @@ export class WeaponAssets {
   /**
    * Upload the next downloaded map and free its CPU copy; once every map of
    * the wanted size is up (and the model is in), put them on. Returns the
-   * map's GPU bytes, or 0 when none was waiting (or the next is more than
-   * `limit` bytes: it waits for a slot of its own).
+   * map's GPU bytes, or 0 when none was waiting.
    */
-  pump(limit = Infinity): number {
+  pump(): number {
     const maps = this.#next();
     if (!maps?.sets) return 0;
     const total = WEAPON_SETS.length * TEXTURE_MAPS.length;
@@ -267,7 +266,6 @@ export class WeaponAssets {
     const set = WEAPON_SETS[Math.floor(maps.uploaded / TEXTURE_MAPS.length)]!;
     const texture = maps.sets.get(set)![TEXTURE_MAPS[maps.uploaded % TEXTURE_MAPS.length]!];
     const bytes = textureBytes(texture);
-    if (bytes > limit) return 0;
     this.#loaders.upload(texture);
     if (texture instanceof THREE.CompressedTexture) texture.mipmaps = [];
     maps.bytes += bytes;

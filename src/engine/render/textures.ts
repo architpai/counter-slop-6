@@ -114,14 +114,12 @@ export class TextureStreamer {
    * Upload the next waiting map, if any has downloaded, then free its CPU
    * copy: the GPU holds the only one from now on, so a map is never uploaded
    * twice (after a context loss the renderer streams the sets again).
-   * Returns the map's GPU bytes, or 0 when none was waiting (or the next is
-   * more than `limit` bytes: it waits, for a slot of its own).
+   * Returns the map's GPU bytes, or 0 when none was waiting.
    */
-  pump(limit = Infinity): number {
+  pump(): number {
     const entry = this.#wanted().find(e => e.maps && e.uploaded < 3);
     if (!entry?.maps) return 0;
     const texture = entry.maps[TEXTURE_MAPS[entry.uploaded]!], bytes = textureBytes(texture);
-    if (bytes > limit) return 0;
     this.#upload(texture);
     freeCpuCopy(texture);
     entry.bytes += bytes;
@@ -375,13 +373,12 @@ export class BakeStreamer {
     return this.#next === null || this.#next.failed || this.#next.uploaded === 2;
   }
 
-  /** Upload the next downloaded piece and free its CPU copy; its GPU bytes, or 0 when none waits (or it is over `limit` bytes). */
-  pump(limit = Infinity): number {
+  /** Upload the next downloaded piece and free its CPU copy; its GPU bytes, or 0 when none waits. */
+  pump(): number {
     const light = this.#next;
     if (!light?.lightmap || !light.grid || light.uploaded >= 2) return 0;
     const texture = light.uploaded === 0 ? light.lightmap : light.grid;
     const bytes = light.uploaded === 0 ? textureBytes(texture) : light.grid.image.data?.byteLength ?? 0;
-    if (bytes > limit) return 0;
     this.#upload(texture);
     if (texture instanceof THREE.CompressedTexture) texture.mipmaps = [];
     else light.grid.image.data = null as unknown as Uint8Array<ArrayBuffer>;

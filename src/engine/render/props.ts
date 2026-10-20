@@ -763,17 +763,14 @@ export class PropAssets {
    * and the kit is in, a step of merging the map's dressing (`MERGE_STEP_MS`
    * of script, 0: it uploads nothing, so the next frame may step again), and
    * once it is merged, build its meshes and hand them to be warmed (the
-   * merged geometry's bytes). 0 too when there is nothing to do yet. With a
-   * `limit` (a slot another upload already used) only an atlas of at most
-   * that many bytes goes up; the merge and the build wait for a slot of their own.
+   * merged geometry's bytes). 0 too when there is nothing to do yet.
    */
-  pump(limit = Infinity): number {
+  pump(): number {
     const atlases = this.#atlases.find(a => a.size === this.#size && a !== this.#worn && a.maps !== null);
     if (atlases?.maps) {
       const atlas = PROP_ATLASES[atlases.uploaded];
       if (atlas !== undefined) {
         const texture = atlases.maps.get(atlas)!, bytes = textureBytes(texture);
-        if (bytes > limit) return 0;
         this.#loaders.upload(texture);
         if (texture instanceof THREE.CompressedTexture) texture.mipmaps = [];
         atlases.uploaded++;
@@ -782,7 +779,7 @@ export class PropAssets {
         return bytes;
       }
     }
-    if (limit !== Infinity || this.#built !== null || this.#worn === null || this.#request === null) return 0;
+    if (this.#built !== null || this.#worn === null || this.#request === null) return 0;
     const kit = this.#kit, dressing = this.#request.dressing;
     if (dressing !== null && (kit === null || this.#kitFamily !== dressing.family)) return 0;
     if (dressing !== null && kit !== null) {

@@ -107,16 +107,6 @@ export const UPLOAD_GAP_MS = 24;
 const UPLOAD_BYTES_PER_MS = 6e4;
 const UPLOAD_SLOW_MS = 4;
 /**
- * A slot uploads several streamed items, from one stream or the next ones in
- * line, as long as they sum to at most a gap's worth of the average rate
- * (`UPLOAD_GAP_MS` × `UPLOAD_BYTES_PER_MS`, 1.44 MB: eight 512 maps, two 1K
- * ones) and the slot has spent under `SLOT_PACK_MS` uploading; the gap after
- * it follows the slot's sum as it follows one map's bytes. A bigger item
- * still goes alone, first in a slot, as before.
- */
-export const SLOT_BYTES = UPLOAD_GAP_MS * UPLOAD_BYTES_PER_MS;
-const SLOT_PACK_MS = 2;
-/**
  * The wait after a level load or a look change before the first upload. The
  * GPU process is still busy with the new level's buffers and programs then,
  * and an upload in that time waited 60-130 ms for it (Ultra, second and later
@@ -335,11 +325,6 @@ export class Renderer {
   /** No upload before this time (`performance.now()`), and the current stream's slow-down factor (1, 2 or 4). */
   _uploadAt = 0;
   _uploadPace = 1;
-  /** This frame's upload slot once something went up in it (`_upload`): when it opened, its bytes, and whether more may join. */
-  _slotFrame = -1;
-  _slotStart = 0;
-  _slotBytes = 0;
-  _slotOpen = false;
   /** A compressed upload has warmed the driver (`warmCompressedUploads`). */
   _uploadsWarm = false;
   /** The streamer's current sets are on the materials. */
@@ -1159,49 +1144,6 @@ export class Renderer {
   }
 
   /**
-   * Upload with `pump` in this frame's upload slot: once `_uploadAt` is past,
-   * the first item at any size, then more (from this stream, or from a later
-   * stream in the same frame) while the slot's items sum to `SLOT_BYTES` at
-   * most (`pump(limit)` leaves a bigger one for a slot of its own) and it has
-   * spent under `SLOT_PACK_MS`. The next slot is the slot's bytes at the
-   * average rate (at least `UPLOAD_GAP_MS`) times the pace; an upload slower
-   * than `UPLOAD_SLOW_MS` doubles the pace (`backOff`; not for the bake) and
-   * closes the slot. The caller checks the match's quiet start.
-   */
-  _upload(pump: (limit: number) => number, backOff = true): void {
-    let start: number, used: number;
-    if (this._slotFrame === this._frame) {
-      if (!this._slotOpen) return;
-      start = this._slotStart;
-      used = this._slotBytes;
-    } else {
-      start = performance.now();
-      if (start < this._uploadAt) return;
-      used = 0;
-    }
-    const before = used;
-    let open = true;
-    for (;;) {
-      const t = performance.now();
-      if (used > 0 && (used >= SLOT_BYTES || t - start >= SLOT_PACK_MS)) break;
-      const bytes = pump(used > 0 ? SLOT_BYTES - used : Infinity);
-      if (bytes <= 0) break;
-      used += bytes;
-      if (backOff && performance.now() - t > UPLOAD_SLOW_MS) {
-        this._uploadPace = Math.min(4, this._uploadPace * 2);
-        open = false;
-        break;
-      }
-    }
-    if (used === before) return;
-    this._slotFrame = this._frame;
-    this._slotStart = start;
-    this._slotBytes = used;
-    this._slotOpen = open;
-    this._uploadAt = start + Math.max(UPLOAD_GAP_MS, used / UPLOAD_BYTES_PER_MS) * this._uploadPace;
-  }
-
-  /**
    * Realistic tiers: keep the level's bake streaming at the file the Textures
    * setting shows (the AO map on low, the 1K or 2K lightmap above), uploaded
    * in the texture streaming's time slots ahead of the textures (two pieces,
@@ -1233,7 +1175,10 @@ export class Renderer {
       return;
     }
     if (!bakes.ready) {
-      if (!this._match.quiet(now)) this._upload(limit => bakes.pump(limit), false);
+      if (now >= this._uploadAt && !this._match.quiet(now)) {
+        const bytes = bakes.pump();
+        if (bytes > 0) this._uploadAt = now + Math.max(UPLOAD_GAP_MS, bytes / UPLOAD_BYTES_PER_MS) * this._uploadPace;
+      }
       return;
     }
     const light = bakes.take();
@@ -1290,7 +1235,14 @@ export class Renderer {
       this._uploadPace = 1;
     }
     if (this._texturesWorn) return;
-    if (!this._match.quiet(performance.now())) this._upload(limit => streamer.pump(limit));
+    const now = performance.now();
+    if (now >= this._uploadAt && !this._match.quiet(now)) {
+      const bytes = streamer.pump();
+      if (bytes > 0) {
+        if (performance.now() - now > UPLOAD_SLOW_MS) this._uploadPace = Math.min(4, this._uploadPace * 2);
+        this._uploadAt = now + Math.max(UPLOAD_GAP_MS, bytes / UPLOAD_BYTES_PER_MS) * this._uploadPace;
+      }
+    }
     if (!streamer.ready) return;
     for (const material of realMaterials()) {
       const set = material.userData.set as TextureSet;
@@ -1317,8 +1269,12 @@ export class Renderer {
     if (size === null || !this.weapons.wanted) return;
     this.weapons.want(size);
     const now = performance.now();
-    if (!this.weapons.pending || this.bakePending || this.texturesPending || this._match.quiet(now)) return;
-    this._upload(limit => this.weapons.pump(limit));
+    if (!this.weapons.pending || this.bakePending || this.texturesPending || now < this._uploadAt || this._match.quiet(now)) return;
+    const bytes = this.weapons.pump();
+    if (bytes > 0) {
+      if (performance.now() - now > UPLOAD_SLOW_MS) this._uploadPace = Math.min(4, this._uploadPace * 2);
+      this._uploadAt = now + Math.max(UPLOAD_GAP_MS, bytes / UPLOAD_BYTES_PER_MS) * this._uploadPace;
+    }
   }
 
   /**
@@ -1335,8 +1291,12 @@ export class Renderer {
     if (want === null || this._prewarmed.size === 0) return;
     this.operators.want(want);
     const now = performance.now();
-    if (!this.operators.pending || this.bakePending || this.texturesPending || this._match.quiet(now)) return;
-    this._upload(limit => this.operators.pump(limit));
+    if (!this.operators.pending || this.bakePending || this.texturesPending || now < this._uploadAt || this._match.quiet(now)) return;
+    const bytes = this.operators.pump();
+    if (bytes > 0) {
+      if (performance.now() - now > UPLOAD_SLOW_MS) this._uploadPace = Math.min(4, this._uploadPace * 2);
+      this._uploadAt = now + Math.max(UPLOAD_GAP_MS, bytes / UPLOAD_BYTES_PER_MS) * this._uploadPace;
+    }
   }
 
   /**
@@ -1350,8 +1310,12 @@ export class Renderer {
     if (size === null || !this.fx.wanted) return;
     this.fx.want(size);
     const now = performance.now();
-    if (!this.fx.pending || this.bakePending || this.texturesPending || this._match.quiet(now)) return;
-    this._upload(limit => this.fx.pump(limit));
+    if (!this.fx.pending || this.bakePending || this.texturesPending || now < this._uploadAt || this._match.quiet(now)) return;
+    const bytes = this.fx.pump();
+    if (bytes > 0) {
+      if (performance.now() - now > UPLOAD_SLOW_MS) this._uploadPace = Math.min(4, this._uploadPace * 2);
+      this._uploadAt = now + Math.max(UPLOAD_GAP_MS, bytes / UPLOAD_BYTES_PER_MS) * this._uploadPace;
+    }
   }
 
   /**
@@ -1370,7 +1334,13 @@ export class Renderer {
     const now = performance.now();
     if (this._match.quiet(now)) return;
     this.props.fetch();
-    if (this.props.pending && !this.bakePending && !this.texturesPending) this._upload(limit => this.props.pump(limit));
+    if (this.props.pending && !this.bakePending && !this.texturesPending && now >= this._uploadAt) {
+      const bytes = this.props.pump();
+      if (bytes > 0) {
+        if (performance.now() - now > UPLOAD_SLOW_MS) this._uploadPace = Math.min(4, this._uploadPace * 2);
+        this._uploadAt = now + Math.max(UPLOAD_GAP_MS, bytes / UPLOAD_BYTES_PER_MS) * this._uploadPace;
+      }
+    }
     // After the slot's pump and its timing: the dressing's placements need no slot (`PropAssets.premerge`).
     this.props.premerge();
   }
