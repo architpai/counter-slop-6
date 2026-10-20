@@ -373,3 +373,114 @@ ultra mexico
 | training/ultra | pre | 19.6, 17.9, 19.9 | 32.6 / 37.3 / 35.3 | 32.8 | 53 / 53 |
 | house/ultra (650 frames, 2 loads) | HEAD | 201 / 134; cb 85: 367 / 226; cb 604: 198 / 184 | 380 / 233 | — | 54 / 58 |
 | house/ultra (650 frames, 2 loads) | pre | — | 39 / 39 | — | 56 / 56 |
+
+## r7f2: fights only (no trace), low/high/ultra x downtown/house/mexico/training, head (= the kept set, ca2d555) / noset (the tree before this round: `git diff e0128de 1fba3a6 -- src tests`) / headB, 3 rounds (balanced), 12:08-12:31, battery 97 -> 100 % on the 94 W charger. The third A/B, run after review 1 (finding: the hud+misc keep exceeded r7f's evidence on Low/High/Ultra; maps incomplete). Here noset > 0 % means the set is faster.
+```
+HEAD ca2d5556c5c19e357514d1b5233d3c6e8380ce32  variants: head, noset, headB  (2026-10-20T03:08:44.562Z)
+complete: 3 variants x 36 cell-scenario-rounds
+
+## mean: geomean (paired ratio vs head)
+all      head=2.881 (0.0%)  noset=2.947 (2.3%)  headB=2.858 (-0.8%)
+low      head=1.704 (0.0%)  noset=1.742 (2.2%)  headB=1.703 (-0.1%)
+high     head=3.262 (0.0%)  noset=3.269 (0.2%)  headB=3.187 (-2.3%)
+ultra    head=4.301 (0.0%)  noset=4.491 (4.4%)  headB=4.301 (0.0%)
+
+## med: geomean (paired ratio vs head)
+all      head=2.748 (0.0%)  noset=2.846 (3.6%)  headB=2.728 (-0.8%)
+low      head=1.555 (0.0%)  noset=1.618 (4.1%)  headB=1.560 (0.4%)
+high     head=3.197 (0.0%)  noset=3.260 (2.0%)  headB=3.101 (-3.0%)
+ultra    head=4.177 (0.0%)  noset=4.371 (4.7%)  headB=4.193 (0.4%)
+
+## p95: geomean (paired ratio vs head)
+all      head=4.427 (0.0%)  noset=4.502 (1.7%)  headB=4.372 (-1.2%)
+low      head=2.959 (0.0%)  noset=2.968 (0.3%)  headB=2.934 (-0.8%)
+high     head=4.756 (0.0%)  noset=4.748 (-0.2%)  headB=4.667 (-1.9%)
+ultra    head=6.166 (0.0%)  noset=6.476 (5.0%)  headB=6.102 (-1.0%)
+
+[mean] diagnostic only: r7f2 log(mean, fight) = cell-scenario-round + variant + run position; each preset row is its own fit, its position effects shared by its cells (the all row shares one set across presets; pos1..: vs the first run), positions from ab.sh's rotation, no uncertainty
+[mean] all     headB=-0.8%  noset=2.3%  | pos1..: 0.5 0.0
+[mean] low     headB=-0.1%  noset=2.2%  | pos1..: -1.3 -0.2
+[mean] high    headB=-2.3%  noset=0.2%  | pos1..: -0.1 -1.6
+[mean] ultra   headB=0.0%  noset=4.4%  | pos1..: 2.9 2.0
+[med] diagnostic only: r7f2 log(med, fight) = cell-scenario-round + variant + run position; each preset row is its own fit, its position effects shared by its cells (the all row shares one set across presets; pos1..: vs the first run), positions from ab.sh's rotation, no uncertainty
+[med] all     headB=-0.8%  noset=3.6%  | pos1..: 0.7 -0.3
+[med] low     headB=0.4%  noset=4.1%  | pos1..: -1.0 -0.4
+[med] high    headB=-3.0%  noset=2.0%  | pos1..: 0.2 -1.7
+[med] ultra   headB=0.4%  noset=4.7%  | pos1..: 3.0 1.1
+[p95] diagnostic only: r7f2 log(p95, fight) = cell-scenario-round + variant + run position; each preset row is its own fit, its position effects shared by its cells (the all row shares one set across presets; pos1..: vs the first run), positions from ab.sh's rotation, no uncertainty
+[p95] all     headB=-1.2%  noset=1.7%  | pos1..: 0.8 0.3
+[p95] low     headB=-0.8%  noset=0.3%  | pos1..: 0.3 0.2
+[p95] high    headB=-1.9%  noset=-0.2%  | pos1..: -1.1 -1.6
+[p95] ultra   headB=-1.0%  noset=5.0%  | pos1..: 3.2 2.5
+[cpu] diagnostic only: r7f2 log(cpu, fight) = cell-scenario-round + variant + run position; each preset row is its own fit, its position effects shared by its cells (the all row shares one set across presets; pos1..: vs the first run), positions from ab.sh's rotation, no uncertainty
+[cpu] all     headB=-1.0%  noset=-4.7%  | pos1..: 0.6 -0.1
+[cpu] low     headB=-0.6%  noset=-6.4%  | pos1..: -1.1 -0.6
+[cpu] high    headB=-2.3%  noset=-5.6%  | pos1..: -0.1 -1.0
+[cpu] ultra   headB=-0.1%  noset=-2.0%  | pos1..: 2.9 1.2
+
+-- robust mean
+low     noset: med/head 1.4% (faster 4/12), med/headB 2.0% (faster 4/12) | headB: med/head 0.3% (faster 5/12)
+high    noset: med/head 0.1% (faster 5/12), med/headB 2.0% (faster 4/12) | headB: med/head 0.4% (faster 6/12)
+ultra   noset: med/head 5.3% (faster 3/12), med/headB 4.0% (faster 3/12) | headB: med/head -1.0% (faster 7/12)
+-- robust med
+low     noset: med/head 5.8% (faster 1/12), med/headB 3.3% (faster 1/12) | headB: med/head 0.0% (faster 2/12)
+high    noset: med/head 3.0% (faster 4/12), med/headB 3.4% (faster 1/12) | headB: med/head 0.0% (faster 5/12)
+ultra   noset: med/head 5.6% (faster 3/12), med/headB 5.5% (faster 2/12) | headB: med/head 0.0% (faster 4/12)
+-- robust p95
+low     noset: med/head 0.0% (faster 3/12), med/headB 0.0% (faster 2/12) | headB: med/head 0.0% (faster 4/12)
+high    noset: med/head 0.0% (faster 5/12), med/headB 1.1% (faster 4/12) | headB: med/head -2.1% (faster 7/12)
+ultra   noset: med/head 4.5% (faster 3/12), med/headB 5.6% (faster 3/12) | headB: med/head 0.0% (faster 5/12)
+
+```
+
+r7f2 per cell and round (fight frame mean, ratio vs head):
+```
+low downtown
+  r1 head 1.53 noset -0.2% headB -2.7%
+  r2 head 1.60 noset -0.6% headB -3.4%
+  r3 head 1.59 noset 1.0% headB 1.1%
+low house
+  r1 head 1.53 noset 5.4% headB 0.1%
+  r2 head 1.57 noset 2.8% headB 1.7%
+  r3 head 1.59 noset -1.5% headB -0.8%
+low mexico
+  r1 head 1.53 noset -0.5% headB 0.5%
+  r2 head 1.63 noset 1.7% headB -0.6%
+  r3 head 1.62 noset 2.8% headB 1.0%
+low training
+  r1 head 2.12 noset 0.0% headB 4.5%
+  r2 head 2.19 noset 7.3% headB 0.8%
+  r3 head 2.15 noset 9.1% headB -3.1%
+high downtown
+  r1 head 2.87 noset 7.0% headB 1.7%
+  r2 head 3.43 noset -1.7% headB 1.2%
+  r3 head 3.37 noset -5.8% headB -7.1%
+high house
+  r1 head 3.57 noset 4.2% headB -15.7%
+  r2 head 3.32 noset -0.7% headB -3.3%
+  r3 head 3.06 noset 1.8% headB 1.2%
+high mexico
+  r1 head 3.21 noset -6.4% headB -9.6%
+  r2 head 3.29 noset 0.2% headB 1.2%
+  r3 head 2.98 noset 0.0% headB 2.9%
+high training
+  r1 head 3.37 noset 3.6% headB -0.4%
+  r2 head 3.68 noset -5.6% headB -0.6%
+  r3 head 3.08 noset 7.3% headB 3.1%
+ultra downtown
+  r1 head 4.26 noset 8.4% headB -4.8%
+  r2 head 4.21 noset 8.0% headB 4.4%
+  r3 head 4.11 noset -2.6% headB 7.5%
+ultra house
+  r1 head 4.69 noset 5.0% headB -5.2%
+  r2 head 4.13 noset -1.8% headB -2.3%
+  r3 head 4.15 noset 14.5% headB -3.9%
+ultra mexico
+  r1 head 4.11 noset 6.0% headB 6.9%
+  r2 head 4.08 noset -0.8% headB 1.3%
+  r3 head 4.32 noset 7.2% headB -0.9%
+ultra training
+  r1 head 4.54 noset 4.5% headB -1.1%
+  r2 head 4.35 noset 0.6% headB -2.0%
+  r3 head 4.72 noset 5.6% headB 1.0%
+```

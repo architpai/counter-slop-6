@@ -950,16 +950,16 @@ line on low1 said the rest of the bundle is kept → "kept on Ultra only".
 
 2026-10-20, on `00a8411` → harness `1fba3a6`, game change `e0128de`. Survey: one read-only Opus agent (Low/Medium
 exact wins); implementation: six Opus agents, each in its own worktree, one patch each (`pre`, `sky`, `worker`,
-`pack`, `hud`, `misc`); review: GPT-6.1-Sol (below). Time budget ~4-5 h, at most 3 A/Bs (2 used: `r7ld`, `r7f`;
-`r7ll` is a load-only A/B under 10 min), no post-round bench (Round 8's pre-bench is the next reference). Wall time:
-06:54 → about 12:30 plus the review (over budget: ~2.5 h waiting for the power gate).
+`pack`, `hud`, `misc`); review: GPT-6.1-Sol (below). Time budget ~4-5 h, at most 3 A/Bs (3 used: `r7ld`, `r7f`, and
+`r7f2` after review 1; `r7ll` is a load-only A/B under 10 min), no post-round bench (Round 8's pre-bench is the next reference). Wall time:
+06:54 → about 13:00 with both reviews (over budget: ~2.5 h waiting for the power gate, ~0.5 h for `r7f2`).
 
 **Machine state** (`perf/results/r7-power.log`). The round started on the **20 W adapter** at 32 %. The six agents'
 builds, tests and Chrome runs drew more than it gave: the battery fell to 6-8 % by 08:00-09:30 (no bench of record
 ran then; the agents' own measurements in that window are marked as such). Around 10:00-10:30 the laptop ran on
 battery while the user swapped chargers; from ~10:30 the **94 W charger** was connected (`pmset -g ac`: Wattage 94).
 Every bench of record ran on the 94 W charger, gate AC and ≥ 50 %, void under 35 % (`PERF_MIN_BATT=35`): job 1a
-(`r7-pre`, `r7ll`, `r7ld`) 10:52-11:18, 56 → 70 %; job 1b (`r7f`) 11:18-11:45, 70 → 83 %. No void, no thermal or
+(`r7-pre`, `r7ll`, `r7ld`) 10:52-11:18, 56 → 70 %; job 1b (`r7f`) 11:18-11:45, 70 → 83 %; job 2 (`r7f2`) 12:08-12:31, 97 → 100 %. No void, no thermal or
 performance warning. Desktop Chrome open (idle), as in earlier rounds. `r7f` still caught power-state jumps inside
 cells (below), perhaps from charging under load (a hypothesis).
 
@@ -979,6 +979,9 @@ programs equal.
 | headB / head (mean / med / p95) | +2.8 / +1.8 / +3.9 % | +1.5 / +0.7 / +2.1 % | -1.6 / -2.1 / +0.2 % | -2.5 / -1.1 / -2.9 % |
 | cpuhm / head where it is HEAD's code (mean) | +2.1 % | (candidate) | (candidate) | -5.4 % |
 | **robust** (median of per-cell ratios, mean): set vs head / vs headB, faster than headB | -4.4 / -4.6 %, 7/8 | -6.8 / -5.7 %, 8/8 | -5.2 / -3.3 %, 5/8 | -0.1 / +0.9 %, 3/8 |
+| **r7f2: the tree before the round (`noset`) vs HEAD = set** (3 rounds, balanced, all 4 maps, charged machine; > 0 = set faster): mean / median / p95 | +2.2 / +4.1 / +0.3 % (1.742 → 1.704 ms, -0.04) | (not run) | +0.2 / +2.0 / -0.2 % (3.269 → 3.262, -0.01) | +4.4 / +4.7 / +5.0 % (4.491 → 4.301, -0.19) |
+| r7f2 headB / head (mean / median / p95) | -0.1 / +0.4 / -0.8 % | | -2.3 / -3.0 / -1.9 % | 0.0 / +0.4 / -1.0 % |
+| r7f2 robust: noset vs head / vs headB; noset slower than headB (a copy of the set) in | +1.4 / +2.0 %; 8/12 | | +0.1 / +2.0 %; 8/12 | +5.3 / +4.0 %; 9/12 |
 | fight callback cpu mean (wall, GPU waits included) | +2.1 % | -3.8 % | +3.3 % | +6.0 % |
 | **readyMs** (r7ld, 4 rounds, balanced, downtown/house/mexico) | (no bake) | 7805 → 7292 ms (-6.6 %, -513) | 7590 → 7263 (-4.3 %, -327) | 9925 → 9767 (-1.6 %, -158) |
 | readyMs headB/head; set faster in (headB) | | -0.5 %; 11/12 (7/12) | +0.2 %; 10/12 (3/12) | +0.9 %; 11/12 (7/12) |
@@ -1000,21 +1003,32 @@ max frame were not part of r7f (no trace); the `hud` agent's traced runs (below)
   32.9 → 34.2 / 32.9 / 36.2 ms, ultra 133 / 116 / 132 → 32.6 / 37.3 / 35.3, house/ultra 380 / 233 → 39 / 39), p99
   unchanged, and High/Ultra hold two programs fewer (the lit sprite programs HEAD made at load were never used). The
   bench never saw it: its warm-ups link these programs before the recorded runs. Readiness: compiles/warm-ups end at
-  the same time (±0.2 s); `deferredWarmups` 5 → 6 (High) / 7 (Ultra). Measured by the agent at 7-8 % battery on the
-  20 W adapter (alternating builds, 3 loads each); the effect is 5-20x the spread.
+  the same time (±0.2 s); `deferredWarmups` 5 → 6 (High) / 7 (Ultra). Measured by the agent at 7-26 % battery on the
+  20 W adapter (alternating builds, 3 loads each): exploratory timings. The program counts are exact (all 16 cells,
+  two script orders: `perf/results/r7-hitch.json`); the time of the compiling callback varies: training/high HEAD
+  458 / 29.5 / 30.4 ms (only the first load shows it in the max frame), with `pre` 19.5 / 18.5 / 22.6; training/ultra
+  124 / 108 / 128 → 18-20 ms; house/ultra max frame 380 / 233 → 39 / 39 ms.
 - **`worker` is kept** (realistic presets; Low has no bake). Ready -6.6 / -4.3 / -1.6 % (medium / high / ultra),
   faster in 32/36 cell-rounds (headB 17/36, headB within ±0.9 %); `bakeLayout` ends 381 ms earlier and the bake 395 ms
-  earlier (median), at the sky landing instead of 0.3-0.5 s of slots after it. Medium and High pass ~2 %; Ultra is
-  -1.6 % (its ready waits on later streams) but faster in 11/12; it is the same preset-independent load code, kept as
-  Round 6 kept `load`. Load-window long frames as HEAD within the control's spread.
+  earlier (median), at the sky landing instead of 0.3-0.5 s of slots after it. Medium and High pass ~2 % on the three bake maps
+  (training, a small bake, was not in r7ld). **Ultra: no ready gain counted**: -1.6 % (under ~2 %; its ready waits on
+  later streams), faster in 11/12; stated exception: the same preset-independent load code, kept as Round 6 kept
+  `load`. The ready numbers measure the whole set; the layout/bake times (-381 / -395 ms) are the worker's alone
+  (nothing else in the set touches the bake). Load-window long frames as HEAD within the control's spread.
 - **`hud` + `misc` are kept as one measured set** (in `set` with `pre` and `worker`, which do not touch steady-state
-  fight frames). Medium passes clearly (robust -6.8 % vs head, -5.7 % vs headB, faster than headB in 8/8). Low is past
-  ~2 % against all three HEAD-code arms (-4.4 % vs head, -4.6 % vs headB, faster in 7/8), but those arms differ by
-  up to 3.3 % among themselves, so Low's size is not pinned down. **High: not validated** (-3.2 % raw with headB
-  -1.6 %; robust vs headB -3.3 %, 5/8). **Ultra: no gain** (-0.2 %, controls -2.5 / -5.4 %). **Stated exception to
-  the one-A/B rule**, as Round 6's `load`: the HUD change and the rig walk are preset-independent exact code (DOM and
-  a matrix walk), so a preset gate would add preset logic to the HUD for no pixel reason; they stay on High/Ultra with
-  no gain counted there. The fence part runs on Low only. The parts were not measured one by one.
+  fight frames), after `r7f2` (review 1 found r7f alone did not support the keep on Low/High/Ultra). **Medium**: r7f
+  robust -6.8 % vs head, -5.7 % vs headB, faster than headB in 8/8 (raw -9.5 %, inflated by one HEAD outlier); not
+  in r7f2. **Ultra**: r7f2 on a charged machine, all 4 maps: the tree before the round is +4.4 % mean / +4.7 % median
+  / +5.0 % p95 slower (set -4.2 % mean, -0.19 ms) with headB 0.0 %, noset slower than headB in 9/12; r7f's Ultra arm
+  (-0.2 % with controls -2.5 / -5.4 %) was the noisy run and is superseded. **Low**: two runs in the same direction,
+  r7f -3.8 % mean / -5.0 % median (HEAD-code arms +2.1 to +3.3 %), r7f2 +2.2 % mean / +4.1 % median for the old tree
+  (headB -0.1 / +0.4 %, p95 +0.3 %): a small gain (~2-4 %), past ~2 % on the median in both. **High: not validated,
+  no gain counted** (r7f -3.2 % raw with headB -1.6 %; r7f2 +0.2 % mean / +2.0 % median with headB -2.3 / -3.0 %, the
+  control past ~2 %); no regression shown either (the old tree is not faster than HEAD in either run). **Stated
+  exception**: the HUD change and the rig walk are preset-independent exact code (DOM and one matrix walk), so they
+  also run on High with no gain counted there, rather than adding a preset gate to the HUD. The fence part runs on
+  Low only. The parts were not measured one by one; the path scenario was not re-measured (the HUD's per-frame
+  `--spread` changes only while firing; the rig walk runs on every frame).
 - **Round 6's `load` on Low: confirmed on ready** (lead 1d, r7ll): the tree without it is +3.4 % slower to ready
   (484 → 500 ms, +16 ms; HEAD faster in 10/12 cell-rounds), headB -0.7 %; first playable +1.6 % (under ~2 %).
 - **Lead 3 (walk + D on High/Medium) rejected again**: `cpuhm` (r7f) medium -2.6 % raw mean (robust -2.7 % vs head,
@@ -1066,7 +1080,8 @@ captures. `npm run typecheck` passes. `npm test`: the full suite on this machine
 (`1fba3a6`: render-chain "a streamed sky…", shadow-walk, weapon-assets; 389/392); with the set the full runs lost
 3-6 tests, all to timeouts (two "expected" assertions in one earlier loaded run were timing-dependent sky/bake waits
 and passed alone), and every failing file passes alone (blood 5, lightmap-worker 3, render-chain 13, shadow-walk 3,
-sky 3, weapon-assets 14). 48 files, 403 tests.
+sky 3, weapon-assets 14). After review 1, with fewer parallel workers (`npx vitest run --maxWorkers=2`, quiet machine):
+first run 402/403 (the render-chain sky test, one of HEAD's three), second run **403/403, 48 files**.
 
 ### Harness (kept, commit `1fba3a6` and this round's log commit)
 
