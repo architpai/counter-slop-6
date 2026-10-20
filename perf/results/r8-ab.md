@@ -297,7 +297,7 @@ mexico    medium: noset 7.3% headB 1.5% bake.off head 3873.6 noset 4260.5 | high
 training  medium: noset -2.7% headB 0.1% bake.off head 3998 noset 4015.8 | high: noset -1.9% headB -0.8% bake.off head 3904.8 noset 4031.9 | ultra: noset 0.2% headB -1.0% bake.off head 4011.8 noset 4147.7
 ```
 
-## r8f: frame time, path + fight (no trace), low/medium/high/ultra x downtown/training, head / opaque / fence / headB / clips / hud2 (each candidate alone on HEAD; patches `perf/patches/r8-*.patch`), 4 rounds (6 variants: near-balanced; read ab-posfit), 14:39-15:30, battery 100 % on AC; agent-browser Chrome 14-62 % CPU (sampled each minute: `/tmp` log summarised in r8-power.log)
+## r8f: frame time, path + fight (no trace), low/medium/high/ultra x downtown/training, head / opaque / fence / headB / clips / hud2 (each candidate alone on HEAD; patches `perf/patches/r8-*.patch`), 4 rounds (6 variants: near-balanced; read ab-posfit), 14:39-15:30, battery 100 % on AC; agent-browser Chrome 37.6-130.1 % CPU (median 80.8 %, sampled each minute; 460.4 % in the start sample: r8-power.log). robust rows below are fight only (ab-robust reads the fight scenario)
 ```
 HEAD 376349062fda80a43c48100a105598c82469faa6  variants: head, opaque, fence, headB, clips, hud2  (2026-10-20T05:39:18.385Z)
 complete: 6 variants x 64 cell-scenario-rounds

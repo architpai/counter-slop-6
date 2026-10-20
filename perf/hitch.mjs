@@ -29,8 +29,9 @@
 //            outside the bench roster: turret, packleader, rubberbander, sapper, parry; specials act, then die),
 //            bosses (each boss kind), solo (outside training: the director's boss wave 5 with pickups and stragglers).
 //            Fresh browser per cell; the default loadout comes back after the guns.
-//            [--check zero]: every step must add no program (and none may fail); [--expect FILE]: the program count at
-//            ready and after every step must equal FILE's (an earlier sweep's JSON) cell by cell. Exit code 1 on a fail.
+//            [--check zero]: no step may create a program (creation log) or change the count, none may fail, and the
+//            cell may have no page error; [--expect FILE]: the program count at ready and after every step must equal
+//            FILE's (an earlier sweep's JSON) cell by cell. Exit code 1 on a fail.
 // Writes perf/results/scratch-hitch-<label>.json (gitignored) and prints a summary.
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -457,6 +458,26 @@ async function sweep(map, preset) {
   } finally { await browser.close(); }
 }
 
+/**
+ * `--check zero` for one sweep cell: a step fails on a failed run, on a program-count change, or on any creation-log
+ * entry (every entry is after ready) carrying its name, so a program created and freed in the step, or one offset by
+ * a release, still fails it. An entry with no step's name (logged before the first step) fails the cell, as does
+ * every page error collected for it (page errors, console errors, a crash).
+ */
+function zeroFails(r, cell) {
+  const fails = [], names = new Set(r.steps.map(x => x.name));
+  for (const x of r.steps) {
+    if (x.failed) fails.push(`${cell} ${x.name}: step failed (${x.failed})`);
+    if (x.after !== x.before) fails.push(`${cell} ${x.name}: ${x.after - x.before >= 0 ? '+' : ''}${x.after - x.before} programs`);
+    const made = r.log.filter(e => e.step === x.name);
+    if (made.length) fails.push(`${cell} ${x.name}: ${made.length} program(s) created after ready: ${made.map(brief).join('; ')}`);
+  }
+  const other = r.log.filter(e => !names.has(e.step));
+  if (other.length) fails.push(`${cell}: ${other.length} program(s) created after ready outside a step: ${other.map(brief).join('; ')}`);
+  for (const e of r.errors ?? []) fails.push(`${cell}: ${e.type} x${e.count}: ${e.text}`);
+  return fails;
+}
+
 const results = [];
 await mkdir(resolve(ROOT, 'perf/results'), { recursive: true });
 const file = resolve(ROOT, `perf/results/scratch-hitch-${cfg.label}.json`);
@@ -488,7 +509,8 @@ if (mode === 'find') {
       for (const e of r.log) console.log(`  ${brief(e)}`);
     }
   });
-  // The per-step program-count check: `--check zero` (no step may add a program, no step may fail), and/or
+  // The per-step program check: `--check zero` (no step may create a program, change the count or fail, and the cell
+  // may have no page error; see zeroFails), and/or
   // `--expect FILE` (an earlier sweep's JSON: the count at ready and after every step must equal its cell's).
   const check = opt('check', null), expectFile = opt('expect', null);
   if (check !== null || expectFile !== null) {
@@ -497,10 +519,8 @@ if (mode === 'find') {
     for (const r of results) {
       const cell = `${r.map}/${r.preset}`;
       if (r.failed) { fails.push(`${cell}: load failed`); continue; }
-      for (const x of r.steps) {
-        if (x.failed) fails.push(`${cell} ${x.name}: step failed (${x.failed})`);
-        if (check === 'zero' && x.after !== x.before) fails.push(`${cell} ${x.name}: +${x.after - x.before} programs`);
-      }
+      if (check === 'zero') fails.push(...zeroFails(r, cell));
+      else for (const x of r.steps) if (x.failed) fails.push(`${cell} ${x.name}: step failed (${x.failed})`);
       if (!expectFile) continue;
       const e = expected.find(o => o.map === r.map && o.preset === r.preset && !o.failed);
       if (!e) { fails.push(`${cell}: not in ${expectFile}`); continue; }

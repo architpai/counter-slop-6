@@ -124,3 +124,4 @@ r8l rc=0
 == r8l-end agent-browser Chrome CPU 15:54:40: 49.5 %
 == job3 done Tue Oct 20 15:54:40 JST 2026
 == agent-browser Chrome CPU during job 3 (r8l, 15:31-15:54): min 48.9 / median 70.8 / max 144.4 % (n=25)
+== 16:03:56 (pmset -g log): the machine left AC (charger detached; 16:27 reading: 'Battery Power', 93 %, discharging, 'No adapter attached'). Every bench of record (r8-pre, r8cov, r8cl, r8f, r8l) had ended before, on AC at 100 %. After 16:04, on battery: the program sweep (exact counts), the render-chain sky-test reruns (HEAD, HEAD + late, final tree), no timing of record. The planned extra packing load A/B (r8l2, after review 1) was not run: the gate needs AC.

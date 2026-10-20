@@ -1144,7 +1144,7 @@ runs every frame, the worker's load A/B without training. Both are lead 0. No th
 (2026-10-20)). Survey: one read-only Opus agent (Low/Medium exact wins); implementation: five Opus agents, each in its
 own worktree, one patch each (`warm` + `late` + the hitch harness, `hud2` + `fence` + `opaque`, `clips`, the packing
 rebase); review: GPT-6.1-Sol (below). Time budget ~5 h, at most 3 frame-time A/Bs (2 used: `r8cov`, `r8f`; plus the
-load-only `r8cl` and `r8l`), no post-round bench (Round 9's pre-bench is the next reference). Wall time: 12:44 → 16:25 before the review.
+load-only `r8cl` and `r8l`), no post-round bench (Round 9's pre-bench is the next reference). Wall time: 12:44 → ~16:50 (both reviews included).
 
 **Machine state** (`perf/results/r8-power.log`). The **94 W charger** all round (`pmset -g ac`: Wattage 94, "96W USB-C
 Power Adapter"); every bench of record started and ended on AC at **100 %**; gate AC and ≥ 60 % at each start, void
@@ -1152,7 +1152,9 @@ under 40 % (`PERF_MIN_BATT=40`); no void, no thermal or performance warning. A "
 `~/.agent-browser` (not ours, left running as the brief said) used CPU during every bench: ~36 % at the start of job 1,
 restarted at 14:34, then **38-130 % (median 81 %) during `r8f`** and 49-144 % (median 71 %) during `r8l` (sum over its
 processes, sampled each minute). The paired A/Bs share that load across variants; unpaired runs (`r8-pre`) do not.
-Desktop Chrome open (idle), as in earlier rounds. A machine-wide lock (`/tmp/r8/heavy.sh`, one build / Chrome job /
+**At 16:03:56 the machine left AC** (charger detached; 93 % on battery at 16:27): every bench of record had ended
+before (r8l at 15:54, on AC at 100 %); after it only exact checks ran (the program sweep, the sky-test reruns), and the
+extra packing load A/B planned after review 1 was not run. Desktop Chrome open (idle), as in earlier rounds. A machine-wide lock (`/tmp/r8/heavy.sh`, one build / Chrome job /
 test run at a time) kept the agents' builds and Chrome runs off the benches and off each other.
 
 **Round baseline.** `r8-pre` (`3763490`, traced, all presets on downtown + training, as `r7-pre`):
@@ -1168,32 +1170,40 @@ a code change: compare within a machine state.
 |---|---|---|
 | **Round 7's set**: the tree before Round 7 (`noset` = 00a8411) vs HEAD, mean / median / p95 (> 0 = the set is faster) | **+3.5 / +4.7 / +3.1 %** (3.162 → 3.272 ms mean, set -0.11 ms; median -0.15, p95 -0.17 ms) | -0.7 / -0.3 / -0.9 % |
 | path / fight (mean) | +0.8 % / **+6.3 %** | -1.2 % / -0.2 % |
-| robust (median of per-cell ratios) vs head / vs headB; noset slower in | +4.4 / +8.2 %; 21/32 | -2.1 / +3.8 %; 10/32 |
+| robust, **fight only** (median of per-cell ratios) vs head / vs headB; path + fight median vs head; noset slower in (path + fight) | +4.4 / +8.2 %; +2.3 %; 21/32 | -2.1 / +3.8 %; -2.6 %; 10/32 |
 | headB / head (mean / median / p95; fitted mean) | -1.3 / -0.7 / -0.7 %; -1.3 % | -2.2 / -1.9 / -2.5 %; -2.2 % (headB faster than head in 13/16) |
 | **Round 4's set**: the tree before Round 4 (`pre4` = 2c75479) vs `noset` (Round 4 + Round 6's boot-only `load` and allocation reuse on Medium/High), mean / median / p95 | **-0.1 / -1.4 / 0.0 %** (path +1.9, fight -1.9 %); pre4 slower in 15/32 | **+5.0 / +3.7 / +3.8 %**; pre4 slower in 23/32 |
 
 | r8cl (load-only, medium/high/ultra x all 4 maps incl. training, 3 rounds) | medium | high | ultra |
 |---|---|---|---|
-| readyMs, `noset` vs HEAD (> 0 = the set is faster); set faster in | +3.4 %; 9/12 | +3.5 %; 10/12 | -0.5 %; 10/12 |
+| readyMs, `noset` vs HEAD (> 0 = Round 7's whole set is faster); set faster in | +3.4 %; 9/12 | +3.5 %; 10/12 | -0.5 %; 10/12 |
 | headB / head | +0.9 % | -0.2 % | -5.0 % (mexico/ultra head outlier: headB -16.5 %) |
 | training only (noset vs head) | -2.7 % | -1.9 % | +0.2 % |
 | downtown / house / mexico (noset vs head) | +6.2 / +3.2 / +7.3 % | +3.7 / +6.7 / +5.7 % | +3.3 / +3.6 / -8.6 % |
 
 **Verdict.**
-- **Round 7's set is confirmed on Medium** on all four maps: the tree before it is +3.5 % mean / +4.7 % median / +3.1 %
-  p95 slower, robust +4.4 % (vs headB +8.2 %), slower in 21/32, headB -1.3 %. The gain is in fights (+6.3 %); the
-  path is within noise (+0.8 %): the path scenario does not fire, so the HUD part does not act there, and the rig walk is
-  small. The worker's ready gain repeats on Medium and High (+3.4 / +3.5 %, with training) and is ~0 on training (a small
-  bake: `bake.off` 3998 vs 4016 ms medium); Ultra again shows none (-0.5 %, control -5.0 %).
+- **Round 7's set is confirmed on the Medium aggregate** (all four maps, path + fight): the tree before it is +3.5 %
+  mean / +4.7 % median / +3.1 % p95 slower, slower in 21/32 cell-scenario-rounds, headB -1.3 %; fight-only robust
+  +4.4 % vs head (+8.2 % vs headB). This is a preset aggregate, not a gain shown on each map (e.g. medium/mexico:
+  noset/head -3.7 % with its control at -6.0 %). The gain is in fights (+6.3 %); the path is within noise (+0.8 %):
+  the path scenario does not fire, so the HUD part does not act there, and the rig walk is small. **Ready time (r8cl)
+  measures Round 7's whole set** (`noset` drops all of it): +3.4 % (Medium) / +3.5 % (High) with training, ~0 on
+  training (a small bake); Ultra shows none (-0.5 %, control -5.0 %). The worker's own part is the bake phase: `bake.off`
+  is 319-418 ms earlier with the set on downtown/house/mexico (all three presets, medians per map) and 18-136 ms on
+  training; nothing else in the set touches the bake.
 - **High: not validated for the third time** (the set -0.7 % slower than the old tree in the raw mean, but the control moved
   -2.2 %, and the old tree is +1.5 % slower than headB): no gain and no regression shown. **Parent's decision (this
-  round's brief): Round 7's exceptions stand** — the HUD and rig changes stay on High and the worker stays on Ultra:
-  they are pixel-exact, preset-independent code, and gating them per preset would add code for no gain. Gains count
-  only where measured past the gate (Medium, Low, Ultra fights; Medium/High ready).
+  round's brief, from the parent orchestrator; no separate user approval is recorded in this log): Round 7's exceptions
+  stand** — the HUD and rig changes stay on High and the worker stays on Ultra: they are pixel-exact,
+  preset-independent code, and gating them per preset would add code for no gain. They remain **acceptance exceptions
+  to the measurement rule** (review 1 of this round, P2): High's HUD/rig and Ultra's worker are not shown past the
+  gate, and no gain is counted there. Gains count only where measured past the gate (Medium, Low, Ultra fights;
+  Medium/High ready).
 - **Round 4 on Medium: not confirmed** (the third try: r5R void, r6/r7 not run, now -0.1 % mean with the control at
   -1.3 %). Round 4's f1 (-3.3 %) and f2 (-2.8 % raw) remain the only Medium evidence. Its parts are exact,
-  preset-independent shader and CPU code; nothing is changed this round (lead 3). **Round 4 on High: confirmed again**
-  (+5.0 % mean, 23/32).
+  preset-independent shader and CPU code; nothing is changed this round (lead 3). **Round 4 on High: supportive, not a clean
+  confirmation**: pre4 is +5.0 % slower than noset (23/32) and slower than both HEAD-code arms (+4.2 % vs head, +6.5 % vs
+  headB), but the run's High control moved -2.2 %, past the ~2 % repeat line.
 
 ### Result (this round's changes)
 
@@ -1202,8 +1212,9 @@ a code change: compare within a machine state.
 | **readyMs, packing** (r8l, `latepack` vs head, 3 rounds, 4 maps) | 508 → 497 ms (-2.1 %: from `late`, no stream on Low) | **6634 → 5313 (-19.9 %, -1.32 s)** | **6676 → 5486 (-17.8 %, -1.19 s)** | 8627 → 8606 (-0.2 %) |
 | packing alone (`latepack` vs `late`); faster in | (none) | -19.7 %; 12/12 | -18.2 %; 12/12 | +0.1 %; 10/12 |
 | headB / head (ready) | +1.9 % | 0.0 % | +0.4 % | +0.2 % |
-| load window: median max frame, ms (head → latepack; late; headB) | 128 → 127 | 134.3 → 130.8 (132.5; 134.8) | 145.2 → 146.2 (144.3; 144.9) | 159.8 → 160.6 (160.1; 160.8) |
-| frames > 33 / > 50 ms per load (head → latepack; late; headB) | 1.0 / 1.0 = | 2.8 / 2.3 → 2.9 / 2.3 (2.9 / 2.3; 2.8 / 2.0) | 4.0 / 2.4 → 4.0 / 2.4 (3.9 / 2.5; 4.0 / 2.3) | 4.2 / 2.3 → 4.2 / 2.3 (4.3 / 2.4; 4.2 / 2.3) |
+| load window: median of the per-load maximum frame, ms (head → latepack; late; headB) | 128 → 127 | 134.3 → 130.8 (132.5; 134.8) | 145.2 → 146.2 (144.3; 144.9) | 159.8 → 160.6 (160.1; 160.8) |
+| frames > 33 / > 50 ms, **totals over the 12 loads** (head → latepack; late; headB) | 12 / 12 = | 34 / 27 → 35 / 27 (35 / 27; 34 / 24) | 48 / 29 → 48 / 29 (47 / 30; 48 / 28) | 50 / 28 → 50 / 28 (51 / 29; 50 / 27) |
+| highest single frame in the window, ms (head → latepack; headB) | | 183.3 → 175.5 (188.9) | 179.8 → 184.0 (182.0) | 184.3 → 185.7 (176.1) |
 | renderer ms in the window (sum), window frames | | 942 → 1510, 1876 → 1661 | 944 → 835, 1718 → 1404 | 1257 → 1270, 2201 → 2471 |
 | **readyMs, `late`** (vs head) | -2.6 % (headB +1.9 %) | -0.3 % | +0.5 % | -0.3 % |
 | **programs linked after ready** (`hitch.mjs sweep`: every gun and optic, sword, the 5 kinds and 6 bosses the bench never spawns, solo wave 5) | 8 → 0 (downtown) | 5 → 0 (training) | 9 → 0 (downtown) | 5 → 0 (training) |
@@ -1225,10 +1236,13 @@ per-preset frame-time delta is claimed this round.
   links cost was not timed (counts only; Round 7 measured 90-460 ms for first-use links of similar programs).
 - **Upload packing is applied by user decision (2026-10-20)**: Round 7's `r7-pack.patch`, rebased unchanged in behaviour
   (`SLOT_BYTES` = 24 ms × 60 kB/ms = 1.44 MB, `SLOT_PACK_MS` = 2, back-off, quiet start and gap rule unchanged). Its
-  gate passes: ready -19.9 % (Medium) and -17.8 % (High), faster in 12/12 cell-rounds each, control ≤ 0.4 %; the
-  load-window counts of frames > 33 / > 50 ms are equal to its base `late` (Medium 2.9 / 2.3, High 4.0 / 2.4 →
-  2.9 / 2.3, 4.0 / 2.4) and to head within 0.1 per load; the worst loading frame is Medium -3.5 ms, High +1.0 ms
-  (Round 7's r7ld read Medium +10 ms; the user accepted ~+8 ms). Ultra unchanged (its 2K maps exceed the slot budget).
+  gate (vs HEAD with the headB control) passes: ready -19.9 % (Medium) and -17.8 % (High), faster in 12/12
+  cell-rounds each, control ≤ 0.4 %. Load-window counts over the 12 loads per preset (> 33 / > 50 ms): High 48 / 29 →
+  48 / 29 (equal to head; `late` 47 / 30), Medium 34 / 27 → 35 / 27 (one more frame > 33 ms in 12 loads, the same as
+  `late`; headB 34 / 24, so the control itself moves 0-3 frames), Ultra 50 / 28 → 50 / 28. Not worse past the control
+  as we read it; the one extra Medium frame (and High's +1 / -1 vs `late`) is inside the control's spread, not proven
+  zero. Median per-load maximum frame: Medium -3.5 ms, High +1.0 ms; the highest single frame: Medium 183.3 → 175.5,
+  High 179.8 → 184.0 ms (headB 188.9 / 182.0) (Round 7's r7ld read Medium +10 ms median max; the user accepted ~+8 ms). Ultra unchanged (its 2K maps exceed the slot budget).
   Streams finish earlier as in Round 7; Medium spends more renderer time in the shorter window (more dressed frames).
 - **Ultra slot budget (`latepacku`, 2 × `SLOT_BYTES` at 2K textures): not kept**: Ultra ready -2.1 % vs head (11/12,
   headB +0.2 %), but only **-1.8 % vs packing alone** (10/12), under ~2 %; load-window counts as head
@@ -1238,7 +1252,7 @@ per-preset frame-time delta is claimed this round.
 
 | r8f (frame time, path + fight, all presets x downtown/training, 4 rounds, 6 variants) | low | medium | high | ultra |
 |---|---|---|---|---|
-| `opaque` mean raw / fitted / robust | +1.1 / +0.3 / +1.4 % | -0.6 / -1.3 / -0.1 % | +1.1 / +0.5 / -0.9 % | +0.8 / +1.1 / -0.7 % |
+| `opaque` mean raw / fitted (path + fight) / robust (**fight only**) | +1.1 / +0.3 / +1.4 % | -0.6 / -1.3 / -0.1 % | +1.1 / +0.5 / -0.9 % | +0.8 / +1.1 / -0.7 % |
 | `fence` | +1.3 / +0.6 / -0.4 % | -0.6 / -1.5 / -0.9 % | +3.6 / +3.2 / +1.5 % | -2.7 / -0.7 / -3.8 % |
 | `clips` | +3.1 / +3.5 / +1.8 % (Low does not run it) | -0.6 / -1.0 / -0.3 % | +2.9 / +3.4 / -0.6 % | -1.3 / +1.3 / -2.2 % |
 | `hud2` | +4.8 / +5.2 / +0.8 % | -0.4 / -0.4 / +1.1 % | +1.0 / +1.4 / +1.0 % | -0.3 / +1.0 / -1.2 % |
@@ -1264,11 +1278,15 @@ object; the fight views of the capture are byte-identical, and fight summaries a
 variants of `r8f` and `r8cov`. **Programs**: `hitch.mjs sweep --check zero` on the committed tree, all 16 cells:
 **0 programs after ready, PASS** (`perf/results/r8-sweep-final.json`; at ready Low 22-24, Medium 52-55, High 54-57,
 Ultra 56-59). `npm run typecheck` passes (also on the `late` commit alone). **`npm test -- --maxWorkers=2`: not clean**:
-404/405, then 403/405 on a second run; the failures are the two render-chain sky tests ("a streamed sky swaps in …",
-"a sky that lands in a match …"), whose `land()` helper renders until the sky lands within a **5 s wall-clock cap**.
-Run as one file alone they fail on **HEAD `3763490` too** (2 of 13), on HEAD + `late` (1 of 14) and on the committed
-tree (1 of 15); the first passes alone with `-t`. They depend on machine load (the other Chrome used 0.5-1.4 cores all
-afternoon; Round 7's 403/403 was on a quiet machine), not on this round's code (lead 7).
+404/405, then 403/405 on a second run; the failures are two render-chain sky tests: "a streamed sky swaps in …" (render-chain.test.ts:571 via `land()`
+:533, `expect(renderer._skyLanding).toBeNull()` after `land()`'s **5 s wall-clock cap**: the sky had not landed) and,
+in the second run only, "a sky that lands in a match …" (:730, `expect(renderer._skyLanding?.uploaded).toBe(false)`
+received `undefined`: fixed render calls, no `land()`; the landing state differed from what the test expects at that
+point). Run as one file alone, **HEAD `3763490` fails both too** (2 of 13 tests; the first at :527 via `land()` :489, the
+second at :627), HEAD + `late` fails the first (1 of 14), and the committed tree fails the first (1 of 15); the first
+passes alone with `-t`. So the failure mode exists on HEAD; that it is load-dependent (the other Chrome used 0.5-1.4
+cores all afternoon; Round 7's 403/403 was on a quiet machine) is a hypothesis, and that this round's code cannot affect
+it is not proven. **The full-suite gate is unresolved** (lead 7): a clean comparison on a quiet machine is needed.
 
 ### Harness (kept)
 
@@ -1276,7 +1294,7 @@ afternoon; Round 7's 403/403 was on a quiet machine), not on this round's code (
   past ready with its interval, render time, sky step, upload slot, compiles, warm-up draws and new programs; flags a
   warm-up sharing a frame with a slot or sky step) and `sweep` (after ready, one step at a time: every loadout gun and
   both rifle optics, the sword with blood, waves and an execution, the five enemy kinds and six bosses the bench never
-  spawns, solo wave 5; `--check zero` fails a step that adds a program, `--expect FILE` compares counts with an earlier
+  spawns, solo wave 5; `--check zero` fails a step whose program count changes or that created any program (by identity, so a program created and freed in the step counts), and a cell with any collected page/console error (review 1 fix; the saved final sweep passes the stricter rule: empty creation logs and error lists in all 16 cells), `--expect FILE` compares counts with an earlier
   sweep). `find` and `measure` unchanged. Results: `perf/results/r8-hitch-load.json`, `r8-sweep.json`,
   `r8-sweep-final.json`.
 - `perf/ab-pair.mjs <tag> <x> <y> [mean|med|p95]` (any two variants of an A/B, per preset and scenario, with the
@@ -1284,7 +1302,22 @@ afternoon; Round 7's 403/403 was on a quiet machine), not on this round's code (
 
 ### Review (GPT-6.1-Sol, high effort)
 
-Pending (`perf-loop-r8-review-1`).
+Round 1 (`perf-loop-r8-review-1`, on `3763490..633ad29`): **no P1 and no game-code defect** (the blade patch is
+idempotent and draws no `Math.random`; the holder is made under `quietly()` and removed after its warm-up render, whose
+target is cleared before any visible draw; no disposal, preset-switch, context-restore, map-change, slot-accounting,
+back-off, quiet-start or worker-layout fault; the rebase keeps the worker's separate layout slot). The principal numbers
+reproduce from the raw JSONs (r8cov +3.5 % / fight +6.3 % / control -1.3 %; Round 4 -0.1 % Medium / +5.0 % High;
+packing -19.9 / -17.8 % with 12/12; packu -1.8 % vs packing; r8f rejections; fight summaries and trails equal). Findings,
+all addressed: (P2) the packing gate's "counts equal to `late`" was wrong (High 47 / 30 → 48 / 29) → exact totals over
+the 12 loads, the gate read vs HEAD + control, the extra Medium frame stated; (P2) `hitch.mjs --check zero` checked only
+count changes → also every creation-log entry and every collected error (above; the saved result passes); (P2) the
+Round 7 exceptions have no recorded user approval → marked as the parent's decision and as open acceptance exceptions,
+no gain counted there; (P2) the sky-test attribution was too strong and the second test does not use `land()` →
+the failing assertions recorded, load dependence a hypothesis, the full-suite gate unresolved; (P2) coverage wording →
+"Medium aggregate", Round 4 on High "supportive, control -2.2 %"; (P2) r8cl measures the whole Round 7 set → so worded,
+the worker's own part given as the bake phase (319-418 ms earlier); (P3) robust columns are fight only → labelled;
+(P3) "worst loading frame" was the median per-load maximum → relabelled, the highest single frames added; the A/B note's
+CPU range corrected (37.6-130.1 %, 460.4 % start sample).
 
 ### Hot spot leads (refreshed)
 
@@ -1309,8 +1342,10 @@ Pending (`perf-loop-r8-review-1`).
    bundled, traced (`AB_TRACE=1`) retry on training/mexico fights could show them; each alone reads ≤ 2 %.
 6. **Background load**: the other Chrome used up to 1.4 cores during this round's A/Bs; ask the user to close it before
    Round 9's pre-bench.
-7. **Tests**: the two render-chain sky tests time out against `land()`'s 5 s wall-clock cap under load, on HEAD too; give
-   `land()` a frame budget instead of wall time (or a longer cap) so `npm test` is a clean gate again (Round 7 lead 5).
+7. **Tests**: two render-chain sky tests fail on HEAD too on this (loaded) machine: one at `land()`'s 5 s wall-clock cap,
+   one on the landing state after fixed render calls. Re-run the suite on a quiet machine to settle the gate, then give
+   `land()` a frame budget instead of wall time and make the second test wait on state, not on a fixed frame count, so
+   `npm test` is a clean gate again (Round 7 lead 5).
 
 ## Tried / rejected ideas
 
