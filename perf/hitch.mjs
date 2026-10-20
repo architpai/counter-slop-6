@@ -38,7 +38,7 @@
 // Writes perf/results/scratch-hitch-<label>.json (gitignored) and prints a summary.
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { MAPS, PORT, PRESETS, ROOT, SEED, launch, loadAndWait, openPage, stats } from './lib.mjs';
+import { MAPS, PORT, PRESETS, ROOT, SEED, checkGpu, launch, loadAndWait, openPage, stats } from './lib.mjs';
 import { serve } from './serve.mjs';
 
 const argv = process.argv.slice(2);
@@ -329,6 +329,7 @@ async function load(map, preset, inits = []) {
   await page.waitForFunction(() => window.__hitch?.atReady !== null, null, { polling: 50 });
   const facts = await page.evaluate(() => window.__perf.prepare());
   if (facts.preset !== preset || facts.level !== map) throw new Error(`wrong cell ${facts.preset}/${facts.level}`);
+  checkGpu(facts);
   const run = (name, frames, seed = SEED) => page.evaluate(([n, f, s]) => { window.__hitch.step = n; return window.__perf.run(n, f, { seed: s }); }, [name, frames, seed]);
   return { browser, page, errors, loaded, run };
 }

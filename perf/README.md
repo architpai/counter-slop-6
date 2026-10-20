@@ -95,6 +95,29 @@ A round's change counts only if `compare` flags it **IMP** beyond the noise floo
 targets, flags no **REG** elsewhere, and `quality.mjs compare baseline <label>` passes. Then `npm run typecheck` and
 `npm test` (≈2.5 min) before the commit.
 
+## Other machines (the MSI: Linux, RTX 4090)
+
+Every default above is the Mac's; three environment variables port the harness, and nothing changes when they are
+unset. `PERF_GPU_ARGS` replaces the two backend flags (`--use-gl=angle --use-angle=metal`) and keeps the rest
+(`--ignore-gpu-blocklist`, vsync and the frame-rate limit off, precise memory). `PERF_GPU_EXPECT` is a regular
+expression the page's WebGL renderer string must match: `bench`, `quality capture` and `hitch` fail the cell when it
+does not (a fallback to SwiftShader or the iGPU). A bench result records `meta.platform` and `meta.gpuEnv`.
+
+On the MSI (`ssh msi`, Ubuntu, headless tty, no X), everything lives in one scratch folder
+(`/home/fleet/perf-scratch-shooter`): `source perf/msi-env.sh` points HOME, TMPDIR, the XDG folders, the npm cache,
+Playwright's browsers and the NVIDIA/Mesa shader caches into it, puts an unpacked zsh (for `ab.sh`) on PATH, and
+selects the GPU: ANGLE's GL backend on the NVIDIA EGL driver (`--use-gl=angle --use-angle=gl-egl` with
+`__EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json`; without the vendor file the same flags
+land on the Intel iGPU). The power gate is `perf/powered-linux.sh` (AC, battery >= 50 % at the start, void under
+35 %, a sample line of AC, battery, GPU P-state/clocks/temperature/throttle reasons and CPU frequency/temperature/
+throttle events every 60 s). `ab.sh` runs as `zsh perf/ab.sh ...`. Setup, flags and readings: `perf/results/msi-s1.md`.
+
+```sh
+cd /home/fleet/perf-scratch-shooter/repo && source perf/msi-env.sh
+perf/powered-linux.sh $S/logs/power.log x1 zsh perf/ab.sh x1 low,medium,high,ultra downtown 3 head /tmp/x.patch headB
+__GL_SHADER_DISK_CACHE=0 node perf/hitch.mjs sweep --out out   # cold driver compiles
+```
+
 ## Files
 
 | file | what |
@@ -110,6 +133,8 @@ targets, flags no **REG** elsewhere, and `quality.mjs compare baseline <label>` 
 | `ab-load.mjs` | load times of an A/B run (best with `AB_ARGS="--load-only --repeat N"`): paired ratios, phase deltas, load-window frames |
 | `ab-posfit.mjs` | diagnostic fit of an A/B run: variant effects corrected for run position |
 | `ab-pair.mjs` | any two variants of an A/B run against each other (geomean/median paired ratio, slower count), with the headB/head control |
+| `powered.sh`, `powered-linux.sh` | power watchdog around a timed job (macOS `pmset`; Linux sysfs + nvidia-smi): logs the power and thermal state, voids the run off AC or under the battery floor |
+| `msi-env.sh` | the MSI's scratch-folder environment and GPU selection (`PERF_GPU_ARGS`, `PERF_GPU_EXPECT`) |
 | `hitch.mjs` | programs linked after ready (`find`, `sweep` with `--check zero` / `--expect`), first-fight hitch (`measure`), per-frame load timeline with warm-up/slot/sky-step collisions (`load`) |
 | `quality.mjs` | screenshot capture and SSIM gate |
 | `image.mjs` | PNG decode/encode (node:zlib), SSIM, diff heat maps |

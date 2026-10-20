@@ -30,7 +30,7 @@
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { MAPS, PRESETS, ROOT, SEED, VIEWPORT, git, launch, loadAndWait, openPage, startServer } from './lib.mjs';
+import { MAPS, PRESETS, ROOT, SEED, VIEWPORT, checkGpu, git, launch, loadAndWait, openPage, startServer } from './lib.mjs';
 import { compareImages, encodePng, heatmap, readPng, sideBySide } from './image.mjs';
 
 const SHOTS = resolve(ROOT, 'perf/shots');
@@ -205,6 +205,7 @@ async function captureMap({ preset, map, dir, views, headed }) {
   try {
     load = await loadAndWait(page);
     facts = await page.evaluate(() => window.__perf.prepare());
+    checkGpu(facts);
     assert.equal(facts.preset, preset, 'preset');
     assert.equal(facts.pixelRatio, 1, 'pixel ratio');
     assert.deepEqual(facts.drawingBuffer, [VIEWPORT.width, VIEWPORT.height], 'drawing buffer');

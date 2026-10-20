@@ -17,9 +17,23 @@ export const URL_BASE = `http://127.0.0.1:${PORT}/`;
 export const MAPS = ['downtown', 'house', 'mexico', 'training'];
 export const PRESETS = ['low', 'medium', 'high', 'ultra'];
 export const VIEWPORT = { width: 1920, height: 1080 };
-/** Real GPU through ANGLE Metal, uncapped: no vsync, no frame-rate limit. Precise heap numbers for the sampler. */
-export const CHROME_ARGS = ['--use-gl=angle', '--use-angle=metal', '--ignore-gpu-blocklist', '--disable-gpu-vsync',
+/**
+ * Real GPU through ANGLE Metal, uncapped: no vsync, no frame-rate limit. Precise heap numbers for the sampler.
+ * PERF_GPU_ARGS (space-separated) replaces only the two backend flags on another machine (README "Other machines");
+ * unset, the list is the Mac's as it always was.
+ */
+const GPU_ARGS = process.env.PERF_GPU_ARGS ? process.env.PERF_GPU_ARGS.trim().split(/\s+/) : ['--use-gl=angle', '--use-angle=metal'];
+export const CHROME_ARGS = [...GPU_ARGS, '--ignore-gpu-blocklist', '--disable-gpu-vsync',
   '--disable-frame-rate-limit', '--enable-precise-memory-info'];
+/** PERF_GPU_EXPECT: a regular expression the WebGL renderer string must match (unset: no check). */
+const GPU_EXPECT = process.env.PERF_GPU_EXPECT ? new RegExp(process.env.PERF_GPU_EXPECT) : null;
+/** The environment that picks the GPU and its caches, as set (recorded in a bench result's meta). */
+export const gpuEnv = () => Object.fromEntries(['PERF_GPU_ARGS', 'PERF_GPU_EXPECT', '__EGL_VENDOR_LIBRARY_FILENAMES', '__GL_SHADER_DISK_CACHE',
+  '__GL_SHADER_DISK_CACHE_PATH'].filter(k => process.env[k] != null).map(k => [k, process.env[k]]));
+/** Throws unless the page's renderer (`facts.gpu` of `P.prepare`) matches PERF_GPU_EXPECT: a fallback fails the run. */
+export function checkGpu(facts) {
+  if (GPU_EXPECT && !GPU_EXPECT.test(facts?.gpu ?? '')) throw new Error(`GPU ${JSON.stringify(facts?.gpu)} does not match PERF_GPU_EXPECT ${GPU_EXPECT}`);
+}
 export const SEED = 20261018;
 export const LOADOUT = 'r4c,pistol,sword';
 

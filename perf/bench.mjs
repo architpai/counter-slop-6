@@ -26,7 +26,7 @@
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { CHROME_ARGS, MAPS, PRESETS, ROOT, SEED, VIEWPORT, git, heapMB, launch, loadAndWait, median, openPage, startServer, stats, traced } from './lib.mjs';
+import { CHROME_ARGS, MAPS, PRESETS, ROOT, SEED, VIEWPORT, checkGpu, git, gpuEnv, heapMB, launch, loadAndWait, median, openPage, startServer, stats, traced } from './lib.mjs';
 
 const argv = process.argv.slice(2);
 const flag = name => argv.includes(`--${name}`);
@@ -149,6 +149,7 @@ async function runCell(map, preset) {
   try {
     const load = await loadAndWait(page);
     const facts = await page.evaluate(() => window.__perf.prepare());
+    checkGpu(facts);
     // The facts every number depends on.
     assert.equal(facts.preset, preset, 'preset');
     assert.equal(facts.fpsTarget, 0, 'fpsTarget (uncapped)');
@@ -340,7 +341,7 @@ const first = cells.flatMap(c => c.runs).find(r => !r.failed);
 const result = {
   meta: {
     label: cfg.label, mode: cfg.profile ? 'profile' : 'bench', date: new Date().toISOString(), git: git(), chrome: first?.chrome ?? null,
-    gpu: first?.facts?.gpu ?? null, viewport: { ...VIEWPORT, deviceScaleFactor: 1 }, chromeArgs: CHROME_ARGS, node: process.version,
+    gpu: first?.facts?.gpu ?? null, viewport: { ...VIEWPORT, deviceScaleFactor: 1 }, chromeArgs: CHROME_ARGS, platform: process.platform, gpuEnv: gpuEnv(), node: process.version,
     args: argv, config: cfg, timer: Object.fromEntries(cells.flatMap(c => c.runs.map(r => [`${c.map}/${c.preset}#${r.repeat}`, r.timer ?? null]))),
     timerNote: TIMER_NOTE, parityNote: PARITY_NOTE, durationMs: Date.now() - t0, errors: cells.flatMap(c => c.runs.flatMap(r => (r.errors ?? []).map(e => ({ cell: `${c.map}/${c.preset}`, ...e })))),
   },
