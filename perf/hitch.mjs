@@ -15,13 +15,16 @@
 //            (`cpu`, as bench); every program created, with its callback's cpu and frame time; program counts at
 //            ready, after the fight, and after a bench-order fight warm-up + fight; readyMs, the `warmups` /
 //            `compiles` phases and the last readiness flags to finish (load.phases); the raw per-frame arrays.
-//   node perf/hitch.mjs load  [--maps a,b] [--presets a,b] [--repeat 3] [--outs head=DIR,new=DIR] [--label NAME]
+//   node perf/hitch.mjs load  [--maps a,b] [--presets a,b] [--repeat 3] [--outs head=DIR,new=DIR] [--label NAME] [--check zero]
 //   load (Round 8): per build, alternating per load as measure, every frame from the match's start to 60 frames past
 //            ready: its rAF interval (the one holding the callback's work: to the next rendered frame's rAF time),
 //            the renderer's wall time, and what the renderer did in it: a sky landing step (bg / env / look), an
 //            upload slot taken (`_uploadAt` moved), held compiles run, warm-up draws (root name, in-match or not,
 //            with the shadow maps or not), programs created; per load the frames over 50 ms with their events and
 //            every warm-up draw with the slot / sky step it shared its frame with (`shared`).
+//            Round 9: every program created from the match's start (quiet start included) to the trace's end, by
+//            identity, with its asker as in find (`programLog`, t from the quiet end; `programsAtMatch`);
+//            [--check zero]: no load may create one (or fail, or collect a page error). Exit code 1 on a fail.
 //   node perf/hitch.mjs sweep [--maps a,b] [--presets a,b] [--parts guns,sword,enemies,bosses,solo] [--out DIR] [--label NAME]
 //   sweep (Round 8): after ready, content the bench never touches, one step at a time, every program created
 //            logged with its step (as find): guns (every loadout gun in turn: hip fire, aim/scope, reload; the rifles
@@ -57,7 +60,7 @@ const cfg = {
 /** Page side (an init script after lib.mjs `pageInit`): the program log. */
 function hitchInit() {
   const P = window.__perf;
-  const H = window.__hitch = { step: 'boot', atReady: null, log: [], released: 0, installed: false, perFrame: null };
+  const H = window.__hitch = { step: 'boot', atReady: null, log: [], early: [], released: 0, installed: false, perFrame: null };
   let cur = null, three = null;
   const describe = (object, material) => {
     const chain = [];
@@ -77,12 +80,16 @@ function hitchInit() {
       for (const p of ps) {
         if (seen.has(p)) continue;
         seen.add(p);
-        if (H.atReady === null) continue;
-        const target = three.getRenderTarget();
-        H.log.push({ step: H.step, frame: P.rec ? P.rec.n : null, renders: P.renders, ms: +P.now().toFixed(1), id: p.id, type: p.type, name: p.name,
+        // Before ready: only with the match live (from its start), in `early` (step 'match'; `load` reports them).
+        const match = H.atReady === null ? window.__game?.ctx.renderer._match : null;
+        if (H.atReady === null && !match?.live) continue;
+        const target = three.getRenderTarget(), now = P.now();
+        const entry = { step: match ? 'match' : H.step, frame: P.rec ? P.rec.n : null, renders: P.renders, ms: +now.toFixed(1), id: p.id, type: p.type, name: p.name,
           key: hashOf(p.cacheKey), keyHead: p.cacheKey.slice(0, 240), keyLen: p.cacheKey.length, cacheKey: p.cacheKey, via: cur?.via ?? 'other', shadow: !!cur?.shadow,
           target: target ? `${target.width}x${target.height}${target.isWebGLCubeRenderTarget ? ' cube' : ''}` : 'canvas',
-          ...(cur?.object || cur?.material ? describe(cur.object, cur.material) : {}), compileRoot: cur?.root ? describe(cur.root, null).object : undefined });
+          ...(cur?.object || cur?.material ? describe(cur.object, cur.material) : {}), compileRoot: cur?.root ? describe(cur.root, null).object : undefined,
+          ...(cur?.object?.material && !Array.isArray(cur.object.material) && cur.object.material !== cur.material ? { objectMaterial: describe(null, cur.object.material).material } : {}) };
+        if (match) { entry.quiet = match.quiet(now); H.early.push(entry); } else H.log.push(entry);
       }
       return push.apply(this, ps);
     };
@@ -125,7 +132,7 @@ function hitchInit() {
  */
 function loadTraceInit() {
   const P = window.__perf;
-  const T = window.__trace = { frames: [], done: false, after: 0, extra: 60, error: null };
+  const T = window.__trace = { frames: [], done: false, after: 0, extra: 60, error: null, atMatch: null };
   const handle = Object.getOwnPropertyDescriptor(window, '__game');
   Object.defineProperty(window, '__game', { configurable: true, enumerable: true, get: handle.get,
     set(g) { handle.set.call(window, g); if (g) { try { install(g); } catch (error) { T.error = String(error?.stack ?? error); } } } });
@@ -146,8 +153,9 @@ function loadTraceInit() {
         f.programs = (three.info.programs?.length ?? 0) - f.programs0;
         f.slot = r._uploadAt !== f.slotAt && r._uploadAt !== Infinity;
         f.ready = P.load.readyMs !== null;
+        const programs0 = f.programs0;
         delete f.slotAt; delete f.programs0;
-        if (m.live || f.ready || T.frames.length > 0) T.frames.push(f);
+        if (m.live || f.ready || T.frames.length > 0) { if (T.frames.length === 0) T.atMatch = programs0; T.frames.push(f); }
         if (f.ready && ++T.after >= T.extra) T.done = true;
       }
     };
@@ -397,7 +405,11 @@ async function traceLoad(map, preset, build) {
     const warmFrames = frames.filter(f => f.warm.length > 0 && f.live);
     const max = window_.reduce((a, f) => (f.interval !== null && f.interval > (a?.interval ?? -1) ? f : a), null);
     const programsAtReady = await page.evaluate(() => window.__hitch.atReady);
-    return { map, preset, build, readyMs: ready, quietEndMs: quietEnd, programsAtReady, error: trace.error,
+    // Every program created from the match's start (its quiet start included) to the end of the trace (60 frames past
+    // ready), by identity, with its asker (as find); t from the quiet end.
+    const programLog = (await page.evaluate(() => [...window.__hitch.early, ...window.__hitch.log]))
+      .map(e => ({ ...e, t: +(e.ms - (quietEnd ?? 0)).toFixed(1) }));
+    return { map, preset, build, readyMs: ready, quietEndMs: quietEnd, programsAtReady, programsAtMatch: trace.atMatch, programLog, error: trace.error,
       maxInterval: max ? { t: max.t, interval: max.interval, ms: max.ms, tags: tags(max) } : null,
       over50: window_.filter(f => f.interval > 50).map(f => ({ t: f.t, interval: f.interval, ms: f.ms, tags: tags(f) })),
       warm: warmFrames.map(f => ({ t: f.t, interval: f.interval, ms: f.ms, quiet: f.quiet, shared: !!(f.slot || f.sky), tags: tags(f) })),
@@ -546,6 +558,8 @@ if (mode === 'find') {
           + `>50 ms ${r.over50.length}; in-match warm-ups ${r.warm.length} (sharing a slot or sky step ${r.warm.filter(w => w.shared).length})`);
         for (const w of r.warm) console.log(`    warm ${at(w.t)} ms: frame ${w.interval} ms, render ${w.ms} ms [${w.tags.join(' ')}]`);
         for (const f of r.over50) console.log(`    >50 ${at(f.t)} ms: frame ${f.interval} ms, render ${f.ms} ms [${f.tags.join(' ')}]`);
+        console.log(`    programs at the match start ${r.programsAtMatch}, created from it ${r.programLog.length}`);
+        for (const e of r.programLog) console.log(`    program ${at(e.t)} ms${e.quiet ? ' (quiet)' : ''}: ${brief(e)}${e.objectMaterial ? ` (object's ${e.objectMaterial})` : ''}`);
       }
     }
   }
@@ -558,6 +572,19 @@ if (mode === 'find') {
     const warmMs = rs.flatMap(r => r.warm.map(w => w.interval));
     console.log(`| ${build} | ${rs.length} | ${med(rs.map(r => r.readyMs))?.toFixed(0)} | ${med(rs.map(r => r.maxInterval?.interval))?.toFixed(1)} (${rs.map(r => r.maxInterval?.interval).join(', ')}) | `
       + `${rs.filter(r => r.warm.some(w => w.shared)).length} | ${med(warmMs)?.toFixed(1)} / ${Math.max(...warmMs.filter(Number.isFinite)).toFixed(1)} | ${rs.filter(r => (r.maxInterval?.interval ?? 0) > 100).length} |`);
+  }
+  // `--check zero`: no program may be created from the match's start to the trace's end, and no load may fail or collect a page error.
+  if (opt('check', null) === 'zero') {
+    const fails = [];
+    for (const r of results) {
+      const cell = `r${r.round} ${r.build} ${r.map}/${r.preset}`;
+      if (r.failed) { fails.push(`${cell}: load failed`); continue; }
+      if (r.programLog.length) fails.push(`${cell}: ${r.programLog.length} program(s) created from the match start: ${r.programLog.map(brief).join('; ')}`);
+      for (const e of r.errors ?? []) fails.push(`${cell}: ${e.type} x${e.count}: ${e.text}`);
+    }
+    console.log(`\ncheck zero (programs from the match start): ${fails.length ? `FAIL (${fails.length})` : 'PASS'}`);
+    for (const f of fails) console.log(`  ${f}`);
+    if (fails.length) process.exitCode = 1;
   }
 } else {
   const builds = Object.entries(cfg.outs);

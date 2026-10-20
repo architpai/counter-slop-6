@@ -1077,6 +1077,14 @@ export function levelDepthSkinnedMat(): THREE.MeshDepthMaterial {
 }
 
 /**
+ * A new material as `levelDepthMat` (the same patch and key, so the same programs), for a probe that links one of
+ * its programs ahead of its casters (render/operators.ts `skinnedDepthProbe`). Make it under `quietly`.
+ */
+export function levelDepthTwin(): THREE.MeshDepthMaterial {
+  return makeLevelDepth();
+}
+
+/**
  * A realistic level mesh's groups as the shadow pass draws them
  * (render/index.ts, `_casters`). Every level material casts alike (opaque,
  * front side, through `levelDepthMat`), so each run of visible groups is one

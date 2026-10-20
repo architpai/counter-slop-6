@@ -21,7 +21,7 @@ import { BakeStreamer, TextureStreamer, fetchGrid, ktx2Loader, lightmapLoader, w
 import { WeaponAssets, weaponTextureSize } from './weapons';
 import { FX_UNIFORMS, FxAssets, fxLateTemplate, fxTemplate, fxTextureSize } from './fx';
 import { useOperatorSource, usePropSource } from './figure';
-import { OperatorAssets, operatorWant } from './operators';
+import { OperatorAssets, operatorWant, skinnedDepthProbe } from './operators';
 import { PropAssets, dressingSets, propTextureSize } from './props';
 import type { PostFX } from './postfx';
 import type { SkyUniforms } from './materials';
@@ -1441,6 +1441,8 @@ export class Renderer {
     this._programsWarm = true;
     void this._hold(this._compiles, this.rig, () => true).then(() => this._hold(this._warmups, this.rig, () => true));
     void this._hold(this._warmups, SHADOW_PROBE, () => true);
+    // The worn operators' skinned shadow program, which their glb's compile does not link (realistic tiers).
+    if (operatorWant(this._quality) !== null) void this._hold(this._warmups, skinnedDepthProbe(), () => true);
     const probe = this._skyProbe;
     if (this._quality.look === 'realistic') void this._hold(this._compiles, probe, () => true).then(() => this._hold(this._warmups, probe, () => true));
     // The effects' programs (R5): tracers and flat decals on every look, the realistic sprites, decals, casings and flashes too.

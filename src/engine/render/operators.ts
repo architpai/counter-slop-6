@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import manifest from './operator-assets.json';
-import { OPERATOR_AO, levelDepthMat, levelDepthSkinnedMat, operatorMaterial, quietly, twinMaterial, wearMaps } from './materials';
+import { OPERATOR_AO, levelDepthMat, levelDepthSkinnedMat, levelDepthTwin, operatorMaterial, quietly, twinMaterial, wearMaps } from './materials';
 import { ClipLibrary, LOOPS, ONE_SHOTS, type ClipGroup, type OperatorMotion } from './operator-motion';
 import { ANISOTROPY, TEXTURE_MAPS, TEXTURE_SIZE } from './surfaces';
 import { textureBytes } from './textures';
@@ -58,6 +58,44 @@ export function operatorWant(values: Pick<GfxValues, 'look' | 'textures'>): { lo
   if (values.look !== 'realistic') return null;
   const size = TEXTURE_SIZE[values.textures];
   return { lod: size <= 512 ? 1 : 0, size };
+}
+
+let depthProbe: THREE.SkinnedMesh | null = null;
+/**
+ * A caster for the menu's warm-up draw (render/index.ts `_warmPrograms`, realistic tiers) that links the worn
+ * operators' shadow-pass program there: no glb's compile links a shadow program, so a glb that lands in a match
+ * (after Start) linked it at its warm-up's (or a body's) first shadow draw, in a match frame. It draws as a body's
+ * mesh does in the shadow pass (`levelDepthSkinnedMat`'s program: skinned, on a map, back faces, no other
+ * attribute that keys a program), with a twin of that material (`levelDepthTwin`: the same patch and key) as its
+ * depth and its own material, so the warm-up's main pass draws it on that program too. It draws nothing: its one
+ * triangle's skin weights are zero, so every vertex skins to its origin and the triangle has no area (no fragment in
+ * the shadow maps or the frame). Made once, without a uuid draw (`quietly`), its bone texture too.
+ */
+export function skinnedDepthProbe(): THREE.SkinnedMesh {
+  return depthProbe ??= quietly(() => {
+    // The glb's quantised layout (KHR_mesh_quantization, as its loader gives it): positions normalised int16 in
+    // 8-byte strides, uv normalised uint16, joints uint8, weights normalised uint8, so the pass's draw takes the
+    // same vertex formats as a body's (ANGLE Metal keys its pipelines on them too).
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.InterleavedBufferAttribute(new THREE.InterleavedBuffer(new Int16Array(12), 4), 3, 0, true));
+    geometry.setAttribute('uv', new THREE.BufferAttribute(new Uint16Array(6), 2, true));
+    geometry.setAttribute('skinIndex', new THREE.BufferAttribute(new Uint8Array(12), 4));
+    geometry.setAttribute('skinWeight', new THREE.BufferAttribute(new Uint8Array(12), 4, true));
+    const material = levelDepthTwin();
+    // A map on channel 0 (a body's set albedo; the patched shader never samples it), and back faces as the pass
+    // gives a front-faced body (`shadowSide` keeps it so: the pass takes this material's side from itself).
+    const map = new THREE.DataTexture(new Uint8Array(4), 1, 1);
+    map.needsUpdate = true;
+    material.map = map;
+    material.side = material.shadowSide = THREE.BackSide;
+    const mesh = new THREE.SkinnedMesh(geometry, material);
+    mesh.name = 'skinned-depth-probe';
+    mesh.customDepthMaterial = material;
+    mesh.castShadow = mesh.receiveShadow = true;
+    mesh.bind(new THREE.Skeleton([new THREE.Bone()]));
+    mesh.skeleton.computeBoneTexture();
+    return mesh;
+  });
 }
 
 /** What a tier downloads for its characters: its glb and every set's maps at its size. */
@@ -583,18 +621,21 @@ function restBounds(template: KindTemplate): THREE.Sphere {
     mesh.bind(skeleton, new THREE.Matrix4());
     return mesh;
   });
+  // Each mesh skinned once (`skinnedPositions`, three's own arithmetic), for both the box and the reach.
+  const positions = meshes.map(skinnedPositions);
   const box = new THREE.Box3();
-  for (const mesh of meshes) {
-    mesh.computeBoundingBox();
-    box.union(mesh.boundingBox!);
-  }
+  meshes.forEach((mesh, m) => {
+    const own = new THREE.Box3(), points = positions[m]!;
+    for (let v = 0; v < points.length; v += 3) own.expandByPoint(_skinned.set(points[v]!, points[v + 1]!, points[v + 2]!));
+    box.union(own);
+  });
   const sphere = box.getBoundingSphere(new THREE.Sphere());
   let radius = 0;
   const vertex = new THREE.Vector3();
-  for (const mesh of meshes) {
-    const joints = mesh.geometry.getAttribute('skinIndex'), weights = mesh.geometry.getAttribute('skinWeight');
+  meshes.forEach((mesh, m) => {
+    const joints = mesh.geometry.getAttribute('skinIndex'), weights = mesh.geometry.getAttribute('skinWeight'), points = positions[m]!;
     for (let v = 0; v < joints.count; v++) {
-      mesh.getVertexPosition(v, vertex);
+      vertex.set(points[v * 3]!, points[v * 3 + 1]!, points[v * 3 + 2]!);
       let reach = vertex.distanceTo(sphere.center);
       for (let k = 0; k < 4; k++) {
         const at = weights.getComponent(v, k) > 0 ? joint[joints.getComponent(v, k)] : null;
@@ -603,9 +644,46 @@ function restBounds(template: KindTemplate): THREE.Sphere {
       radius = Math.max(radius, reach);
     }
     (mesh.material as THREE.Material).dispose();
-  }
+  });
   sphere.radius = radius + BOUNDS_MARGIN;
   return sphere;
+}
+
+const _skinned = new THREE.Vector3();
+const _base = new THREE.Vector3();
+const _bone = new THREE.Vector3();
+const _skinIndex = new THREE.Vector4();
+const _skinWeight = new THREE.Vector4();
+
+/**
+ * Every vertex of a skinned mesh as `SkinnedMesh.getVertexPosition` gives it (x, y, z per vertex, as doubles), with each
+ * bone's skinning matrix made once, not once per vertex weight: the same products of the same matrices in the same
+ * order (three r170 `applyBoneTransform`), so the same numbers.
+ */
+function skinnedPositions(mesh: THREE.SkinnedMesh): Float64Array {
+  const { skeleton, geometry } = mesh;
+  const count = geometry.getAttribute('position').count;
+  const matrices: (THREE.Matrix4 | undefined)[] = [];
+  const out = new Float64Array(count * 3);
+  for (let v = 0; v < count; v++) {
+    THREE.Mesh.prototype.getVertexPosition.call(mesh, v, _skinned);
+    _skinIndex.fromBufferAttribute(geometry.attributes.skinIndex as THREE.BufferAttribute, v);
+    _skinWeight.fromBufferAttribute(geometry.attributes.skinWeight as THREE.BufferAttribute, v);
+    _base.copy(_skinned).applyMatrix4(mesh.bindMatrix);
+    _skinned.set(0, 0, 0);
+    for (let k = 0; k < 4; k++) {
+      const weight = _skinWeight.getComponent(k);
+      if (weight === 0) continue;
+      const bone = _skinIndex.getComponent(k);
+      const matrix = matrices[bone] ??= new THREE.Matrix4().multiplyMatrices(skeleton.bones[bone]!.matrixWorld, skeleton.boneInverses[bone]!);
+      _skinned.addScaledVector(_bone.copy(_base).applyMatrix4(matrix), weight);
+    }
+    _skinned.applyMatrix4(mesh.bindMatrixInverse);
+    out[v * 3] = _skinned.x;
+    out[v * 3 + 1] = _skinned.y;
+    out[v * 3 + 2] = _skinned.z;
+  }
+  return out;
 }
 
 /**
@@ -619,22 +697,32 @@ function gibGeometries(template: KindTemplate): Map<string, THREE.BufferGeometry
     for (let b = bone; b >= 0; b = template.bones[b]!.parent) if (b === root) return true;
     return false;
   };
+  // Each mesh's triangles by the heaviest bone of their first corner, found once (at the first gib bone) for all of them.
+  let firsts: Int32Array[] | null = null;
+  const heaviestFirsts = () => template.meshes.map(({ geometry }) => {
+    const joints = geometry.getAttribute('skinIndex'), weights = geometry.getAttribute('skinWeight'), index = geometry.index!;
+    const heaviest = (v: number) => {
+      let best = 0, bone = 0;
+      for (let k = 0; k < 4; k++) {
+        const w = weights.getComponent(v, k);
+        if (w > best) { best = w; bone = joints.getComponent(v, k); }
+      }
+      return bone;
+    };
+    const bones = new Int32Array(index.count / 3);
+    for (let i = 0; i < index.count; i += 3) bones[i / 3] = heaviest(index.getX(i));
+    return bones;
+  });
   for (const name of GIB_BONES) {
     const root = template.bones.findIndex(b => b.name === name);
     if (root < 0) continue;
-    out.set(name, template.meshes.map(({ geometry }) => {
-      const joints = geometry.getAttribute('skinIndex'), weights = geometry.getAttribute('skinWeight'), index = geometry.index!;
-      const heaviest = (v: number) => {
-        let best = 0, bone = 0;
-        for (let k = 0; k < 4; k++) {
-          const w = weights.getComponent(v, k);
-          if (w > best) { best = w; bone = joints.getComponent(v, k); }
-        }
-        return bone;
-      };
+    firsts ??= heaviestFirsts();
+    const inside = template.bones.map((_, bone) => under(bone, root));
+    out.set(name, template.meshes.map(({ geometry }, m) => {
+      const index = geometry.index!, first = firsts![m]!;
       const kept: number[] = [];
       for (let i = 0; i < index.count; i += 3) {
-        if (under(heaviest(index.getX(i)), root)) kept.push(index.getX(i), index.getX(i + 1), index.getX(i + 2));
+        if (inside[first[i / 3]!] ?? under(first[i / 3]!, root)) kept.push(index.getX(i), index.getX(i + 1), index.getX(i + 2));
       }
       const gib = new THREE.BufferGeometry();
       for (const [key, attribute] of Object.entries(geometry.attributes)) gib.setAttribute(key, attribute);

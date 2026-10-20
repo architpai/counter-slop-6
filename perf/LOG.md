@@ -1371,6 +1371,152 @@ test that fails on HEAD); the tree's `src/` and `tests/` equal `d1ba2e3`, whose 
    `land()` a frame budget instead of wall time and make the second test wait on state, not on a fixed frame count, so
    `npm test` is a clean gate again (Round 7 lead 5).
 
+## Round 9 — packing confirmed (stays), quiet-start glb callback halved (exact), shadow-depth program pre-linked, `npm test` clean again; cpuhm rejected a third time
+
+2026-10-20, on `264559e` → `e1af377` (upload packing re-applied by user decision) → `51dd4d4` (sky tests) → this round's
+game commit (quiet + shadow). Time budget ~3.5 h after a restart, at most 3 frame-time A/Bs (**1 used**: `r9f`; plus the
+load-only `r9pl`, `r9pu` and the hitch runs, under 15 min each), no post-round bench (Round 10's pre-bench is the next
+reference). **Rate-limit restart:** the first Round 9 agent stopped at ~17:50 on an API rate limit, after the packing commit,
+`r9-pre` and `r9pl` (not aggregated). A second agent resumed at 17:54 and judged its worktrees (below). Wall time: 16:39 →
+~17:50 (first agent), 17:54 → ~20:00 (second agent, reviews included).
+
+**Machine state** (`perf/results/r9-power.log`). A **30 W adapter** ("30W USB-C Power Adapter", `pmset -g ac`: Wattage 30W),
+not Round 8's 94 W charger, from 16:53 on. It did not keep up under bench load: 84 → 78 % in r9pl (13 min), 87 → 66 %
+in r9f (48 min), always "AC Power". Gate AC and ≥ 60 % at each start, void under 40 % (`PERF_MIN_BATT=40`); no void,
+no thermal or performance warning. The agent-browser "Google Chrome for Testing" (not ours, left running) used **59-89 %
+CPU** at each bench start and end (sum over its processes). The paired A/Bs share that load across variants; `r9-pre`
+(unpaired) does not. A machine-wide lock (`/tmp/r9/heavy.sh`) kept the agents' builds, tests and Chrome runs off the
+benches and off each other.
+
+**Round baseline.** `r9-pre` (`e1af377`, traced, all presets on downtown + training): `perf/results/r9-pre.json`
+(ready Medium 5309 / 5330 ms, High 5791 / 5580, Ultra 9769 / 6605: packing on).
+
+### Upload packing: confirmed, stays (parent's decision rule)
+
+The parent's rule: revert only if a preset's load-window count of frames > 33 or > 50 ms exceeds **both** nopack and the
+control by more than 2 per 12 loads, or if ready does not improve on Medium and High. Notes: `perf/results/r9-ab.md`.
+
+| r9pl (load-only, 4 maps, 3 rounds; head = packing, nopack, headB) | medium | high | ultra |
+|---|---|---|---|
+| readyMs geomean head → nopack (headB) | 5297 → 6773 **(+27.9 %; nopack faster 0/12)** (+0.6 %) | 5497 → 6737 **(+22.6 %; 0/12)** (+0.1 %) | 8456 → 8565 (+1.3 %; 2/12) (+0.6 %) |
+| frames > 33 ms, total over 12 loads: head / nopack / headB | 35 / 35 / 34 | 48 / 48 / 48 | **52 / 49 / 48** |
+| frames > 50 ms | 24 / 26 / 26 | 29 / 28 / 29 | 32 / 32 / 32 |
+| highest single frame, ms | 169.3 / 168.8 / 154.6 | 166.7 / 163.4 / 213.1 | 249.7 / 198.4 / 251.2 |
+
+Medium and High pass. **Ultra > 33 ms tripped the rule** (+3 vs nopack, +4 vs headB; head and headB are the same code).
+Before more data, the rule for an extension was written down (`r9-ab.md`): pool r9pl with an Ultra-only load A/B
+(`r9pu`, 6 balanced rounds) and fail only if head's pooled total is more than 6 (2 per 12) above both. Pooled over 36
+loads: **> 33 ms head 151 / nopack 146 / headB 148** (+5 / +3), **> 50 ms 87 / 89 / 90**; r9pu alone 99 / 97 / 100;
+r9pu ready nopack +2.7 % (faster 1/24). **The rule passes: packing stays** (`e1af377`). The r9pl Ultra excess was the
+spread between loads. The 249.7 ms maximum is one load, and headB (the same code) has 251.2 ms.
+
+### Result (this round's changes)
+
+| | low | medium | high | ultra |
+|---|---|---|---|---|
+| **quiet start: the operators glb callback** (`hitch.mjs load`, head = e1af377 vs the round tree, downtown + house, 2 rounds, 4 loads per preset per build; checks, not benches of record) | not run (no realistic figures) | the ~-2.8 s frame 92-95 ms → **under 50 ms in 3/4 loads** (64 ms in one) | 142-177 ms (median 142.8) → **73-89 ms (median 81.0)** | 143-160 ms (median 143.4) → **73-91 ms (median 81.3)** |
+| median per-load maximum frame of the window | | 115.9 → 107.5 ms | 142.8 → 112.8 ms | 143.4 → 113.0 ms |
+| the ~-3.0 s frame (AudioContext constructor: not changed) | | 115.9 → 107.5 | 116.4 → 112.8 | 110.2 → 113.0 |
+| **shadow-depth program linked in the match** (the operators' skinned depth program at its first shadow draw, +66-94 ms after the quiet end) | none (Low has no worn operators) | 4/4 → **0/4** | 4/4 → **0/4** | 4/4 → **0/4** |
+| programs created from the match start / at ready | | 12 → 11 / equal (55) | 12 → 11 / equal (57) | 12 → 11 / equal (59) |
+| readyMs (median) | | 5304 → 5295 | 5627 → 5606 | 9726 → 9708 (noise) |
+| frame time after ready | no change (neither change runs after ready; no frame-time claim) | | | |
+
+The shadow agent's own hitch run (12 + 12 loads, medium/high/ultra x downtown/house) gives the same picture:
+the in-match `MeshDepthMaterial` link in 12/12 head loads, 0/12 with the probe, and the head key set minus the candidate's
+is exactly that key in every cell (none in its place); programs at the match start +1 (linked at the menu now). The
+warm-up frame it shared (`warm:Scene +shadows`, ~35 ms on High/Ultra) is mostly the template's draw: High render median
+38.9 → 33.4 ms, Ultra unchanged (4 loads each; not established).
+
+**Verdict.**
+- **quiet (kept, realistic tiers):** Round 8 lead 1 traced (three existing head traces). The quiet start's two long
+  intervals are two main-thread tasks. (A, ~-3.0 s) a rAF task of 108-124 ms, 89-99 ms of it blocked in
+  `new AudioContext()` (`Audio.init` from `beginSolo`: a sync IPC for the output device; the game decodes no audio).
+  (B, ~-2.8 s) the realistic operators glb callback, 96-173 ms of CPU: `restBounds` skinned every vertex twice
+  (`computeBoundingBox`, then `getVertexPosition`) with a bone matrix product per vertex weight (~66 ms), and
+  `gibGeometries` found each triangle's heaviest bone again for each of the 7 gib bones (~58 ms). The fix skins each
+  mesh once with each bone's `matrixWorld × boneInverse` made once (three r170's `applyBoneTransform` steps in the same
+  order) and finds the heaviest bones once. **Bit-exact**: a scratch browser test on both LODs (23 kinds each) compared
+  HEAD's functions (copied verbatim) with the new ones: 92 sphere numbers per LOD equal by `Object.is`, 1,704,261 / 873,372
+  gib indices equal, the same Math.random counts per kind (no new uuid object). B's interval roughly halves on
+  High/Ultra and goes under 50 ms on Medium in 3/4 loads. A is not changed (lead 1).
+- **shadow (kept, realistic tiers):** a hidden zero-area skinned probe (`skinnedDepthProbe`, made under `quietly()`, the
+  glb's quantised vertex formats, a twin of `levelDepthSkinnedMat` with the same patch and key) is held for the menu
+  warm-up, so the worn operators' depth program links there, not in a match frame. Kept on the program evidence, as
+  Round 8 kept `late`. No frame-time gain is claimed (the link was ≤ ~5 ms of a ~35 ms frame).
+- **`hitch.mjs load --check zero` fails on HEAD and on the round tree alike**: 11 held compiles per realistic load
+  remain after the match starts (7 at the sky landing frame: the acog rim, sword, r4c prop, 2 operator programs, a
+  physical and an unnamed standard material; 4 dressing programs about 0.65-6.2 s later). They are `compile`, not draw links;
+  their glbs land after Start (lead 2).
+- **Round 4 on Medium — parent's decision (this round's brief, from the parent orchestrator): kept.** It is exact apart
+  from the logged 39 px of `g`, and the same code runs on every preset (High/Ultra confirmed). **No Medium gain is
+  counted for it.**
+- **Round 7's High/Ultra exceptions stay** (parent's decision, unchanged).
+- **cpuhm rejected** (third try, below).
+
+| r9f (frame time, fight only, traced, medium/high x training/mexico, 9 balanced rounds; head / cpuhm / headB) | medium | high |
+|---|---|---|
+| cpuhm frame mean raw / fitted vs head | +0.9 / +0.9 % | -2.4 / -2.4 % |
+| cpuhm median / p95 / js mean | +0.7 / +2.6 / -0.7 % | -1.9 / -2.9 / -0.8 % |
+| robust (median of per-cell ratios) vs head / vs headB; faster in | -1.1 / -1.9 %; 9/18 | -3.3 / -3.6 %; 12/18 |
+| headB / head (control) | **+3.3 %** | +1.1 % |
+
+The acceptance line was written before the run (`r9-ab.md`): ≥ 2 % (Medium) / ≥ 4.5 % (High) frame mean, or js past
+its line, with the control within 2 %. Neither preset passes.
+
+### Changes kept (this round's game commit; patches `perf/patches/r9-quiet.patch`, `r9-shadow.patch`, `r9-sky.patch`)
+
+| change | where | evidence | pixels |
+|---|---|---|---|
+| **pack** (user decision, re-applied in `e1af377`) | `render/index.ts`, `textures.ts`, `weapons.ts`, `operators.ts`, `props.ts`, `fx.ts`, tests | r9pl ready Medium -22 % / High -18 % (nopack +27.9 / +22.6 %); counts pass (Ultra by the pooled rule) | exact after ready |
+| **quiet**: `restBounds` skins once with per-bone matrices made once (`skinnedPositions`); `gibGeometries` heaviest bones once | `render/operators.ts` | quiet-start B frame: High 142.8 → 81.0 ms, Ultra 143.4 → 81.3 ms medians; Medium under 50 ms in 3/4 | exact (bit-equal bounds and gibs; 56/56) |
+| **shadow**: `skinnedDepthProbe` held for the menu warm-up on realistic tiers; `levelDepthTwin` | `render/operators.ts`, `materials.ts`, `index.ts`, `tests/shadow-probe.test.ts` | in-match depth link 12/12 → 0/12, nothing in its place | exact (56/56) |
+| **sky tests**: `land()` caps a hang only (3000 frames / 60 s), the in-match landing test starts each of its five frames in a quiet start | `tests/render-chain.test.ts` (`51dd4d4`) | file 3/3, full suite clean | n/a |
+
+### Quality gate
+
+`node perf/quality.mjs compare baseline r9`: **PASS, 56/56, every SSIM 1.0000** (the changed pixels are Round 1/4's
+known LSBs, as in r8). `compare r8 r9`: **56/56, 0 changed pixels**, and `cmp` finds all 56 PNGs byte-identical (r8 was
+`late` + packing, the same packing code as now). Each candidate alone was 56/56 byte-identical vs r8 too (`scratch-r9-shadow`,
+`scratch-r9-quiet`, by the agents). **Math.random**: the probe is made under `quietly()` (a test counts 0 draws); the quiet
+change makes no uuid object (equal counts per kind). `npm run typecheck` passes. **`npm test -- --maxWorkers=2`: 49 files,
+407/407 PASS** on the round tree (the sky agent: 405/405 on e1af377 + the sky fix; the render-chain file 3/3).
+
+**Test-suite health (Round 8 lead 7, settled).** **main (`be47535`) fails both sky tests too** (3/3 runs of the file,
+`/tmp/r9/t4-main-*.log`); HEAD failed one in 1/3 runs. So the fault is older than the loop. Causes:
+(1) "a streamed sky swaps in …": a 10 ms timer after the first render took **4188 ms** beside the suite's other GPU
+tests (a probe), so `land()`'s 5 s wall cap ran out before the first step; (2) "a sky that lands in a match …": the
+`.then` that sets `_skyLanding` runs before `settle()`'s timer (a microtask), so the landing had started. The match was
+set live before `settle()`, and the same stall used up the 3 s quiet start, so the five renders landed the sky
+(`_skyLanding` null → `undefined`). Round 8's guess (the landing had not started) was wrong; a new assertion
+(`_skyLanding?.key === 'house'` after `settle()`) now pins it. Every count and assertion is kept.
+
+### Harness (kept)
+
+- `perf/hitch.mjs load`: every program created from the match start (quiet start included) to the trace's end, by
+  identity, with its asker (`programLog`, `programsAtMatch`), and `--check zero` (fails a load that creates any, fails
+  or collects a page error). Results: `perf/results/r9-hitch-final.json` (round tree vs e1af377),
+  `r9-hitch-shadow.json`, `r9-hitch-quiet.json`.
+
+### Review (GPT-6.1-Sol, high effort)
+
+(pending)
+
+### Hot spot leads for Round 10 (the last round: small, safe items only)
+
+1. **The AudioContext constructor (~90 ms in the first quiet-start frame of every traced realistic load; Low not traced).**
+   An async warm-up of the audio output device (e.g. `navigator.mediaDevices.enumerateDevices()` at boot) might
+   remove the sync IPC wait at no visible cost. Measure it first: the cost may exist only in the harness's fresh
+   browser profile. Building the context earlier changes behaviour (a suspended context in the menu; the noise-buffer
+   fill's 96,000 `rand()` calls must keep their place in the Math.random order): the user's choice.
+2. **The 11 held compiles after the match start** (7 at the sky landing frame, ~13.5 ms; 4 dressing programs): their
+   glbs land after Start. A menu-time compile of the same keys would need the templates earlier. Only if it is small.
+3. **The template's in-match warm-up draw (~35 ms on High/Ultra)**: the two `operator` main-pass programs compile at
+   +11 ms and first draw in that frame. A probe like `skinnedDepthProbe` with `operatorMaterial` could move that first
+   draw to the menu. Check the keys first.
+4. **Do not retry**: cpuhm (walk + D on Medium/High: three A/Bs without a gain), `hud2`, `fence`, `opaque`, `clips`,
+   `low1`, `matrix`, the Ultra slot budget (`r8-packu`).
+
 ## Tried / rejected ideas
 
 Format: round, idea, where, result numbers vs the noise floor, why rejected.
@@ -1525,3 +1671,7 @@ Format: round, idea, where, result numbers vs the noise floor, why rejected.
 - **r8, not built (survey)**: a per-frame `getProgram` probe (no live material/variant flip found by reading; a probe
   would confirm); compiling out Low's unused aerial-fog and probe-grid varyings (≤ 0.02 ms on a presentation-bound
   preset, and any shader text edit risks Metal LSBs).
+- **r9, cpuhm: walk + D on Medium and High (third try)** (`perf/patches/r9-cpuhm.patch`: `fightCpuPaths` on
+  Medium/High/Ultra; the same code Ultra runs). Exact. r9f (fight only, traced, training + mexico, 9 balanced rounds):
+  medium +0.9 % mean (control +3.3 %), high -2.4 % mean / fitted, js -0.8 %, robust -3.3 % vs head (12/18). Under
+  the 2 % / 4.5 % lines. Rejected; do not try it again.

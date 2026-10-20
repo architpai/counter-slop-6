@@ -1,0 +1,319 @@
+diff --git a/perf/hitch.mjs b/perf/hitch.mjs
+index f1fede1..753c9f6 100644
+--- a/perf/hitch.mjs
++++ b/perf/hitch.mjs
+@@ -15,13 +15,16 @@
+ //            (`cpu`, as bench); every program created, with its callback's cpu and frame time; program counts at
+ //            ready, after the fight, and after a bench-order fight warm-up + fight; readyMs, the `warmups` /
+ //            `compiles` phases and the last readiness flags to finish (load.phases); the raw per-frame arrays.
+-//   node perf/hitch.mjs load  [--maps a,b] [--presets a,b] [--repeat 3] [--outs head=DIR,new=DIR] [--label NAME]
++//   node perf/hitch.mjs load  [--maps a,b] [--presets a,b] [--repeat 3] [--outs head=DIR,new=DIR] [--label NAME] [--check zero]
+ //   load (Round 8): per build, alternating per load as measure, every frame from the match's start to 60 frames past
+ //            ready: its rAF interval (the one holding the callback's work: to the next rendered frame's rAF time),
+ //            the renderer's wall time, and what the renderer did in it: a sky landing step (bg / env / look), an
+ //            upload slot taken (`_uploadAt` moved), held compiles run, warm-up draws (root name, in-match or not,
+ //            with the shadow maps or not), programs created; per load the frames over 50 ms with their events and
+ //            every warm-up draw with the slot / sky step it shared its frame with (`shared`).
++//            Round 9: every program created from the match's start (quiet start included) to the trace's end, by
++//            identity, with its asker as in find (`programLog`, t from the quiet end; `programsAtMatch`);
++//            [--check zero]: no load may create one (or fail, or collect a page error). Exit code 1 on a fail.
+ //   node perf/hitch.mjs sweep [--maps a,b] [--presets a,b] [--parts guns,sword,enemies,bosses,solo] [--out DIR] [--label NAME]
+ //   sweep (Round 8): after ready, content the bench never touches, one step at a time, every program created
+ //            logged with its step (as find): guns (every loadout gun in turn: hip fire, aim/scope, reload; the rifles
+@@ -57,7 +60,7 @@ const cfg = {
+ /** Page side (an init script after lib.mjs `pageInit`): the program log. */
+ function hitchInit() {
+   const P = window.__perf;
+-  const H = window.__hitch = { step: 'boot', atReady: null, log: [], released: 0, installed: false, perFrame: null };
++  const H = window.__hitch = { step: 'boot', atReady: null, log: [], early: [], released: 0, installed: false, perFrame: null };
+   let cur = null, three = null;
+   const describe = (object, material) => {
+     const chain = [];
+@@ -77,12 +80,16 @@ function hitchInit() {
+       for (const p of ps) {
+         if (seen.has(p)) continue;
+         seen.add(p);
+-        if (H.atReady === null) continue;
+-        const target = three.getRenderTarget();
+-        H.log.push({ step: H.step, frame: P.rec ? P.rec.n : null, renders: P.renders, ms: +P.now().toFixed(1), id: p.id, type: p.type, name: p.name,
++        // Before ready: only with the match live (from its start), in `early` (step 'match'; `load` reports them).
++        const match = H.atReady === null ? window.__game?.ctx.renderer._match : null;
++        if (H.atReady === null && !match?.live) continue;
++        const target = three.getRenderTarget(), now = P.now();
++        const entry = { step: match ? 'match' : H.step, frame: P.rec ? P.rec.n : null, renders: P.renders, ms: +now.toFixed(1), id: p.id, type: p.type, name: p.name,
+           key: hashOf(p.cacheKey), keyHead: p.cacheKey.slice(0, 240), keyLen: p.cacheKey.length, cacheKey: p.cacheKey, via: cur?.via ?? 'other', shadow: !!cur?.shadow,
+           target: target ? `${target.width}x${target.height}${target.isWebGLCubeRenderTarget ? ' cube' : ''}` : 'canvas',
+-          ...(cur?.object || cur?.material ? describe(cur.object, cur.material) : {}), compileRoot: cur?.root ? describe(cur.root, null).object : undefined });
++          ...(cur?.object || cur?.material ? describe(cur.object, cur.material) : {}), compileRoot: cur?.root ? describe(cur.root, null).object : undefined,
++          ...(cur?.object?.material && !Array.isArray(cur.object.material) && cur.object.material !== cur.material ? { objectMaterial: describe(null, cur.object.material).material } : {}) };
++        if (match) { entry.quiet = match.quiet(now); H.early.push(entry); } else H.log.push(entry);
+       }
+       return push.apply(this, ps);
+     };
+@@ -125,7 +132,7 @@ function hitchInit() {
+  */
+ function loadTraceInit() {
+   const P = window.__perf;
+-  const T = window.__trace = { frames: [], done: false, after: 0, extra: 60, error: null };
++  const T = window.__trace = { frames: [], done: false, after: 0, extra: 60, error: null, atMatch: null };
+   const handle = Object.getOwnPropertyDescriptor(window, '__game');
+   Object.defineProperty(window, '__game', { configurable: true, enumerable: true, get: handle.get,
+     set(g) { handle.set.call(window, g); if (g) { try { install(g); } catch (error) { T.error = String(error?.stack ?? error); } } } });
+@@ -146,8 +153,9 @@ function loadTraceInit() {
+         f.programs = (three.info.programs?.length ?? 0) - f.programs0;
+         f.slot = r._uploadAt !== f.slotAt && r._uploadAt !== Infinity;
+         f.ready = P.load.readyMs !== null;
++        const programs0 = f.programs0;
+         delete f.slotAt; delete f.programs0;
+-        if (m.live || f.ready || T.frames.length > 0) T.frames.push(f);
++        if (m.live || f.ready || T.frames.length > 0) { if (T.frames.length === 0) T.atMatch = programs0; T.frames.push(f); }
+         if (f.ready && ++T.after >= T.extra) T.done = true;
+       }
+     };
+@@ -397,7 +405,11 @@ async function traceLoad(map, preset, build) {
+     const warmFrames = frames.filter(f => f.warm.length > 0 && f.live);
+     const max = window_.reduce((a, f) => (f.interval !== null && f.interval > (a?.interval ?? -1) ? f : a), null);
+     const programsAtReady = await page.evaluate(() => window.__hitch.atReady);
+-    return { map, preset, build, readyMs: ready, quietEndMs: quietEnd, programsAtReady, error: trace.error,
++    // Every program created from the match's start (its quiet start included) to the end of the trace (60 frames past
++    // ready), by identity, with its asker (as find); t from the quiet end.
++    const programLog = (await page.evaluate(() => [...window.__hitch.early, ...window.__hitch.log]))
++      .map(e => ({ ...e, t: +(e.ms - (quietEnd ?? 0)).toFixed(1) }));
++    return { map, preset, build, readyMs: ready, quietEndMs: quietEnd, programsAtReady, programsAtMatch: trace.atMatch, programLog, error: trace.error,
+       maxInterval: max ? { t: max.t, interval: max.interval, ms: max.ms, tags: tags(max) } : null,
+       over50: window_.filter(f => f.interval > 50).map(f => ({ t: f.t, interval: f.interval, ms: f.ms, tags: tags(f) })),
+       warm: warmFrames.map(f => ({ t: f.t, interval: f.interval, ms: f.ms, quiet: f.quiet, shared: !!(f.slot || f.sky), tags: tags(f) })),
+@@ -546,6 +558,8 @@ if (mode === 'find') {
+           + `>50 ms ${r.over50.length}; in-match warm-ups ${r.warm.length} (sharing a slot or sky step ${r.warm.filter(w => w.shared).length})`);
+         for (const w of r.warm) console.log(`    warm ${at(w.t)} ms: frame ${w.interval} ms, render ${w.ms} ms [${w.tags.join(' ')}]`);
+         for (const f of r.over50) console.log(`    >50 ${at(f.t)} ms: frame ${f.interval} ms, render ${f.ms} ms [${f.tags.join(' ')}]`);
++        console.log(`    programs at the match start ${r.programsAtMatch}, created from it ${r.programLog.length}`);
++        for (const e of r.programLog) console.log(`    program ${at(e.t)} ms${e.quiet ? ' (quiet)' : ''}: ${brief(e)}${e.objectMaterial ? ` (object's ${e.objectMaterial})` : ''}`);
+       }
+     }
+   }
+@@ -559,6 +573,19 @@ if (mode === 'find') {
+     console.log(`| ${build} | ${rs.length} | ${med(rs.map(r => r.readyMs))?.toFixed(0)} | ${med(rs.map(r => r.maxInterval?.interval))?.toFixed(1)} (${rs.map(r => r.maxInterval?.interval).join(', ')}) | `
+       + `${rs.filter(r => r.warm.some(w => w.shared)).length} | ${med(warmMs)?.toFixed(1)} / ${Math.max(...warmMs.filter(Number.isFinite)).toFixed(1)} | ${rs.filter(r => (r.maxInterval?.interval ?? 0) > 100).length} |`);
+   }
++  // `--check zero`: no program may be created from the match's start to the trace's end, and no load may fail or collect a page error.
++  if (opt('check', null) === 'zero') {
++    const fails = [];
++    for (const r of results) {
++      const cell = `r${r.round} ${r.build} ${r.map}/${r.preset}`;
++      if (r.failed) { fails.push(`${cell}: load failed`); continue; }
++      if (r.programLog.length) fails.push(`${cell}: ${r.programLog.length} program(s) created from the match start: ${r.programLog.map(brief).join('; ')}`);
++      for (const e of r.errors ?? []) fails.push(`${cell}: ${e.type} x${e.count}: ${e.text}`);
++    }
++    console.log(`\ncheck zero (programs from the match start): ${fails.length ? `FAIL (${fails.length})` : 'PASS'}`);
++    for (const f of fails) console.log(`  ${f}`);
++    if (fails.length) process.exitCode = 1;
++  }
+ } else {
+   const builds = Object.entries(cfg.outs);
+   for (let round = 0; round < cfg.repeat; round++) {
+diff --git a/src/engine/render/index.ts b/src/engine/render/index.ts
+index 3d0ebc5..b8fcbbf 100644
+--- a/src/engine/render/index.ts
++++ b/src/engine/render/index.ts
+@@ -21,7 +21,7 @@ import { BakeStreamer, TextureStreamer, fetchGrid, ktx2Loader, lightmapLoader, w
+ import { WeaponAssets, weaponTextureSize } from './weapons';
+ import { FX_UNIFORMS, FxAssets, fxLateTemplate, fxTemplate, fxTextureSize } from './fx';
+ import { useOperatorSource, usePropSource } from './figure';
+-import { OperatorAssets, operatorWant } from './operators';
++import { OperatorAssets, operatorWant, skinnedDepthProbe } from './operators';
+ import { PropAssets, dressingSets, propTextureSize } from './props';
+ import type { PostFX } from './postfx';
+ import type { SkyUniforms } from './materials';
+@@ -1441,6 +1441,8 @@ export class Renderer {
+     this._programsWarm = true;
+     void this._hold(this._compiles, this.rig, () => true).then(() => this._hold(this._warmups, this.rig, () => true));
+     void this._hold(this._warmups, SHADOW_PROBE, () => true);
++    // The worn operators' skinned shadow program, which their glb's compile does not link (realistic tiers).
++    if (operatorWant(this._quality) !== null) void this._hold(this._warmups, skinnedDepthProbe(), () => true);
+     const probe = this._skyProbe;
+     if (this._quality.look === 'realistic') void this._hold(this._compiles, probe, () => true).then(() => this._hold(this._warmups, probe, () => true));
+     // The effects' programs (R5): tracers and flat decals on every look, the realistic sprites, decals, casings and flashes too.
+diff --git a/src/engine/render/materials.ts b/src/engine/render/materials.ts
+index 3bc310a..b630b47 100644
+--- a/src/engine/render/materials.ts
++++ b/src/engine/render/materials.ts
+@@ -1076,6 +1076,14 @@ export function levelDepthSkinnedMat(): THREE.MeshDepthMaterial {
+   return levelDepthSkinned ??= makeLevelDepth();
+ }
+ 
++/**
++ * A new material as `levelDepthMat` (the same patch and key, so the same programs), for a probe that links one of
++ * its programs ahead of its casters (render/operators.ts `skinnedDepthProbe`). Make it under `quietly`.
++ */
++export function levelDepthTwin(): THREE.MeshDepthMaterial {
++  return makeLevelDepth();
++}
++
+ /**
+  * A realistic level mesh's groups as the shadow pass draws them
+  * (render/index.ts, `_casters`). Every level material casts alike (opaque,
+diff --git a/src/engine/render/operators.ts b/src/engine/render/operators.ts
+index d33d425..0fb77bf 100644
+--- a/src/engine/render/operators.ts
++++ b/src/engine/render/operators.ts
+@@ -1,6 +1,6 @@
+ import * as THREE from 'three';
+ import manifest from './operator-assets.json';
+-import { OPERATOR_AO, levelDepthMat, levelDepthSkinnedMat, operatorMaterial, quietly, twinMaterial, wearMaps } from './materials';
++import { OPERATOR_AO, levelDepthMat, levelDepthSkinnedMat, levelDepthTwin, operatorMaterial, quietly, twinMaterial, wearMaps } from './materials';
+ import { ClipLibrary, LOOPS, ONE_SHOTS, type ClipGroup, type OperatorMotion } from './operator-motion';
+ import { ANISOTROPY, TEXTURE_MAPS, TEXTURE_SIZE } from './surfaces';
+ import { textureBytes } from './textures';
+@@ -60,6 +60,44 @@ export function operatorWant(values: Pick<GfxValues, 'look' | 'textures'>): { lo
+   return { lod: size <= 512 ? 1 : 0, size };
+ }
+ 
++let depthProbe: THREE.SkinnedMesh | null = null;
++/**
++ * A caster for the menu's warm-up draw (render/index.ts `_warmPrograms`, realistic tiers) that links the worn
++ * operators' shadow-pass program there: no glb's compile links a shadow program, so a glb that lands in a match
++ * (after Start) linked it at its warm-up's (or a body's) first shadow draw, in a match frame. It draws as a body's
++ * mesh does in the shadow pass (`levelDepthSkinnedMat`'s program: skinned, on a map, back faces, no other
++ * attribute that keys a program), with a twin of that material (`levelDepthTwin`: the same patch and key) as its
++ * depth and its own material, so the warm-up's main pass draws it on that program too. It draws nothing: its one
++ * triangle's skin weights are zero, so every vertex skins to its origin and the triangle has no area (no fragment in
++ * the shadow maps or the frame). Made once, without a uuid draw (`quietly`), its bone texture too.
++ */
++export function skinnedDepthProbe(): THREE.SkinnedMesh {
++  return depthProbe ??= quietly(() => {
++    // The glb's quantised layout (KHR_mesh_quantization, as its loader gives it): positions normalised int16 in
++    // 8-byte strides, uv normalised uint16, joints uint8, weights normalised uint8, so the pass's draw takes the
++    // same vertex formats as a body's (ANGLE Metal keys its pipelines on them too).
++    const geometry = new THREE.BufferGeometry();
++    geometry.setAttribute('position', new THREE.InterleavedBufferAttribute(new THREE.InterleavedBuffer(new Int16Array(12), 4), 3, 0, true));
++    geometry.setAttribute('uv', new THREE.BufferAttribute(new Uint16Array(6), 2, true));
++    geometry.setAttribute('skinIndex', new THREE.BufferAttribute(new Uint8Array(12), 4));
++    geometry.setAttribute('skinWeight', new THREE.BufferAttribute(new Uint8Array(12), 4, true));
++    const material = levelDepthTwin();
++    // A map on channel 0 (a body's set albedo; the patched shader never samples it), and back faces as the pass
++    // gives a front-faced body (`shadowSide` keeps it so: the pass takes this material's side from itself).
++    const map = new THREE.DataTexture(new Uint8Array(4), 1, 1);
++    map.needsUpdate = true;
++    material.map = map;
++    material.side = material.shadowSide = THREE.BackSide;
++    const mesh = new THREE.SkinnedMesh(geometry, material);
++    mesh.name = 'skinned-depth-probe';
++    mesh.customDepthMaterial = material;
++    mesh.castShadow = mesh.receiveShadow = true;
++    mesh.bind(new THREE.Skeleton([new THREE.Bone()]));
++    mesh.skeleton.computeBoneTexture();
++    return mesh;
++  });
++}
++
+ /** What a tier downloads for its characters: its glb and every set's maps at its size. */
+ export function operatorDownloadBytes(lod: OperatorLod, size: TextureSize): number {
+   return OPERATOR_SETS.reduce((sum, set) => sum + OPERATOR_MANIFEST.sets[set]!.bytes[`${size}`]!.reduce((a, b) => a + b, 0), OPERATOR_MANIFEST.glb[lod]);
+diff --git a/tests/shadow-probe.test.ts b/tests/shadow-probe.test.ts
+new file mode 100644
+index 0000000..e25b2e0
+--- /dev/null
++++ b/tests/shadow-probe.test.ts
+@@ -0,0 +1,101 @@
++import { afterEach, expect, test, vi } from 'vitest';
++import * as THREE from 'three';
++import { Renderer } from '@/engine/render/index';
++import { levelDepthSkinnedMat } from '@/engine/render/materials';
++import { skinnedDepthProbe } from '@/engine/render/operators';
++import { PRESET_VALUES } from '@/engine/render/quality';
++
++// Round 9: the worn operators' skinned shadow program is linked and first drawn at the menu (`skinnedDepthProbe`,
++// `_warmPrograms`), not at the first shadow draw of a glb that lands in a match.
++
++const fx = { hurt: 0, flash: 0, slow: 0, lowHp: 0 };
++const cleanup: (() => void)[] = [];
++afterEach(() => { for (const done of cleanup.splice(0)) done(); });
++
++function makeRenderer(): Renderer {
++  const canvas = document.createElement('canvas');
++  document.body.append(canvas);
++  const renderer = new Renderer(canvas);
++  cleanup.push(() => { renderer.dispose(); canvas.remove(); });
++  return renderer;
++}
++
++/** A body's mesh as the glb gives it (KHR_mesh_quantization's layout) and as a worn figure casts it. */
++function bodyMesh(): THREE.SkinnedMesh {
++  const geometry = new THREE.BufferGeometry();
++  geometry.setAttribute('position', new THREE.InterleavedBufferAttribute(new THREE.InterleavedBuffer(new Int16Array([0, 0, 0, 0, 9000, 0, 0, 0, 0, 9000, 0, 0]), 4), 3, 0, true));
++  geometry.setAttribute('normal', new THREE.BufferAttribute(new Int8Array([0, 0, 127, 0, 0, 127, 0, 0, 127]), 3, true));
++  geometry.setAttribute('uv', new THREE.BufferAttribute(new Uint16Array(6), 2, true));
++  geometry.setAttribute('skinIndex', new THREE.BufferAttribute(new Uint8Array(12), 4));
++  geometry.setAttribute('skinWeight', new THREE.BufferAttribute(new Uint8Array([255, 0, 0, 0, 255, 0, 0, 0, 255, 0, 0, 0]), 4, true));
++  const map = new THREE.DataTexture(new Uint8Array([200, 200, 200, 255]), 1, 1);
++  map.needsUpdate = true;
++  const mesh = new THREE.SkinnedMesh(geometry, new THREE.MeshStandardMaterial({ map }));
++  mesh.bind(new THREE.Skeleton([new THREE.Bone()]), new THREE.Matrix4());
++  mesh.castShadow = mesh.receiveShadow = true;
++  mesh.frustumCulled = false;
++  mesh.customDepthMaterial = levelDepthSkinnedMat();
++  return mesh;
++}
++
++test('the skinned depth probe: made without a random draw, drawn with no area, as the bodies cast', () => {
++  // This file's first call (each browser test file has its own module state).
++  const random = vi.spyOn(Math, 'random');
++  const probe = skinnedDepthProbe();
++  expect(random).not.toHaveBeenCalled();
++  random.mockRestore();
++  expect(skinnedDepthProbe()).toBe(probe);
++  const { geometry } = probe;
++  const weights = geometry.getAttribute('skinWeight') as THREE.BufferAttribute;
++  expect([...weights.array].every(w => w === 0)).toBe(true);
++  // Every vertex skins to the origin: the triangle has no area, in the shadow maps or the frame.
++  const position = geometry.getAttribute('position');
++  for (let i = 0; i < position.count; i++) {
++    expect(probe.applyBoneTransform(i, new THREE.Vector3().fromBufferAttribute(position, i)).toArray()).toEqual([0, 0, 0]);
++  }
++  // Its material is the bodies' depth material's twin: the same patch and key, back faces, a map on channel 0.
++  const material = probe.material as THREE.MeshDepthMaterial, body = levelDepthSkinnedMat();
++  expect(material).not.toBe(body);
++  expect(probe.customDepthMaterial).toBe(material);
++  expect(material.onBeforeCompile).toBe(body.onBeforeCompile);
++  expect(material.customProgramCacheKey).toBe(body.customProgramCacheKey);
++  expect(material.depthPacking).toBe(body.depthPacking);
++  expect([material.side, material.shadowSide, material.map?.channel]).toEqual([THREE.BackSide, THREE.BackSide, 0]);
++  expect(probe.castShadow).toBe(true);
++});
++
++test('the menu warm-up links the bodies\' skinned shadow program on the realistic tiers, again after a preset change', () => {
++  const renderer = makeRenderer();
++  const probe = skinnedDepthProbe();
++  const queued = () => renderer._warmups.some(w => w.root === probe);
++  const warm = () => {
++    for (let i = 0; i < 20 && (renderer._compiles.length > 0 || renderer._warmups.length > 0 || !renderer._programsWarm); i++) renderer.render(0, fx);
++    expect(renderer._warmups).toEqual([]);
++    expect(probe.parent, 'the probe out of the scene after its draw').toBeNull();
++  };
++  renderer.applyQuality(PRESET_VALUES.low);
++  renderer._warmPrograms();
++  expect(queued(), 'Low wears no operators').toBe(false);
++  warm();
++  renderer.applyQuality(PRESET_VALUES.high);
++  renderer._warmPrograms();
++  expect(queued(), 'High after Low').toBe(true);
++  warm();
++  // The program the probe's shadow draw linked is a body's: a body cast after the warm-up links no depth program.
++  const depthKeys = () => new Set(renderer.three.info.programs!.filter(p => p.cacheKey.startsWith('depth,')).map(p => p.cacheKey));
++  const known = depthKeys();
++  expect(known.size).toBeGreaterThan(0);
++  const linked = renderer.three.properties.get(probe.material) as { programs?: Map<string, unknown> };
++  expect(linked.programs?.size ?? 0).toBeGreaterThan(0);
++  const body = bodyMesh();
++  body.position.copy(renderer.camera.position).add(renderer.camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(2));
++  renderer.scene.add(body);
++  cleanup.push(() => { renderer.scene.remove(body); });
++  renderer.render(0, fx);
++  renderer.render(0, fx);
++  const used = (renderer.three.properties.get(levelDepthSkinnedMat()) as { currentProgram?: { cacheKey: string } }).currentProgram;
++  expect(used, 'the body was cast in the shadow pass').toBeDefined();
++  expect(known.has(used!.cacheKey), 'the body\'s depth program was linked at the menu').toBe(true);
++  expect(linked.programs!.has(used!.cacheKey), 'by the probe').toBe(true);
++  expect([...depthKeys()].filter(key => !known.has(key))).toEqual([]);
++});
