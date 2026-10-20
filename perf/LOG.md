@@ -1557,6 +1557,101 @@ shadow link, programs at the match start 44 / 46 / 48 (the probe's +1); **`npm t
    Log the failing pool's height and extents: a satellite on the upper step is correct and the assertion too strict;
    a pool on the lower step past the edge is a clamp bug (a game fix, outside perf scope unless tiny).
 
+## Round 10 — AudioContext wait removed from the first match frame; blood test fixed (test fault); operator probe rejected; Round 0 → final verification
+
+2026-10-20, on `d7f9fbf` → game change `eb2e359`. The last round. Implementation: three Opus agents, each in its own
+worktree, one item each (audio; the held compiles + the operator probe; the blood test); review: GPT-6.1-Sol (below).
+Time budget ~5 h (PART A ≤ 2 h; PART B: one frame-time A/B ≤ 90 min, one load-only A/B, one hitch sweep). PART A used
+no frame-time A/B (none of its items runs after ready). Wall time: 19:55 → ~23:45 (PART A 19:55-20:45; PART B 20:45-23:10 with ~1.5 h of idle charging; reviews included).
+
+**Machine state** (`perf/results/r10-power.log`: `pmset -g ac` wattage, battery and the other Chrome's CPU before each
+job; `powered.sh` stamps). The **30 W adapter** all round ("30W USB-C Power Adapter", Wattage 30W); the 94 W charger
+was not connected. Idle it charged ~0.2 points per minute; under a bench or a sweep the battery fell ~0.5-0.6 points per
+minute. Gate: AC and ≥ 50 % at the start of every timed job, void under 35 % (`PERF_MIN_BATT=35`). So PART B's
+frame-time A/B was split into one balanced run per map, each started at ≥ 50 % after idle charging. Exact checks
+(program sweeps, captures, tests) ran without the gate. The agent-browser "Google Chrome for Testing" (not ours, left
+running) used 70-102 % CPU at each reading. No run was voided. The hitch measure started at 47 % (under the 50 % gate, over the watchdog floor) to save one more charging wait. No thermal or performance warning.
+
+### PART A
+
+| item | decision | evidence | pixels |
+|---|---|---|---|
+| **1. AudioContext wait** (`audio`, kept) | The wait is real outside the harness: the first `new AudioContext()` in any new browser process blocks 95-112 ms (Playwright headless, fresh or persistent profile) and 147-196 ms (installed Chrome, headless or headed, persistent profile too); later contexts 0.1-1.4 ms. At HEAD a mouse start pays it in the menu's `pointerdown` wake (a menu frame), a keyboard start in the click task just before the first match frame, a gamepad start and the harness in the match's first rAF. A gesture-based move cannot take it off that frame (keydown and click share one task), and a context made at boot would sit suspended on the menu (a behaviour change), so neither was done. Instead `GameMount`'s effect calls `navigator.mediaDevices?.enumerateDevices?.().catch(() => {})`: it starts the browser's audio service off the main thread (longest main-thread gap 5 ms), makes no context, plays nothing, prompts for nothing, draws no `Math.random` and makes no three object; the same context is made at the same time and the same sounds play. Constructor time 150 ms or more after the call: 0.6-0.9 ms. | `hitch.mjs load`, downtown + house × medium/high/ultra, 2 rounds, head = d7f9fbf vs new, under `powered.sh` (`perf/results/r10-hitch-audio.json`): **first quiet-start frame 125-178 ms (median 144.2) → 22-41 ms (median 28.8), 12/12 loads**; median per-load max frame 144.1 → 93.4 ms (the ~-2.8 s glb callback frame is now the largest); loads with a frame > 100 ms 12/12 → 4/12; ready median 5565 → 5534 ms (noise); programs equal | exact (56/56 byte-identical vs r9) |
+| **2. The 11 held compiles after the match start** (not built) | From `r9-hitch-final.json` (24 loads): the sky landing frame is 12.9-15.6 ms (median 14.3), its 7 compiles ~0.8 ms each, ~6 ms in all; the dressing frame 7.7-8.7 ms with ~2-3 ms of compiles. Every frame is under 16.7 ms, and linking earlier needs the glbs before Start (a load-order change). | — | — |
+| **3. The operators' first main-pass draw** (`prelink`, **rejected**) | A hidden zero-area skinned + rigid probe (`operatorTwin` = the same patch, parameters and key as `operatorMaterial` on its own 1×1 maps, under `quietly()`, one per renderer, freed in `dispose`) links the two `operator` programs at the menu: in 24/24 loads exactly those two keys leave the in-match list (11 → 9 compiles after the match start), none takes their place, programs at ready equal. But `#warmUp` already waits for the held compile before it draws, so the ~35 ms warm-up frame never waited on a link: it is the template's first draw. Warm-up interval medium 17.4 → 17.8, high 35.1 → 34.7, ultra 34.5 → 35.3 ms; sky landing render 14.5 → 12.6 / 14.7 → 12.7 / 13.7 → 13.2 ms (4 loads each, not established). No frame gain past noise and more code: rejected; patch `perf/patches/r10-prelink.patch`. | agent's `hitch.mjs load` (24 loads, exploratory), `perf/results/r10-hitch-prelink.json` | exact (56/56) |
+| **4. Blood stair-pool flake** (`blood`, kept: a test fix) | **The test was at fault, not the game.** With `Math.random` replaced by mulberry32 for seeds 1-2000, the old check failed 228 seeds (114 per 1000). Every rejected pool lay on the riser top (y 0.326-0.340, e.g. seed 2: centre z -0.240, z extent [-0.417, -0.064], size 0.353): a satellite (up to 0.65 m from the main pool at z = 0.35) on the upper step, whose whole extent is below z = 0, while the old check held every pool to the lower step's edge. Over 4962 pools: 4729 on the floor, 233 on the riser, none elsewhere, 0 over the edge of its own step (largest riser +z edge -0.00005, smallest floor -z edge +0.00007). Round 9's -0.309 case matches (seed 6: [-0.308, -0.065] on the riser). The clamp (`Effects._flatRadius`) works as `docs/spec/blood.md` says. The test now runs 200 fixed seeds (restores `Math.random` in `finally`), finds each pool's step by its height (2-4 cm over its top: a floating or sunk pool now fails), checks both z edges and the x edges against that step, keeps the open-floor size check per seed, and requires pools on both steps (seed 2 on the riser). With the clamp disabled the new test fails at seed 1 (size 1.126, -z edge -0.213). | 5/5 runs of the file, typecheck | n/a (tests/ only) |
+
+**Quality** (PART A): `node perf/quality.mjs capture final` on the committed tree: `compare r9 final` **56/56, 0 changed
+pixels**, and `cmp` finds all 56 PNGs byte-identical. **Tests**: `npm run typecheck` passes; `npx vitest run
+--maxWorkers=2` first run 407/408 (`tests/pacing.test.ts` "the view models compile and draw once at the menu, not in a
+match…": the figure had a program after the first live render; the file passed 3/3 alone, neither patch touches that
+path; it looks like the sky tests' wall-clock quiet-start fault, not fixed), second run **49 files, 408/408 PASS**.
+
+### Review (GPT-6.1-Sol, high effort)
+
+Round 1 (`perf-loop-r10-review-1`, on `eb2e359` and the SUMMARY.md draft): **no game-code defect** (the mount call is
+client-only, tolerates a missing API and a rejected promise, makes no context, sound, random draw or three object;
+StrictMode only repeats the listing; no capture permission; device data discarded); the blood verdict (test fault) and
+the new invariants are sound, `Math.random` restored in `finally`; rejecting `prelink` is justified; `ab-final`'s pairing,
+geomeans, p99 and count medians are right. Findings, all addressed: (P1) the audio medians were the upper middle values
+(147.6 → 29.2) → **144.2 → 28.8 ms** (the 12-load median; the `eb2e359` commit message keeps the old figures); (P2)
+"the only clean cumulative number" with downtown controls of +5.9 / +4.8 % → per-map controls shown, a downtown
+Medium + Ultra repeat run (`r10b-downtown2`, above), sizes stated as estimates; (P2) Round 1's js -21 % is unpaired
+(`r1-post` vs baselines) → so labelled; (P2) Round 2's rows were path + fight under "fights" → both given (fight only
+-5.8 / -3.5 / -3.1 % and -5.1 / -2.9 / -1.9 %), Round 7's Ultra -4.2 % labelled fights only; (P2) Round 7's ready gain
+measured the whole set → the worker's own evidence is the bake phase; (P2) `ab-final` would drop repeats → it now
+refuses files with more than one run; (P3) the LSB definition now names the 23/255 SMAA cluster, and Round 1's component
+runs x1-x4 as unbalanced.
+
+{{REVIEW2}}
+
+## Final verification — Round 0 → final (Round 10 PART B)
+
+Full tables, method and caveats: **`perf/SUMMARY.md`**; printed A/B output: `perf/results/r10-ab.md`. Final tree =
+`eb2e359` (src/ and tests/); Round 0 = `c7a65d8`'s src/ and tests/ as a reverse patch through `perf/ab.sh` (the
+harness, `package.json` and assets are the final tree's; outside perf/, src/ and tests/ only one doc line differs).
+Smoke checks first: the current harness runs the Round 0 tree (load phases, facts, sweep), and its fight summaries
+and state trails equal the final tree's (the loop kept the `Math.random` order in all ten rounds).
+
+**Frame time** (`r10b-downtown`, `-house`, `-mexico`, `-training`: one balanced run per map, 3 rounds = 3 variants
+head / r0 / headB, path + fight, `--no-trace`, 96 cell-scenario-rounds; `node perf/ab-final.mjs r0 <tags>`):
+
+| final vs Round 0 | low | medium | high | ultra | all |
+|---|---|---|---|---|---|
+| frame mean | 1.658 → 1.568 ms (**-5.4 %**) | 2.971 → 2.365 (**-20.4 %**) | 3.608 → 2.965 (**-17.8 %**) | 4.655 → 3.704 (**-20.4 %**) | 3.016 → 2.526 (-16.2 %) |
+| frame median | -3.9 % | -18.4 % | -14.3 % | -21.1 % | -14.7 % |
+| frame p95 | -4.6 % | -15.2 % | -13.6 % | -15.8 % | -12.4 % |
+| frame p99 | -5.8 % | -11.6 % | -10.8 % | -15.5 % | -11.0 % |
+| cpu (callback wall) mean | -1.3 % | -19.6 % | -17.6 % | -21.0 % | -15.2 % |
+| fight only, frame mean | -7.9 % | -22.5 % | -18.4 % | -20.5 % | -17.5 % |
+| path only, frame mean | -2.9 % | -18.2 % | -17.3 % | -20.4 % | -15.0 % |
+| final faster in | 24/24 | 24/24 | 24/24 | 24/24 | 96/96 |
+| control headB/head (mean) | -0.2 % | +2.7 % | +0.2 % | +1.0 % | +0.9 % |
+| fight calls (median) | 213.75 → 213.75 | 245.5 → 226.5 | 319 → 305 | 366.5 → 346.5 | |
+| programs at the bench (median) | 21 → 23 | 51.5 → 54.5 | 55.5 → 56.5 | 57.5 → 58.5 | |
+
+Per map the control passed ~2 % on downtown Medium (+5.9 %) / Ultra (+4.8 %), house Medium (+2.1 %), mexico
+Medium/High (+2.3 / +2.0 %); a downtown Medium + Ultra repeat (`r10b-downtown2`, controls -0.1 / +0.9 %) read -19.0 /
+-21.9 % against the first run's -20.7 / -20.7 %. The position fit equals the raw ratios (exact balance). js was not
+measured (traced mode did not fit the time and power budget).
+
+**Load** (`r10l`, load-only, 4 presets x 4 maps x 3 rounds): ready Low 502 → 398 ms (-20.8 %), Medium 6848 → 5209
+(-24.0 %), High 6802 → 5372 (-21.0 %), Ultra 8539 → 8158 (-4.5 %); Round 0 faster in 0/12 per preset; first playable
+-18 to -20 % (~105 ms: the AudioContext frame); control ≤ 2.0 %. Load window median per-load max frame 145.1 → 72.7 ms;
+frames > 50 ms per load 2.1 → 1.0.
+
+**Hitches**: programs after ready in the content sweep 4-13 per cell → 0 in all 16 (`--check zero` PASS); first-fight
+max frame (1 load per cell) High 34.6-37.3 → 9.8-11.2 ms and Ultra 55.0-70.5 → 10.8-11.8 ms on downtown/house/mexico,
+training/ultra 38.9 → 14.0; Round 0 links 2 programs in every High/Ultra first fight, the final tree none.
+
+**Quality**: `compare baseline final` PASS, 56/56, SSIM 1.0000; Low 14/14 byte-identical; 289 px in the 42 realistic
+images, all 1-3/255 (Round 1's B1/B3 and Round 4's `g`, Metal fast math; Round 1's 23/255 SMAA edge flip is undone
+by `g`); `compare r9 final` 0 changed pixels. **Tests**: typecheck passes; `npx vitest run --maxWorkers=2` 408/408 on
+the final src/ and tests/ (second run; the first lost the pacing test above).
+
+**Power**: 30 W adapter, every timed job started on AC at ≥ 50 % (the measure at 47 %), none voided; battery 50 → 46 %
+per ~10 min per-map run; the other Chrome at 70-102 % CPU.
+
 ## Tried / rejected ideas
 
 Format: round, idea, where, result numbers vs the noise floor, why rejected.
@@ -1715,3 +1810,11 @@ Format: round, idea, where, result numbers vs the noise floor, why rejected.
   Medium/High/Ultra; the same code Ultra runs). Exact. r9f (fight only, traced, training + mexico, 9 balanced rounds):
   medium +0.9 % mean (control +3.3 %), high -2.4 % mean / fitted, js -0.8 %, robust -3.3 % vs head (12/18). Under
   the 2 % / 4.5 % lines. Rejected; do not try it again.
+- **r10, prelink: the operators' main-pass programs linked at the menu** (`perf/patches/r10-prelink.patch`: a hidden
+  zero-area skinned + rigid probe with `operatorTwin`, one per renderer, freed in `dispose`, under `quietly()`). Exact
+  (56/56); in 24/24 loads exactly the two `operator` keys leave the in-match compile list (11 → 9). But the warm-up
+  already waits for the held compile before it draws, so the ~35 ms warm-up frame was never a link: interval medium
+  17.4 → 17.8, high 35.1 → 34.7, ultra 34.5 → 35.3 ms (4 loads each). No frame gain; more code. Rejected.
+- **r10, the 9-11 held compiles after the match start** (not built): ~6 ms of a 13-16 ms sky-landing frame and 2-3 ms of
+  an ~8 ms dressing frame; linking earlier needs the glbs before Start (a load-order change).
+

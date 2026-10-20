@@ -22,6 +22,7 @@ for (const tag of tagList.split(',')) {
       const f = `scratch-${tag}-${v}-${map}-${preset}-${r}.json`;
       if (!existsSync(dir + f)) { errs.push(`missing ${f}`); continue; }
       const cells = JSON.parse(readFileSync(dir + f)).cells ?? [];
+      if (cells[0]?.runs?.length > 1) { errs.push(`${f}: ${cells[0].runs.length} repeats (ab-final pairs one run per file)`); continue; }
       const run = cells.length === 1 && cells[0].map === map && cells[0].preset === preset ? cells[0].runs?.[0]?.[s] : null;
       if (!run?.frameMs) { errs.push(`${f}: no ${s} result for ${map}/${preset}`); continue; }
       row.v[v] = { mean: run.frameMs.mean, med: run.frameMs.med, p95: run.frameMs.p95, p99: run.frameMs.p99,
