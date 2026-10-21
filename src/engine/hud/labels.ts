@@ -24,7 +24,7 @@ export const KEYBOARD_ROWS: readonly string[] = [
   '<b>G</b> grenade · hold it to throw further',
   '<b>Tab</b> scoreboard (online)   <b>Esc</b> pause',
   '<b>Both mouse buttons</b> dash-slash once the gauge is lit',
-  '<b>1-3 / wheel</b> your loadout · pick 3 weapons under Weapons',
+  '<b>1-3 / wheel</b> your loadout slots · pick and order them under Weapons',
   '<b>Enter</b> skips the break between waves',
 ];
 

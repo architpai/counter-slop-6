@@ -43,12 +43,12 @@ export function createUI(app: App): UiApi {
     msaaSoft: ctx.renderer?.msaaDepthReadable ?? true });
   const look = () => ({ sens: settings.sens, touchSens: settings.touchSens, touch: ctx.input.usingTouch, acogSens: settings.acogSens, sniperSens: settings.sniperSens,
     invert: settings.invert, music: settings.music, gore: settings.gore, confirmKey: hud.key('confirm'), gfx: gfx() });
-  /** A pick under way: fewer than `LOADOUT_SIZE` weapons. Saved (`pickLoadout`) once full. */
-  let draft: WeaponKind[] | null = null;
+  /** A pick under way: `LOADOUT_SIZE` slots, some of them empty. Saved (`pickLoadout`) once full. */
+  let draft: (WeaponKind | null)[] | null = null;
   const weapons = () => ({ optic: settings.optic, r4cOptic: settings.r4cOptic, choices: LOADOUT_CHOICES,
     loadout: [...(draft ?? settings.loadout)], loadoutNote: loadoutNote() });
   function loadoutNote(): string {
-    if (draft) return `Pick ${LOADOUT_SIZE - draft.length} more.`;
+    if (draft) return `Pick ${draft.filter(kind => kind === null).length} more.`;
     const pending = !!ctx.player && ctx.player.loadout.join() !== settings.loadout.join();
     if (!['play', 'dying', 'pause'].includes(gs.state)) return 'Saved on this device. You carry these from the start of the next run or match.';
     if (gs.mode === 'training') return 'Training: changes apply at once.';
@@ -58,13 +58,25 @@ export function createUI(app: App): UiApi {
     }
     return pending ? 'Locked for this match. Applies from the next match.' : 'Locked for this match.';
   }
+  /** A tap: a picked weapon leaves its slot empty, an unpicked one fills the first empty slot. */
   function toggleLoadout(value: string | null): void {
     if (!isWeaponKind(value)) return;
-    const next = draft ?? [...settings.loadout], at = next.indexOf(value);
-    if (at >= 0) next.splice(at, 1);
-    else if (next.length < LOADOUT_SIZE) next.push(value);
+    const next = [...(draft ?? settings.loadout)], at = next.indexOf(value), free = next.indexOf(null);
+    if (at >= 0) next[at] = null;
+    else if (free >= 0) next[free] = value;
     else return;
-    if (next.length === LOADOUT_SIZE && app.pickLoadout(next)) draft = null;
+    setSlots(next);
+  }
+  /** A drag: the whole slot list, as `WeaponSettingsModel.loadout` describes. Anything malformed is ignored. */
+  function setLoadout(value: string | null): void {
+    const next = String(value ?? '').split(',').map(kind => kind === '' ? null : kind);
+    const kinds = next.filter(kind => kind !== null);
+    if (next.length !== LOADOUT_SIZE || !kinds.every(isWeaponKind) || new Set(kinds).size !== kinds.length) return;
+    setSlots(next as (WeaponKind | null)[]);
+  }
+  function setSlots(next: (WeaponKind | null)[]): void {
+    const full = next.every(kind => kind !== null);
+    if (full && app.pickLoadout(next)) draft = null;
     else draft = next;
     redraw();
   }
@@ -177,6 +189,7 @@ export function createUI(app: App): UiApi {
     optic: value => setOptic('optic', value),
     r4cOptic: value => setOptic('r4cOptic', value),
     loadout: value => toggleLoadout(value),
+    loadoutSet: value => setLoadout(value),
     invert: value => { settings.invert = value === '1'; app.applyLook(); },
     music: value => { app.setMusic(value === '1'); },
     gore: value => { if (value === 'off' || value === 'reduced' || value === 'full') { app.setGore(value); redraw(); } },

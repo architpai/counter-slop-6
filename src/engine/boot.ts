@@ -80,7 +80,10 @@ export interface App {
   applyOptic(): void;
   /** Set and save the blood level. */
   setGore(level: Gore): void;
-  /** Save `kinds` as the loadout; true if it was a valid one. The player takes it up when `loadoutOpen` allows. */
+  /**
+   * Save `kinds` as the loadout; true if it was a valid one. The player takes it up when `loadoutOpen`
+   * allows, except a new order of the weapons carried now: that applies at once, in every mode.
+   */
   pickLoadout(kinds: readonly WeaponKind[]): boolean;
   /** The player may change weapons now: in training, between co-op or solo waves, or before a run or match. */
   loadoutOpen(): boolean;
@@ -357,7 +360,8 @@ export function boot(canvas: HTMLCanvasElement, hud: HudView): GameHandle {
     if (!valid) return false;
     settings.loadout = valid;
     store.set(SKEY.LOADOUT, valid.join(','));
-    loadoutPending = true;
+    // Only the number keys change, so there is nothing to wait for.
+    loadoutPending = !player.reorderLoadout(valid);
     return true;
   };
   app.pickups = createPickups(ctx);

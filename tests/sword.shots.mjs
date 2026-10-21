@@ -18,21 +18,23 @@ const tag = preset ?? 'auto';
 try {
   await page.goto(url);
   await page.waitForFunction(() => window.__game?.live === 1, null, { timeout: 120000 });
-  // The Weapons page: drop the pistol, pick the LMG, which saves r4c, sword, lmg.
+  // The Weapons page: drop the pistol, pick the LMG into its slot, which saves r4c, lmg, sword.
   await page.locator('.menu-nav button', { hasText: 'weapons' }).click();
-  await page.locator('[data-act="loadout"][data-value="pistol"]').click();
-  assert.equal(await page.locator('[data-act="loadout"][data-value="sniper"]').isDisabled(), false);
+  await page.locator('.loadout-card[data-value="pistol"]').click();
+  assert.equal(await page.locator('.slot-empty').count(), 1);
   await page.screenshot({ path: `${out}/${tag}-menu-picking.png` });
-  await page.locator('[data-act="loadout"][data-value="lmg"]').click();
-  assert.equal(await page.evaluate(() => localStorage.getItem('cs6_loadout')), 'r4c,sword,lmg');
-  assert.equal(await page.locator('[data-act="loadout"][data-value="sniper"]').isDisabled(), true);
+  await page.locator('.loadout-card[data-value="lmg"]').click();
+  assert.equal(await page.evaluate(() => localStorage.getItem('cs6_loadout')), 'r4c,lmg,sword');
+  // Full: a tap on another weapon changes nothing (dragging it onto a slot swaps it in).
+  await page.locator('.loadout-card[data-value="sniper"]').click();
+  assert.equal(await page.evaluate(() => localStorage.getItem('cs6_loadout')), 'r4c,lmg,sword');
   await page.mouse.move(10, 450);
   await page.waitForTimeout(300);
   await page.screenshot({ path: `${out}/${tag}-menu-loadout.png` });
   await page.locator('[data-act="training"]').click();
   await page.waitForFunction(() => window.__game.gs.mode === 'training');
-  assert.deepEqual(await page.evaluate(() => window.__game.player.loadout), ['r4c', 'sword', 'lmg']);
-  await page.evaluate(() => window.__game.player.switchTo(1));
+  assert.deepEqual(await page.evaluate(() => window.__game.player.loadout), ['r4c', 'lmg', 'sword']);
+  await page.evaluate(() => window.__game.player.switchTo(2));
   // The realistic tiers stream their Blender weapons in after the level.
   if (preset && preset !== 'low') await page.waitForFunction(() => window.__game.ctx.renderer.weapons?.ready === true, null, { timeout: 120000 });
   await page.waitForTimeout(preset ? 4000 : 1000);
@@ -68,7 +70,7 @@ try {
   });
   assert.equal(await page.evaluate(() => window.__game.player.waves.length), 1);
   await page.screenshot({ path: `${out}/${tag}-air-slash.png` });
-  await page.evaluate(() => { window.swordStep(80); window.__game.player.switchTo(2, true); window.swordStep(60); });
+  await page.evaluate(() => { window.swordStep(80); window.__game.player.switchTo(1, true); window.swordStep(60); });
   await page.screenshot({ path: `${out}/${tag}-lmg.png` });
   assert.deepEqual(errors, []);
   console.log(`OK: sword screenshots in ${out}`);

@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import type { CSSProperties, ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { CSSProperties, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode, RefObject } from 'react';
 import { ControlEditor } from './ControlEditor';
 import { KEYBOARD_ROWS, PAD_ROWS } from '@/engine/hud/labels';
 import { ONLINE_MODES, TEAM_NAMES, isTeam, isTeamMode } from '@/engine/game/team-rules';
@@ -137,56 +137,218 @@ function Weapons({ model, onAction, collapsible = false }: {
   model: WeaponSettingsModel; onAction: Act; collapsible?: boolean;
 }) {
   const content = <div className="weapon-customization" data-ui-block="" data-ui-input-block="">
-    <Loadout model={model} onAction={onAction} />
-    <h4 className="loadout-title">Scopes</h4>
-    <p className="weapon-customization-note">Choose a scope for each rifle. Changes apply immediately and are saved on this device.</p>
-    {([
-      { name: 'R4-C', badge: 'AR', field: 'r4cOptic', role: 'Assault rifle · medium-range damage' },
-      { name: 'MP5', badge: 'SMG', field: 'optic', role: 'SMG · accurate on the move' },
-    ] as const).map(weapon => <div className="weapon-customization-row" key={weapon.field}>
-      <div className="weapon-identity">
-        <span className="slot-badge">{weapon.badge}</span>
-        <div><h4>{weapon.name}</h4><p>{weapon.role}</p></div>
+    <Loadout model={model} onAction={onAction}>
+      <h4 className="loadout-title">Scopes</h4>
+      <p className="weapon-customization-note">Choose a scope for each rifle. Changes apply immediately and are saved on this device.</p>
+      <div className="scope-rows">
+        {([
+          { name: 'R4-C', badge: 'AR', field: 'r4cOptic', role: 'Assault rifle · medium-range damage' },
+          { name: 'MP5', badge: 'SMG', field: 'optic', role: 'SMG · accurate on the move' },
+        ] as const).map(weapon => <div className="weapon-customization-row" key={weapon.field}>
+          <div className="weapon-identity">
+            <span className="slot-badge">{weapon.badge}</span>
+            <div><h4>{weapon.name}</h4><p>{weapon.role}</p></div>
+          </div>
+          <fieldset className="optic-picker" aria-label={`${weapon.name} scope`}>
+            <legend>Scope</legend>
+            {(['acog', 'holo'] as const).map(kind => <button type="button" className="screen-button" key={kind}
+              data-act={weapon.field} data-value={kind} aria-pressed={model[weapon.field] === kind}
+              onClick={event => onAction(weapon.field, kind, event.nativeEvent)}>
+              {kind === 'acog' ? 'ACOG · 2.5×' : 'HOLO · 1×'}
+            </button>)}
+          </fieldset>
+        </div>)}
       </div>
-      <fieldset className="optic-picker" aria-label={`${weapon.name} scope`}>
-        <legend>Scope</legend>
-        {(['acog', 'holo'] as const).map(kind => <button type="button" className="screen-button" key={kind}
-          data-act={weapon.field} data-value={kind} aria-pressed={model[weapon.field] === kind}
-          onClick={event => onAction(weapon.field, kind, event.nativeEvent)}>
-          {kind === 'acog' ? 'ACOG · 2.5×' : 'HOLO · 1×'}
-        </button>)}
-      </fieldset>
-    </div>)}
+    </Loadout>
   </div>;
   return collapsible ? <details className="weapons-section" data-ui-block="" data-ui-input-block="">
     <summary>Weapons <span>Loadout and scopes</span></summary>
     {content}
-  </details> : <section className="weapons-section" aria-label="Weapons">
-    <h3>Weapon customization</h3>
-    {content}
-  </section>;
+  </details> : <section className="weapons-section" aria-label="Weapons">{content}</section>;
 }
 
-/** Pick three weapons: a picked card shows its slot; tap it again to drop it. */
-function Loadout({ model, onAction }: { model: WeaponSettingsModel; onAction: Act }) {
-  const choices = list(model.choices), full = (model.loadout?.length ?? 0) >= 3;
-  const picked = Array.isArray(model.loadout) ? model.loadout.filter(kind => typeof kind === 'string') : [];
-  return <section className="loadout-picker" aria-label="Loadout">
-    <h4 className="loadout-title">Loadout <span>pick 3 · the weapon in hand sets your speed</span></h4>
-    <p className="weapon-customization-note" aria-live="polite">{model.loadoutNote}</p>
-    <div className="loadout-grid">
-      {choices.map(choice => {
-        const at = picked.indexOf(choice.kind);
-        return <button type="button" className="loadout-card" key={choice.kind} data-act="loadout" data-value={choice.kind}
-          aria-pressed={at >= 0} disabled={at < 0 && full} onClick={event => onAction('loadout', choice.kind, event.nativeEvent)}>
-          <span className="slot-badge">{at >= 0 ? at + 1 : '+'}</span>
-          <b>{choice.name}</b>
-          <small>{choice.role}</small>
-          <span className="loadout-speed" style={{ '--speed': `${Math.max(0, Math.min(100, (count(choice.speed) - 75) * 2.2))}%` } as CSSProperties}>
-            speed <em>{count(choice.speed)}%</em>
-          </span>
-        </button>;
-      })}
+/** The loadout's slots in order (slot 1 is key 1); null for an empty one. */
+type Slots = (string | null)[];
+const SLOT_COUNT = 3;
+
+/**
+ * `kind` dropped on slot `to`, or (null) off the slots. From a slot it swaps with what is there, or
+ * leaves its slot empty when dropped off; from the arsenal it takes the slot, swapping if it was picked.
+ */
+export function dropLoadout(slots: Slots, kind: string, from: number | null, to: number | null): Slots {
+  const next = [...slots];
+  if (to === null) {
+    if (from !== null) next[from] = null;
+    return next;
+  }
+  const at = next.indexOf(kind);
+  if (at >= 0 && at !== to) next[at] = next[to] ?? null;
+  next[to] = kind;
+  return next;
+}
+
+/** A card on the move: `to` is the slot under the pointer, 'off' outside the slots, null between them. */
+interface Drag { kind: string; from: number | null; dx: number; dy: number; to: number | 'off' | null }
+
+/**
+ * Pointer dragging for the loadout. A mouse or pen drags after a few pixels; a finger after a
+ * short hold, so a swipe still scrolls a touch menu. The click that ends a drag is swallowed:
+ * it would toggle the card, or, on the backdrop, resume the game.
+ */
+function useLoadoutDrag(root: RefObject<HTMLElement | null>, drop: (kind: string, from: number | null, to: number | null, ev: Event) => void) {
+  const [drag, setDrag] = useState<Drag | null>(null);
+  const onDrop = useRef(drop);
+  useEffect(() => { onDrop.current = drop; });
+  const target = (x: number, y: number): Drag['to'] => {
+    const inside = (el: Element | null | undefined): boolean => {
+      const r = el?.getBoundingClientRect();
+      return !!r && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+    };
+    const slot = [...root.current?.querySelectorAll('[data-slot]') ?? []].findIndex(inside);
+    return slot >= 0 ? slot : inside(root.current?.querySelector('.loadout-slots')) ? null : 'off';
+  };
+  const start = (event: ReactPointerEvent<HTMLElement>, kind: string, from: number | null): void => {
+    if (!event.isPrimary || event.button !== 0) return;
+    const el = event.currentTarget, id = event.pointerId, x0 = event.clientX, y0 = event.clientY;
+    const touch = event.pointerType === 'touch';
+    // The panel shrinks to fit with CSS zoom; the card moves in its own, zoomed, pixels.
+    const zoom = el.getBoundingClientRect().width / el.offsetWidth || 1;
+    let live = false;
+    const begin = (): void => { live = true; setDrag({ kind, from, dx: 0, dy: 0, to: null }); };
+    const timer = touch ? window.setTimeout(begin, 250) : 0;
+    const move = (e: PointerEvent): void => {
+      if (e.pointerId !== id) return;
+      const dx = e.clientX - x0, dy = e.clientY - y0;
+      if (!live) {
+        if (Math.hypot(dx, dy) < (touch ? 10 : 5)) return;
+        if (touch) return end();
+        begin();
+      }
+      setDrag({ kind, from, dx: dx / zoom, dy: dy / zoom, to: target(e.clientX, e.clientY) });
+    };
+    const up = (e: PointerEvent): void => {
+      if (e.pointerId !== id) return;
+      end();
+      if (!live) return;
+      const swallow = (click: MouseEvent): void => { click.stopPropagation(); click.preventDefault(); };
+      window.addEventListener('click', swallow, { capture: true, once: true });
+      window.setTimeout(() => window.removeEventListener('click', swallow, true), 0);
+      const to = target(e.clientX, e.clientY);
+      if (to !== null) onDrop.current(kind, from, to === 'off' ? null : to, e);
+    };
+    const cancel = (e: PointerEvent): void => { if (e.pointerId === id) end(); };
+    // A held finger owns the gesture: the menu must not scroll under it.
+    const hold = (e: TouchEvent): void => { if (live) e.preventDefault(); };
+    function end(): void {
+      window.clearTimeout(timer);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', cancel);
+      window.removeEventListener('touchmove', hold);
+      setDrag(null);
+    }
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', cancel);
+    window.addEventListener('touchmove', hold, { passive: false });
+  };
+  return { drag, start };
+}
+
+function Speed({ speed }: { speed: number }) {
+  return <span className="loadout-speed" style={{ '--speed': `${Math.max(0, Math.min(100, (count(speed) - 75) * 2.2))}%` } as CSSProperties}>
+    speed <em>{count(speed)}%</em>
+  </span>;
+}
+
+/**
+ * The three slots, keys 1 to 3, beside the arsenal. Drag a weapon onto a slot, or a slot onto
+ * another to swap them; drag a slot off to empty it. Taps still work: a slot empties, an arsenal
+ * weapon fills the first empty slot; the move buttons serve the keyboard. `children` sit under the arsenal.
+ */
+function Loadout({ model, onAction, children }: { model: WeaponSettingsModel; onAction: Act; children?: ReactNode }) {
+  const choices = list(model.choices);
+  const slots: Slots = Array.from({ length: SLOT_COUNT }, (_, i) => {
+    const kind = model.loadout?.[i];
+    return typeof kind === 'string' ? kind : null;
+  });
+  const full = slots.every(kind => kind !== null);
+  const send = (next: Slots, ev: Event): void => {
+    if (next.join() !== slots.join()) onAction('loadoutSet', next.map(kind => kind ?? '').join(','), ev);
+  };
+  const root = useRef<HTMLElement>(null);
+  const { drag, start } = useLoadoutDrag(root, (kind, from, to, ev) => send(dropLoadout(slots, kind, from, to), ev));
+  // The keyboard's place after a change: the moved weapon's button in its new slot, so a second
+  // press moves it on; or a removed weapon's arsenal card, since its slot button is gone.
+  const refocus = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    const at = refocus.current;
+    refocus.current = null;
+    if (!at) return;
+    const [first, second] = at.split('|').map(selector => root.current?.querySelector<HTMLButtonElement>(selector));
+    (first && !first.disabled ? first : second)?.focus();
+  });
+  const keep = (selector: string): void => {
+    if (root.current?.contains(document.activeElement)) refocus.current = selector;
+  };
+  const move = (kind: string, from: number, to: number, ev: Event): void => {
+    keep(`[data-slot="${to}"] .slot-moves button:${to < from ? 'first' : 'last'}-child|[data-slot="${to}"] .slot-weapon`);
+    send(dropLoadout(slots, kind, from, to), ev);
+  };
+  const tap = (kind: string, ev: Event): void => {
+    keep(`.loadout-card[data-value="${kind}"]`);
+    onAction('loadout', kind, ev);
+  };
+  const moving = (kind: string, from: number | null): CSSProperties | undefined =>
+    drag?.kind === kind && drag.from === from ? { transform: `translate(${drag.dx}px, ${drag.dy}px)` } : undefined;
+  const grab = (kind: string, from: number | null) => ({
+    'data-dragging': drag?.kind === kind && drag.from === from ? (from !== null && drag.to === 'off' ? 'off' : '') : undefined,
+    style: moving(kind, from),
+    onPointerDown: (event: ReactPointerEvent<HTMLElement>) => start(event, kind, from),
+    onContextMenu: (event: ReactMouseEvent) => event.preventDefault(),
+  });
+  return <section className="loadout-picker" aria-label="Loadout" ref={root}>
+    <div className="loadout-slots">
+      <h4 className="loadout-title">Loadout <span>keys 1 · 2 · 3</span></h4>
+      <p className="weapon-customization-note" aria-live="polite">{model.loadoutNote}</p>
+      <ol className="slot-list" aria-label="Slots">
+        {slots.map((kind, i) => {
+          const choice = choices.find(item => item.kind === kind);
+          return <li className="loadout-slot" key={i} data-slot={i} data-over={drag !== null && drag.to === i ? '' : undefined}>
+            <kbd className="slot-key" aria-label={`Slot ${i + 1}`}>{i + 1}</kbd>
+            {kind && choice ? <>
+              <button type="button" className="slot-weapon" data-act="loadout" data-value={kind} {...grab(kind, i)}
+                aria-label={`Slot ${i + 1}: ${choice.name}. Remove`} onClick={event => tap(kind, event.nativeEvent)}>
+                <b>{choice.name}</b>
+                <Speed speed={choice.speed} />
+              </button>
+              <span className="slot-moves">
+                <button type="button" aria-label={`Move ${choice.name} up`} disabled={i === 0}
+                  onClick={event => move(kind, i, i - 1, event.nativeEvent)}>▲</button>
+                <button type="button" aria-label={`Move ${choice.name} down`} disabled={i === SLOT_COUNT - 1}
+                  onClick={event => move(kind, i, i + 1, event.nativeEvent)}>▼</button>
+              </span>
+            </> : <span className="slot-empty">empty</span>}
+          </li>;
+        })}
+      </ol>
+      <p className="weapon-customization-note">Drag a slot onto another to swap their keys. The weapon in hand sets your speed.</p>
+    </div>
+    <div className="loadout-arsenal">
+      <h4 className="loadout-title">Arsenal <span>{full ? 'drag onto a slot to swap it in' : 'tap to fill the next slot, or drag onto one'}</span></h4>
+      <div className="loadout-grid">
+        {choices.map(choice => {
+          const at = slots.indexOf(choice.kind);
+          return <button type="button" className="loadout-card" key={choice.kind} data-act="loadout" data-value={choice.kind}
+            aria-pressed={at >= 0} {...grab(choice.kind, null)} onClick={event => onAction('loadout', choice.kind, event.nativeEvent)}>
+            <span className="slot-badge">{at >= 0 ? at + 1 : '+'}</span>
+            <b>{choice.name}</b>
+            <small>{choice.role}</small>
+            <Speed speed={choice.speed} />
+          </button>;
+        })}
+      </div>
+      {children}
     </div>
   </section>;
 }
