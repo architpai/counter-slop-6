@@ -15,7 +15,7 @@ import type { OnlineMode, Team } from '../game/team-rules';
 export const UI_ACTIONS = [
   'start', 'online', 'back', 'quickPlay', 'create', 'join', 'joinCode',
   'visibility', 'name', 'pickMap', 'onlineMode', 'team', 'mainMenu', 'startMatch',
-  'leave', 'leaveMatch', 'sens', 'touchSens', 'resume', 'acogSens', 'sniperSens', 'optic', 'r4cOptic', 'loadout', 'training', 'invert', 'music', 'gore',
+  'leave', 'leaveMatch', 'sens', 'touchSens', 'resume', 'acogSens', 'sniperSens', 'optic', 'r4cOptic', 'loadout', 'loadoutSet', 'training', 'invert', 'music', 'gore',
   'gfxPreset', 'gfx', 'gfxFps', 'gfxReset', 'gfxLower',
   'startWave',
 ] as const;
@@ -35,7 +35,7 @@ export interface OnlineInfo {
 
 /** One weapon the loadout picker offers. */
 export interface LoadoutChoice {
-  /** The `loadout` action's value. */
+  /** The `loadout` action's value, and one entry of a `loadoutSet` value. */
   kind: string;
   name: string;
   role: string;
@@ -46,8 +46,12 @@ export interface WeaponSettingsModel {
   optic: RifleOptic; r4cOptic: RifleOptic;
   /** Every weapon on offer, in order. */
   choices?: LoadoutChoice[];
-  /** The picked kinds in slot order: `LOADOUT_SIZE` of them, or fewer while a pick is under way. */
-  loadout?: string[];
+  /**
+   * The slots in order, `LOADOUT_SIZE` of them: slot 1 is key 1. A slot is null while a pick is
+   * under way. The picker sends the whole list back as `loadoutSet`: kinds joined by commas, an
+   * empty slot as an empty entry (`sniper,,sword`).
+   */
+  loadout?: (string | null)[];
   /** When the pick takes effect, or how many are left to pick. */
   loadoutNote?: string;
 }

@@ -17,20 +17,20 @@ try {
   await page.locator('[data-act="start"]').click();
   await page.waitForFunction(() => window.__game.gs.mode === 'solo' && window.__game.gs.state === 'play' && window.__game.gs.wave === 1);
   await page.evaluate(() => { window.__game.gs.intermission = 0; });
-  // Mid-wave: the pick is saved, the player keeps their weapons.
+  // Mid-wave: the pick is saved, the player keeps their weapons. The LMG takes the pistol's emptied slot.
   await pick('pistol'); await pick('lmg');
-  assert.equal(await page.evaluate(() => localStorage.getItem('cs6_loadout')), 'r4c,sword,lmg');
+  assert.equal(await page.evaluate(() => localStorage.getItem('cs6_loadout')), 'r4c,lmg,sword');
   await page.waitForTimeout(500);
   assert.equal(await loadout(), 'r4c,pistol,sword', 'a pick made mid-wave waits');
   // The wave is cleared: the break between waves hands the new weapons over.
   await page.evaluate(() => { window.__game.gs.intermission = 8; });
-  await page.waitForFunction(() => window.__game.player.loadout.join(',') === 'r4c,sword,lmg');
+  await page.waitForFunction(() => window.__game.player.loadout.join(',') === 'r4c,lmg,sword');
   // Training applies a pick at once.
   await page.evaluate(() => { window.__game.gs.state = 'start'; });
   await page.locator('[data-act="training"]').click().catch(() => page.evaluate(() => window.__game.hud.onUiAction('training', null, new Event('click'))));
   await page.waitForFunction(() => window.__game.gs.mode === 'training' && window.__game.gs.state === 'play');
   await pick('lmg'); await pick('sniper');
-  await page.waitForFunction(() => window.__game.player.loadout.join(',') === 'r4c,sword,sniper');
+  await page.waitForFunction(() => window.__game.player.loadout.join(',') === 'r4c,sniper,sword');
   assert.deepEqual(errors, []);
   console.log('OK: solo picks wait for the wave clear; training applies them at once');
 } finally {

@@ -146,6 +146,20 @@ export class Player implements Target {
     return true;
   }
 
+  /**
+   * Put the weapons carried now in the order of `kinds`: the number keys follow it. The weapon in
+   * hand stays in hand and every ammo count is kept. False, and nothing changes, unless `kinds`
+   * holds exactly the weapons carried now.
+   */
+  reorderLoadout(kinds: readonly WeaponKind[]): boolean {
+    const valid = validLoadout(kinds), carried = this.loadout;
+    if (!valid || valid.length !== carried.length || !valid.every(kind => carried.includes(kind))) return false;
+    const held = this.weapons[this.wi];
+    this.weapons = valid.map(kind => this._arm(kind));
+    this.wi = held ? this.weapons.indexOf(held) : 0;
+    return true;
+  }
+
   /** This player's weapon of `kind`, built on first use. */
   _arm(kind: WeaponKind): Weapon {
     let weapon = this._armory.get(kind);
